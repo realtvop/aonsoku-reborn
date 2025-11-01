@@ -15,11 +15,12 @@ export function createManualChunks(id: string) {
     if (vendor.some((name) => scopedPackageName.startsWith(name))) {
       return 'vendor'
     }
+    // Bundle Radix UI with React in vendor chunk to avoid runtime hook resolution issues
+    if (includes('@radix-ui')) return 'vendor'
     if (includes('i18n')) return 'i18n'
     if (includes('tailwind')) return 'tailwind'
     if (includes('tauri')) return 'tauri'
     if (includes('@tanstack')) return 'tanstack'
-    if (includes('@radix-ui')) return 'radix'
     if (includes('markdown') || includes('remark')) return 'markdown'
 
     return undefined
