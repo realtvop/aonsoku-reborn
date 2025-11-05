@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { SearchIcon } from 'lucide-react'
-import { KeyboardEvent, useCallback, useState } from 'react'
+import { KeyboardEvent, useCallback, useEffect, useState } from 'react'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { useTranslation } from 'react-i18next'
+import { useLocation, useParams } from 'react-router-dom'
 import { useDebouncedCallback } from 'use-debounce'
 import { Keyboard } from '@/app/components/command/keyboard-key'
 import { Button } from '@/app/components/ui/button'
@@ -14,6 +15,7 @@ import {
   CommandList,
 } from '@/app/components/ui/command'
 import { ScrollArea } from '@/app/components/ui/scroll-area'
+import { getPodcast } from '@/queries/podcasts'
 import { subsonic } from '@/service/subsonic'
 import { useAppStore } from '@/store/app.store'
 import { byteLength } from '@/utils/byteLength'
@@ -27,7 +29,6 @@ import { CommandPlaylists } from './playlists'
 import { CommandServer } from './server-management'
 import { CommandSongResult } from './song-result'
 import { CommandThemes } from './themes'
-import { usePlayerSonglist } from '@/store/player.store'
 
 export type CommandItemProps = {
   runCommand: (command: () => unknown) => void
@@ -36,9 +37,12 @@ export type CommandItemProps = {
 export default function CommandMenu() {
   const { t } = useTranslation()
   const { open, setOpen } = useAppStore((state) => state.command)
+  const location = useLocation()
+  const params = useParams()
 
   const [query, setQuery] = useState('')
   const [pages, setPages] = useState<CommandPages[]>(['HOME'])
+  const [pageTitle, setPageTitle] = useState<string>('Aonsoku')
 
   const activePage = pages[pages.length - 1]
   const isHome = activePage === 'HOME'
@@ -47,20 +51,107 @@ export default function CommandMenu() {
     byteLength(query) >= 3 && activePage !== 'PLAYLISTS',
   )
 
-  const { currentList, currentSongIndex, currentSong } = usePlayerSonglist()
-  
-  const isPlaylistEmpty = currentList.length === 0
+  // 获取专辑信息
+  const { data: albumData } = useQuery({
+    queryKey: [queryKeys.album.single, params.albumId],
+    queryFn: () => subsonic.albums.getOne(params.albumId!),
+    enabled: Boolean(params.albumId),
+    staleTime: convertMinutesToMs(5),
+  })
 
-  function formatSongCount() {
-    const currentPosition = currentSongIndex + 1
-    const listLength = currentList.length
+  // 获取艺术家信息
+  const { data: artistData } = useQuery({
+    queryKey: [queryKeys.artist.single, params.artistId],
+    queryFn: () => subsonic.artists.getOne(params.artistId!),
+    enabled: Boolean(params.artistId),
+    staleTime: convertMinutesToMs(5),
+  })
 
-    return `[${currentPosition}/${listLength}]`
-  }
+  // 获取播放列表信息
+  const { data: playlistData } = useQuery({
+    queryKey: [queryKeys.playlist.single, params.playlistId],
+    queryFn: () => subsonic.playlists.getOne(params.playlistId!),
+    enabled: Boolean(params.playlistId),
+    staleTime: convertMinutesToMs(5),
+  })
 
-  function getCurrentSongInfo() {
-    return `${currentSong.title} - ${currentSong.artist}`
-  }
+  // 获取播客信息
+  const { data: podcastData } = useQuery({
+    queryKey: [queryKeys.podcast.one, params.podcastId],
+    queryFn: () => getPodcast(params.podcastId!),
+    enabled: Boolean(params.podcastId),
+    staleTime: convertMinutesToMs(5),
+  })
+
+  useEffect(() => {
+    const pathname = location.pathname
+
+    // 首页
+    if (pathname === '/') {
+      setPageTitle('Aonsoku')
+      return
+    }
+
+    // 资料库页面
+    if (pathname === '/library/artists') {
+      setPageTitle(t('sidebar.artists'))
+      return
+    }
+    if (pathname === '/library/songs') {
+      setPageTitle(t('sidebar.songs'))
+      return
+    }
+    if (pathname === '/library/albums') {
+      setPageTitle(t('sidebar.albums'))
+      return
+    }
+    if (pathname === '/library/playlists') {
+      setPageTitle(t('sidebar.playlists'))
+      return
+    }
+    if (pathname === '/library/radios') {
+      setPageTitle(t('sidebar.radios'))
+      return
+    }
+    if (pathname === '/library/podcasts') {
+      setPageTitle(t('sidebar.podcasts'))
+      return
+    }
+    if (pathname === '/library/episodes/latest') {
+      setPageTitle(t('sidebar.podcasts'))
+      return
+    }
+
+    // 详情页面 - 显示具体名称
+    if (pathname.startsWith('/library/artists/') && artistData) {
+      setPageTitle(artistData.name)
+      return
+    }
+    if (pathname.startsWith('/library/albums/') && albumData) {
+      setPageTitle(albumData.name)
+      return
+    }
+    if (pathname.startsWith('/library/playlists/') && playlistData) {
+      setPageTitle(playlistData.name)
+      return
+    }
+    if (pathname.startsWith('/library/podcasts/') && podcastData) {
+      setPageTitle(podcastData.title || podcastData.description || t('sidebar.podcasts'))
+      return
+    }
+    if (pathname.startsWith('/library/episodes/')) {
+      setPageTitle(t('sidebar.podcasts'))
+      return
+    }
+
+    // 服务器配置
+    if (pathname === '/server-config') {
+      setPageTitle(t('menu.server'))
+      return
+    }
+
+    setPageTitle('Aonsoku')
+  }, [location.pathname, albumData, artistData, playlistData, podcastData, t])
 
   const { data: searchResult } = useQuery({
     queryKey: [queryKeys.search, query],
@@ -146,7 +237,7 @@ export default function CommandMenu() {
       >
         <SearchIcon className="h-5 w-5 text-muted-foreground" />
         <span className="inline-flex text-muted-foreground text-xs">
-          {isPlaylistEmpty ? "Aonsoku" : `${formatSongCount()} ${getCurrentSongInfo()}`}
+          {pageTitle}
         </span>
 
         <div className="absolute right-2">
