@@ -156,3 +156,14 @@ export async function getArtistAllSongs(artistId: string, params: ArtistSongsPar
     nextOffset: null,
   }
 }
+
+export async function getFavoriteSongs() {
+  const response = await subsonic.songs.getFavoriteSongs();
+  console.log(response);
+  if (!response || !response.song) return { songs: [], nextOffset: null };
+
+  return {
+    songs: response.song,
+    nextOffset: null,
+  };
+}
