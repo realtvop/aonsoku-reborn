@@ -41,7 +41,7 @@ export function Sidebar({ className }: SidebarProps) {
     <aside>
       <div
         className={cn(
-          'hidden 2xl:flex flex-col min-w-sidebar max-w-sidebar border-r fixed top-header left-0 bottom-0 pb-player bg-background z-10',
+          'hidden xl:flex flex-col min-w-sidebar max-w-sidebar border-r fixed top-header left-0 bottom-0 pb-player bg-background z-10',
           className,
         )}
       >
