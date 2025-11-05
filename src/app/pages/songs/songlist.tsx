@@ -6,14 +6,22 @@ import { InfinitySongListFallback } from '@/app/components/fallbacks/song-fallba
 import { HeaderTitle } from '@/app/components/header-title'
 import { ClearFilterButton } from '@/app/components/search/clear-filter-button'
 import { ExpandableSearchInput } from '@/app/components/search/expandable-input'
-import { SongsOrderByFilter, SongsSortFilter } from '@/app/components/songs/songs-filters'
+import {
+  SongsOrderByFilter,
+  SongsSortFilter,
+} from '@/app/components/songs/songs-filters'
 import { DataTableList } from '@/app/components/ui/data-table-list'
 import { useTotalSongs } from '@/app/hooks/use-total-songs'
 import { songsColumns } from '@/app/tables/songs-columns'
 import { getArtistAllSongs, songsSearch } from '@/queries/songs'
 import { usePlayerActions } from '@/store/player.store'
 import { ColumnFilter } from '@/types/columnFilter'
-import { AlbumsFilters, AlbumsSearchParams, SongsOrderByOptions, SortOptions } from '@/utils/albumsFilter'
+import {
+  AlbumsFilters,
+  AlbumsSearchParams,
+  SongsOrderByOptions,
+  SortOptions,
+} from '@/utils/albumsFilter'
 import { queryKeys } from '@/utils/queryKeys'
 import { SearchParamsHandler } from '@/utils/searchParamsHandler'
 
@@ -30,7 +38,10 @@ export default function SongList() {
   const query = getSearchParam<string>(AlbumsSearchParams.Query, '')
   const artistId = getSearchParam<string>(AlbumsSearchParams.ArtistId, '')
   const artistName = getSearchParam<string>(AlbumsSearchParams.ArtistName, '')
-  const orderBy = getSearchParam<SongsOrderByOptions>('orderBy', SongsOrderByOptions.LastAdded)
+  const orderBy = getSearchParam<SongsOrderByOptions>(
+    'orderBy',
+    SongsOrderByOptions.LastAdded,
+  )
   const sort = getSearchParam<SortOptions>('sort', SortOptions.Desc)
 
   const searchFilterIsSet = filter === AlbumsFilters.Search && query !== ''

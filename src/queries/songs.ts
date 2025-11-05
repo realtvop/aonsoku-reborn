@@ -1,7 +1,7 @@
 import { SearchQueryOptions } from '@/service/search'
 import { subsonic } from '@/service/subsonic'
-import { SongsOrderByOptions, SortOptions } from '@/utils/albumsFilter'
 import { ISong } from '@/types/responses/song'
+import { SongsOrderByOptions, SortOptions } from '@/utils/albumsFilter'
 
 const emptyResponse = { songs: [], nextOffset: null }
 
@@ -17,15 +17,20 @@ interface ArtistSongsParams {
   sort?: SortOptions
 }
 
-function sortSongs(songs: ISong[], orderBy: SongsOrderByOptions, sort: SortOptions): ISong[] {
+function sortSongs(
+  songs: ISong[],
+  orderBy: SongsOrderByOptions,
+  sort: SortOptions,
+): ISong[] {
   const isAsc = sort === SortOptions.Asc
-  
+
   return songs.sort((a, b) => {
     let comparison = 0
-    
+
     switch (orderBy) {
       case SongsOrderByOptions.LastAdded:
-        comparison = new Date(a.created).getTime() - new Date(b.created).getTime()
+        comparison =
+          new Date(a.created).getTime() - new Date(b.created).getTime()
         break
       case SongsOrderByOptions.Artist:
         comparison = (a.artist || '').localeCompare(b.artist || '')
@@ -37,21 +42,29 @@ function sortSongs(songs: ISong[], orderBy: SongsOrderByOptions, sort: SortOptio
         comparison = (a.album || '').localeCompare(b.album || '')
         break
       default:
-        comparison = new Date(a.created).getTime() - new Date(b.created).getTime()
+        comparison =
+          new Date(a.created).getTime() - new Date(b.created).getTime()
     }
-    
+
     return isAsc ? comparison : -comparison
   })
 }
 
 // Cache for all songs to avoid refetching
-let allSongsCache: { songs: any[], timestamp: number } | null = null
+let allSongsCache: { songs: ISong[]; timestamp: number } | null = null
 const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
 
-async function getAllSongs(orderBy = SongsOrderByOptions.LastAdded, sort = SortOptions.Desc) {
+async function getAllSongs(
+  orderBy = SongsOrderByOptions.LastAdded,
+  sort = SortOptions.Desc,
+) {
   // Check cache first
   const now = Date.now()
-  if (allSongsCache && allSongsCache.timestamp && (now - allSongsCache.timestamp) < CACHE_DURATION) {
+  if (
+    allSongsCache &&
+    allSongsCache.timestamp &&
+    now - allSongsCache.timestamp < CACHE_DURATION
+  ) {
     // Re-sort cached songs if sorting changed
     return sortSongs(allSongsCache.songs, orderBy, sort)
   }
@@ -71,7 +84,7 @@ async function getAllSongs(orderBy = SongsOrderByOptions.LastAdded, sort = SortO
   // Update cache with unsorted songs
   allSongsCache = {
     songs: response.song,
-    timestamp: now
+    timestamp: now,
   }
 
   // Return sorted songs
@@ -81,7 +94,7 @@ async function getAllSongs(orderBy = SongsOrderByOptions.LastAdded, sort = SortO
 export async function songsSearch(params: SongSearchParams) {
   const orderBy = params.orderBy || SongsOrderByOptions.LastAdded
   const sort = params.sort || SortOptions.Desc
-  
+
   // If there's a search query, use the original search behavior
   if (params.query && params.query.trim() !== '') {
     const response = await subsonic.search.get({
@@ -111,7 +124,7 @@ export async function songsSearch(params: SongSearchParams) {
 
   // For browsing all songs (no search query), fetch all and paginate
   const allSongs = await getAllSongs(orderBy, sort)
-  
+
   if (allSongs.length === 0) return emptyResponse
 
   // Apply pagination to the sorted results
@@ -130,10 +143,13 @@ export async function songsSearch(params: SongSearchParams) {
   }
 }
 
-export async function getArtistAllSongs(artistId: string, params: ArtistSongsParams = {}) {
+export async function getArtistAllSongs(
+  artistId: string,
+  params: ArtistSongsParams = {},
+) {
   const orderBy = params.orderBy || SongsOrderByOptions.LastAdded
   const sort = params.sort || SortOptions.Desc
-  
+
   const artist = await subsonic.artists.getOne(artistId)
 
   if (!artist || !artist.album) return emptyResponse
@@ -158,12 +174,12 @@ export async function getArtistAllSongs(artistId: string, params: ArtistSongsPar
 }
 
 export async function getFavoriteSongs() {
-  const response = await subsonic.songs.getFavoriteSongs();
-  console.log(response);
-  if (!response || !response.song) return { songs: [], nextOffset: null };
+  const response = await subsonic.songs.getFavoriteSongs()
+  console.log(response)
+  if (!response || !response.song) return { songs: [], nextOffset: null }
 
   return {
     songs: response.song,
     nextOffset: null,
-  };
+  }
 }

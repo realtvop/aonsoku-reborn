@@ -1,4 +1,4 @@
-import { Eye, EyeOff, CheckIcon, ClockIcon, XIcon } from 'lucide-react'
+import { Eye, EyeOff, ClockIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { PlaylistOptions } from '@/app/components/playlist/options'

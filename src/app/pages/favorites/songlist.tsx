@@ -37,7 +37,8 @@ export default function SongList() {
       getNextPageParam: (lastPage) => lastPage.nextOffset,
     })
 
-  const { data: songCountData, isLoading: songCountIsLoading } = useTotalFavorites()
+  const { data: songCountData, isLoading: songCountIsLoading } =
+    useTotalFavorites()
 
   if (isLoading && !isFetchingNextPage) {
     return <InfinitySongListFallback />
@@ -77,7 +78,6 @@ export default function SongList() {
           count={songCount}
           loading={songCountIsLoading}
         />
-
       </ShadowHeader>
 
       <div className="w-full h-[calc(100%-80px)] overflow-auto">

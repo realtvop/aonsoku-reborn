@@ -17,7 +17,6 @@ async function fetchTotalFavorites() {
   }
   const songs = await fetchFavorites()
   return songs.length
-
 }
 
 export function useTotalFavorites() {
