@@ -97,14 +97,9 @@ export function Player() {
     const audio = getAudioRef().current
     if (!audio) return
 
-    const audioDuration = Math.floor(audio.duration)
-    const infinityDuration = audioDuration === Infinity
-
-    if (!infinityDuration) {
-      setCurrentDuration(audioDuration)
-    }
-
-    if (isPodcast && infinityDuration && podcast) {
+    if (isSong && song) {
+      setCurrentDuration(song.duration)
+    } else if (isPodcast && podcast) {
       setCurrentDuration(podcast.duration)
     }
 
@@ -124,7 +119,9 @@ export function Player() {
   }, [
     getAudioRef,
     isPodcast,
+    isSong,
     podcast,
+    song,
     setCurrentDuration,
     getCurrentPodcastProgress,
     setProgress,
