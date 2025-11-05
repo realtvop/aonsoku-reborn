@@ -27,6 +27,7 @@ import { CommandPlaylists } from './playlists'
 import { CommandServer } from './server-management'
 import { CommandSongResult } from './song-result'
 import { CommandThemes } from './themes'
+import { usePlayerSonglist } from '@/store/player.store'
 
 export type CommandItemProps = {
   runCommand: (command: () => unknown) => void
@@ -45,6 +46,21 @@ export default function CommandMenu() {
   const enableQuery = Boolean(
     byteLength(query) >= 3 && activePage !== 'PLAYLISTS',
   )
+
+  const { currentList, currentSongIndex, currentSong } = usePlayerSonglist()
+  
+  const isPlaylistEmpty = currentList.length === 0
+
+  function formatSongCount() {
+    const currentPosition = currentSongIndex + 1
+    const listLength = currentList.length
+
+    return `[${currentPosition}/${listLength}]`
+  }
+
+  function getCurrentSongInfo() {
+    return `${currentSong.title} - ${currentSong.artist}`
+  }
 
   const { data: searchResult } = useQuery({
     queryKey: [queryKeys.search, query],
@@ -125,12 +141,12 @@ export default function CommandMenu() {
     <>
       <Button
         variant="outline"
-        className="flex justify-start w-full px-2 gap-2 relative"
+        className="w-full px-2 gap-2 relative h-8 overflow-hidden"
         onClick={() => setOpen(true)}
       >
-        <SearchIcon className="h-4 w-4 text-muted-foreground" />
-        <span className="inline-flex text-muted-foreground text-sm">
-          {t('sidebar.search')}
+        <SearchIcon className="h-5 w-5 text-muted-foreground" />
+        <span className="inline-flex text-muted-foreground text-xs">
+          {isPlaylistEmpty ? "Aonsoku" : `${formatSongCount()} ${getCurrentSongInfo()}`}
         </span>
 
         <div className="absolute right-2">

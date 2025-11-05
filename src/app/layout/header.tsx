@@ -3,18 +3,23 @@ import { Linux } from '@/app/components/controls/linux'
 import { Windows } from '@/app/components/controls/windows'
 import { NavigationButtons } from '@/app/components/header/navigation-buttons'
 import { UserDropdown } from '@/app/components/header/user-dropdown'
-import { HeaderSongInfo } from '@/app/components/header-song'
 import { SettingsButton } from '@/app/components/settings/header-button'
 import { useAppWindow } from '@/app/hooks/use-app-window'
 import { useWindowControlsOverlay } from '@/app/hooks/use-window-controls-overlay'
 import { isLinux, isMac, isWindows } from '@/utils/osType'
 import { tauriDragRegion } from '@/utils/tauriDragRegion'
 import { isTauri } from '@/utils/tauriTools'
+import { memo } from 'react'
+import CommandMenu from '../components/command/command-menu'
+import { Link } from 'react-router-dom'
+import { Button } from '../components/ui/button'
+import { HomeIcon } from 'lucide-react'
 
 export function Header() {
   const { isFullscreen } = useAppWindow()
   const { visible: wcoVisible } = useWindowControlsOverlay()
   const isPWA = !isTauri()
+  const MemoCommandMenu = memo(CommandMenu)
 
   return (
     <header
@@ -44,9 +49,28 @@ export function Header() {
         }
       >
         {isMac && !isFullscreen && !wcoVisible && <div className="w-[70px]" />}
-        <NavigationButtons />
+        <div
+          className={clsx(
+            'w-8 h-8',
+          )}
+        >
+          <Link
+            to="/"
+          >
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 rounded-md"
+            >
+              <HomeIcon className="w-4 h-4" strokeWidth={1.5} />
+            </Button>
+          </Link>
+        </div>
       </div>
-      <HeaderSongInfo />
+      <div className="col-span-2 flex justify-center items-center px-4 gap-2">
+        <NavigationButtons />
+        <MemoCommandMenu />
+      </div>
       <div
         {...(isTauri() ? tauriDragRegion : {})}
         className="flex justify-end items-center gap-2"

@@ -3,7 +3,6 @@ import { ChevronLeft, ChevronRight, HomeIcon } from 'lucide-react'
 import { Button } from '@/app/components/ui/button'
 import useNavigationHistory from '@/app/hooks/use-navigation-history'
 import { useMainDrawerState } from '@/store/player.store'
-import { Link } from 'react-router-dom'
 
 export function NavigationButtons() {
   const { canGoBack, canGoForward, goBack, goForward } = useNavigationHistory()
@@ -11,23 +10,6 @@ export function NavigationButtons() {
 
   return (
     <div className="flex gap-1">
-      <div
-        className={clsx(
-          'w-8 h-8',
-        )}
-      >
-        <Link
-          to="/"
-        >
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 p-0 rounded-md"
-          >
-            <HomeIcon className="w-4 h-4" strokeWidth={1.5} />
-          </Button>
-        </Link>
-      </div>
       <div
         className={clsx(
           'w-8 h-8',
