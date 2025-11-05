@@ -7,7 +7,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@/app/components/ui/dropdown-menu'
-import { useIsMobile } from '@/app/hooks/use-mobile'
+import { isMobile } from 'react-device-detect'
 
 interface TableActionButtonProps {
   optionsMenuItems?: ReactNode
@@ -17,7 +17,6 @@ export function TableActionButton({
   optionsMenuItems,
 }: TableActionButtonProps) {
   const [open, setOpen] = useState(false)
-  const isMobile = useIsMobile()
 
   return (
     <DropdownMenu open={open} onOpenChange={(state) => setOpen(state)}>

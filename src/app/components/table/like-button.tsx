@@ -10,7 +10,7 @@ import {
   usePlayerSongStarred,
   usePlayerSonglist,
 } from '@/store/player.store'
-import { useIsMobile } from '@/app/hooks/use-mobile'
+import { isMobile } from 'react-device-detect'
 
 interface TableLikeButtonProps {
   type: 'song' | 'artist'
@@ -28,7 +28,6 @@ export function TableLikeButton({
   const isSongStarred = usePlayerSongStarred()
   const { isRadio, isSong } = usePlayerMediaType()
   const { starCurrentSong, starSongInQueue } = usePlayerActions()
-    const isMobile = useIsMobile()
 
   useEffect(() => {
     if (type === 'artist') return
