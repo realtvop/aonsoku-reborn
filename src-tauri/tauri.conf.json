@@ -30,12 +30,12 @@
   },
   "productName": "Aonsoku",
   "mainBinaryName": "Aonsoku",
-  "identifier": "com.victoralvesf.aonsoku",
+  "identifier": "com.realtvop.aonsoku",
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRDNTlENjZCNTJFRDdDRDAKUldUUWZPMVNhOVpaVENsbXg5RTM1TzFnME43TmZoaHU5bWplS1VSSW9YcE1QT0w1ZHRIWHNUOVoK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI5NDdDNjFFOUZFMjgzRkUKUldUK2crS2ZIc1pIdWRlOEErczllQm85OHpMWGlaMmd1ZFR2RDlHNHh2c1FDQjJLTEFHQzZjM2cK",
       "endpoints": [
-        "https://github.com/victoralvesf/aonsoku/releases/latest/download/latest.json"
+        "https://github.com/realtvop/aonsoku/releases/latest/download/latest.json"
       ]
     }
   },
