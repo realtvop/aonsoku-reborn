@@ -11,7 +11,7 @@
     A modern desktop client for Navidrome/Subsonic servers built with React and Rust.
     <br />
     <br />
-    <a href="https://aonsoku.vercel.app">Web App</a>
+    <a href="https://aonsoku.realtvop.top">Web App</a>
     ·
     <a href="https://github.com/realtvop/aonsoku/issues/new?labels=bug&template=bug-report---.md">Report Bug</a>
     ·
