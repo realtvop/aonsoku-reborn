@@ -49,11 +49,11 @@ export function Sidebar({ className }: SidebarProps) {
           <MemoCommandMenu />
         </div>
         <div className="space-y-4 py-4 pt-0">
-          <SidebarSection>
+          {/* <SidebarSection>
             <div>
               <MemoSidebarGenerator list={mainMenuItems} />
             </div>
-          </SidebarSection>
+          </SidebarSection> */}
           <SidebarSection>
             <SectionTitle>{t('sidebar.library')}</SectionTitle>
             <div>
@@ -71,7 +71,7 @@ export function Sidebar({ className }: SidebarProps) {
 }
 
 export enum SidebarItems {
-  Home = 'home',
+  // Home = 'home',
   Artists = 'artists',
   Songs = 'songs',
   Albums = 'albums',
@@ -81,12 +81,12 @@ export enum SidebarItems {
 }
 
 export const mainMenuItems = [
-  {
-    id: SidebarItems.Home,
-    title: 'sidebar.home',
-    route: ROUTES.LIBRARY.HOME,
-    icon: Home,
-  },
+  // {
+  //   id: SidebarItems.Home,
+  //   title: 'sidebar.home',
+  //   route: ROUTES.LIBRARY.HOME,
+  //   icon: Home,
+  // },
 ]
 
 export const libraryItems = [
