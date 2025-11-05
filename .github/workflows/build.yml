@@ -1,4 +1,4 @@
-name: 'build'
+name: "build"
 
 on:
   push:
@@ -16,16 +16,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: 'macos-latest'
+          - platform: "macos-latest"
             # for Arm based macs (M1 and above).
-            args: '--target aarch64-apple-darwin'
-          - platform: 'macos-latest'
+            args: "--target aarch64-apple-darwin"
+          - platform: "macos-latest"
             # for Intel based macs.
-            args: '--target x86_64-apple-darwin'
-          - platform: 'ubuntu-22.04'
+            args: "--target x86_64-apple-darwin"
+          - platform: 'ubuntu-24.04'
             args: ''
-          - platform: 'windows-latest'
+          - runner: 'ubuntu-24.04-arm'
             args: ''
+          - platform: "windows-latest"
+            args: ""
     runs-on: ${{ matrix.platform }}
     steps:
       - name: Checkout repository
@@ -52,7 +54,7 @@ jobs:
         with:
           version: 9.15.2
           run_install: false
-        
+
       - name: Setup node
         uses: actions/setup-node@v4
         with:
