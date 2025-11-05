@@ -58,9 +58,9 @@ export function TableRow<TData>({
             !isNextRowSelected(index) &&
             'rounded-b-md',
           isModern && !row.getIsSelected() && 'rounded-md',
-          'hover:bg-foreground/20 data-[state=selected]:bg-foreground/30',
+          'hover:bg-muted data-[state=selected]:bg-primary/75',
           isClassic && 'border-b',
-          isRowSongActive && isModern && 'row-active bg-foreground/20',
+          isRowSongActive && isModern && 'row-active bg-accent',
         )}
       >
         {row.getVisibleCells().map((cell) => (
