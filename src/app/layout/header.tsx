@@ -1,4 +1,7 @@
 import clsx from 'clsx'
+import { HomeIcon } from 'lucide-react'
+import { memo } from 'react'
+import { Link } from 'react-router-dom'
 import { Linux } from '@/app/components/controls/linux'
 import { Windows } from '@/app/components/controls/windows'
 import { NavigationButtons } from '@/app/components/header/navigation-buttons'
@@ -9,11 +12,8 @@ import { useWindowControlsOverlay } from '@/app/hooks/use-window-controls-overla
 import { isLinux, isMac, isWindows } from '@/utils/osType'
 import { tauriDragRegion } from '@/utils/tauriDragRegion'
 import { isTauri } from '@/utils/tauriTools'
-import { memo } from 'react'
 import CommandMenu from '../components/command/command-menu'
-import { Link } from 'react-router-dom'
 import { Button } from '../components/ui/button'
-import { HomeIcon } from 'lucide-react'
 
 export function Header() {
   const { isFullscreen } = useAppWindow()
@@ -49,14 +49,8 @@ export function Header() {
         }
       >
         {isMac && !isFullscreen && !wcoVisible && <div className="w-[70px]" />}
-        <div
-          className={clsx(
-            'w-8 h-8',
-          )}
-        >
-          <Link
-            to="/"
-          >
+        <div className={clsx('w-8 h-8')}>
+          <Link to="/">
             <Button
               variant="ghost"
               size="sm"

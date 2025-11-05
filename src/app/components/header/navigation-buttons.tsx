@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { ChevronLeft, ChevronRight, HomeIcon } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/app/components/ui/button'
 import useNavigationHistory from '@/app/hooks/use-navigation-history'
 import { useMainDrawerState } from '@/store/player.store'

@@ -136,7 +136,9 @@ export default function CommandMenu() {
       return
     }
     if (pathname.startsWith('/library/podcasts/') && podcastData) {
-      setPageTitle(podcastData.title || podcastData.description || t('sidebar.podcasts'))
+      setPageTitle(
+        podcastData.title || podcastData.description || t('sidebar.podcasts'),
+      )
       return
     }
     if (pathname.startsWith('/library/episodes/')) {

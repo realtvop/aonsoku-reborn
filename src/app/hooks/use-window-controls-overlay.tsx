@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react'
 
 // Extend Navigator interface to include windowControlsOverlay
 declare global {
-  interface Navigator {
-    windowControlsOverlay?: WindowControlsOverlay
-  }
-
   interface WindowControlsOverlay extends EventTarget {
     visible: boolean
     getTitlebarAreaRect(): DOMRect
+  }
+
+  interface Navigator {
+    windowControlsOverlay?: WindowControlsOverlay
   }
 }
 
@@ -37,7 +37,9 @@ export function useWindowControlsOverlay() {
     const updateOverlayState = () => {
       setOverlayState({
         visible: overlay.visible,
-        titlebarAreaRect: overlay.visible ? overlay.getTitlebarAreaRect() : null,
+        titlebarAreaRect: overlay.visible
+          ? overlay.getTitlebarAreaRect()
+          : null,
       })
     }
 

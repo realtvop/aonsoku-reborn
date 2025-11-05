@@ -8,15 +8,16 @@
 export function isPWA(): boolean {
   // Check if running in standalone mode (iOS/Android)
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches
-  
+
   // Check if running with window controls overlay (Desktop PWA)
   const isWindowControlsOverlay = window.matchMedia(
     '(display-mode: window-controls-overlay)',
   ).matches
 
   // Check if navigator standalone is set (iOS)
-  const isIOSStandalone = 'standalone' in window.navigator && 
-    (window.navigator as any).standalone === true
+  const isIOSStandalone =
+    'standalone' in window.navigator &&
+    (window.navigator as { standalone?: boolean }).standalone === true
 
   return isStandalone || isWindowControlsOverlay || isIOSStandalone
 }
