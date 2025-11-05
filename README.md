@@ -2,7 +2,7 @@
 
 <br />
 <div align="center">
-  <a href="https://github.com/victoralvesf/aonsoku">
+  <a href="https://github.com/realtvop/aonsoku">
     <img src="./src-tauri/icons/128x128.png" alt="Aonsoku" width="80" height="80">
   </a>
 
@@ -13,9 +13,9 @@
     <br />
     <a href="https://aonsoku.vercel.app">Web App</a>
     ·
-    <a href="https://github.com/victoralvesf/aonsoku/issues/new?labels=bug&template=bug-report---.md">Report Bug</a>
+    <a href="https://github.com/realtvop/aonsoku/issues/new?labels=bug&template=bug-report---.md">Report Bug</a>
     ·
-    <a href="https://github.com/victoralvesf/aonsoku/issues/new?labels=enhancement&template=feature-request---.md">Request Feature</a>
+    <a href="https://github.com/realtvop/aonsoku/issues/new?labels=enhancement&template=feature-request---.md">Request Feature</a>
   </p>
 
   [![React][React.js]][React-url] [![Tauri][Tauri]][Tauri-url] [![Rust][Rust]][Rust-url]
@@ -54,7 +54,7 @@
 
 - **Subsonic Integration:** Aonsoku integrates with your Navidrome or Subsonic server, providing you with easy access to your music collection. 
 - **Intuitive UI:** Modern, clean and user-friendly interface designed to enhance your music listening experience.
-- **Podcast Support:** With [Aonsoku Podcasts](https://github.com/victoralvesf/aonsoku-podcasts) you can easily access, manage, and listen to your favorites podcasts directly within the app. Enjoy advanced search options, customizable filters and seamless listening synchronization to enhance your podcast experience. 
+- **Podcast Support:** With [Aonsoku Podcasts](https://github.com/realtvop/aonsoku-podcasts) you can easily access, manage, and listen to your favorites podcasts directly within the app. Enjoy advanced search options, customizable filters and seamless listening synchronization to enhance your podcast experience. 
 - **Synchronized lyrics**: Aonsoku will automatically find a synced lyric from [LRCLIB](https://lrclib.net/) if none is provided by the server.
 - **Unsynchronized lyrics**: If your songs have embedded unsynchronized lyrics, Aonsoku is able to show them.
 - **Radio:** If your server supports it, listen to radio shows directly within Aonsoku.
@@ -64,13 +64,13 @@
 
 ## Screenshots
 
-<a href="https://raw.githubusercontent.com/victoralvesf/aonsoku/main/media/home.png"><img src="https://raw.githubusercontent.com/victoralvesf/aonsoku/main/media/home.png" width="49.5%"/></a> <a href="https://raw.githubusercontent.com/victoralvesf/aonsoku/main/media/album.png"><img src="https://raw.githubusercontent.com/victoralvesf/aonsoku/main/media/album.png" width="49.5%"/></a>
+<a href="https://raw.githubusercontent.com/realtvop/aonsoku/main/media/home.png"><img src="https://raw.githubusercontent.com/realtvop/aonsoku/main/media/home.png" width="49.5%"/></a> <a href="https://raw.githubusercontent.com/realtvop/aonsoku/main/media/album.png"><img src="https://raw.githubusercontent.com/realtvop/aonsoku/main/media/album.png" width="49.5%"/></a>
 
-<a href="https://raw.githubusercontent.com/victoralvesf/aonsoku/main/media/playlist.png"><img src="https://raw.githubusercontent.com/victoralvesf/aonsoku/main/media/playlist.png" width="49.5%"/></a> <a href="https://raw.githubusercontent.com/victoralvesf/aonsoku/main/media/albums.png"><img src="https://raw.githubusercontent.com/victoralvesf/aonsoku/main/media/albums.png" width="49.5%"/></a>
+<a href="https://raw.githubusercontent.com/realtvop/aonsoku/main/media/playlist.png"><img src="https://raw.githubusercontent.com/realtvop/aonsoku/main/media/playlist.png" width="49.5%"/></a> <a href="https://raw.githubusercontent.com/realtvop/aonsoku/main/media/albums.png"><img src="https://raw.githubusercontent.com/realtvop/aonsoku/main/media/albums.png" width="49.5%"/></a>
 
-<a href="https://raw.githubusercontent.com/victoralvesf/aonsoku/main/media/albumsByArtist.png"><img src="https://raw.githubusercontent.com/victoralvesf/aonsoku/main/media/albumsByArtist.png" width="49.5%"/></a> <a href="https://raw.githubusercontent.com/victoralvesf/aonsoku/main/media/artist.png"><img src="https://raw.githubusercontent.com/victoralvesf/aonsoku/main/media/artist.png" width="49.5%"/></a>
+<a href="https://raw.githubusercontent.com/realtvop/aonsoku/main/media/albumsByArtist.png"><img src="https://raw.githubusercontent.com/realtvop/aonsoku/main/media/albumsByArtist.png" width="49.5%"/></a> <a href="https://raw.githubusercontent.com/realtvop/aonsoku/main/media/artist.png"><img src="https://raw.githubusercontent.com/realtvop/aonsoku/main/media/artist.png" width="49.5%"/></a>
 
-<a href="https://raw.githubusercontent.com/victoralvesf/aonsoku/main/media/player.png"><img src="https://raw.githubusercontent.com/victoralvesf/aonsoku/main/media/player.png" width="49.5%"/></a> <a href="https://raw.githubusercontent.com/victoralvesf/aonsoku/main/media/lyrics.png"><img src="https://raw.githubusercontent.com/victoralvesf/aonsoku/main/media/lyrics.png" width="49.5%"/></a>
+<a href="https://raw.githubusercontent.com/realtvop/aonsoku/main/media/player.png"><img src="https://raw.githubusercontent.com/realtvop/aonsoku/main/media/player.png" width="49.5%"/></a> <a href="https://raw.githubusercontent.com/realtvop/aonsoku/main/media/lyrics.png"><img src="https://raw.githubusercontent.com/realtvop/aonsoku/main/media/lyrics.png" width="49.5%"/></a>
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -87,7 +87,7 @@
 
 1. Clone the repo
 ```sh
-git clone https://github.com/victoralvesf/aonsoku.git
+git clone https://github.com/realtvop/aonsoku.git
 ```
 2. Install NPM packages
 ```sh
@@ -117,7 +117,7 @@ version: '3.8'
 services:
   aonsoku:
     container_name: aonsoku
-    image: ghcr.io/victoralvesf/aonsoku:latest
+    image: ghcr.io/realtvop/aonsoku:latest
     restart: unless-stopped
     ports:
       - 8080:8080
@@ -130,7 +130,7 @@ Description=Aonsoku Container
 
 [Container]
 ContainerName=aonsoku
-Image=ghcr.io/victoralvesf/aonsoku:latest
+Image=ghcr.io/realtvop/aonsoku:latest
 PublishPort=8080:8080
 AutoUpdate=registry
 
@@ -184,7 +184,7 @@ Below is a table describing the environment variables that can be used in this p
 - [x] Synced lyrics
 - [x] Podcast support
 
-Feel free to request more cool features [here](https://github.com/victoralvesf/aonsoku/issues/new?labels=enhancement&template=feature-request---.md).
+Feel free to request more cool features [here](https://github.com/realtvop/aonsoku/issues/new?labels=enhancement&template=feature-request---.md).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -204,14 +204,14 @@ Don't forget to give the project a star! Thanks again!
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-<!-- WEBLATE -->
+<!-- WEBLATE
 ## Translation
 
 This project uses [Weblate](https://hosted.weblate.org/projects/aonsoku/) for translations. If you'd like to help, please visit the link to submit your contribution.
 
 <a href="https://hosted.weblate.org/engage/aonsoku/"><img src="https://hosted.weblate.org/widget/aonsoku/translation/multi-auto.svg" alt="Translation status" /></a>
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+<p align="right">(<a href="#readme-top">back to top</a>)</p> -->
 
 <!-- LICENSE -->
 ## License
@@ -228,5 +228,5 @@ Distributed under the MIT License. See `LICENSE.txt` for more information.
 [Rust-url]: https://www.rust-lang.org
 [Tauri]: https://img.shields.io/badge/Tauri-000000?style=for-the-badge&logo=tauri&logoColor=24C8DB
 [Tauri-url]: https://tauri.app
-[Release-badge]: https://img.shields.io/github/v/release/victoralvesf/aonsoku?display_name=release&style=for-the-badge&label=Download&labelColor=%23000&color=%2310B77F&logo=rocket&logoColor=%2310B77F&logoSize=auto
-[Release-url]: https://github.com/victoralvesf/aonsoku/releases/latest
+[Release-badge]: https://img.shields.io/github/v/release/realtvop/aonsoku?display_name=release&style=for-the-badge&label=Download&labelColor=%23000&color=%2310B77F&logo=rocket&logoColor=%2310B77F&logoSize=auto
+[Release-url]: https://github.com/realtvop/aonsoku/releases/latest
