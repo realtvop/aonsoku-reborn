@@ -7,6 +7,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@/app/components/ui/dropdown-menu'
+import { useIsMobile } from '@/app/hooks/use-mobile'
 
 interface TableActionButtonProps {
   optionsMenuItems?: ReactNode
@@ -16,6 +17,7 @@ export function TableActionButton({
   optionsMenuItems,
 }: TableActionButtonProps) {
   const [open, setOpen] = useState(false)
+  const isMobile = useIsMobile()
 
   return (
     <DropdownMenu open={open} onOpenChange={(state) => setOpen(state)}>
@@ -30,6 +32,7 @@ export function TableActionButton({
             'w-8 h-8 p-1 rounded-full hover:bg-background/80',
             'data-[state=open]:bg-accent data-[state=open]:opacity-100',
             'opacity-0 group-hover/tablerow:opacity-100 transition-opacity',
+            isMobile && 'opacity-100',
           )}
           onClick={(e) => {
             e.stopPropagation()

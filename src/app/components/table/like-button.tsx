@@ -10,6 +10,7 @@ import {
   usePlayerSongStarred,
   usePlayerSonglist,
 } from '@/store/player.store'
+import { useIsMobile } from '@/app/hooks/use-mobile'
 
 interface TableLikeButtonProps {
   type: 'song' | 'artist'
@@ -22,11 +23,12 @@ export function TableLikeButton({
   starred,
   type,
 }: TableLikeButtonProps) {
-  const [isStarred, setIsStarred] = useState(starred)
+  const [ isStarred, setIsStarred ] = useState(starred)
   const { currentSong } = usePlayerSonglist()
   const isSongStarred = usePlayerSongStarred()
   const { isRadio, isSong } = usePlayerMediaType()
   const { starCurrentSong, starSongInQueue } = usePlayerActions()
+    const isMobile = useIsMobile()
 
   useEffect(() => {
     if (type === 'artist') return
@@ -58,6 +60,7 @@ export function TableLikeButton({
       className={clsx(
         'w-8 h-8 p-1 rounded-full transition-opacity hover:bg-background/80',
         !isStarred && 'opacity-0 group-hover/tablerow:opacity-100',
+        isMobile && 'opacity-100',
       )}
       onClick={(e) => {
         e.stopPropagation()
