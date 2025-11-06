@@ -306,8 +306,16 @@ export function DataTable<TData, TValue>({
     (e: TouchEvent<HTMLDivElement>, row: Row<TData>) => {
       clearTimeout(tapTimeout)
       if (isTap && handlePlaySong) {
-        e.stopPropagation()
-        handlePlaySong(row)
+        // Check if the touch target is within a button or interactive element
+        const target = e.target as HTMLElement
+        const isButton = target.closest('button')
+        const isInteractive = target.closest('[role="button"]')
+        
+        // Don't trigger the row tap if touching a button or interactive element
+        if (!isButton && !isInteractive) {
+          e.stopPropagation()
+          handlePlaySong(row)
+        }
       }
     },
     [handlePlaySong],

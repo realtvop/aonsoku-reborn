@@ -47,7 +47,17 @@ export function TableListRow<TData>({
 
   function handleTouchEnd(e: TouchEvent<HTMLDivElement>) {
     clearTimeout(tapTimeout)
-    if (isTap) handleRowTap(e, row)
+    if (isTap) {
+      // Check if the touch target is within a button or interactive element
+      const target = e.target as HTMLElement
+      const isButton = target.closest('button')
+      const isInteractive = target.closest('[role="button"]')
+      
+      // Don't trigger the row tap if touching a button or interactive element
+      if (!isButton && !isInteractive) {
+        handleRowTap(e, row)
+      }
+    }
   }
 
   function handleTouchCancel() {

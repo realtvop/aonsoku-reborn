@@ -57,7 +57,7 @@ export function TableLikeButton({
     <Button
       variant="ghost"
       className={clsx(
-        'w-8 h-8 p-1 rounded-full transition-opacity hover:bg-background/80',
+        'w-8 h-8 p-1 rounded-full transition-opacity',
         !isStarred && 'opacity-0 group-hover/tablerow:opacity-100',
         isMobile && 'opacity-100',
       )}
