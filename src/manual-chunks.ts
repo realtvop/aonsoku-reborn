@@ -1,5 +1,5 @@
 export function createManualChunks(id: string) {
-  const vendor = ['react', 'react-dom', 'react-router-dom']
+  const vendor = ['react-dom', 'react-router-dom']
 
   if (id.includes('node_modules')) {
     const modulePath = id.split('node_modules/')[1]
@@ -19,10 +19,20 @@ export function createManualChunks(id: string) {
     if (includes('@radix-ui')) return 'vendor'
     if (includes('i18n')) return 'i18n'
     if (includes('tailwind')) return 'tailwind'
-    if (includes('tauri')) return 'tauri'
-    if (includes('@tanstack')) return 'tanstack'
+    if (includes('html-to-text') || includes('linkify-it')) return 'formatters'
+    if (includes('lucide')) return 'lucide'
+    if (includes('embla')) return 'embla'
+    if (includes('dayjs')) return 'date-time'
+    if (includes('audio-context')) return 'audio-context'
+    if (includes('crypto')) return 'crypto'
+    if (includes('lodash')) return 'lodash'
+    if (includes('tanstack')) return 'tanstack'
     if (includes('markdown') || includes('remark')) return 'markdown'
+    if (includes('react-hook-form') || includes('zod')) return 'forms'
+    if (scopedPackageName.startsWith('react')) return 'vendor'
 
     return undefined
   }
+
+  return undefined
 }

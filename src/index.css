@@ -2,20 +2,23 @@
 @tailwind components;
 @tailwind utilities;
 
-
 @layer base {
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
   }
+
   body.windows-linux {
     @apply antialiased;
   }
+
   body.mac {
     @apply subpixel-antialiased;
   }
+
   :root {
     --header-height: 44px;
     --sidebar-width: 280px;
@@ -37,6 +40,14 @@
     --titlebar-area-width: env(titlebar-area-width, 100%);
     --titlebar-area-height: env(titlebar-area-height, var(--header-height));
   }
+}
+
+.electron-drag {
+  app-region: drag;
+}
+
+button {
+  app-region: no-drag;
 }
 
 .Toastify__toast-container {
@@ -178,18 +189,22 @@ img {
   width: 7px;
   height: 0px;
 }
+
 ::-webkit-scrollbar-button {
   width: 7px;
   height: 0px;
 }
+
 ::-webkit-scrollbar-thumb {
   background: hsl(var(--border));
   border-radius: 7px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
   border-radius: 7px;
 }
+
 ::-webkit-scrollbar-corner {
   background: transparent;
 }
@@ -208,7 +223,7 @@ img {
   @apply rounded-full default-ring;
 }
 
-.user-dropdown-trigger[data-state="open"] > :first-child {
+.user-dropdown-trigger[data-state="open"]> :first-child {
   @apply bg-accent;
 }
 
@@ -249,27 +264,56 @@ svg#bars .eq-bar--4 {
 }
 
 @keyframes eq-1 {
-  0%, 100% { transform: scaleY(0.4); }
-  50% { transform: scaleY(0.8); }
+
+  0%,
+  100% {
+    transform: scaleY(0.4);
+  }
+
+  50% {
+    transform: scaleY(0.8);
+  }
 }
 
 @keyframes eq-2 {
-  0%, 100% { transform: scaleY(0.9); }
-  50% { transform: scaleY(0.4); }
+
+  0%,
+  100% {
+    transform: scaleY(0.9);
+  }
+
+  50% {
+    transform: scaleY(0.4);
+  }
 }
 
 @keyframes eq-3 {
-  0%, 100% { transform: scaleY(0.7); }
-  50% { transform: scaleY(1); }
+
+  0%,
+  100% {
+    transform: scaleY(0.7);
+  }
+
+  50% {
+    transform: scaleY(1);
+  }
 }
 
 @keyframes eq-4 {
-  0%, 100% { transform: scaleY(0.6); }
-  50% { transform: scaleY(1); }
+
+  0%,
+  100% {
+    transform: scaleY(0.6);
+  }
+
+  50% {
+    transform: scaleY(1);
+  }
 }
 
 #sync-lyrics-box,
 .lrc-box {
+
   /* webkit */
   &::-webkit-scrollbar {
     width: 0;
@@ -293,17 +337,26 @@ svg#bars .eq-bar--4 {
 }
 
 @media all and (display-mode: picture-in-picture) {
-  body, html {
+
+  body,
+  html {
     @apply w-full h-full overflow-hidden p-0 m-0;
   }
 }
 
 /* PWA Window Controls Overlay Support */
 @media all and (display-mode: window-controls-overlay) {
+
   /* Make header draggable as titlebar */
   header {
     -webkit-app-region: drag;
     app-region: drag;
+    /* Use the titlebar area coordinates */
+    position: fixed;
+    left: env(titlebar-area-x, 0);
+    top: env(titlebar-area-y, 0);
+    width: env(titlebar-area-width, 100%);
+    height: env(titlebar-area-height, var(--header-height));
   }
 
   /* Make interactive elements in header non-draggable */
@@ -318,9 +371,31 @@ svg#bars .eq-bar--4 {
   }
 }
 
+/* PWA Standalone mode support for macOS */
+@media all and (display-mode: standalone) {
+  /* On macOS Safari PWA, add padding to avoid traffic light buttons */
+  @supports (-webkit-backdrop-filter: blur(1px)) {
+    header {
+      -webkit-app-region: drag;
+      app-region: drag;
+    }
+
+    header button,
+    header a,
+    header input,
+    header select,
+    header [role="button"],
+    header [role="link"] {
+      -webkit-app-region: no-drag;
+      app-region: no-drag;
+    }
+  }
+}
+
 div[data-test-id="table-row"][data-state="selected"],
 div[data-test-id="table-row"].row-active,
 div[data-test-id="table-row"]:hover {
+
   & a,
   & span {
     @apply text-foreground;

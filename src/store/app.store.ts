@@ -7,6 +7,8 @@ import { createWithEqualityFn } from 'zustand/traditional'
 import { pingServer } from '@/api/pingServer'
 import { queryServerInfo } from '@/api/queryServerInfo'
 import { AuthType, IAppContext, IServerConfig } from '@/types/serverConfig'
+import { isDesktop } from '@/utils/desktop'
+import { discordRpc } from '@/utils/discordRpc'
 import { logger } from '@/utils/logger'
 import {
   genEncodedPassword,
@@ -38,6 +40,16 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
             lockUser: hasValidConfig,
             songCount: null,
             favoriteCount: null,
+          },
+          accounts: {
+            discord: {
+              rpcEnabled: false,
+              setRpcEnabled: (value) => {
+                set((state) => {
+                  state.accounts.discord.rpcEnabled = value
+                })
+              },
+            },
           },
           podcasts: {
             active: false,
@@ -91,6 +103,18 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
               set((state) => {
                 state.pages.artistsPageViewType = type
               })
+            },
+          },
+          desktop: {
+            data: {
+              minimizeToTray: true,
+            },
+            actions: {
+              setMinimizeToTray: (value) => {
+                set((state) => {
+                  state.desktop.data.minimizeToTray = value
+                })
+              },
             },
           },
           command: {
@@ -296,9 +320,37 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
   shallow,
 )
 
+useAppStore.subscribe(
+  (state) => state.accounts.discord.rpcEnabled,
+  (currentState) => {
+    if (currentState) {
+      discordRpc.sendCurrentSong()
+    } else {
+      discordRpc.clear()
+    }
+  },
+)
+
+useAppStore.subscribe(
+  (state) => state.desktop.data,
+  (data) => {
+    if (!isDesktop()) return
+
+    window.api.saveAppSettings(data)
+  },
+  {
+    equalityFn: shallow,
+  },
+)
+
 export const useAppData = () => useAppStore((state) => state.data)
+export const useAppAccounts = () => useAppStore((state) => state.accounts)
 export const useAppPodcasts = () => useAppStore((state) => state.podcasts)
 export const useAppPages = () => useAppStore((state) => state.pages)
+export const useAppDesktopData = () =>
+  useAppStore((state) => state.desktop.data)
+export const useAppDesktopActions = () =>
+  useAppStore((state) => state.desktop.actions)
 export const useAppActions = () => useAppStore((state) => state.actions)
 export const useAppUpdate = () => useAppStore((state) => state.update)
 export const useAppSettings = () => useAppStore((state) => state.settings)
