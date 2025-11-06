@@ -4,28 +4,15 @@ import { useSearchParams } from 'react-router-dom'
 import { ShadowHeader } from '@/app/components/album/shadow-header'
 import { InfinitySongListFallback } from '@/app/components/fallbacks/song-fallbacks'
 import { HeaderTitle } from '@/app/components/header-title'
-import { ClearFilterButton } from '@/app/components/search/clear-filter-button'
-import { ExpandableSearchInput } from '@/app/components/search/expandable-input'
-import {
-  SongsOrderByFilter,
-  SongsSortFilter,
-} from '@/app/components/songs/songs-filters'
 import { DataTableList } from '@/app/components/ui/data-table-list'
-import { useTotalSongs } from '@/app/hooks/use-total-songs'
+import { useTotalFavorites } from '@/app/hooks/use-favorite-songs'
 import { songsColumns } from '@/app/tables/songs-columns'
-import { getArtistAllSongs, songsSearch } from '@/queries/songs'
+import { getFavoriteSongs } from '@/queries/songs'
 import { usePlayerActions } from '@/store/player.store'
 import { ColumnFilter } from '@/types/columnFilter'
-import {
-  AlbumsFilters,
-  AlbumsSearchParams,
-  SongsOrderByOptions,
-  SortOptions,
-} from '@/utils/albumsFilter'
+import { AlbumsSearchParams } from '@/utils/albumsFilter'
 import { queryKeys } from '@/utils/queryKeys'
 import { SearchParamsHandler } from '@/utils/searchParamsHandler'
-
-const DEFAULT_OFFSET = 100
 
 export default function SongList() {
   const { t } = useTranslation()
@@ -37,40 +24,21 @@ export default function SongList() {
   const filter = getSearchParam<string>(AlbumsSearchParams.MainFilter, '')
   const query = getSearchParam<string>(AlbumsSearchParams.Query, '')
   const artistId = getSearchParam<string>(AlbumsSearchParams.ArtistId, '')
-  const artistName = getSearchParam<string>(AlbumsSearchParams.ArtistName, '')
-  const orderBy = getSearchParam<SongsOrderByOptions>(
-    'orderBy',
-    SongsOrderByOptions.LastAdded,
-  )
-  const sort = getSearchParam<SortOptions>('sort', SortOptions.Desc)
 
-  const searchFilterIsSet = filter === AlbumsFilters.Search && query !== ''
-  const filterByArtist = artistId !== '' && artistName !== ''
-  const hasSomeFilter = searchFilterIsSet || filterByArtist
-
-  async function fetchSongs({ pageParam = 0 }) {
-    if (filterByArtist) {
-      return getArtistAllSongs(artistId, { orderBy, sort })
-    }
-
-    return songsSearch({
-      query: searchFilterIsSet ? query : '',
-      songCount: DEFAULT_OFFSET,
-      songOffset: pageParam,
-      orderBy,
-      sort,
-    })
+  async function fetchSongs() {
+    return getFavoriteSongs()
   }
 
   const { data, isLoading, isFetchingNextPage, fetchNextPage, hasNextPage } =
     useInfiniteQuery({
-      queryKey: [queryKeys.song.all, filter, query, artistId, orderBy, sort],
+      queryKey: [queryKeys.song.all, filter, query, artistId],
       initialPageParam: 0,
       queryFn: fetchSongs,
       getNextPageParam: (lastPage) => lastPage.nextOffset,
     })
 
-  const { data: songCountData, isLoading: songCountIsLoading } = useTotalSongs()
+  const { data: songCountData, isLoading: songCountIsLoading } =
+    useTotalFavorites()
 
   if (isLoading && !isFetchingNextPage) {
     return <InfinitySongListFallback />
@@ -78,7 +46,7 @@ export default function SongList() {
   if (!data) return null
 
   const songlist = data.pages.flatMap((page) => page.songs) ?? []
-  const songCount = (hasSomeFilter ? songlist.length : songCountData) ?? 0
+  const songCount = songCountData ?? 0
 
   function handlePlaySong(index: number) {
     if (songlist) setSongList(songlist, index)
@@ -96,9 +64,7 @@ export default function SongList() {
     'select',
   ]
 
-  const title = filterByArtist
-    ? t('songs.list.byArtist', { artist: artistName })
-    : t('sidebar.songs')
+  const title = t('sidebar.favorites')
 
   return (
     <div className="w-full h-content">
@@ -112,15 +78,6 @@ export default function SongList() {
           count={songCount}
           loading={songCountIsLoading}
         />
-
-        <div className="flex gap-2 flex-1 justify-end">
-          {filterByArtist && <ClearFilterButton />}
-          <ExpandableSearchInput
-            placeholder={t('songs.list.search.placeholder')}
-          />
-          <SongsSortFilter />
-          <SongsOrderByFilter />
-        </div>
       </ShadowHeader>
 
       <div className="w-full h-[calc(100%-80px)] overflow-auto">
