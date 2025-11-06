@@ -1,4 +1,4 @@
-import clsx from 'clsx'
+import clsx from "clsx";
 import {
   RefObject,
   useCallback,
@@ -6,10 +6,10 @@ import {
   useMemo,
   useRef,
   useState,
-} from 'react'
-import { ProgressSlider } from '@/app/components/ui/slider'
-import { podcasts } from '@/service/podcasts'
-import { subsonic } from '@/service/subsonic'
+} from "react";
+import { ProgressSlider } from "@/app/components/ui/slider";
+import { podcasts } from "@/service/podcasts";
+import { subsonic } from "@/service/subsonic";
 import {
   usePlayerActions,
   usePlayerDuration,
@@ -17,113 +17,113 @@ import {
   usePlayerMediaType,
   usePlayerProgress,
   usePlayerSonglist,
-} from '@/store/player.store'
-import { convertSecondsToTime } from '@/utils/convertSecondsToTime'
-import { logger } from '@/utils/logger'
+} from "@/store/player.store";
+import { convertSecondsToTime } from "@/utils/convertSecondsToTime";
+import { logger } from "@/utils/logger";
 
 interface PlayerProgressProps {
-  audioRef: RefObject<HTMLAudioElement>
+  audioRef: RefObject<HTMLAudioElement>;
 }
 
-let isSeeking = false
+let isSeeking = false;
 
 export function PlayerProgress({ audioRef }: PlayerProgressProps) {
-  const progress = usePlayerProgress()
-  const [localProgress, setLocalProgress] = useState(progress)
-  const currentDuration = usePlayerDuration()
-  const isPlaying = usePlayerIsPlaying()
+  const progress = usePlayerProgress();
+  const [localProgress, setLocalProgress] = useState(progress);
+  const currentDuration = usePlayerDuration();
+  const isPlaying = usePlayerIsPlaying();
   const { currentSong, currentList, podcastList, currentSongIndex } =
-    usePlayerSonglist()
-  const { isSong, isPodcast } = usePlayerMediaType()
+    usePlayerSonglist();
+  const { isSong, isPodcast } = usePlayerMediaType();
   const { setProgress, setUpdatePodcastProgress, getCurrentPodcastProgress } =
-    usePlayerActions()
-  const isScrobbleSentRef = useRef(false)
-  const isNowPlayingSentRef = useRef(false)
+    usePlayerActions();
+  const isScrobbleSentRef = useRef(false);
+  const isNowPlayingSentRef = useRef(false);
 
-  const isEmpty = isSong && currentList.length === 0
+  const isEmpty = isSong && currentList.length === 0;
 
   const updateAudioCurrentTime = useCallback(
     (value: number) => {
-      isSeeking = false
+      isSeeking = false;
       if (audioRef.current) {
-        audioRef.current.currentTime = value
+        audioRef.current.currentTime = value;
       }
     },
-    [audioRef],
-  )
+    [audioRef]
+  );
 
   const handleSeeking = useCallback((amount: number) => {
-    isSeeking = true
-    setLocalProgress(amount)
-  }, [])
+    isSeeking = true;
+    setLocalProgress(amount);
+  }, []);
 
   const handleSeeked = useCallback(
     (amount: number) => {
-      updateAudioCurrentTime(amount)
-      setProgress(amount)
-      setLocalProgress(amount)
+      updateAudioCurrentTime(amount);
+      setProgress(amount);
+      setLocalProgress(amount);
     },
-    [setProgress, updateAudioCurrentTime],
-  )
+    [setProgress, updateAudioCurrentTime]
+  );
 
   const handleSeekedFallback = useCallback(() => {
     if (localProgress !== progress) {
-      updateAudioCurrentTime(localProgress)
-      setProgress(localProgress)
+      updateAudioCurrentTime(localProgress);
+      setProgress(localProgress);
     }
-  }, [localProgress, progress, setProgress, updateAudioCurrentTime])
+  }, [localProgress, progress, setProgress, updateAudioCurrentTime]);
 
   const songDuration = useMemo(
     () => convertSecondsToTime(currentDuration ?? 0),
-    [currentDuration],
-  )
+    [currentDuration]
+  );
 
   const sendScrobble = useCallback(async (songId: string) => {
-    await subsonic.scrobble.send(songId)
-  }, [])
+    await subsonic.scrobble.send(songId);
+  }, []);
 
-  const progressTicks = useRef(0)
+  const progressTicks = useRef(0);
 
   useEffect(() => {
-    if (!isSong || !isPlaying || !currentSong?.id) return
+    if (!isSong || !isPlaying || !currentSong?.id) return;
 
     // Send now playing notification when song starts
     if (progress === 0 && !isNowPlayingSentRef.current) {
-      subsonic.scrobble.send(currentSong.id, false)
-      isNowPlayingSentRef.current = true
+      subsonic.scrobble.send(currentSong.id, false);
+      isNowPlayingSentRef.current = true;
     }
 
     // Reset flag when song changes or stops
     if (progress === 0 && !isPlaying) {
-      isNowPlayingSentRef.current = false
+      isNowPlayingSentRef.current = false;
     }
-  }, [isSong, isPlaying, currentSong?.id, progress])
+  }, [isSong, isPlaying, currentSong?.id, progress]);
 
   // Reset the flag when the song changes
   useEffect(() => {
-    isNowPlayingSentRef.current = false
-  }, [])
+    isNowPlayingSentRef.current = false;
+  }, []);
 
   useEffect(() => {
     if (isSeeking || !isPlaying) {
-      return
+      return;
     }
     if (isSong) {
-      const progressPercentage = (progress / currentDuration) * 100
+      const progressPercentage = (progress / currentDuration) * 100;
 
       if (progressPercentage === 0) {
-        isScrobbleSentRef.current = false
-        progressTicks.current = 0
+        isScrobbleSentRef.current = false;
+        progressTicks.current = 0;
       } else {
-        progressTicks.current += 1
+        progressTicks.current += 1;
 
         if (
           (progressTicks.current >= currentDuration / 2 ||
             progressTicks.current >= 60 * 4) &&
           !isScrobbleSentRef.current
         ) {
-          sendScrobble(currentSong.id)
-          isScrobbleSentRef.current = true
+          sendScrobble(currentSong.id);
+          isScrobbleSentRef.current = true;
         }
       }
     }
@@ -134,32 +134,32 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
     sendScrobble,
     currentSong.id,
     isPlaying,
-  ])
+  ]);
 
   // Used to save listening progress to backend every 30 seconds
   useEffect(() => {
-    if (!isPodcast || !podcastList) return
-    if (progress === 0) return
+    if (!isPodcast || !podcastList) return;
+    if (progress === 0) return;
 
-    const send = (progress / 30) % 1 === 0
-    if (!send) return
+    const send = (progress / 30) % 1 === 0;
+    if (!send) return;
 
-    const podcast = podcastList[currentSongIndex] ?? null
-    if (!podcast) return
+    const podcast = podcastList[currentSongIndex] ?? null;
+    if (!podcast) return;
 
-    const podcastProgress = getCurrentPodcastProgress()
-    if (progress === podcastProgress) return
+    const podcastProgress = getCurrentPodcastProgress();
+    if (progress === podcastProgress) return;
 
-    setUpdatePodcastProgress(progress)
+    setUpdatePodcastProgress(progress);
 
     podcasts
       .saveEpisodeProgress(podcast.id, progress)
       .then(() => {
-        logger.info('Progress sent:', progress)
+        logger.info("Progress sent:", progress);
       })
       .catch((error) => {
-        logger.error('Error sending progress', error)
-      })
+        logger.error("Error sending progress", error);
+      });
   }, [
     currentSongIndex,
     getCurrentPodcastProgress,
@@ -167,29 +167,31 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
     podcastList,
     progress,
     setUpdatePodcastProgress,
-  ])
+  ]);
 
-  const currentTime = convertSecondsToTime(isSeeking ? localProgress : progress)
+  const currentTime = convertSecondsToTime(
+    isSeeking ? localProgress : progress
+  );
 
   const isProgressLarge = useMemo(() => {
-    return localProgress >= 3600 || progress >= 3600
-  }, [localProgress, progress])
+    return localProgress >= 3600 || progress >= 3600;
+  }, [localProgress, progress]);
 
   const isDurationLarge = useMemo(() => {
-    return currentDuration >= 3600
-  }, [currentDuration])
+    return currentDuration >= 3600;
+  }, [currentDuration]);
 
   return (
     <div
       className={clsx(
-        'flex w-full justify-center items-center gap-2',
-        isEmpty && 'opacity-50',
+        "flex w-full justify-center items-center gap-2",
+        isEmpty && "opacity-50"
       )}
     >
       <small
         className={clsx(
-          'text-xs text-muted-foreground text-right',
-          isProgressLarge ? 'min-w-14' : 'min-w-10',
+          "text-xs text-muted-foreground text-right",
+          isProgressLarge ? "min-w-14" : "min-w-10"
         )}
         data-testid="player-current-time"
       >
@@ -223,13 +225,13 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
       )}
       <small
         className={clsx(
-          'text-xs text-muted-foreground text-left',
-          isDurationLarge ? 'min-w-14' : 'min-w-10',
+          "text-xs text-muted-foreground text-left",
+          isDurationLarge ? "min-w-14" : "min-w-10"
         )}
         data-testid="player-duration-time"
       >
         {songDuration}
       </small>
     </div>
-  )
+  );
 }
