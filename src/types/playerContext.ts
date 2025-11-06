@@ -1,3 +1,4 @@
+import { LanControlMessageType, PlayerStateData, CurrentSongData, QueueData, RemoteDeviceInfo } from './lanControl'
 import { EpisodeWithPodcast } from './responses/podcasts'
 import { Radio } from './responses/radios'
 import { ISong } from './responses/song'
@@ -120,6 +121,12 @@ export interface IPlayerSettings {
   colors: IColorsSettings
 }
 
+export interface IRemoteControlState {
+  active: boolean
+  device: RemoteDeviceInfo | null
+  sendCommand: ((type: LanControlMessageType, data?: unknown) => void) | null
+}
+
 export interface IPlayerActions {
   playSong: (song: ISong) => void
   setSongList: (songlist: ISong[], index: number, shuffle?: boolean) => void
@@ -175,6 +182,16 @@ export interface IPlayerActions {
   setUseSongColorOnQueue: (value: boolean) => void
   setUseSongColorOnBigPlayer: (value: boolean) => void
   setBigPlayerBlurValue: (value: number) => void
+  enterRemoteControl: (device: RemoteDeviceInfo | null) => void
+  exitRemoteControl: () => void
+  registerRemoteSender: (
+    sender: (type: LanControlMessageType, data?: unknown) => void,
+  ) => void
+  clearRemoteSender: () => void
+  setRemotePlayerState: (state: PlayerStateData | null) => void
+  setRemoteCurrentSongData: (song: CurrentSongData | null) => void
+  setRemoteQueueData: (queue: QueueData | null) => void
+  setRemoteDevice: (device: RemoteDeviceInfo | null) => void
 }
 
 export interface IPlayerContext {
@@ -182,5 +199,6 @@ export interface IPlayerContext {
   playerState: IPlayerState
   playerProgress: IPlayerProgress
   settings: IPlayerSettings
+  remoteControl: IRemoteControlState
   actions: IPlayerActions
 }

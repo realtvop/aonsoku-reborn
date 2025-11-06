@@ -22,5 +22,6 @@
     "src/i18n",
     "src/i18n/locales",
     "src/app/components/settings/pages/language"
-  ]
+  ],
+  "i18n-ally.keystyle": "nested"
 }

@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Aonsoku Remote Control</title>
+    <style>
+      :root {
+        color-scheme: dark light;
+        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        --bg: #0f172a;
+        --fg: #f8fafc;
+        --accent: #38bdf8;
+        --accent-soft: rgba(56, 189, 248, 0.16);
+        --error: #f87171;
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+        background: radial-gradient(circle at top, #1e293b, #0f172a);
+        color: var(--fg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .card {
+        width: min(680px, 92vw);
+        background: rgba(15, 23, 42, 0.78);
+        backdrop-filter: blur(18px);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        border-radius: 20px;
+        padding: 28px 32px;
+        box-shadow: 0 30px 70px rgba(15, 23, 42, 0.5);
+      }
+
+      header {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-bottom: 24px;
+      }
+
+      header h1 {
+        font-size: clamp(1.5rem, 2.2vw, 2rem);
+        margin: 0;
+      }
+
+      header p {
+        margin: 0;
+        color: rgba(226, 232, 240, 0.72);
+        font-size: 0.95rem;
+      }
+
+      .connection {
+        display: grid;
+        grid-template-columns: 1fr 140px;
+        gap: 12px;
+        margin-bottom: 26px;
+      }
+
+      .connection .inputs {
+        display: grid;
+        gap: 10px;
+      }
+
+      label {
+        font-size: 0.75rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: rgba(226, 232, 240, 0.6);
+      }
+
+      input {
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        background: rgba(15, 23, 42, 0.4);
+        color: var(--fg);
+        font-size: 0.95rem;
+      }
+
+      input:focus {
+        outline: 2px solid var(--accent);
+        outline-offset: 0;
+        border-color: transparent;
+      }
+
+      button {
+        border: none;
+        border-radius: 12px;
+        padding: 12px 16px;
+        font-weight: 600;
+        font-size: 0.95rem;
+        cursor: pointer;
+        transition: transform 0.18s ease, box-shadow 0.18s ease;
+      }
+
+      button.primary {
+        background: linear-gradient(135deg, var(--accent), #0ea5e9);
+        color: #0f172a;
+        box-shadow: 0 10px 28px rgba(56, 189, 248, 0.28);
+      }
+
+      button.secondary {
+        background: rgba(148, 163, 184, 0.14);
+        color: var(--fg);
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        box-shadow: none;
+      }
+
+      button:not(:disabled):hover {
+        transform: translateY(-1px);
+        box-shadow: 0 14px 32px rgba(56, 189, 248, 0.35);
+      }
+
+      .status {
+        margin-bottom: 24px;
+        padding: 14px 16px;
+        border-radius: 12px;
+        background: rgba(56, 189, 248, 0.12);
+        color: var(--accent);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .status[data-state="disconnected"] {
+        background: rgba(100, 116, 139, 0.14);
+        color: rgba(226, 232, 240, 0.75);
+      }
+
+      .status[data-state="error"] {
+        background: rgba(248, 113, 113, 0.12);
+        color: var(--error);
+      }
+
+      .controls {
+        display: grid;
+        gap: 20px;
+      }
+
+      .now-playing {
+        display: grid;
+        grid-template-columns: 100px 1fr;
+        gap: 18px;
+        align-items: center;
+        padding: 18px;
+        border-radius: 16px;
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid rgba(148, 163, 184, 0.12);
+      }
+
+      .cover {
+        width: 100px;
+        aspect-ratio: 1;
+        border-radius: 12px;
+        background: rgba(148, 163, 184, 0.18);
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .cover img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .cover span {
+        font-size: 0.8rem;
+        opacity: 0.65;
+      }
+
+      .track-details h2 {
+        margin: 0;
+        font-size: 1.1rem;
+      }
+
+      .track-details p {
+        margin: 6px 0 0;
+        font-size: 0.9rem;
+        color: rgba(226, 232, 240, 0.72);
+      }
+
+      .progress {
+        margin-top: 12px;
+        position: relative;
+      }
+
+      .progress-bar {
+        height: 6px;
+        width: 100%;
+        border-radius: 6px;
+        background: rgba(148, 163, 184, 0.18);
+        overflow: hidden;
+      }
+
+      .progress-bar span {
+        display: block;
+        height: 100%;
+        background: linear-gradient(90deg, var(--accent), #0ea5e9);
+      }
+
+      .progress-times {
+        margin-top: 6px;
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.75rem;
+        color: rgba(226, 232, 240, 0.65);
+      }
+
+      .control-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 12px;
+      }
+
+      .control-grid button {
+        width: 100%;
+      }
+
+      .queue {
+        padding: 18px;
+        border-radius: 16px;
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid rgba(148, 163, 184, 0.12);
+        max-height: 220px;
+        overflow-y: auto;
+      }
+
+      .queue h3 {
+        margin: 0 0 12px;
+        font-size: 1rem;
+      }
+
+      .queue ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 10px;
+      }
+
+      .queue li {
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: rgba(148, 163, 184, 0.12);
+        font-size: 0.9rem;
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .queue li[data-current="true"] {
+        background: rgba(56, 189, 248, 0.18);
+        color: var(--accent);
+      }
+
+      @media (max-width: 640px) {
+        .card {
+          padding: 24px;
+        }
+        .connection {
+          grid-template-columns: 1fr;
+        }
+        .now-playing {
+          grid-template-columns: 1fr;
+          text-align: center;
+        }
+        .cover {
+          margin: 0 auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <header>
+        <h1>Aonsoku Remote Control</h1>
+        <p>Connect to the server and control playback from here.</p>
+      </header>
+
+      <section class="connection">
+        <div class="inputs">
+          <div>
+            <label for="server-url">Server URL</label>
+            <input
+              id="server-url"
+              type="text"
+              placeholder="ws://localhost:5299"
+              autocomplete="off"
+            />
+          </div>
+          <div>
+            <label for="password">Access Code</label>
+            <input
+              id="password"
+              type="text"
+              placeholder="6-digit code"
+              maxlength="6"
+              autocomplete="off"
+            />
+          </div>
+        </div>
+        <div class="actions">
+          <button id="connect-btn" class="primary">Connect</button>
+          <button id="disconnect-btn" class="secondary" disabled>
+            Disconnect
+          </button>
+        </div>
+      </section>
+
+      <div id="status" class="status" data-state="disconnected">
+        <span>Not connected</span>
+        <small id="status-detail"></small>
+      </div>
+
+      <section class="controls" hidden>
+        <div class="now-playing">
+          <div class="cover" id="cover">
+            <span>No artwork</span>
+          </div>
+          <div class="track-details">
+            <h2 id="track-title">No track playing</h2>
+            <p id="track-artist"></p>
+            <p id="track-album"></p>
+            <div class="progress">
+              <div class="progress-bar">
+                <span id="progress-bar" style="width: 0%"></span>
+              </div>
+              <div class="progress-times">
+                <span id="current-time">0:00</span>
+                <span id="duration">0:00</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="control-grid">
+          <button data-action="previous" class="secondary">Previous</button>
+          <button data-action="play" class="primary">Play</button>
+          <button data-action="pause" class="secondary">Pause</button>
+          <button data-action="next" class="secondary">Next</button>
+          <button data-action="toggle-shuffle" class="secondary">
+            Toggle Shuffle
+          </button>
+          <button data-action="toggle-repeat" class="secondary">
+            Toggle Repeat
+          </button>
+        </div>
+
+        <div class="queue">
+          <h3>Queue</h3>
+          <ul id="queue"></ul>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const MessageType = {
+        AUTH_REQUEST: "auth_request",
+        AUTH_RESPONSE: "auth_response",
+        PLAY: "play",
+        PAUSE: "pause",
+        NEXT: "next",
+        PREVIOUS: "previous",
+        PLAY_PAUSE: "play_pause",
+        TOGGLE_SHUFFLE: "toggle_shuffle",
+        TOGGLE_REPEAT: "toggle_repeat",
+        SET_SHUFFLE: "set_shuffle",
+        SET_REPEAT: "set_repeat",
+        STATE_UPDATE: "state_update",
+        CURRENT_SONG_UPDATE: "current_song_update",
+        QUEUE_UPDATE: "queue_update",
+        ERROR: "error",
+        GET_STATE: "get_state",
+        GET_QUEUE: "get_queue",
+        GET_CURRENT_SONG: "get_current_song",
+      };
+
+      const statusEl = document.getElementById("status");
+      const statusDetailEl = document.getElementById("status-detail");
+      const controlsSection = document.querySelector(".controls");
+      const coverEl = document.getElementById("cover");
+      const trackTitleEl = document.getElementById("track-title");
+      const trackArtistEl = document.getElementById("track-artist");
+      const trackAlbumEl = document.getElementById("track-album");
+      const progressBarEl = document.getElementById("progress-bar");
+      const currentTimeEl = document.getElementById("current-time");
+      const durationEl = document.getElementById("duration");
+      const queueEl = document.getElementById("queue");
+      const connectBtn = document.getElementById("connect-btn");
+      const disconnectBtn = document.getElementById("disconnect-btn");
+      const serverUrlInput = document.getElementById("server-url");
+      const passwordInput = document.getElementById("password");
+
+      let socket = null;
+      let authenticated = false;
+      let stateCache = {
+        currentTime: 0,
+        duration: 0,
+      };
+
+      function formatTime(seconds) {
+        if (Number.isNaN(seconds) || !Number.isFinite(seconds)) return "0:00";
+        const minutes = Math.floor(seconds / 60);
+        const remaining = Math.floor(seconds % 60);
+        return `${minutes}:${remaining.toString().padStart(2, "0")}`;
+      }
+
+      function setStatus(state, message = "", detail = "") {
+        statusEl.dataset.state = state;
+        statusEl.firstElementChild.textContent = message;
+        statusDetailEl.textContent = detail;
+      }
+
+      function updateCover(coverArt) {
+        if (coverArt) {
+          coverEl.innerHTML = `<img src="${coverArt}" alt="Cover art" />`;
+        } else {
+          coverEl.innerHTML = "<span>No artwork</span>";
+        }
+      }
+
+      function updateNowPlaying(song) {
+        if (!song) {
+          trackTitleEl.textContent = "No track playing";
+          trackArtistEl.textContent = "";
+          trackAlbumEl.textContent = "";
+          updateCover(null);
+          return;
+        }
+
+        trackTitleEl.textContent = song.title ?? "Unknown title";
+        trackArtistEl.textContent = song.artist ?? "";
+        trackAlbumEl.textContent = song.album ?? "";
+        updateCover(song.coverArt ? song.coverArt : null);
+        stateCache.duration = song.duration ?? 0;
+        durationEl.textContent = formatTime(stateCache.duration);
+      }
+
+      function updateProgress(progress) {
+        stateCache.currentTime = progress.currentTime ?? 0;
+        stateCache.duration = progress.duration ?? stateCache.duration;
+        const percent = stateCache.duration
+          ? Math.min(
+              100,
+              Math.max(0, (stateCache.currentTime / stateCache.duration) * 100)
+            )
+          : 0;
+        progressBarEl.style.width = `${percent}%`;
+        currentTimeEl.textContent = formatTime(stateCache.currentTime);
+        durationEl.textContent = formatTime(stateCache.duration);
+      }
+
+      function updateQueue(queue) {
+        queueEl.innerHTML = "";
+        if (!queue || !Array.isArray(queue.songs) || queue.songs.length === 0) {
+          queueEl.innerHTML = "<li>No songs queued</li>";
+          return;
+        }
+
+        queue.songs.forEach((song, index) => {
+          const li = document.createElement("li");
+          li.dataset.current = String(index === queue.currentIndex);
+          li.textContent = `${song.title ?? "Unknown"} — ${song.artist ?? ""}`;
+          queueEl.appendChild(li);
+        });
+      }
+
+      function sendMessage(type, data) {
+        if (!socket || socket.readyState !== WebSocket.OPEN) return;
+        const payload = {
+          type,
+          data,
+          timestamp: Date.now(),
+        };
+        socket.send(JSON.stringify(payload));
+      }
+
+      function handleControlAction(action) {
+        if (!authenticated) return;
+        switch (action) {
+          case "previous":
+            sendMessage(MessageType.PREVIOUS);
+            break;
+          case "play":
+            sendMessage(MessageType.PLAY);
+            break;
+          case "pause":
+            sendMessage(MessageType.PAUSE);
+            break;
+          case "next":
+            sendMessage(MessageType.NEXT);
+            break;
+          case "toggle-shuffle":
+            sendMessage(MessageType.TOGGLE_SHUFFLE);
+            break;
+          case "toggle-repeat":
+            sendMessage(MessageType.TOGGLE_REPEAT);
+            break;
+        }
+      }
+
+      document
+        .querySelector(".control-grid")
+        .addEventListener("click", (event) => {
+          const target = event.target;
+          if (!(target instanceof HTMLElement)) return;
+          const action = target.dataset.action;
+          if (!action) return;
+          handleControlAction(action);
+        });
+
+      function connect() {
+        const rawUrl = serverUrlInput.value.trim();
+        const password = passwordInput.value.trim().toUpperCase();
+
+        if (!rawUrl) {
+          setStatus("error", "Missing URL", "Provide the WebSocket server URL");
+          return;
+        }
+
+        try {
+          const url = new URL(rawUrl, window.location.href);
+          if (!/^wss?:$/.test(url.protocol)) {
+            url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+          }
+          socket = new WebSocket(url.toString());
+        } catch (error) {
+          console.error(error);
+          setStatus("error", "Invalid URL", "Unable to parse the server URL");
+          return;
+        }
+
+        authenticated = false;
+        setStatus("connecting", "Connecting…");
+        connectBtn.disabled = true;
+        disconnectBtn.disabled = false;
+
+        socket.addEventListener("open", () => {
+          setStatus("connecting", "Authenticating…");
+          sendMessage(MessageType.AUTH_REQUEST, {
+            authType: "lan",
+            password,
+          });
+        });
+
+        socket.addEventListener("message", (event) => {
+          try {
+            const message = JSON.parse(event.data);
+            switch (message.type) {
+              case MessageType.AUTH_RESPONSE:
+                if (message.data?.success) {
+                  authenticated = true;
+                  setStatus(
+                    "connected",
+                    "Connected",
+                    message.data?.message ?? ""
+                  );
+                  controlsSection.hidden = false;
+                  sendMessage(MessageType.GET_STATE);
+                  sendMessage(MessageType.GET_CURRENT_SONG);
+                  sendMessage(MessageType.GET_QUEUE);
+                } else {
+                  setStatus(
+                    "error",
+                    "Auth failed",
+                    message.data?.message ?? ""
+                  );
+                  controlsSection.hidden = true;
+                  socket?.close();
+                }
+                break;
+              case MessageType.STATE_UPDATE:
+                updateProgress(message.data ?? {});
+                break;
+              case MessageType.CURRENT_SONG_UPDATE:
+                updateNowPlaying(message.data ?? null);
+                break;
+              case MessageType.QUEUE_UPDATE:
+                updateQueue(message.data ?? {});
+                break;
+              case MessageType.ERROR:
+                setStatus("error", "Server error", message.data?.message ?? "");
+                break;
+            }
+          } catch (error) {
+            console.error("[Remote] Failed to parse message", error);
+          }
+        });
+
+        socket.addEventListener("close", () => {
+          setStatus("disconnected", "Disconnected");
+          controlsSection.hidden = true;
+          connectBtn.disabled = false;
+          disconnectBtn.disabled = true;
+          authenticated = false;
+          socket = null;
+        });
+
+        socket.addEventListener("error", (event) => {
+          console.error("[Remote] WebSocket error", event);
+          setStatus("error", "Connection error", "WebSocket connection failed");
+        });
+      }
+
+      function disconnect() {
+        if (socket) {
+          socket.close();
+        }
+      }
+
+      connectBtn.addEventListener("click", connect);
+      disconnectBtn.addEventListener("click", disconnect);
+
+      // Autofill defaults when served directly from the LAN server
+      if (window.location.protocol.startsWith("http")) {
+        serverUrlInput.value = `${
+          window.location.protocol === "https:" ? "wss" : "ws"
+        }://${window.location.host}`;
+      }
+    </script>
+  </body>
+</html>

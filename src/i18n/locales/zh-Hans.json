@@ -615,6 +615,46 @@
       }
     }
   },
+  "lanControl": {
+    "remote": {
+      "menu": "控制其他设备",
+      "title": "控制其他设备",
+      "description": "连接到 LAN 控制服务器并远程管理播放。",
+      "address": "服务器地址",
+      "password": "访问验证码",
+      "status": {
+        "label": "状态",
+        "connected": "已连接",
+        "connecting": "连接中",
+        "authenticating": "验证中",
+        "error": "错误",
+        "disconnected": "未连接"
+      },
+      "actions": {
+        "connect": "连接",
+        "connecting": "正在连接…",
+        "disconnect": "断开连接",
+        "refresh": "刷新状态"
+      },
+      "nowPlaying": "正在播放",
+      "volume": "音量：{{volume}}%",
+      "emptyTitle": "暂无播放内容",
+      "emptyArtist": "未知艺术家",
+      "controls": {
+        "previous": "上一首",
+        "play": "播放",
+        "pause": "暂停",
+        "next": "下一首",
+        "shuffle": "切换随机播放",
+        "repeat": "切换循环"
+      },
+      "queue": "播放队列",
+      "items": "项",
+      "queueEmpty": "队列为空",
+      "unknownDevice": "未知设备",
+      "version": "版本 {{version}}"
+    }
+  },
   "podcasts": {
     "form": {
       "latestEpisodes": "最新单集",

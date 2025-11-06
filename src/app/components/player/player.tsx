@@ -1,10 +1,10 @@
-import { memo, useCallback, useEffect, useRef } from 'react'
-import { getSongStreamUrl } from '@/api/httpClient'
-import { getProxyURL } from '@/api/podcastClient'
-import { MiniPlayerButton } from '@/app/components/mini-player/button'
-import { RadioInfo } from '@/app/components/player/radio-info'
-import { TrackInfo } from '@/app/components/player/track-info'
-import { podcasts } from '@/service/podcasts'
+import { memo, useCallback, useEffect, useRef } from "react";
+import { getSongStreamUrl } from "@/api/httpClient";
+import { getProxyURL } from "@/api/podcastClient";
+import { MiniPlayerButton } from "@/app/components/mini-player/button";
+import { RadioInfo } from "@/app/components/player/radio-info";
+import { TrackInfo } from "@/app/components/player/track-info";
+import { podcasts } from "@/service/podcasts";
 import {
   getVolume,
   usePlayerActions,
@@ -14,41 +14,42 @@ import {
   usePlayerRef,
   usePlayerSonglist,
   usePlayerStore,
+  useIsRemoteControlActive,
   useReplayGainState,
-} from '@/store/player.store'
-import { LoopState } from '@/types/playerContext'
-import { hasPiPSupport } from '@/utils/browser'
-import { logger } from '@/utils/logger'
-import { ReplayGainParams } from '@/utils/replayGain'
-import { AudioPlayer } from './audio'
-import { PlayerClearQueueButton } from './clear-queue-button'
-import { PlayerControls } from './controls'
-import { PlayerLikeButton } from './like-button'
-import { PlayerLyricsButton } from './lyrics-button'
-import { PodcastInfo } from './podcast-info'
-import { PodcastPlaybackRate } from './podcast-playback-rate'
-import { PlayerProgress } from './progress'
-import { PlayerQueueButton } from './queue-button'
-import { PlayerVolume } from './volume'
+} from "@/store/player.store";
+import { LoopState } from "@/types/playerContext";
+import { hasPiPSupport } from "@/utils/browser";
+import { logger } from "@/utils/logger";
+import { ReplayGainParams } from "@/utils/replayGain";
+import { AudioPlayer } from "./audio";
+import { PlayerClearQueueButton } from "./clear-queue-button";
+import { PlayerControls } from "./controls";
+import { PlayerLikeButton } from "./like-button";
+import { PlayerLyricsButton } from "./lyrics-button";
+import { PodcastInfo } from "./podcast-info";
+import { PodcastPlaybackRate } from "./podcast-playback-rate";
+import { PlayerProgress } from "./progress";
+import { PlayerQueueButton } from "./queue-button";
+import { PlayerVolume } from "./volume";
 
-const MemoTrackInfo = memo(TrackInfo)
-const MemoRadioInfo = memo(RadioInfo)
-const MemoPodcastInfo = memo(PodcastInfo)
-const MemoPlayerControls = memo(PlayerControls)
-const MemoPlayerProgress = memo(PlayerProgress)
-const MemoPlayerLikeButton = memo(PlayerLikeButton)
-const MemoPlayerQueueButton = memo(PlayerQueueButton)
-const MemoPlayerClearQueueButton = memo(PlayerClearQueueButton)
-const MemoPlayerVolume = memo(PlayerVolume)
-const MemoPodcastPlaybackRate = memo(PodcastPlaybackRate)
-const MemoLyricsButton = memo(PlayerLyricsButton)
-const MemoMiniPlayerButton = memo(MiniPlayerButton)
-const MemoAudioPlayer = memo(AudioPlayer)
+const MemoTrackInfo = memo(TrackInfo);
+const MemoRadioInfo = memo(RadioInfo);
+const MemoPodcastInfo = memo(PodcastInfo);
+const MemoPlayerControls = memo(PlayerControls);
+const MemoPlayerProgress = memo(PlayerProgress);
+const MemoPlayerLikeButton = memo(PlayerLikeButton);
+const MemoPlayerQueueButton = memo(PlayerQueueButton);
+const MemoPlayerClearQueueButton = memo(PlayerClearQueueButton);
+const MemoPlayerVolume = memo(PlayerVolume);
+const MemoPodcastPlaybackRate = memo(PodcastPlaybackRate);
+const MemoLyricsButton = memo(PlayerLyricsButton);
+const MemoMiniPlayerButton = memo(MiniPlayerButton);
+const MemoAudioPlayer = memo(AudioPlayer);
 
 export function Player() {
-  const audioRef = useRef<HTMLAudioElement>(null)
-  const radioRef = useRef<HTMLAudioElement>(null)
-  const podcastRef = useRef<HTMLAudioElement>(null)
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const radioRef = useRef<HTMLAudioElement>(null);
+  const podcastRef = useRef<HTMLAudioElement>(null);
   const {
     setAudioPlayerRef,
     setCurrentDuration,
@@ -57,65 +58,74 @@ export function Player() {
     handleSongEnded,
     getCurrentProgress,
     getCurrentPodcastProgress,
-  } = usePlayerActions()
+  } = usePlayerActions();
   const { currentList, currentSongIndex, radioList, podcastList } =
-    usePlayerSonglist()
-  const isPlaying = usePlayerIsPlaying()
-  const { isSong, isRadio, isPodcast } = usePlayerMediaType()
-  const loopState = usePlayerLoop()
-  const audioPlayerRef = usePlayerRef()
-  const currentPlaybackRate = usePlayerStore().playerState.currentPlaybackRate
+    usePlayerSonglist();
+  const isPlaying = usePlayerIsPlaying();
+  const { isSong, isRadio, isPodcast } = usePlayerMediaType();
+  const loopState = usePlayerLoop();
+  const audioPlayerRef = usePlayerRef();
+  const isRemoteControlActive = useIsRemoteControlActive();
+  const currentPlaybackRate = usePlayerStore().playerState.currentPlaybackRate;
   const { replayGainType, replayGainPreAmp, replayGainDefaultGain } =
-    useReplayGainState()
+    useReplayGainState();
 
-  const song = currentList[currentSongIndex]
-  const radio = radioList[currentSongIndex]
-  const podcast = podcastList[currentSongIndex]
+  const song = currentList[currentSongIndex];
+  const radio = radioList[currentSongIndex];
+  const podcast = podcastList[currentSongIndex];
 
   const getAudioRef = useCallback(() => {
-    if (isRadio) return radioRef
-    if (isPodcast) return podcastRef
+    if (isRadio) return radioRef;
+    if (isPodcast) return podcastRef;
 
-    return audioRef
-  }, [isPodcast, isRadio])
+    return audioRef;
+  }, [isPodcast, isRadio]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: audioRef needed
   useEffect(() => {
-    if (!isSong && !song) return
+    if (!isSong && !song) return;
+    if (isRemoteControlActive) return;
 
     if (audioPlayerRef === null && audioRef.current)
-      setAudioPlayerRef(audioRef.current)
-  }, [audioPlayerRef, audioRef, isSong, setAudioPlayerRef, song])
+      setAudioPlayerRef(audioRef.current);
+  }, [
+    audioPlayerRef,
+    audioRef,
+    isRemoteControlActive,
+    isSong,
+    setAudioPlayerRef,
+    song,
+  ]);
 
   useEffect(() => {
-    const audio = podcastRef.current
-    if (!audio || !isPodcast) return
+    const audio = podcastRef.current;
+    if (!audio || !isPodcast) return;
 
-    audio.playbackRate = currentPlaybackRate
-  }, [currentPlaybackRate, isPodcast])
+    audio.playbackRate = currentPlaybackRate;
+  }, [currentPlaybackRate, isPodcast]);
 
   const setupDuration = useCallback(() => {
-    const audio = getAudioRef().current
-    if (!audio) return
+    const audio = getAudioRef().current;
+    if (!audio) return;
 
     if (isSong && song) {
-      setCurrentDuration(song.duration)
+      setCurrentDuration(song.duration);
     } else if (isPodcast && podcast) {
-      setCurrentDuration(podcast.duration)
+      setCurrentDuration(podcast.duration);
     }
 
     if (isPodcast) {
-      const podcastProgress = getCurrentPodcastProgress()
+      const podcastProgress = getCurrentPodcastProgress();
 
-      logger.info('[Player] - Resuming episode from:', {
+      logger.info("[Player] - Resuming episode from:", {
         seconds: podcastProgress,
-      })
+      });
 
-      setProgress(podcastProgress)
-      audio.currentTime = podcastProgress
+      setProgress(podcastProgress);
+      audio.currentTime = podcastProgress;
     } else {
-      const progress = getCurrentProgress()
-      audio.currentTime = progress
+      const progress = getCurrentProgress();
+      audio.currentTime = progress;
     }
   }, [
     getAudioRef,
@@ -127,51 +137,51 @@ export function Player() {
     getCurrentPodcastProgress,
     setProgress,
     getCurrentProgress,
-  ])
+  ]);
 
   const setupProgress = useCallback(() => {
-    const audio = getAudioRef().current
-    if (!audio) return
+    const audio = getAudioRef().current;
+    if (!audio) return;
 
-    const currentProgress = Math.floor(audio.currentTime)
-    setProgress(currentProgress)
-  }, [getAudioRef, setProgress])
+    const currentProgress = Math.floor(audio.currentTime);
+    setProgress(currentProgress);
+  }, [getAudioRef, setProgress]);
 
   const setupInitialVolume = useCallback(() => {
-    const audio = getAudioRef().current
-    if (!audio) return
+    const audio = getAudioRef().current;
+    if (!audio) return;
 
-    audio.volume = getVolume() / 100
-  }, [getAudioRef])
+    audio.volume = getVolume() / 100;
+  }, [getAudioRef]);
 
   const sendFinishProgress = useCallback(() => {
-    if (!isPodcast || !podcast) return
+    if (!isPodcast || !podcast) return;
 
     podcasts
       .saveEpisodeProgress(podcast.id, podcast.duration)
       .then(() => {
-        logger.info('Complete progress sent:', podcast.duration)
+        logger.info("Complete progress sent:", podcast.duration);
       })
       .catch((error) => {
-        logger.error('Error sending complete progress', error)
-      })
-  }, [isPodcast, podcast])
+        logger.error("Error sending complete progress", error);
+      });
+  }, [isPodcast, podcast]);
 
   function getTrackReplayGain(): ReplayGainParams {
-    const preAmp = replayGainPreAmp
-    const defaultGain = replayGainDefaultGain
+    const preAmp = replayGainPreAmp;
+    const defaultGain = replayGainDefaultGain;
 
     if (!song || !song.replayGain) {
-      return { gain: defaultGain, peak: 1, preAmp }
+      return { gain: defaultGain, peak: 1, preAmp };
     }
 
-    if (replayGainType === 'album') {
-      const { albumGain = defaultGain, albumPeak = 1 } = song.replayGain
-      return { gain: albumGain, peak: albumPeak, preAmp }
+    if (replayGainType === "album") {
+      const { albumGain = defaultGain, albumPeak = 1 } = song.replayGain;
+      return { gain: albumGain, peak: albumPeak, preAmp };
     }
 
-    const { trackGain = defaultGain, trackPeak = 1 } = song.replayGain
-    return { gain: trackGain, peak: trackPeak, preAmp }
+    const { trackGain = defaultGain, trackPeak = 1 } = song.replayGain;
+    return { gain: trackGain, peak: trackPeak, preAmp };
   }
 
   return (
@@ -221,7 +231,7 @@ export function Player() {
         </div>
       </div>
 
-      {isSong && song && (
+      {isSong && song && !isRemoteControlActive && (
         <MemoAudioPlayer
           replayGain={getTrackReplayGain()}
           src={getSongStreamUrl(song.id)}
@@ -238,7 +248,7 @@ export function Player() {
         />
       )}
 
-      {isRadio && radio && (
+      {isRadio && radio && !isRemoteControlActive && (
         <MemoAudioPlayer
           src={radio.streamUrl}
           autoPlay={isPlaying}
@@ -250,7 +260,7 @@ export function Player() {
         />
       )}
 
-      {isPodcast && podcast && (
+      {isPodcast && podcast && !isRemoteControlActive && (
         <MemoAudioPlayer
           src={getProxyURL(podcast.audio_url)}
           autoPlay={isPlaying}
@@ -261,13 +271,13 @@ export function Player() {
           onLoadedMetadata={setupDuration}
           onTimeUpdate={setupProgress}
           onEnded={() => {
-            sendFinishProgress()
-            handleSongEnded()
+            sendFinishProgress();
+            handleSongEnded();
           }}
           onLoadStart={setupInitialVolume}
           data-testid="player-podcast-audio"
         />
       )}
     </footer>
-  )
+  );
 }

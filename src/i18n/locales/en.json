@@ -712,7 +712,72 @@
           "label": "Minimize to Tray",
           "info": "When enabled, the app will minimize to the system tray instead of closing when you click the close button."
         }
+      },
+      "lanControl": {
+        "group": "LAN Control",
+        "description": "Manage LAN control settings for remote access.",
+        "enable": {
+          "label": "Enable LAN Control",
+          "info": "Turn on LAN control to allow remote access to this application."
+        },
+        "port": {
+          "label": "Port",
+          "info": "Specify the port number for the LAN control server."
+        },
+        "password": {
+          "label": "Password",
+          "info": "Set a password for secure access to the LAN control server."
+        },
+        "allowNavidromeAuth": {
+          "label": "Allow Navidrome Authentication",
+          "info": "Enable authentication using Navidrome credentials."
+        },
+        "serverStarted": "LAN control server started successfully.",
+        "serverError": "Failed to start LAN control server.",
+        "passwordRegenerated": "Password regenerated successfully.",
+        "addressCopied": "Server address copied to clipboard.",
+        "passwordCopied": "Password copied to clipboard."
       }
+    }
+  },
+  "lanControl": {
+    "remote": {
+      "menu": "Control other devices",
+      "title": "Control other devices",
+      "description": "Connect to a LAN control server and manage playback remotely.",
+      "address": "Server address",
+      "password": "Access code",
+      "status": {
+        "label": "Status",
+        "connected": "Connected",
+        "connecting": "Connecting",
+        "authenticating": "Authenticating",
+        "error": "Error",
+        "disconnected": "Disconnected"
+      },
+      "actions": {
+        "connect": "Connect",
+        "connecting": "Connecting...",
+        "disconnect": "Disconnect",
+        "refresh": "Refresh state"
+      },
+      "nowPlaying": "Now playing",
+      "volume": "Volume: {{volume}}%",
+      "emptyTitle": "No track playing",
+      "emptyArtist": "Unknown artist",
+      "controls": {
+        "previous": "Previous",
+        "play": "Play",
+        "pause": "Pause",
+        "next": "Next",
+        "shuffle": "Toggle shuffle",
+        "repeat": "Toggle repeat"
+      },
+      "queue": "Playback queue",
+      "items": "items",
+      "queueEmpty": "Queue is empty",
+      "unknownDevice": "Unknown device",
+      "version": "v{{version}}"
     }
   },
   "dayjs": {

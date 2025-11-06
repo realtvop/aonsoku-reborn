@@ -1,12 +1,12 @@
-import { Info, Keyboard, LogOut, User } from 'lucide-react'
-import { useState } from 'react'
-import { Fragment } from 'react/jsx-runtime'
-import { useHotkeys } from 'react-hotkeys-hook'
-import { useTranslation } from 'react-i18next'
+import { Cast, Info, Keyboard, LogOut, User } from "lucide-react";
+import { useState } from "react";
+import { Fragment } from "react/jsx-runtime";
+import { useHotkeys } from "react-hotkeys-hook";
+import { useTranslation } from "react-i18next";
 
-import { AboutDialog } from '@/app/components/about/dialog'
-import { ShortcutsDialog } from '@/app/components/shortcuts/dialog'
-import { Avatar, AvatarFallback } from '@/app/components/ui/avatar'
+import { AboutDialog } from "@/app/components/about/dialog";
+import { ShortcutsDialog } from "@/app/components/shortcuts/dialog";
+import { Avatar, AvatarFallback } from "@/app/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,25 +15,27 @@ import {
   DropdownMenuSeparator,
   DropdownMenuShortcut,
   DropdownMenuTrigger,
-} from '@/app/components/ui/dropdown-menu'
-import { LogoutObserver } from '@/app/observers/logout-observer'
-import { logoutKeys, shortcutDialogKeys, stringifyShortcut } from '@/shortcuts'
-import { useAppData, useAppStore } from '@/store/app.store'
-import { isMacOS } from '@/utils/desktop'
+} from "@/app/components/ui/dropdown-menu";
+import { LogoutObserver } from "@/app/observers/logout-observer";
+import { RemoteControlDialog } from "@/app/components/remote-control/dialog";
+import { logoutKeys, shortcutDialogKeys, stringifyShortcut } from "@/shortcuts";
+import { useAppData, useAppStore } from "@/store/app.store";
+import { isMacOS } from "@/utils/desktop";
 
 export function UserDropdown() {
-  const { username, url, lockUser } = useAppData()
+  const { username, url, lockUser } = useAppData();
   const setLogoutDialogState = useAppStore(
-    (state) => state.actions.setLogoutDialogState,
-  )
-  const { t } = useTranslation()
-  const [shortcutsOpen, setShortcutsOpen] = useState(false)
-  const [aboutOpen, setAboutOpen] = useState(false)
+    (state) => state.actions.setLogoutDialogState
+  );
+  const { t } = useTranslation();
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [remoteControlOpen, setRemoteControlOpen] = useState(false);
 
-  useHotkeys('shift+ctrl+q', () => setLogoutDialogState(true))
-  useHotkeys('mod+/', () => setShortcutsOpen((prev) => !prev))
+  useHotkeys("shift+ctrl+q", () => setLogoutDialogState(true));
+  useHotkeys("mod+/", () => setShortcutsOpen((prev) => !prev));
 
-  const alignPosition = isMacOS ? 'end' : 'center'
+  const alignPosition = isMacOS ? "end" : "center";
 
   return (
     <Fragment>
@@ -41,6 +43,10 @@ export function UserDropdown() {
 
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
+      <RemoteControlDialog
+        open={remoteControlOpen}
+        onOpenChange={setRemoteControlOpen}
+      />
 
       <DropdownMenu>
         <DropdownMenuTrigger className="user-dropdown-trigger">
@@ -62,22 +68,26 @@ export function UserDropdown() {
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => setShortcutsOpen(true)}>
             <Keyboard className="mr-2 h-4 w-4" />
-            <span>{t('shortcuts.modal.title')}</span>
+            <span>{t("shortcuts.modal.title")}</span>
             <DropdownMenuShortcut>
               {stringifyShortcut(shortcutDialogKeys)}
             </DropdownMenuShortcut>
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setRemoteControlOpen(true)}>
+            <Cast className="mr-2 h-4 w-4" />
+            <span>{t("lanControl.remote.menu")}</span>
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => setAboutOpen(true)}>
             <Info className="mr-2 h-4 w-4" />
-            <span>{t('menu.about')}</span>
+            <span>{t("menu.about")}</span>
           </DropdownMenuItem>
           {!lockUser && (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => setLogoutDialogState(true)}>
                 <LogOut className="mr-2 h-4 w-4" />
-                <span>{t('menu.serverLogout')}</span>
+                <span>{t("menu.serverLogout")}</span>
                 <DropdownMenuShortcut>
                   {stringifyShortcut(logoutKeys)}
                 </DropdownMenuShortcut>
@@ -87,5 +97,5 @@ export function UserDropdown() {
         </DropdownMenuContent>
       </DropdownMenu>
     </Fragment>
-  )
+  );
 }

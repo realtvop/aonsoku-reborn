@@ -17,6 +17,7 @@ import {
   usePlayerMediaType,
   usePlayerProgress,
   usePlayerSonglist,
+  useIsRemoteControlActive,
 } from "@/store/player.store";
 import { convertSecondsToTime } from "@/utils/convertSecondsToTime";
 import { logger } from "@/utils/logger";
@@ -37,6 +38,7 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
   const { isSong, isPodcast } = usePlayerMediaType();
   const { setProgress, setUpdatePodcastProgress, getCurrentPodcastProgress } =
     usePlayerActions();
+  const isRemoteControlActive = useIsRemoteControlActive();
   const isScrobbleSentRef = useRef(false);
   const isNowPlayingSentRef = useRef(false);
 
@@ -45,11 +47,12 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
   const updateAudioCurrentTime = useCallback(
     (value: number) => {
       isSeeking = false;
+      if (isRemoteControlActive) return;
       if (audioRef.current) {
         audioRef.current.currentTime = value;
       }
     },
-    [audioRef]
+    [audioRef, isRemoteControlActive]
   );
 
   const handleSeeking = useCallback((amount: number) => {
@@ -59,19 +62,29 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
 
   const handleSeeked = useCallback(
     (amount: number) => {
-      updateAudioCurrentTime(amount);
+      if (!isRemoteControlActive) {
+        updateAudioCurrentTime(amount);
+      }
       setProgress(amount);
       setLocalProgress(amount);
     },
-    [setProgress, updateAudioCurrentTime]
+    [isRemoteControlActive, setProgress, updateAudioCurrentTime]
   );
 
   const handleSeekedFallback = useCallback(() => {
     if (localProgress !== progress) {
-      updateAudioCurrentTime(localProgress);
+      if (!isRemoteControlActive) {
+        updateAudioCurrentTime(localProgress);
+      }
       setProgress(localProgress);
     }
-  }, [localProgress, progress, setProgress, updateAudioCurrentTime]);
+  }, [
+    isRemoteControlActive,
+    localProgress,
+    progress,
+    setProgress,
+    updateAudioCurrentTime,
+  ]);
 
   const songDuration = useMemo(
     () => convertSecondsToTime(currentDuration ?? 0),
@@ -85,7 +98,8 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
   const progressTicks = useRef(0);
 
   useEffect(() => {
-    if (!isSong || !isPlaying || !currentSong?.id) return;
+    if (isRemoteControlActive || !isSong || !isPlaying || !currentSong?.id)
+      return;
 
     // Send now playing notification when song starts
     if (progress === 0 && !isNowPlayingSentRef.current) {
@@ -97,7 +111,7 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
     if (progress === 0 && !isPlaying) {
       isNowPlayingSentRef.current = false;
     }
-  }, [isSong, isPlaying, currentSong?.id, progress]);
+  }, [isSong, isPlaying, currentSong?.id, progress, isRemoteControlActive]);
 
   // Reset the flag when the song changes
   useEffect(() => {
@@ -108,6 +122,7 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
     if (isSeeking || !isPlaying) {
       return;
     }
+    if (isRemoteControlActive || !isSong) return;
     if (isSong) {
       const progressPercentage = (progress / currentDuration) * 100;
 
@@ -134,11 +149,12 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
     sendScrobble,
     currentSong.id,
     isPlaying,
+    isRemoteControlActive,
   ]);
 
   // Used to save listening progress to backend every 30 seconds
   useEffect(() => {
-    if (!isPodcast || !podcastList) return;
+    if (isRemoteControlActive || !isPodcast || !podcastList) return;
     if (progress === 0) return;
 
     const send = (progress / 30) % 1 === 0;
@@ -167,6 +183,7 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
     podcastList,
     progress,
     setUpdatePodcastProgress,
+    isRemoteControlActive,
   ]);
 
   const currentTime = convertSecondsToTime(
