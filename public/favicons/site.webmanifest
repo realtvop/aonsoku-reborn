@@ -3,11 +3,16 @@
   "short_name": "Aonsoku",
   "description": "A modern desktop client for Navidrome/Subsonic servers.",
   "theme_color": "#060E23",
-  "categories": ["music", "entertainment"],
+  "categories": [
+    "music",
+    "entertainment"
+  ],
   "background_color": "#20b358",
   "start_url": "/",
   "display": "standalone",
-  "display_override": ["window-controls-overlay"],
+  "display_override": [
+    "window-controls-overlay"
+  ],
   "icons": [
     {
       "src": "/favicons/android-chrome-192x192.png",

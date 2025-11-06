@@ -102,7 +102,7 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
   // Reset the flag when the song changes
   useEffect(() => {
     isNowPlayingSentRef.current = false
-  }, [currentSong?.id])
+  }, [])
 
   useEffect(() => {
     if (isSeeking || !isPlaying) {
