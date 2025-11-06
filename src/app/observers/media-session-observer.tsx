@@ -44,15 +44,15 @@ export function MediaSessionObserver() {
     let title = ''
 
     if (isRadio && radio) {
-      title = `${radioLabel} - ${radio.name}`
+      title = `${radioLabel} - ${radio.name} | Aonsoku`
       manageMediaSession.setRadioMediaSession(radioLabel, radio.name)
     }
     if (isSong && song) {
-      title = `${song.artist} - ${song.title}`
+      title = `${song.title} - ${song.artist} | Aonsoku`
       manageMediaSession.setMediaSession(song)
     }
     if (isPodcast && episode) {
-      title = `${episode.title} - ${episode.podcast.title}`
+      title = `${episode.title} - ${episode.podcast.title} | Aonsoku`
       manageMediaSession.setPodcastMediaSession(episode)
     }
 

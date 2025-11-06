@@ -47,7 +47,17 @@ export function TableListRow<TData>({
 
   function handleTouchEnd(e: TouchEvent<HTMLDivElement>) {
     clearTimeout(tapTimeout)
-    if (isTap) handleRowTap(e, row)
+    if (isTap) {
+      // Check if the touch target is within a button or interactive element
+      const target = e.target as HTMLElement
+      const isButton = target.closest('button')
+      const isInteractive = target.closest('[role="button"]')
+      
+      // Don't trigger the row tap if touching a button or interactive element
+      if (!isButton && !isInteractive) {
+        handleRowTap(e, row)
+      }
+    }
   }
 
   function handleTouchCancel() {
@@ -80,9 +90,9 @@ export function TableListRow<TData>({
         onContextMenu={(e) => handleClicks(e, row)}
         className={clsx(
           'group/tablerow w-[calc(100%-10px)] flex flex-row transition-colors',
-          'data-[state=selected]:bg-foreground/30 hover:bg-foreground/20',
+          'data-[state=selected]:bg-primary/75 hover:bg-muted',
           isQueue && 'rounded-md',
-          isRowSongActive && 'row-active bg-foreground/20',
+          isRowSongActive && 'row-active bg-accent',
         )}
         style={{
           height: `${virtualRow.size}px`,

@@ -10,6 +10,7 @@ import {
   usePlayerSonglist,
   usePlayerSongStarred,
 } from '@/store/player.store'
+import { isMobile } from 'react-device-detect'
 
 interface TableLikeButtonProps {
   type: 'song' | 'artist'
@@ -22,7 +23,7 @@ export function TableLikeButton({
   starred,
   type,
 }: TableLikeButtonProps) {
-  const [isStarred, setIsStarred] = useState(starred)
+  const [ isStarred, setIsStarred ] = useState(starred)
   const { currentSong } = usePlayerSonglist()
   const isSongStarred = usePlayerSongStarred()
   const { isRadio, isSong } = usePlayerMediaType()
@@ -56,8 +57,9 @@ export function TableLikeButton({
     <Button
       variant="ghost"
       className={clsx(
-        'w-8 h-8 p-1 rounded-full transition-opacity hover:bg-background/80',
+        'w-8 h-8 p-1 rounded-full transition-opacity',
         !isStarred && 'opacity-0 group-hover/tablerow:opacity-100',
+        isMobile && 'opacity-100',
       )}
       onClick={(e) => {
         e.stopPropagation()

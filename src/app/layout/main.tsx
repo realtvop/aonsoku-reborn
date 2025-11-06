@@ -11,7 +11,7 @@ export function MainRoutes() {
   }, [pathname])
 
   return (
-    <main className="flex h-full pl-mini-sidebar 2xl:pl-sidebar pt-header pb-player">
+    <main className="flex h-full pl-mini-sidebar xl:pl-sidebar pt-header pb-player">
       <ScrollArea
         id="main-scroll-area"
         className="w-full bg-background-foreground"

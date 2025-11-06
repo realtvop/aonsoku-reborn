@@ -12,6 +12,11 @@ export function createManualChunks(id: string) {
     const scopedPackageName = modulePath.split('/')[1]
     const includes = (id: string) => scopedPackageName.includes(id)
 
+    if (vendor.some((name) => scopedPackageName.startsWith(name))) {
+      return 'vendor'
+    }
+    // Bundle Radix UI with React in vendor chunk to avoid runtime hook resolution issues
+    if (includes('@radix-ui')) return 'vendor'
     if (includes('i18n')) return 'i18n'
     if (includes('tailwind')) return 'tailwind'
     if (includes('html-to-text') || includes('linkify-it')) return 'formatters'
@@ -22,12 +27,8 @@ export function createManualChunks(id: string) {
     if (includes('crypto')) return 'crypto'
     if (includes('lodash')) return 'lodash'
     if (includes('tanstack')) return 'tanstack'
-    if (includes('radix')) return 'radix'
     if (includes('markdown') || includes('remark')) return 'markdown'
     if (includes('react-hook-form') || includes('zod')) return 'forms'
-    if (vendor.some((name) => scopedPackageName.startsWith(name))) {
-      return 'vendor-dom'
-    }
     if (scopedPackageName.startsWith('react')) return 'vendor'
 
     return undefined

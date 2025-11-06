@@ -7,6 +7,7 @@
   "background_color": "#20b358",
   "start_url": "/",
   "display": "standalone",
+  "display_override": ["window-controls-overlay"],
   "icons": [
     {
       "src": "/favicons/android-chrome-192x192.png",
@@ -63,7 +64,7 @@
     {
       "src": "/screenshots/home.png",
       "type": "image/png",
-      "sizes": "1924x1059",
+      "sizes": "1024x1024",
       "form_factor": "wide",
       "label": "Screenshot Displaying Home"
     }

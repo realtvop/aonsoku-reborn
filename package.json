@@ -4,7 +4,7 @@
   "version": "0.10.0",
   "description": "A modern desktop client for Navidrome/Subsonic servers.",
   "author": {
-    "name": "Victor Alves"
+    "name": "realtvop & Victor Alves"
   },
   "main": "./out/main/index.js",
   "type": "module",
@@ -134,7 +134,11 @@
     "vite": "^6.2.3"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["cypress", "electron", "esbuild"]
+    "onlyBuiltDependencies": [
+      "cypress",
+      "electron",
+      "esbuild"
+    ]
   },
   "electron": {
     "window": {
