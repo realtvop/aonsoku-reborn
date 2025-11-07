@@ -25,6 +25,8 @@ export enum LanControlMessageType {
 
   // Playlist control
   PLAY_SONG = "play_song",
+  PLAY_ALBUM = "play_album",
+  PLAY_PLAYLIST = "play_playlist",
   ADD_TO_QUEUE = "add_to_queue",
   CLEAR_QUEUE = "clear_queue",
 
@@ -106,6 +108,14 @@ export interface VolumeData {
 
 export interface PlaySongData {
   songId: string;
+}
+
+export interface PlayAlbumData {
+  albumId: string;
+}
+
+export interface PlayPlaylistData {
+  playlistId: string;
 }
 
 export interface AddToQueueData {

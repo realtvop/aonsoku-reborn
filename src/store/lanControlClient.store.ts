@@ -69,12 +69,62 @@ function cleanupRemoteControl() {
   actions.exitRemoteControl();
 }
 
+// LocalStorage keys
+const STORAGE_KEY_ADDRESS = "lanControl.client.address";
+const STORAGE_KEY_PASSWORD = "lanControl.client.password";
+const STORAGE_KEY_AUTO_CONNECT = "lanControl.client.autoConnect";
+
+// Load saved connection info from localStorage
+function loadSavedConnection() {
+  try {
+    const address = localStorage.getItem(STORAGE_KEY_ADDRESS);
+    const password = localStorage.getItem(STORAGE_KEY_PASSWORD);
+    const autoConnect = localStorage.getItem(STORAGE_KEY_AUTO_CONNECT) === "true";
+    return {
+      address: address || "ws://localhost:5299",
+      password: password || "",
+      autoConnect,
+    };
+  } catch (error) {
+    console.error("[LAN Control Client] Failed to load saved connection", error);
+    return {
+      address: "ws://localhost:5299",
+      password: "",
+      autoConnect: false,
+    };
+  }
+}
+
+// Save connection info to localStorage
+function saveConnection(address: string, password: string) {
+  try {
+    localStorage.setItem(STORAGE_KEY_ADDRESS, address);
+    localStorage.setItem(STORAGE_KEY_PASSWORD, password);
+    localStorage.setItem(STORAGE_KEY_AUTO_CONNECT, "true");
+  } catch (error) {
+    console.error("[LAN Control Client] Failed to save connection", error);
+  }
+}
+
+// Clear saved connection
+function clearSavedConnection() {
+  try {
+    localStorage.removeItem(STORAGE_KEY_ADDRESS);
+    localStorage.removeItem(STORAGE_KEY_PASSWORD);
+    localStorage.removeItem(STORAGE_KEY_AUTO_CONNECT);
+  } catch (error) {
+    console.error("[LAN Control Client] Failed to clear saved connection", error);
+  }
+}
+
+const savedConnection = loadSavedConnection();
+
 export const useLanControlClientStore =
   createWithEqualityFn<LanControlClientState>()(
     (set, get) => ({
       status: "disconnected",
-      address: "ws://localhost:5299",
-      password: "",
+      address: savedConnection.address,
+      password: savedConnection.password,
       remoteDevice: null,
       playerState: null,
       currentSong: null,
@@ -150,6 +200,8 @@ export const useLanControlClientStore =
                 const success = Boolean(response?.success);
                 if (success) {
                   const remoteDevice = response.deviceInfo ?? null;
+                  // Save successful connection
+                  saveConnection(get().address, get().password);
                   set({
                     status: "connected",
                     remoteDevice,
@@ -270,6 +322,8 @@ export const useLanControlClientStore =
           reconnectAbort = true;
           closeSocket();
           cleanupRemoteControl();
+          // Clear saved connection on manual disconnect
+          clearSavedConnection();
           set({
             status: "disconnected",
             remoteDevice: null,
@@ -291,3 +345,17 @@ export const useLanControlClientStore =
     }),
     shallow,
   );
+
+// Auto-connect function to be called on app startup
+export function tryAutoConnect() {
+  const saved = loadSavedConnection();
+  if (saved.autoConnect && saved.address && saved.password) {
+    // Delay to ensure store is initialized
+    setTimeout(() => {
+      const store = useLanControlClientStore.getState();
+      if (store.status === "disconnected") {
+        store.actions.connect();
+      }
+    }, 1000);
+  }
+}

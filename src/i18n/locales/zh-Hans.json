@@ -640,6 +640,28 @@
       "volume": "音量：{{volume}}%",
       "emptyTitle": "暂无播放内容",
       "emptyArtist": "未知艺术家",
+      "loadingSong": "加载中...",
+      "queue": "播放队列",
+      "playing": "播放中",
+      "currentlyPlaying": "当前播放",
+      "clickToPlay": "点击播放",
+      "tabs": {
+        "control": "控制",
+        "library": "音乐库"
+      },
+      "library": {
+        "search": "搜索",
+        "albums": "专辑",
+        "playlists": "播放列表",
+        "songs": "歌曲",
+        "searchPlaceholder": "搜索歌曲、专辑...",
+        "searchButton": "搜索",
+        "searching": "搜索中...",
+        "noResults": "未找到结果",
+        "loading": "加载中...",
+        "noAlbums": "没有可用的专辑",
+        "noPlaylists": "没有可用的播放列表"
+      },
       "controls": {
         "previous": "上一首",
         "play": "播放",
@@ -648,11 +670,11 @@
         "shuffle": "切换随机播放",
         "repeat": "切换循环"
       },
-      "queue": "播放队列",
       "items": "项",
       "queueEmpty": "队列为空",
       "unknownDevice": "未知设备",
-      "version": "版本 {{version}}"
+      "version": "版本 {{version}}",
+      "autoConnectFailed": "无法连接到远程设备，进入本地播放模式"
     }
   },
   "podcasts": {

@@ -765,6 +765,28 @@
       "volume": "Volume: {{volume}}%",
       "emptyTitle": "No track playing",
       "emptyArtist": "Unknown artist",
+      "loadingSong": "Loading...",
+      "queue": "Playback queue",
+      "playing": "Playing",
+      "currentlyPlaying": "Currently playing",
+      "clickToPlay": "Click to play",
+      "tabs": {
+        "control": "Control",
+        "library": "Library"
+      },
+      "library": {
+        "search": "Search",
+        "albums": "Albums",
+        "playlists": "Playlists",
+        "songs": "Songs",
+        "searchPlaceholder": "Search songs, albums...",
+        "searchButton": "Search",
+        "searching": "Searching...",
+        "noResults": "No results found",
+        "loading": "Loading...",
+        "noAlbums": "No albums available",
+        "noPlaylists": "No playlists available"
+      },
       "controls": {
         "previous": "Previous",
         "play": "Play",
@@ -773,11 +795,11 @@
         "shuffle": "Toggle shuffle",
         "repeat": "Toggle repeat"
       },
-      "queue": "Playback queue",
       "items": "items",
       "queueEmpty": "Queue is empty",
       "unknownDevice": "Unknown device",
-      "version": "v{{version}}"
+      "version": "v{{version}}",
+      "autoConnectFailed": "Failed to connect to remote device, entering local playback mode"
     }
   },
   "dayjs": {

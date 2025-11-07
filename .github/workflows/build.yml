@@ -4,11 +4,11 @@ on:
   push:
     branches:
       - main
-      - develop
+      - development
   pull_request:
     branches:
       - main
-      - develop
+      - development
 
 jobs:
   build-tauri:
@@ -22,10 +22,10 @@ jobs:
           - platform: "macos-latest"
             # for Intel based macs.
             args: "--target x86_64-apple-darwin"
-          - platform: 'ubuntu-22.04'
-            args: ''
-        #   - platform: 'ubuntu-22.04-arm'
-        #     args: ''
+          - platform: "ubuntu-22.04"
+            args: ""
+          #   - platform: 'ubuntu-22.04-arm'
+          #     args: ''
           - platform: "windows-latest"
             args: ""
           - platform: "windows-11-arm"

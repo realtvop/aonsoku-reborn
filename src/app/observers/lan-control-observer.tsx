@@ -24,6 +24,9 @@ import {
   LanControlMessageType,
   LanControlServerInfo,
   PlayerStateData,
+  PlayAlbumData,
+  PlayPlaylistData,
+  PlaySongData,
   QueueData,
   SeekData,
   SetRepeatData,
@@ -32,6 +35,7 @@ import {
 } from "@/types/lanControl";
 import { LoopState } from "@/types/playerContext";
 import { isDesktop } from "@/utils/desktop";
+import { subsonic } from "@/service/subsonic";
 
 function mapLoopState(loop: LoopState): PlayerStateData["repeatMode"] {
   switch (loop) {
@@ -129,7 +133,7 @@ export function LanControlObserver() {
       if (!latestServerInfo.current.running) return;
       window.api.lanControl.broadcastState(state);
     },
-    [config.enabled, isDesktopEnv],
+    [config.enabled, isDesktopEnv]
   );
 
   const ensureServerRunning = useCallback(async () => {
@@ -142,7 +146,7 @@ export function LanControlObserver() {
       setServerInfo(result);
       if (!result.running && result.error) {
         toast.error(
-          `${t("settings.desktop.lanControl.serverError")}: ${result.error}`,
+          `${t("settings.desktop.lanControl.serverError")}: ${result.error}`
         );
       }
     }
@@ -166,7 +170,7 @@ export function LanControlObserver() {
         setServerInfo(result);
         if (!result.running && result.error) {
           toast.error(
-            `${t("settings.desktop.lanControl.serverError")}: ${result.error}`,
+            `${t("settings.desktop.lanControl.serverError")}: ${result.error}`
           );
         } else if (result.running) {
           toast.success(t("settings.desktop.lanControl.serverStarted"));
@@ -303,6 +307,54 @@ export function LanControlObserver() {
         case LanControlMessageType.GET_QUEUE: {
           const queue = buildQueueData();
           window.api.lanControl.broadcastQueue(queue);
+          break;
+        }
+        case LanControlMessageType.PLAY_SONG: {
+          const payload = data as PlaySongData | undefined;
+          if (payload && payload.songId) {
+            subsonic.songs
+              .getSong(payload.songId)
+              .then((song) => {
+                if (song) {
+                  playerActions.playSong(song);
+                }
+              })
+              .catch((error) => {
+                console.error("Failed to play song:", error);
+              });
+          }
+          break;
+        }
+        case LanControlMessageType.PLAY_ALBUM: {
+          const payload = data as PlayAlbumData | undefined;
+          if (payload && payload.albumId) {
+            subsonic.albums
+              .getOne(payload.albumId)
+              .then((album) => {
+                if (album && album.song) {
+                  playerActions.setSongList(album.song, 0);
+                }
+              })
+              .catch((error) => {
+                console.error("Failed to play album:", error);
+              });
+          }
+          break;
+        }
+        case LanControlMessageType.PLAY_PLAYLIST: {
+          const payload = data as PlayPlaylistData | undefined;
+          if (payload && payload.playlistId) {
+            subsonic.playlists
+              .getOne(payload.playlistId)
+              .then((playlist) => {
+                if (playlist && playlist.entry) {
+                  playerActions.setSongList(playlist.entry, 0);
+                }
+              })
+              .catch((error) => {
+                console.error("Failed to play playlist:", error);
+              });
+          }
           break;
         }
       }
