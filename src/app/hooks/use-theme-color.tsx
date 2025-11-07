@@ -16,7 +16,7 @@ export function useThemeColor() {
       // Convert HSL to hex color for theme-color meta tag
       // --background is typically in format like "222.2 84% 4.9%"
       const hslMatch = bgColor.match(
-        /^(\d+\.?\d*)\s+(\d+\.?\d*)%\s+(\d+\.?\d*)%$/
+        /^(\d+\.?\d*)\s+(\d+\.?\d*)%\s+(\d+\.?\d*)%$/,
       );
 
       if (hslMatch) {
@@ -121,6 +121,6 @@ function rgbToHex(rgb: string): string {
   };
 
   return `#${toHex(Number(match[1]))}${toHex(Number(match[2]))}${toHex(
-    Number(match[3])
+    Number(match[3]),
   )}`;
 }

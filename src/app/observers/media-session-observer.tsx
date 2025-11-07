@@ -1,62 +1,62 @@
-import { useCallback, useEffect } from 'react'
-import { useTranslation } from 'react-i18next'
+import { useCallback, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import {
   usePlayerIsPlaying,
   usePlayerMediaType,
   usePlayerSonglist,
-} from '@/store/player.store'
-import { appName } from '@/utils/appName'
-import { manageMediaSession } from '@/utils/setMediaSession'
+} from "@/store/player.store";
+import { appName } from "@/utils/appName";
+import { manageMediaSession } from "@/utils/setMediaSession";
 
 export function MediaSessionObserver() {
-  const { t } = useTranslation()
-  const isPlaying = usePlayerIsPlaying()
-  const { isRadio, isSong, isPodcast } = usePlayerMediaType()
+  const { t } = useTranslation();
+  const isPlaying = usePlayerIsPlaying();
+  const { isRadio, isSong, isPodcast } = usePlayerMediaType();
   const { currentList, radioList, currentSongIndex, podcastList } =
-    usePlayerSonglist()
-  const radioLabel = t('radios.label')
+    usePlayerSonglist();
+  const radioLabel = t("radios.label");
 
-  const song = currentList[currentSongIndex] ?? null
-  const radio = radioList[currentSongIndex] ?? null
-  const episode = podcastList[currentSongIndex] ?? null
+  const song = currentList[currentSongIndex] ?? null;
+  const radio = radioList[currentSongIndex] ?? null;
+  const episode = podcastList[currentSongIndex] ?? null;
 
   const hasNothingPlaying =
     currentList.length === 0 &&
     radioList.length === 0 &&
-    podcastList.length === 0
+    podcastList.length === 0;
 
   const resetAppTitle = useCallback(() => {
-    document.title = appName
-  }, [])
+    document.title = appName;
+  }, []);
 
   useEffect(() => {
-    manageMediaSession.setPlaybackState(isPlaying)
+    manageMediaSession.setPlaybackState(isPlaying);
 
     if (hasNothingPlaying) {
-      manageMediaSession.removeMediaSession()
+      manageMediaSession.removeMediaSession();
     }
 
     if (hasNothingPlaying || !isPlaying) {
-      resetAppTitle()
-      return
+      resetAppTitle();
+      return;
     }
 
-    let title = ''
+    let title = "";
 
     if (isRadio && radio) {
-      title = `${radioLabel} - ${radio.name} | Aonsoku`
-      manageMediaSession.setRadioMediaSession(radioLabel, radio.name)
+      title = `${radioLabel} - ${radio.name} | Aonsoku`;
+      manageMediaSession.setRadioMediaSession(radioLabel, radio.name);
     }
     if (isSong && song) {
-      title = `${song.title} - ${song.artist} | Aonsoku`
-      manageMediaSession.setMediaSession(song)
+      title = `${song.title} - ${song.artist} | Aonsoku`;
+      manageMediaSession.setMediaSession(song);
     }
     if (isPodcast && episode) {
-      title = `${episode.title} - ${episode.podcast.title} | Aonsoku`
-      manageMediaSession.setPodcastMediaSession(episode)
+      title = `${episode.title} - ${episode.podcast.title} | Aonsoku`;
+      manageMediaSession.setPodcastMediaSession(episode);
     }
 
-    document.title = title
+    document.title = title;
   }, [
     episode,
     hasNothingPlaying,
@@ -68,7 +68,7 @@ export function MediaSessionObserver() {
     radioLabel,
     song,
     resetAppTitle,
-  ])
+  ]);
 
-  return null
+  return null;
 }

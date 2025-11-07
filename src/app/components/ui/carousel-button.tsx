@@ -1,15 +1,15 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react'
-import * as React from 'react'
-import { cn } from '@/lib/utils'
-import { Button } from './button'
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import * as React from "react";
+import { cn } from "@/lib/utils";
+import { Button } from "./button";
 
 interface CarouselButtonProps extends React.ComponentProps<typeof Button> {
-  direction: 'prev' | 'next'
+  direction: "prev" | "next";
 }
 
 const CarouselButton = React.forwardRef<HTMLButtonElement, CarouselButtonProps>(
   (
-    { className, variant = 'outline', size = 'icon', direction, ...props },
+    { className, variant = "outline", size = "icon", direction, ...props },
     ref,
   ) => {
     return (
@@ -17,10 +17,10 @@ const CarouselButton = React.forwardRef<HTMLButtonElement, CarouselButtonProps>(
         ref={ref}
         variant={variant}
         size={size}
-        className={cn('h-8 w-8 rounded-full shadow-sm', className)}
+        className={cn("h-8 w-8 rounded-full shadow-sm", className)}
         {...props}
       >
-        {direction === 'prev' ? (
+        {direction === "prev" ? (
           <>
             <ChevronLeft className="h-4 w-4" />
             <span className="sr-only">Previous slide</span>
@@ -32,10 +32,10 @@ const CarouselButton = React.forwardRef<HTMLButtonElement, CarouselButtonProps>(
           </>
         )}
       </Button>
-    )
+    );
   },
-)
+);
 
-CarouselButton.displayName = 'CarouselButton'
+CarouselButton.displayName = "CarouselButton";
 
-export { CarouselButton }
+export { CarouselButton };

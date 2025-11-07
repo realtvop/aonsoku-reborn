@@ -1,10 +1,10 @@
-import { platform } from '@electron-toolkit/utils'
-import { app, Menu, shell } from 'electron'
-import { repository } from '../../../package.json'
-import { aboutDialog } from './about'
+import { platform } from "@electron-toolkit/utils";
+import { app, Menu, shell } from "electron";
+import { repository } from "../../../package.json";
+import { aboutDialog } from "./about";
 
 export function createAppMenu() {
-  if (!platform.isMacOS) return
+  if (!platform.isMacOS) return;
 
   const template = [
     {
@@ -14,78 +14,78 @@ export function createAppMenu() {
           label: `About ${app.name}`,
           click: () => aboutDialog(),
         },
-        { type: 'separator' },
-        { role: 'services' },
-        { type: 'separator' },
-        { role: 'hide' },
-        { role: 'hideOthers' },
-        { role: 'unhide' },
-        { type: 'separator' },
-        { role: 'quit' },
+        { type: "separator" },
+        { role: "services" },
+        { type: "separator" },
+        { role: "hide" },
+        { role: "hideOthers" },
+        { role: "unhide" },
+        { type: "separator" },
+        { role: "quit" },
       ],
     },
     {
-      label: 'File',
-      submenu: [{ role: 'close' }],
+      label: "File",
+      submenu: [{ role: "close" }],
     },
     {
-      label: 'Edit',
+      label: "Edit",
       submenu: [
-        { role: 'undo' },
-        { role: 'redo' },
-        { type: 'separator' },
-        { role: 'cut' },
-        { role: 'copy' },
-        { role: 'paste' },
-        { role: 'delete' },
-        { role: 'selectAll' },
-        { type: 'separator' },
+        { role: "undo" },
+        { role: "redo" },
+        { type: "separator" },
+        { role: "cut" },
+        { role: "copy" },
+        { role: "paste" },
+        { role: "delete" },
+        { role: "selectAll" },
+        { type: "separator" },
         {
-          label: 'Speech',
-          submenu: [{ role: 'startSpeaking' }, { role: 'stopSpeaking' }],
+          label: "Speech",
+          submenu: [{ role: "startSpeaking" }, { role: "stopSpeaking" }],
         },
       ],
     },
     {
-      label: 'View',
+      label: "View",
       submenu: [
-        { role: 'reload' },
-        { role: 'forceReload' },
-        { role: 'toggleDevTools' },
-        { type: 'separator' },
-        { role: 'resetZoom' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
-        { type: 'separator' },
-        { role: 'togglefullscreen' },
+        { role: "reload" },
+        { role: "forceReload" },
+        { role: "toggleDevTools" },
+        { type: "separator" },
+        { role: "resetZoom" },
+        { role: "zoomIn" },
+        { role: "zoomOut" },
+        { type: "separator" },
+        { role: "togglefullscreen" },
       ],
     },
     {
-      label: 'Window',
+      label: "Window",
       submenu: [
-        { role: 'minimize' },
-        { role: 'zoom' },
-        { type: 'separator' },
-        { role: 'front' },
-        { type: 'separator' },
-        { role: 'window' },
+        { role: "minimize" },
+        { role: "zoom" },
+        { type: "separator" },
+        { role: "front" },
+        { type: "separator" },
+        { role: "window" },
       ],
     },
     {
-      role: 'help',
+      role: "help",
       submenu: [
         {
-          label: 'Github',
+          label: "Github",
           click: async () => {
-            await shell.openExternal(repository.url)
+            await shell.openExternal(repository.url);
           },
         },
       ],
     },
-  ]
+  ];
 
   // @ts-expect-error set only roles for menu
-  const menu = Menu.buildFromTemplate(template)
+  const menu = Menu.buildFromTemplate(template);
 
-  Menu.setApplicationMenu(menu)
+  Menu.setApplicationMenu(menu);
 }

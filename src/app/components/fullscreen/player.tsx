@@ -1,7 +1,7 @@
-import { FullscreenControls } from './controls'
-import { LikeButton } from './like-button'
-import { FullscreenProgress } from './progress'
-import { VolumeContainer } from './volume-container'
+import { FullscreenControls } from "./controls";
+import { LikeButton } from "./like-button";
+import { FullscreenProgress } from "./progress";
+import { VolumeContainer } from "./volume-container";
 
 export function FullscreenPlayer() {
   return (
@@ -22,5 +22,5 @@ export function FullscreenPlayer() {
         </div>
       </div>
     </div>
-  )
+  );
 }

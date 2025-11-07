@@ -8,7 +8,7 @@ export default function ListWrapper({ children, className }: ListWrapperProps) {
     <div
       className={cn(
         "w-full px-4 py-6 pt-0 bg-transparent relative z-10",
-        className
+        className,
       )}
     >
       {children}

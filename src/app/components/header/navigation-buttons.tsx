@@ -1,19 +1,19 @@
-import clsx from 'clsx'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { Button } from '@/app/components/ui/button'
-import useNavigationHistory from '@/app/hooks/use-navigation-history'
-import { useMainDrawerState } from '@/store/player.store'
+import clsx from "clsx";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Button } from "@/app/components/ui/button";
+import useNavigationHistory from "@/app/hooks/use-navigation-history";
+import { useMainDrawerState } from "@/store/player.store";
 
 export function NavigationButtons() {
-  const { canGoBack, canGoForward, goBack, goForward } = useNavigationHistory()
-  const { mainDrawerState } = useMainDrawerState()
+  const { canGoBack, canGoForward, goBack, goForward } = useNavigationHistory();
+  const { mainDrawerState } = useMainDrawerState();
 
   return (
     <div className="flex gap-1">
       <div
         className={clsx(
-          'w-8 h-8',
-          !canGoBack && !mainDrawerState && 'cursor-not-allowed',
+          "w-8 h-8",
+          !canGoBack && !mainDrawerState && "cursor-not-allowed",
         )}
       >
         <Button
@@ -28,8 +28,8 @@ export function NavigationButtons() {
       </div>
       <div
         className={clsx(
-          'w-8 h-8',
-          !canGoForward && !mainDrawerState && 'cursor-not-allowed',
+          "w-8 h-8",
+          !canGoForward && !mainDrawerState && "cursor-not-allowed",
         )}
       >
         <Button
@@ -43,5 +43,5 @@ export function NavigationButtons() {
         </Button>
       </div>
     </div>
-  )
+  );
 }

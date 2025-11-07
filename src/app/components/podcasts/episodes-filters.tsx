@@ -1,60 +1,60 @@
-import { ArrowDown, ArrowUp, ListFilterIcon } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
-import { useSearchParams } from 'react-router-dom'
-import { ExpandableSearchInput } from '@/app/components/search/expandable-input'
-import { Button } from '@/app/components/ui/button'
+import { ArrowDown, ArrowUp, ListFilterIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
+import { ExpandableSearchInput } from "@/app/components/search/expandable-input";
+import { Button } from "@/app/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuTrigger,
-} from '@/app/components/ui/dropdown-menu'
-import { SimpleTooltip } from '@/app/components/ui/simple-tooltip'
-import { EpisodesOrderByOptions, SortOptions } from '@/utils/albumsFilter'
-import { SearchParamsHandler } from '@/utils/searchParamsHandler'
+} from "@/app/components/ui/dropdown-menu";
+import { SimpleTooltip } from "@/app/components/ui/simple-tooltip";
+import { EpisodesOrderByOptions, SortOptions } from "@/utils/albumsFilter";
+import { SearchParamsHandler } from "@/utils/searchParamsHandler";
 
 export function EpisodesFilters() {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
 
   return (
     <div className="px-8 h-16 flex items-center justify-between">
-      <h2 className="text-xl font-semibold">{t('podcasts.list.episodes')}</h2>
+      <h2 className="text-xl font-semibold">{t("podcasts.list.episodes")}</h2>
 
       <div className="flex gap-2">
         <ExpandableSearchInput
-          placeholder={t('podcasts.filters.episodes.search')}
+          placeholder={t("podcasts.filters.episodes.search")}
         />
         <DefaultSortFilter />
         <FilterDropdown />
       </div>
     </div>
-  )
+  );
 }
 
 function FilterDropdown() {
-  const { t } = useTranslation()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const { getSearchParam } = new SearchParamsHandler(searchParams)
-  const { PublishedAt, Title, Duration } = EpisodesOrderByOptions
+  const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { getSearchParam } = new SearchParamsHandler(searchParams);
+  const { PublishedAt, Title, Duration } = EpisodesOrderByOptions;
 
   const orderByFilter = getSearchParam<EpisodesOrderByOptions>(
-    'orderBy',
+    "orderBy",
     PublishedAt,
-  )
+  );
 
   function handleChangeFilter(value: EpisodesOrderByOptions) {
     setSearchParams((state) => {
-      state.set('orderBy', value)
+      state.set("orderBy", value);
 
-      return state
-    })
+      return state;
+    });
   }
 
   const filters = [
-    { label: 'publishDate', option: PublishedAt },
-    { label: 'title', option: Title },
-    { label: 'duration', option: Duration },
-  ]
+    { label: "publishDate", option: PublishedAt },
+    { label: "title", option: Title },
+    { label: "duration", option: Duration },
+  ];
 
   return (
     <DropdownMenu>
@@ -75,38 +75,38 @@ function FilterDropdown() {
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
-  )
+  );
 }
 
 interface SortFilterProps {
-  defaultSort?: SortOptions
+  defaultSort?: SortOptions;
 }
 
 export function DefaultSortFilter({
   defaultSort = SortOptions.Desc,
 }: SortFilterProps) {
-  const { t } = useTranslation()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const { getSearchParam } = new SearchParamsHandler(searchParams)
-  const { Asc, Desc } = SortOptions
+  const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { getSearchParam } = new SearchParamsHandler(searchParams);
+  const { Asc, Desc } = SortOptions;
 
-  const sortFilter = getSearchParam<SortOptions>('sort', defaultSort)
-  const isDesc = sortFilter === Desc
+  const sortFilter = getSearchParam<SortOptions>("sort", defaultSort);
+  const isDesc = sortFilter === Desc;
 
   function yearFilterTooltip() {
     if (isDesc) {
-      return t('table.sort.asc')
+      return t("table.sort.asc");
     } else {
-      return t('table.sort.desc')
+      return t("table.sort.desc");
     }
   }
 
   function handleChangeSort() {
     setSearchParams((state) => {
-      state.set('sort', isDesc ? Asc : Desc)
+      state.set("sort", isDesc ? Asc : Desc);
 
-      return state
-    })
+      return state;
+    });
   }
 
   return (
@@ -124,5 +124,5 @@ export function DefaultSortFilter({
         )}
       </Button>
     </SimpleTooltip>
-  )
+  );
 }

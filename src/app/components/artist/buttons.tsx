@@ -1,18 +1,18 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useTranslation } from 'react-i18next'
-import { Actions } from '@/app/components/actions'
-import { useSongList } from '@/app/hooks/use-song-list'
-import { subsonic } from '@/service/subsonic'
-import { useAppPages } from '@/store/app.store'
-import { usePlayerActions } from '@/store/player.store'
-import { IArtist } from '@/types/responses/artist'
-import { queryKeys } from '@/utils/queryKeys'
-import { ArtistOptions } from './options'
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
+import { Actions } from "@/app/components/actions";
+import { useSongList } from "@/app/hooks/use-song-list";
+import { subsonic } from "@/service/subsonic";
+import { useAppPages } from "@/store/app.store";
+import { usePlayerActions } from "@/store/player.store";
+import { IArtist } from "@/types/responses/artist";
+import { queryKeys } from "@/utils/queryKeys";
+import { ArtistOptions } from "./options";
 
 interface ArtistButtonsProps {
-  artist: IArtist
-  showInfoButton: boolean
-  isArtistEmpty: boolean
+  artist: IArtist;
+  showInfoButton: boolean;
+  isArtistEmpty: boolean;
 }
 
 export function ArtistButtons({
@@ -20,56 +20,58 @@ export function ArtistButtons({
   showInfoButton,
   isArtistEmpty,
 }: ArtistButtonsProps) {
-  const { t } = useTranslation()
-  const { setSongList } = usePlayerActions()
-  const { showInfoPanel, toggleShowInfoPanel } = useAppPages()
-  const { getArtistAllSongs } = useSongList()
+  const { t } = useTranslation();
+  const { setSongList } = usePlayerActions();
+  const { showInfoPanel, toggleShowInfoPanel } = useAppPages();
+  const { getArtistAllSongs } = useSongList();
 
-  const isArtistStarred = artist.starred !== undefined
+  const isArtistStarred = artist.starred !== undefined;
 
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   const starMutation = useMutation({
     mutationFn: subsonic.star.handleStarItem,
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: [queryKeys.artist.single, artist.id],
-      })
+      });
     },
-  })
+  });
 
   function handleLikeButton() {
-    if (!artist) return
+    if (!artist) return;
     starMutation.mutate({
       id: artist.id,
       starred: isArtistStarred,
-    })
+    });
   }
 
   async function handlePlayArtistRadio(shuffle = false) {
-    const songList = await getArtistAllSongs(artist?.name || '')
+    const songList = await getArtistAllSongs(artist?.name || "");
 
     if (songList) {
-      setSongList(songList, 0, shuffle)
+      setSongList(songList, 0, shuffle);
     }
   }
 
   const buttonsTooltips = {
-    play: t('playlist.buttons.play', { name: artist.name }),
-    shuffle: t('playlist.buttons.shuffle', { name: artist.name }),
-    options: t('playlist.buttons.options', { name: artist.name }),
+    play: t("playlist.buttons.play", { name: artist.name }),
+    shuffle: t("playlist.buttons.shuffle", { name: artist.name }),
+    options: t("playlist.buttons.options", { name: artist.name }),
     like: () => {
       return isArtistStarred
-        ? t('album.buttons.dislike', { name: artist.name })
-        : t('album.buttons.like', { name: artist.name })
+        ? t("album.buttons.dislike", { name: artist.name })
+        : t("album.buttons.like", { name: artist.name });
     },
     info: () => {
-      return showInfoPanel ? t('generic.hideDetails') : t('generic.showDetails')
+      return showInfoPanel
+        ? t("generic.hideDetails")
+        : t("generic.showDetails");
     },
-  }
+  };
 
   if (isArtistEmpty) {
-    return <div className="h-8 w-full" />
+    return <div className="h-8 w-full" />;
   }
 
   return (
@@ -110,5 +112,5 @@ export function ArtistButtons({
         options={<ArtistOptions artist={artist} />}
       />
     </Actions.Container>
-  )
+  );
 }

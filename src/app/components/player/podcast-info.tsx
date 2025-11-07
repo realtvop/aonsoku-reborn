@@ -1,17 +1,17 @@
-import { Fragment, memo, useState } from 'react'
-import { LazyLoadImage } from 'react-lazy-load-image-component'
-import { Link } from 'react-router-dom'
-import { MarqueeTitle } from '@/app/components/fullscreen/marquee-title'
-import { ROUTES } from '@/routes/routesList'
-import { EpisodeWithPodcast } from '@/types/responses/podcasts'
+import { Fragment, memo, useState } from "react";
+import { LazyLoadImage } from "react-lazy-load-image-component";
+import { Link } from "react-router-dom";
+import { MarqueeTitle } from "@/app/components/fullscreen/marquee-title";
+import { ROUTES } from "@/routes/routesList";
+import { EpisodeWithPodcast } from "@/types/responses/podcasts";
 
-const placeholderImageSrc = '/default_podcast_art.png'
+const placeholderImageSrc = "/default_podcast_art.png";
 
-const MemoLazyLoadImage = memo(LazyLoadImage)
-const MemoMarqueeTitle = memo(MarqueeTitle)
+const MemoLazyLoadImage = memo(LazyLoadImage);
+const MemoMarqueeTitle = memo(MarqueeTitle);
 
 export function PodcastInfo({ podcast }: { podcast: EpisodeWithPodcast }) {
-  const [imageError, setImageError] = useState(false)
+  const [imageError, setImageError] = useState(false);
 
   return (
     <Fragment>
@@ -48,5 +48,5 @@ export function PodcastInfo({ podcast }: { podcast: EpisodeWithPodcast }) {
         </Link>
       </div>
     </Fragment>
-  )
+  );
 }

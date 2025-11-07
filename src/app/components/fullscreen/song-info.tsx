@@ -1,16 +1,16 @@
-import { memo } from 'react'
-import { Dot } from '@/app/components/dot'
-import { MarqueeTitle } from '@/app/components/fullscreen/marquee-title'
-import { Badge } from '@/app/components/ui/badge'
-import { usePlayerStore } from '@/store/player.store'
-import { ISong } from '@/types/responses/song'
-import { ALBUM_ARTISTS_MAX_NUMBER } from '@/utils/multipleArtists'
-import { FullscreenSongImage } from './song-image'
+import { memo } from "react";
+import { Dot } from "@/app/components/dot";
+import { MarqueeTitle } from "@/app/components/fullscreen/marquee-title";
+import { Badge } from "@/app/components/ui/badge";
+import { usePlayerStore } from "@/store/player.store";
+import { ISong } from "@/types/responses/song";
+import { ALBUM_ARTISTS_MAX_NUMBER } from "@/utils/multipleArtists";
+import { FullscreenSongImage } from "./song-image";
 
-const MemoFullscreenSongImage = memo(FullscreenSongImage)
+const MemoFullscreenSongImage = memo(FullscreenSongImage);
 
 export function SongInfo() {
-  const currentSong = usePlayerStore((state) => state.songlist.currentSong)
+  const currentSong = usePlayerStore((state) => state.songlist.currentSong);
 
   return (
     <div className="flex items-center justify-start h-full min-h-full max-h-full gap-4 2xl:gap-6 flex-1 pt-2 overflow-hidden">
@@ -39,26 +39,26 @@ export function SongInfo() {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 function ArtistNames({ song }: { song: ISong }) {
-  const { artist, artists } = song
+  const { artist, artists } = song;
 
   if (artists && artists.length > 1) {
-    const data = artists.slice(0, ALBUM_ARTISTS_MAX_NUMBER)
+    const data = artists.slice(0, ALBUM_ARTISTS_MAX_NUMBER);
 
     return (
       <div className="flex items-center gap-1">
         {data.map(({ id, name }, index) => (
           <div key={id} className="flex">
             <p className="truncate drop-shadow-lg">{name}</p>
-            {index < data.length - 1 && ','}
+            {index < data.length - 1 && ","}
           </div>
         ))}
       </div>
-    )
+    );
   }
 
-  return <p className="truncate drop-shadow-lg">{artist}</p>
+  return <p className="truncate drop-shadow-lg">{artist}</p>;
 }

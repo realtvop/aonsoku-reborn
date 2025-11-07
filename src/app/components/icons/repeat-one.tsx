@@ -1,8 +1,8 @@
-import { SVGProps } from 'react'
+import { SVGProps } from "react";
 
 type IconProps = SVGProps<SVGSVGElement> & {
-  size?: number
-}
+  size?: number;
+};
 
 export default function RepeatOne({ size = 24, ...props }: IconProps) {
   return (
@@ -34,5 +34,5 @@ export default function RepeatOne({ size = 24, ...props }: IconProps) {
         strokeLinejoin="round"
       />
     </svg>
-  )
+  );
 }

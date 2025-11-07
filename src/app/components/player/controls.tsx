@@ -1,4 +1,4 @@
-import clsx from 'clsx'
+import clsx from "clsx";
 import {
   Pause,
   Play,
@@ -8,19 +8,19 @@ import {
   Shuffle,
   SkipBack,
   SkipForward,
-} from 'lucide-react'
+} from "lucide-react";
 import {
   ComponentPropsWithoutRef,
   RefObject,
   useCallback,
   useEffect,
-} from 'react'
-import { useTranslation } from 'react-i18next'
-import RepeatOne from '@/app/components/icons/repeat-one'
-import { Button } from '@/app/components/ui/button'
-import { SimpleTooltip } from '@/app/components/ui/simple-tooltip'
-import { usePlayerHotkeys } from '@/app/hooks/use-audio-hotkeys'
-import { cn } from '@/lib/utils'
+} from "react";
+import { useTranslation } from "react-i18next";
+import RepeatOne from "@/app/components/icons/repeat-one";
+import { Button } from "@/app/components/ui/button";
+import { SimpleTooltip } from "@/app/components/ui/simple-tooltip";
+import { usePlayerHotkeys } from "@/app/hooks/use-audio-hotkeys";
+import { cn } from "@/lib/utils";
 import {
   usePlayerActions,
   usePlayerIsPlaying,
@@ -28,18 +28,18 @@ import {
   usePlayerMediaType,
   usePlayerPrevAndNext,
   usePlayerShuffle,
-} from '@/store/player.store'
-import { LoopState } from '@/types/playerContext'
-import { EpisodeWithPodcast } from '@/types/responses/podcasts'
-import { Radio } from '@/types/responses/radios'
-import { ISong } from '@/types/responses/song'
-import { manageMediaSession } from '@/utils/setMediaSession'
+} from "@/store/player.store";
+import { LoopState } from "@/types/playerContext";
+import { EpisodeWithPodcast } from "@/types/responses/podcasts";
+import { Radio } from "@/types/responses/radios";
+import { ISong } from "@/types/responses/song";
+import { manageMediaSession } from "@/utils/setMediaSession";
 
 interface PlayerControlsProps {
-  song: ISong
-  radio: Radio
-  podcast: EpisodeWithPodcast
-  audioRef: RefObject<HTMLAudioElement>
+  song: ISong;
+  radio: Radio;
+  podcast: EpisodeWithPodcast;
+  audioRef: RefObject<HTMLAudioElement>;
 }
 
 export function PlayerControls({
@@ -48,12 +48,12 @@ export function PlayerControls({
   podcast,
   audioRef,
 }: PlayerControlsProps) {
-  const { t } = useTranslation()
-  const { isSong, isPodcast } = usePlayerMediaType()
-  const isShuffleActive = usePlayerShuffle()
-  const { hasPrev, hasNext } = usePlayerPrevAndNext()
-  const loopState = usePlayerLoop()
-  const isPlaying = usePlayerIsPlaying()
+  const { t } = useTranslation();
+  const { isSong, isPodcast } = usePlayerMediaType();
+  const isShuffleActive = usePlayerShuffle();
+  const { hasPrev, hasNext } = usePlayerPrevAndNext();
+  const loopState = usePlayerLoop();
+  const isPlaying = usePlayerIsPlaying();
   const {
     isPlayingOneSong,
     toggleShuffle,
@@ -61,63 +61,63 @@ export function PlayerControls({
     togglePlayPause,
     playPrevSong,
     playNextSong,
-  } = usePlayerActions()
-  const { useAudioHotkeys } = usePlayerHotkeys()
+  } = usePlayerActions();
+  const { useAudioHotkeys } = usePlayerHotkeys();
 
-  useAudioHotkeys('space', togglePlayPause)
-  useAudioHotkeys('mod+left', playPrevSong)
-  useAudioHotkeys('mod+right', playNextSong)
-  useAudioHotkeys('mod+s', toggleShuffle)
-  useAudioHotkeys('mod+r', toggleLoop)
+  useAudioHotkeys("space", togglePlayPause);
+  useAudioHotkeys("mod+left", playPrevSong);
+  useAudioHotkeys("mod+right", playNextSong);
+  useAudioHotkeys("mod+s", toggleShuffle);
+  useAudioHotkeys("mod+r", toggleLoop);
 
   const handleSeekAction = useCallback(
     (value: number) => {
-      const audio = audioRef.current
-      if (!audio) return
+      const audio = audioRef.current;
+      if (!audio) return;
 
-      audio.currentTime += value
+      audio.currentTime += value;
     },
     [audioRef],
-  )
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: isPlaying needed to trigger
   useEffect(() => {
     if (isPodcast) {
-      manageMediaSession.setPodcastHandlers({ handleSeekAction })
+      manageMediaSession.setPodcastHandlers({ handleSeekAction });
     } else {
-      manageMediaSession.setHandlers()
+      manageMediaSession.setHandlers();
     }
-  }, [handleSeekAction, isPodcast, isPlaying])
+  }, [handleSeekAction, isPodcast, isPlaying]);
 
   const shuffleTooltip = isShuffleActive
-    ? t('player.tooltips.shuffle.disable')
-    : t('player.tooltips.shuffle.enable')
+    ? t("player.tooltips.shuffle.disable")
+    : t("player.tooltips.shuffle.enable");
 
-  const previousTooltip = t('player.tooltips.previous')
-  const nextTooltip = t('player.tooltips.next')
+  const previousTooltip = t("player.tooltips.previous");
+  const nextTooltip = t("player.tooltips.next");
 
-  const skipRewindTooltip = t('player.tooltips.rewind', { amount: 15 })
-  const skipForwardTooltip = t('player.tooltips.forward', { amount: 30 })
+  const skipRewindTooltip = t("player.tooltips.rewind", { amount: 15 });
+  const skipForwardTooltip = t("player.tooltips.forward", { amount: 30 });
 
   const playTooltip = isPlaying
-    ? t('player.tooltips.pause')
-    : t('player.tooltips.play')
+    ? t("player.tooltips.pause")
+    : t("player.tooltips.play");
 
   const repeatTooltips = {
-    0: t('player.tooltips.repeat.enable'),
-    1: t('player.tooltips.repeat.enableOne'),
-    2: t('player.tooltips.repeat.disable'),
-  }
-  const repeatTooltip = repeatTooltips[loopState]
+    0: t("player.tooltips.repeat.enable"),
+    1: t("player.tooltips.repeat.enableOne"),
+    2: t("player.tooltips.repeat.disable"),
+  };
+  const repeatTooltip = repeatTooltips[loopState];
 
-  const cannotGotoNextSong = !hasNext && loopState !== LoopState.All
-  const disableButtons = !song && !radio && !podcast
+  const cannotGotoNextSong = !hasNext && loopState !== LoopState.All;
+  const disableButtons = !song && !radio && !podcast;
 
   return (
     <div className="flex w-full gap-1 justify-center items-center mb-1">
       {isSong && (
         <PlayerButton
-          className={clsx(isShuffleActive && 'player-button-active')}
+          className={clsx(isShuffleActive && "player-button-active")}
           disabled={!song || isPlayingOneSong() || !hasNext}
           onClick={toggleShuffle}
           data-testid="player-button-shuffle"
@@ -125,7 +125,7 @@ export function PlayerControls({
         >
           <Shuffle
             className={clsx(
-              isShuffleActive ? 'text-primary' : 'text-secondary-foreground',
+              isShuffleActive ? "text-primary" : "text-secondary-foreground",
             )}
           />
         </PlayerButton>
@@ -157,7 +157,7 @@ export function PlayerControls({
         variant="default"
         disabled={!song && !radio && !isPodcast}
         onClick={togglePlayPause}
-        data-testid={`player-button-${isPlaying ? 'pause' : 'play'}`}
+        data-testid={`player-button-${isPlaying ? "pause" : "play"}`}
         tooltip={playTooltip}
       >
         {isPlaying ? (
@@ -192,7 +192,7 @@ export function PlayerControls({
       {isSong && (
         <PlayerButton
           className={clsx(
-            loopState !== LoopState.Off && 'player-button-active',
+            loopState !== LoopState.Off && "player-button-active",
           )}
           disabled={!song}
           onClick={toggleLoop}
@@ -209,12 +209,12 @@ export function PlayerControls({
         </PlayerButton>
       )}
     </div>
-  )
+  );
 }
 
 type PlayerButtonProps = ComponentPropsWithoutRef<typeof Button> & {
-  tooltip: string
-}
+  tooltip: string;
+};
 
 function PlayerButton({ className, tooltip, ...props }: PlayerButtonProps) {
   return (
@@ -222,11 +222,11 @@ function PlayerButton({ className, tooltip, ...props }: PlayerButtonProps) {
       <Button
         variant="ghost"
         className={cn(
-          'relative rounded-full size-10 p-0 [&_svg]:pointer-events-none [&_svg]:size-[18px] [&_svg]:shrink-0',
+          "relative rounded-full size-10 p-0 [&_svg]:pointer-events-none [&_svg]:size-[18px] [&_svg]:shrink-0",
           className,
         )}
         {...props}
       />
     </SimpleTooltip>
-  )
+  );
 }

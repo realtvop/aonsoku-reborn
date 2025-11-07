@@ -1,10 +1,10 @@
-import { ComponentPropsWithoutRef } from 'react'
-import { useAppWindow } from '@/app/hooks/use-app-window'
-import { cn } from '@/lib/utils'
-import { ControlButton } from './button'
-import { Icons } from './icons'
+import { ComponentPropsWithoutRef } from "react";
+import { useAppWindow } from "@/app/hooks/use-app-window";
+import { cn } from "@/lib/utils";
+import { ControlButton } from "./button";
+import { Icons } from "./icons";
 
-type LinuxProps = ComponentPropsWithoutRef<'div'>
+type LinuxProps = ComponentPropsWithoutRef<"div">;
 
 export function Linux({ className, ...props }: LinuxProps) {
   const {
@@ -13,15 +13,15 @@ export function Linux({ className, ...props }: LinuxProps) {
     maximizeWindow,
     closeWindow,
     isFullscreen,
-  } = useAppWindow()
+  } = useAppWindow();
 
-  if (isFullscreen) return null
+  if (isFullscreen) return null;
 
   return (
     <div
       className={cn(
-        'ml-1 mr-3 h-auto flex items-center gap-2',
-        'fixed top-2 right-0 z-50',
+        "ml-1 mr-3 h-auto flex items-center gap-2",
+        "fixed top-2 right-0 z-50",
         className,
       )}
       {...props}
@@ -49,5 +49,5 @@ export function Linux({ className, ...props }: LinuxProps) {
         <Icons.closeLinux className="text-foreground group-hover:text-white size-3" />
       </ControlButton>
     </div>
-  )
+  );
 }

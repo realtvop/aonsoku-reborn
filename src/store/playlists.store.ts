@@ -1,7 +1,7 @@
-import { devtools, subscribeWithSelector } from 'zustand/middleware'
-import { immer } from 'zustand/middleware/immer'
-import { createWithEqualityFn } from 'zustand/traditional'
-import { IPlaylistsContext, PlaylistData } from '@/types/playlistsContext'
+import { devtools, subscribeWithSelector } from "zustand/middleware";
+import { immer } from "zustand/middleware/immer";
+import { createWithEqualityFn } from "zustand/traditional";
+import { IPlaylistsContext, PlaylistData } from "@/types/playlistsContext";
 
 export const usePlaylistsStore = createWithEqualityFn<IPlaylistsContext>()(
   subscribeWithSelector(
@@ -11,57 +11,57 @@ export const usePlaylistsStore = createWithEqualityFn<IPlaylistsContext>()(
         data: {} as PlaylistData,
         setPlaylistDialogState: (dialogState) => {
           set((state) => {
-            state.playlistDialogState = dialogState
-          })
+            state.playlistDialogState = dialogState;
+          });
         },
         setData: (data) => {
           set((state) => {
-            state.data = data
-          })
+            state.data = data;
+          });
         },
         removeSong: {
           confirmDialogState: false,
           setConfirmDialogState: (status) => {
             set((state) => {
-              state.removeSong.confirmDialogState = status
-            })
+              state.removeSong.confirmDialogState = status;
+            });
           },
           actionData: {
-            playlistId: '',
+            playlistId: "",
             songIndexes: [],
           },
           setActionData: (data) => {
             set((state) => {
-              state.removeSong.actionData = data
-            })
+              state.removeSong.actionData = data;
+            });
           },
         },
         removePlaylist: {
           confirmDialogState: false,
           setConfirmDialogState: (status) => {
             set((state) => {
-              state.removePlaylist.confirmDialogState = status
-            })
+              state.removePlaylist.confirmDialogState = status;
+            });
           },
-          playlistId: '',
+          playlistId: "",
           setPlaylistId: (id) => {
             set((state) => {
-              state.removePlaylist.playlistId = id
-            })
+              state.removePlaylist.playlistId = id;
+            });
           },
         },
       })),
       {
-        name: 'playlists_store',
+        name: "playlists_store",
       },
     ),
   ),
-)
+);
 
-export const usePlaylists = () => usePlaylistsStore((state) => state)
+export const usePlaylists = () => usePlaylistsStore((state) => state);
 
 export const usePlaylistRemoveSong = () =>
-  usePlaylistsStore((state) => state.removeSong)
+  usePlaylistsStore((state) => state.removeSong);
 
 export const useRemovePlaylist = () =>
-  usePlaylistsStore((state) => state.removePlaylist)
+  usePlaylistsStore((state) => state.removePlaylist);

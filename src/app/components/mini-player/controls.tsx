@@ -1,4 +1,4 @@
-import { clsx } from 'clsx'
+import { clsx } from "clsx";
 import {
   Heart,
   Pause,
@@ -7,10 +7,10 @@ import {
   Shuffle,
   SkipBack,
   SkipForward,
-} from 'lucide-react'
-import RepeatOne from '@/app/components/icons/repeat-one'
-import { Button } from '@/app/components/ui/button'
-import { cn } from '@/lib/utils'
+} from "lucide-react";
+import RepeatOne from "@/app/components/icons/repeat-one";
+import { Button } from "@/app/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   usePlayerActions,
   usePlayerIsPlaying,
@@ -18,14 +18,14 @@ import {
   usePlayerPrevAndNext,
   usePlayerShuffle,
   usePlayerSongStarred,
-} from '@/store/player.store'
-import { LoopState } from '@/types/playerContext'
+} from "@/store/player.store";
+import { LoopState } from "@/types/playerContext";
 
 export function MiniPlayerControls() {
-  const isPlaying = usePlayerIsPlaying()
-  const isShuffleActive = usePlayerShuffle()
-  const loopState = usePlayerLoop()
-  const { hasPrev, hasNext } = usePlayerPrevAndNext()
+  const isPlaying = usePlayerIsPlaying();
+  const isShuffleActive = usePlayerShuffle();
+  const loopState = usePlayerLoop();
+  const { hasPrev, hasNext } = usePlayerPrevAndNext();
   const {
     isPlayingOneSong,
     toggleShuffle,
@@ -33,19 +33,19 @@ export function MiniPlayerControls() {
     playPrevSong,
     togglePlayPause,
     toggleLoop,
-  } = usePlayerActions()
+  } = usePlayerActions();
 
   return (
     <div className="flex items-center">
       <Button
         size="icon"
         variant="ghost"
-        data-state={isShuffleActive && 'active'}
+        data-state={isShuffleActive && "active"}
         className={clsx(
           buttonsStyle.secondary,
           buttonsStyle.removeRing,
           isShuffleActive && buttonsStyle.activeDot,
-          'mini-player:hidden',
+          "mini-player:hidden",
         )}
         style={{ ...buttonsStyle.style }}
         onClick={() => toggleShuffle()}
@@ -59,7 +59,7 @@ export function MiniPlayerControls() {
         className={clsx(
           buttonsStyle.secondary,
           buttonsStyle.removeRing,
-          'mini-player:hidden',
+          "mini-player:hidden",
         )}
         style={{ ...buttonsStyle.style }}
         onClick={() => playPrevSong()}
@@ -73,7 +73,7 @@ export function MiniPlayerControls() {
         className={cn(
           buttonsStyle.main,
           buttonsStyle.removeRing,
-          'mini-player:w-8 mini-player:h-8',
+          "mini-player:w-8 mini-player:h-8",
         )}
         style={{ ...buttonsStyle.style }}
         onClick={() => togglePlayPause()}
@@ -96,7 +96,7 @@ export function MiniPlayerControls() {
         className={clsx(
           buttonsStyle.secondary,
           buttonsStyle.removeRing,
-          'mini-player:w-8 mini-player:h-8',
+          "mini-player:w-8 mini-player:h-8",
         )}
         style={{ ...buttonsStyle.style }}
         onClick={() => playNextSong()}
@@ -107,12 +107,12 @@ export function MiniPlayerControls() {
       <Button
         size="icon"
         variant="ghost"
-        data-state={loopState !== LoopState.Off && 'active'}
+        data-state={loopState !== LoopState.Off && "active"}
         className={clsx(
           buttonsStyle.secondary,
           buttonsStyle.removeRing,
           loopState !== LoopState.Off && buttonsStyle.activeDot,
-          'mini-player:hidden',
+          "mini-player:hidden",
         )}
         onClick={() => toggleLoop()}
         style={{ ...buttonsStyle.style }}
@@ -122,12 +122,12 @@ export function MiniPlayerControls() {
         {loopState === LoopState.One && <RepeatOne size={18} />}
       </Button>
     </div>
-  )
+  );
 }
 
 export function MiniPlayerLikeButton() {
-  const isSongStarred = usePlayerSongStarred()
-  const { starCurrentSong } = usePlayerActions()
+  const isSongStarred = usePlayerSongStarred();
+  const { starCurrentSong } = usePlayerActions();
 
   return (
     <Button
@@ -136,29 +136,29 @@ export function MiniPlayerLikeButton() {
       className={clsx(
         buttonsStyle.secondary,
         buttonsStyle.removeRing,
-        'mini-player:hidden',
+        "mini-player:hidden",
       )}
       onClick={starCurrentSong}
       style={{ ...buttonsStyle.style }}
     >
       <Heart
-        className={clsx(isSongStarred && 'text-red-500 fill-red-500')}
+        className={clsx(isSongStarred && "text-red-500 fill-red-500")}
         size={18}
       />
     </Button>
-  )
+  );
 }
 
 const buttonsStyle = {
-  main: 'w-9 h-9 p-0 rounded-full bg-secondary-foreground hover:scale-105 transition-transform will-change-transform',
-  mainIcon: 'text-secondary fill-secondary',
+  main: "w-9 h-9 p-0 rounded-full bg-secondary-foreground hover:scale-105 transition-transform will-change-transform",
+  mainIcon: "text-secondary fill-secondary",
   secondary:
-    'relative w-9 h-9 p-0 rounded-full text-secondary-foreground hover:text-secondary-foreground data-[state=active]:text-primary hover:bg-transparent hover:scale-110 transition-transform will-change-transform',
-  secondaryIconFilled: 'text-secondary-foreground fill-secondary-foreground',
-  activeDot: 'mini-player-button-active',
+    "relative w-9 h-9 p-0 rounded-full text-secondary-foreground hover:text-secondary-foreground data-[state=active]:text-primary hover:bg-transparent hover:scale-110 transition-transform will-change-transform",
+  secondaryIconFilled: "text-secondary-foreground fill-secondary-foreground",
+  activeDot: "mini-player-button-active",
   style: {
-    backfaceVisibility: 'hidden' as const,
+    backfaceVisibility: "hidden" as const,
   },
   removeRing:
-    'focus-visible:ring-0 focus-visible:ring-transparent ring-0 ring-offset-transparent',
-}
+    "focus-visible:ring-0 focus-visible:ring-transparent ring-0 ring-offset-transparent",
+};

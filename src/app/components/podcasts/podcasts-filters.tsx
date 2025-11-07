@@ -1,51 +1,54 @@
-import { ListFilterIcon } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
-import { useSearchParams } from 'react-router-dom'
-import { ExpandableSearchInput } from '@/app/components/search/expandable-input'
-import { Button } from '@/app/components/ui/button'
+import { ListFilterIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
+import { ExpandableSearchInput } from "@/app/components/search/expandable-input";
+import { Button } from "@/app/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuTrigger,
-} from '@/app/components/ui/dropdown-menu'
-import { PodcastsOrderByOptions, SortOptions } from '@/utils/albumsFilter'
-import { SearchParamsHandler } from '@/utils/searchParamsHandler'
-import { DefaultSortFilter } from './episodes-filters'
+} from "@/app/components/ui/dropdown-menu";
+import { PodcastsOrderByOptions, SortOptions } from "@/utils/albumsFilter";
+import { SearchParamsHandler } from "@/utils/searchParamsHandler";
+import { DefaultSortFilter } from "./episodes-filters";
 
 export function PodcastsFilters() {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
 
   return (
     <>
-      <ExpandableSearchInput placeholder={t('podcasts.form.search')} />
+      <ExpandableSearchInput placeholder={t("podcasts.form.search")} />
 
       <DefaultSortFilter defaultSort={SortOptions.Asc} />
       <OrderByFilter />
     </>
-  )
+  );
 }
 
 function OrderByFilter() {
-  const { t } = useTranslation()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const { getSearchParam } = new SearchParamsHandler(searchParams)
-  const { EpisodeCount, Title } = PodcastsOrderByOptions
+  const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { getSearchParam } = new SearchParamsHandler(searchParams);
+  const { EpisodeCount, Title } = PodcastsOrderByOptions;
 
-  const orderByFilter = getSearchParam<PodcastsOrderByOptions>('orderBy', Title)
+  const orderByFilter = getSearchParam<PodcastsOrderByOptions>(
+    "orderBy",
+    Title,
+  );
 
   function handleChangeFilter(value: PodcastsOrderByOptions) {
     setSearchParams((state) => {
-      state.set('orderBy', value)
+      state.set("orderBy", value);
 
-      return state
-    })
+      return state;
+    });
   }
 
   const filters = [
-    { label: 'title', option: Title },
-    { label: 'episodeCount', option: EpisodeCount },
-  ]
+    { label: "title", option: Title },
+    { label: "episodeCount", option: EpisodeCount },
+  ];
 
   return (
     <DropdownMenu>
@@ -66,5 +69,5 @@ function OrderByFilter() {
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
-  )
+  );
 }

@@ -1,4 +1,4 @@
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from "react-i18next";
 import {
   Content,
   ContentItem,
@@ -9,26 +9,26 @@ import {
   HeaderDescription,
   HeaderTitle,
   Root,
-} from '@/app/components/settings/section'
-import { Switch } from '@/app/components/ui/switch'
-import { useAppAccounts } from '@/store/app.store'
+} from "@/app/components/settings/section";
+import { Switch } from "@/app/components/ui/switch";
+import { useAppAccounts } from "@/store/app.store";
 
 export function DiscordRpc() {
-  const { t } = useTranslation()
-  const { discord } = useAppAccounts()
+  const { t } = useTranslation();
+  const { discord } = useAppAccounts();
 
   return (
     <Root>
       <Header>
-        <HeaderTitle>{t('settings.accounts.discord.group')}</HeaderTitle>
+        <HeaderTitle>{t("settings.accounts.discord.group")}</HeaderTitle>
         <HeaderDescription>
-          {t('settings.accounts.discord.description')}
+          {t("settings.accounts.discord.description")}
         </HeaderDescription>
       </Header>
       <Content>
         <ContentItem>
           <ContentItemTitle>
-            {t('settings.accounts.discord.enabled.label')}
+            {t("settings.accounts.discord.enabled.label")}
           </ContentItemTitle>
           <ContentItemForm>
             <Switch
@@ -40,5 +40,5 @@ export function DiscordRpc() {
       </Content>
       <ContentSeparator />
     </Root>
-  )
+  );
 }

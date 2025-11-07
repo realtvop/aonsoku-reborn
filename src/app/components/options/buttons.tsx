@@ -1,4 +1,4 @@
-import omit from 'lodash/omit'
+import omit from "lodash/omit";
 import {
   CheckIcon,
   DownloadIcon,
@@ -10,180 +10,180 @@ import {
   PlusIcon,
   PodcastIcon,
   Trash,
-} from 'lucide-react'
-import { useTranslation } from 'react-i18next'
-import { ContextMenuItem } from '@/app/components/ui/context-menu'
-import { DropdownMenuItem } from '@/app/components/ui/dropdown-menu'
-import { MenuItemFactory } from './menu-item-factory'
-import { SubMenuFactory } from './sub-menu-factory'
+} from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { ContextMenuItem } from "@/app/components/ui/context-menu";
+import { DropdownMenuItem } from "@/app/components/ui/dropdown-menu";
+import { MenuItemFactory } from "./menu-item-factory";
+import { SubMenuFactory } from "./sub-menu-factory";
 
 type DropdownMenuItemProps = React.ComponentPropsWithoutRef<
   typeof DropdownMenuItem | typeof ContextMenuItem
 > & {
-  variant?: 'dropdown' | 'context'
-}
+  variant?: "dropdown" | "context";
+};
 
-function Play({ variant = 'dropdown', ...props }: DropdownMenuItemProps) {
-  const { t } = useTranslation()
+function Play({ variant = "dropdown", ...props }: DropdownMenuItemProps) {
+  const { t } = useTranslation();
 
   return (
     <MenuItemFactory
       variant={variant}
       icon={<PlayIcon className="mr-2 h-4 w-4 fill-foreground" />}
-      label={t('options.play')}
+      label={t("options.play")}
       {...props}
     />
-  )
+  );
 }
 
-function PlayNext({ variant = 'dropdown', ...props }: DropdownMenuItemProps) {
-  const { t } = useTranslation()
+function PlayNext({ variant = "dropdown", ...props }: DropdownMenuItemProps) {
+  const { t } = useTranslation();
 
   return (
     <MenuItemFactory
       variant={variant}
       icon={<ListPlus className="mr-2 h-4 w-4" />}
-      label={t('options.playNext')}
+      label={t("options.playNext")}
       {...props}
     />
-  )
+  );
 }
 
-function PlayLast({ variant = 'dropdown', ...props }: DropdownMenuItemProps) {
-  const { t } = useTranslation()
+function PlayLast({ variant = "dropdown", ...props }: DropdownMenuItemProps) {
+  const { t } = useTranslation();
 
   return (
     <MenuItemFactory
       variant={variant}
       icon={<ListEnd className="mr-2 h-4 w-4" />}
-      label={t('options.addLast')}
+      label={t("options.addLast")}
       {...props}
     />
-  )
+  );
 }
 
-function Download({ variant = 'dropdown', ...props }: DropdownMenuItemProps) {
-  const { t } = useTranslation()
+function Download({ variant = "dropdown", ...props }: DropdownMenuItemProps) {
+  const { t } = useTranslation();
 
   return (
     <MenuItemFactory
       variant={variant}
       icon={<DownloadIcon className="mr-2 h-4 w-4" />}
-      label={t('options.download')}
+      label={t("options.download")}
       {...props}
     />
-  )
+  );
 }
 
 function EditPlaylist({
-  variant = 'dropdown',
+  variant = "dropdown",
   ...props
 }: DropdownMenuItemProps) {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
 
   return (
     <MenuItemFactory
       variant={variant}
       icon={<Pencil className="mr-2 h-4 w-4" />}
-      label={t('options.playlist.edit')}
+      label={t("options.playlist.edit")}
       {...props}
     />
-  )
+  );
 }
 
 function RemovePlaylist({
-  variant = 'dropdown',
+  variant = "dropdown",
   ...props
 }: DropdownMenuItemProps) {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
 
   return (
     <MenuItemFactory
       variant={variant}
       icon={<Trash className="mr-2 h-4 w-4 fill-red-300 text-red-500" />}
-      label={t('options.playlist.delete')}
+      label={t("options.playlist.delete")}
       {...props}
     />
-  )
+  );
 }
 
 export function AddToPlaylistOption({
-  variant = 'dropdown',
+  variant = "dropdown",
   children,
   ...props
 }: DropdownMenuItemProps) {
-  const { t } = useTranslation()
-  const propsWithoutChildren = omit(props, 'children')
+  const { t } = useTranslation();
+  const propsWithoutChildren = omit(props, "children");
 
   return (
     <SubMenuFactory
       variant={variant}
       icon={<PlusIcon className="mr-2 h-4 w-4" />}
-      label={t('options.playlist.add')}
+      label={t("options.playlist.add")}
       {...propsWithoutChildren}
     >
       {children}
     </SubMenuFactory>
-  )
+  );
 }
 
 function RemoveFromPlaylist({
-  variant = 'dropdown',
+  variant = "dropdown",
   ...props
 }: DropdownMenuItemProps) {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
 
   return (
     <MenuItemFactory
       variant={variant}
       icon={<Trash className="mr-2 h-4 w-4 fill-red-300 text-red-500" />}
-      label={t('options.playlist.removeSong')}
+      label={t("options.playlist.removeSong")}
       {...props}
     />
-  )
+  );
 }
 
-function SongInfo({ variant = 'dropdown', ...props }: DropdownMenuItemProps) {
-  const { t } = useTranslation()
+function SongInfo({ variant = "dropdown", ...props }: DropdownMenuItemProps) {
+  const { t } = useTranslation();
 
   return (
     <MenuItemFactory
       variant={variant}
       icon={<Info className="mr-2 h-4 w-4" />}
-      label={t('options.info')}
+      label={t("options.info")}
       {...props}
     />
-  )
+  );
 }
 
 function MarkAsPlayed({
-  variant = 'dropdown',
+  variant = "dropdown",
   ...props
 }: DropdownMenuItemProps) {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
 
   return (
     <MenuItemFactory
       variant={variant}
       icon={<CheckIcon className="mr-2 h-4 w-4" />}
-      label={t('options.markAsPlayed')}
+      label={t("options.markAsPlayed")}
       {...props}
     />
-  )
+  );
 }
 
 type GotoPodcastProps = DropdownMenuItemProps & {
-  type: 'podcast' | 'episode'
-}
+  type: "podcast" | "episode";
+};
 
 function GotoPodcast({
-  variant = 'dropdown',
-  type = 'podcast',
+  variant = "dropdown",
+  type = "podcast",
   ...props
 }: GotoPodcastProps) {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
 
-  const label = t(`options.goto.${type}`)
+  const label = t(`options.goto.${type}`);
 
   return (
     <MenuItemFactory
@@ -192,7 +192,7 @@ function GotoPodcast({
       label={label}
       {...props}
     />
-  )
+  );
 }
 
 export const OptionsButtons = {
@@ -207,4 +207,4 @@ export const OptionsButtons = {
   SongInfo,
   MarkAsPlayed,
   GotoPodcast,
-}
+};

@@ -1,22 +1,22 @@
-import { useQuery } from '@tanstack/react-query'
-import { subsonic } from '@/service/subsonic'
-import { useAppStore } from '@/store/app.store'
-import { convertMinutesToMs } from '@/utils/convertSecondsToTime'
-import { queryKeys } from '@/utils/queryKeys'
+import { useQuery } from "@tanstack/react-query";
+import { subsonic } from "@/service/subsonic";
+import { useAppStore } from "@/store/app.store";
+import { convertMinutesToMs } from "@/utils/convertSecondsToTime";
+import { queryKeys } from "@/utils/queryKeys";
 
 async function fetchFavorites() {
-  const response = await subsonic.songs.getFavoriteSongs()
-  return response?.song ?? []
+  const response = await subsonic.songs.getFavoriteSongs();
+  return response?.song ?? [];
 }
 
 async function fetchTotalFavorites() {
-  const storedFavoriteCount = useAppStore.getState().data.favoriteCount
+  const storedFavoriteCount = useAppStore.getState().data.favoriteCount;
 
   if (storedFavoriteCount && storedFavoriteCount > 0) {
-    return storedFavoriteCount
+    return storedFavoriteCount;
   }
-  const songs = await fetchFavorites()
-  return songs.length
+  const songs = await fetchFavorites();
+  return songs.length;
 }
 
 export function useTotalFavorites() {
@@ -25,5 +25,5 @@ export function useTotalFavorites() {
     queryFn: fetchTotalFavorites,
     staleTime: convertMinutesToMs(5),
     gcTime: convertMinutesToMs(5),
-  })
+  });
 }

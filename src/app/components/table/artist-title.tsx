@@ -1,11 +1,11 @@
-import { Link } from 'react-router-dom'
-import { CoverImage } from '@/app/components/table/cover-image.tsx'
-import { ROUTES } from '@/routes/routesList.ts'
-import { ISimilarArtist } from '@/types/responses/artist.ts'
+import { Link } from "react-router-dom";
+import { CoverImage } from "@/app/components/table/cover-image.tsx";
+import { ROUTES } from "@/routes/routesList.ts";
+import { ISimilarArtist } from "@/types/responses/artist.ts";
 
 type ArtistTitleProps = {
-  artist: ISimilarArtist
-}
+  artist: ISimilarArtist;
+};
 
 export function ArtistTitle({ artist }: ArtistTitleProps) {
   return (
@@ -24,5 +24,5 @@ export function ArtistTitle({ artist }: ArtistTitleProps) {
         </Link>
       </div>
     </div>
-  )
+  );
 }

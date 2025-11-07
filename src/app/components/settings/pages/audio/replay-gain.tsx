@@ -1,4 +1,4 @@
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from "react-i18next";
 import {
   Content,
   ContentItem,
@@ -9,9 +9,9 @@ import {
   HeaderDescription,
   HeaderTitle,
   Root,
-} from '@/app/components/settings/section'
-import { Button } from '@/app/components/ui/button'
-import { NumericInput } from '@/app/components/ui/numeric-input'
+} from "@/app/components/settings/section";
+import { Button } from "@/app/components/ui/button";
+import { NumericInput } from "@/app/components/ui/numeric-input";
 import {
   Select,
   SelectContent,
@@ -19,49 +19,49 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/app/components/ui/select'
-import { Switch } from '@/app/components/ui/switch'
-import { useReplayGainActions, useReplayGainState } from '@/store/player.store'
-import { ReplayGainType } from '@/types/playerContext'
+} from "@/app/components/ui/select";
+import { Switch } from "@/app/components/ui/switch";
+import { useReplayGainActions, useReplayGainState } from "@/store/player.store";
+import { ReplayGainType } from "@/types/playerContext";
 
-const replayGainModes: ReplayGainType[] = ['track', 'album']
+const replayGainModes: ReplayGainType[] = ["track", "album"];
 
 export function ReplayGainConfig() {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
   const {
     replayGainEnabled,
     replayGainType,
     replayGainPreAmp,
     replayGainDefaultGain,
     replayGainError,
-  } = useReplayGainState()
+  } = useReplayGainState();
   const {
     setReplayGainEnabled,
     setReplayGainType,
     setReplayGainPreAmp,
     setReplayGainDefaultGain,
     setReplayGainError,
-  } = useReplayGainActions()
+  } = useReplayGainActions();
 
   const handleResetError = () => {
-    setReplayGainError(false)
-    setReplayGainEnabled(true)
-    window.location.reload()
-  }
+    setReplayGainError(false);
+    setReplayGainEnabled(true);
+    window.location.reload();
+  };
 
   return (
     <Root>
       <Header>
-        <HeaderTitle>{t('settings.audio.replayGain.group')}</HeaderTitle>
+        <HeaderTitle>{t("settings.audio.replayGain.group")}</HeaderTitle>
         <HeaderDescription>
-          {t('settings.audio.replayGain.description')}
+          {t("settings.audio.replayGain.description")}
         </HeaderDescription>
       </Header>
 
       <Content>
         <ContentItem>
           <ContentItemTitle>
-            {t('settings.audio.replayGain.enabled')}
+            {t("settings.audio.replayGain.enabled")}
           </ContentItemTitle>
           <ContentItemForm>
             <Switch
@@ -75,7 +75,7 @@ export function ReplayGainConfig() {
         {replayGainError && (
           <ContentItem>
             <ContentItemTitle className="text-xs text-muted-foreground text-balance">
-              {t('settings.audio.replayGain.error.message')}
+              {t("settings.audio.replayGain.error.message")}
             </ContentItemTitle>
             <ContentItemForm>
               <Button
@@ -84,7 +84,7 @@ export function ReplayGainConfig() {
                 className="h-8"
                 onClick={handleResetError}
               >
-                {t('settings.audio.replayGain.error.button')}
+                {t("settings.audio.replayGain.error.button")}
               </Button>
             </ContentItemForm>
           </ContentItem>
@@ -93,7 +93,7 @@ export function ReplayGainConfig() {
         {replayGainEnabled && (
           <ContentItem>
             <ContentItemTitle>
-              {t('settings.audio.replayGain.mode.label')}
+              {t("settings.audio.replayGain.mode.label")}
             </ContentItemTitle>
             <ContentItemForm>
               <Select
@@ -105,7 +105,7 @@ export function ReplayGainConfig() {
                 <SelectTrigger className="h-8 ring-offset-transparent focus:ring-0 focus:ring-transparent text-left">
                   <SelectValue>
                     <span className="text-sm text-foreground">
-                      {t('settings.audio.replayGain.mode.' + replayGainType)}
+                      {t("settings.audio.replayGain.mode." + replayGainType)}
                     </span>
                   </SelectValue>
                 </SelectTrigger>
@@ -115,7 +115,7 @@ export function ReplayGainConfig() {
                       <SelectItem key={replayGainMode} value={replayGainMode}>
                         <span>
                           {t(
-                            'settings.audio.replayGain.mode.' + replayGainMode,
+                            "settings.audio.replayGain.mode." + replayGainMode,
                           )}
                         </span>
                       </SelectItem>
@@ -130,7 +130,7 @@ export function ReplayGainConfig() {
         {replayGainEnabled && (
           <ContentItem>
             <ContentItemTitle>
-              {t('settings.audio.replayGain.preAmp')}
+              {t("settings.audio.replayGain.preAmp")}
             </ContentItemTitle>
             <ContentItemForm>
               <NumericInput
@@ -146,9 +146,9 @@ export function ReplayGainConfig() {
         {replayGainEnabled && (
           <ContentItem>
             <ContentItemTitle
-              info={t('settings.audio.replayGain.defaultGain.info')}
+              info={t("settings.audio.replayGain.defaultGain.info")}
             >
-              {t('settings.audio.replayGain.defaultGain.label')}
+              {t("settings.audio.replayGain.defaultGain.label")}
             </ContentItemTitle>
             <ContentItemForm>
               <NumericInput
@@ -164,5 +164,5 @@ export function ReplayGainConfig() {
 
       <ContentSeparator />
     </Root>
-  )
+  );
 }

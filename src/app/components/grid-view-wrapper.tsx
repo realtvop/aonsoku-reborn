@@ -1,4 +1,4 @@
-import { useGrid, useVirtualizer } from '@virtual-grid/react'
+import { useGrid, useVirtualizer } from "@virtual-grid/react";
 import {
   Fragment,
   ReactNode,
@@ -8,23 +8,23 @@ import {
   useMemo,
   useRef,
   useState,
-} from 'react'
+} from "react";
 import {
   GridViewWrapperType,
   getGridClickedItem,
   saveGridClickedItem,
-} from '@/utils/gridTools'
-import { getMainScrollElement } from '@/utils/scrollPageToTop'
+} from "@/utils/gridTools";
+import { getMainScrollElement } from "@/utils/scrollPageToTop";
 
 type GridViewWrapperProps<T> = {
-  list: T[]
-  children: (child: T) => ReactNode
-  titleHeight?: number
-  gap?: number
-  padding?: number
-  defaultWidth?: number
-  type: GridViewWrapperType
-}
+  list: T[];
+  children: (child: T) => ReactNode;
+  titleHeight?: number;
+  gap?: number;
+  padding?: number;
+  defaultWidth?: number;
+  type: GridViewWrapperType;
+};
 
 export function GridViewWrapper<T>({
   list,
@@ -35,80 +35,80 @@ export function GridViewWrapper<T>({
   defaultWidth = 181,
   type,
 }: GridViewWrapperProps<T>) {
-  const scrollDivRef = useRef<HTMLDivElement | null>(null)
-  const [gridColumnsSize, setGridColumnsSize] = useState(4)
+  const scrollDivRef = useRef<HTMLDivElement | null>(null);
+  const [gridColumnsSize, setGridColumnsSize] = useState(4);
   const [size, setSize] = useState({
     width: defaultWidth,
     height: defaultWidth + titleHeight,
-  })
-  const initialScrollRestored = useRef(false)
-  const isScrollingSaved = useRef(false)
-  const initialMeasurementDone = useRef(false)
+  });
+  const initialScrollRestored = useRef(false);
+  const isScrollingSaved = useRef(false);
+  const initialMeasurementDone = useRef(false);
 
-  const routeKey = location.pathname + location.search
+  const routeKey = location.pathname + location.search;
 
   const rows = useMemo(
     () => Math.ceil(list.length / gridColumnsSize),
     [gridColumnsSize, list.length],
-  )
+  );
 
   const calculateSize = useCallback(() => {
     if (!scrollDivRef.current) {
       return {
         width: defaultWidth,
         height: defaultWidth + titleHeight,
-      }
+      };
     }
 
-    const pageWidth = scrollDivRef.current.offsetWidth
-    const gapsDifference = (gridColumnsSize - 1) * gap
-    const bothSidesPaddingSize = padding * 2
-    const remainSpace = pageWidth - bothSidesPaddingSize - gapsDifference
+    const pageWidth = scrollDivRef.current.offsetWidth;
+    const gapsDifference = (gridColumnsSize - 1) * gap;
+    const bothSidesPaddingSize = padding * 2;
+    const remainSpace = pageWidth - bothSidesPaddingSize - gapsDifference;
 
-    const width = remainSpace / gridColumnsSize
-    const height = width + titleHeight
+    const width = remainSpace / gridColumnsSize;
+    const height = width + titleHeight;
 
     return {
       width,
       height,
-    }
-  }, [defaultWidth, gap, gridColumnsSize, padding, titleHeight])
+    };
+  }, [defaultWidth, gap, gridColumnsSize, padding, titleHeight]);
 
   useLayoutEffect(() => {
-    scrollDivRef.current = getMainScrollElement()
+    scrollDivRef.current = getMainScrollElement();
 
     const handleResize = () => {
-      const width = window.innerWidth
+      const width = window.innerWidth;
 
       if (width >= 1536) {
-        setGridColumnsSize(8) // 2xl breakpoint
+        setGridColumnsSize(8); // 2xl breakpoint
       } else if (width >= 1024) {
-        setGridColumnsSize(6) // lg breakpoint
+        setGridColumnsSize(6); // lg breakpoint
       } else {
-        setGridColumnsSize(4) // default size
+        setGridColumnsSize(4); // default size
       }
 
-      const newSize = calculateSize()
-      setSize(newSize)
-    }
+      const newSize = calculateSize();
+      setSize(newSize);
+    };
 
-    let animationFrameId: number
+    let animationFrameId: number;
 
     const resizeHandler = () => {
       if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId)
+        cancelAnimationFrame(animationFrameId);
       }
-      animationFrameId = requestAnimationFrame(handleResize)
-    }
+      animationFrameId = requestAnimationFrame(handleResize);
+    };
 
-    handleResize()
-    window.addEventListener('resize', resizeHandler)
+    handleResize();
+    window.addEventListener("resize", resizeHandler);
 
     return () => {
-      window.removeEventListener('resize', resizeHandler)
-      cancelAnimationFrame(animationFrameId)
-    }
-  }, [calculateSize])
+      window.removeEventListener("resize", resizeHandler);
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [calculateSize]);
 
   const grid = useGrid({
     scrollRef: scrollDivRef,
@@ -122,77 +122,78 @@ export function GridViewWrapper<T>({
     },
     gap,
     overscan: 5,
-  })
+  });
 
-  const rowVirtualizer = useVirtualizer(grid.rowVirtualizer)
-  const columnVirtualizer = useVirtualizer(grid.columnVirtualizer)
+  const rowVirtualizer = useVirtualizer(grid.rowVirtualizer);
+  const columnVirtualizer = useVirtualizer(grid.columnVirtualizer);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: initial grid measurement
   useLayoutEffect(() => {
-    rowVirtualizer.measure()
-    columnVirtualizer.measure()
+    rowVirtualizer.measure();
+    columnVirtualizer.measure();
 
-    initialMeasurementDone.current = true
+    initialMeasurementDone.current = true;
   }, [
     rowVirtualizer,
     columnVirtualizer,
     grid.virtualItemHeight,
     grid.virtualItemWidth,
-  ])
+  ]);
 
   // Restoring scroll position
   useLayoutEffect(() => {
     // Awaits initial measurement before restoring
-    if (!initialMeasurementDone.current || initialScrollRestored.current) return
+    if (!initialMeasurementDone.current || initialScrollRestored.current)
+      return;
 
-    const savedRowPosition = getGridClickedItem({ name: type })
+    const savedRowPosition = getGridClickedItem({ name: type });
     if (!savedRowPosition) {
-      initialScrollRestored.current = true
-      return
+      initialScrollRestored.current = true;
+      return;
     }
 
-    const offsetTop = savedRowPosition[routeKey] ?? 0
+    const offsetTop = savedRowPosition[routeKey] ?? 0;
     if (offsetTop <= 0) {
-      initialScrollRestored.current = true
-      return
+      initialScrollRestored.current = true;
+      return;
     }
 
     // 50ms timeout to ensure the grid was rendered
     setTimeout(() => {
-      rowVirtualizer.scrollToOffset(offsetTop)
-      initialScrollRestored.current = true
+      rowVirtualizer.scrollToOffset(offsetTop);
+      initialScrollRestored.current = true;
 
       // 100ms timeout to allow saving scroll position again avoiding saving wrong offsets
       setTimeout(() => {
-        isScrollingSaved.current = false
-      }, 100)
-    }, 50)
+        isScrollingSaved.current = false;
+      }, 100);
+    }, 50);
 
     // Prevent scroll saves while restoring the scroll
-    isScrollingSaved.current = true
-  }, [routeKey, rowVirtualizer, type])
+    isScrollingSaved.current = true;
+  }, [routeKey, rowVirtualizer, type]);
 
   // Saving scroll position
   useEffect(() => {
     if (isScrollingSaved.current || !initialScrollRestored.current || !routeKey)
-      return
+      return;
 
-    const offsetTop = rowVirtualizer.scrollOffset ?? 0
-    if (offsetTop <= 0) return
+    const offsetTop = rowVirtualizer.scrollOffset ?? 0;
+    if (offsetTop <= 0) return;
 
     saveGridClickedItem({
       name: type,
       offsetTop,
       routeKey,
-    })
-  }, [routeKey, rowVirtualizer.scrollOffset, type])
+    });
+  }, [routeKey, rowVirtualizer.scrollOffset, type]);
 
   return (
     <div
       style={{
         width: columnVirtualizer.getTotalSize(),
         height: rowVirtualizer.getTotalSize(),
-        position: 'relative',
+        position: "relative",
       }}
     >
       {rowVirtualizer.getVirtualItems().map((virtualRow) => (
@@ -201,20 +202,20 @@ export function GridViewWrapper<T>({
             const item = grid.getVirtualItem({
               row: virtualRow,
               column: virtualColumn,
-            })
+            });
 
-            if (!item) return null
+            if (!item) return null;
 
-            const child = list[item.index]
+            const child = list[item.index];
 
             return (
               <div key={virtualColumn.key} style={item.style}>
                 {children(child)}
               </div>
-            )
+            );
           })}
         </Fragment>
       ))}
     </div>
-  )
+  );
 }

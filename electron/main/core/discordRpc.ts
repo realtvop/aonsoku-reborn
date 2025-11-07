@@ -1,17 +1,17 @@
-import { DEFAULT_LARGE_IMAGE, DEFAULT_SMALL_IMAGE, RPC } from './discord'
+import { DEFAULT_LARGE_IMAGE, DEFAULT_SMALL_IMAGE, RPC } from "./discord";
 
 export type RpcPayload = {
-  trackName: string
-  albumName: string
-  artist: string
-  startTime: number
-  endTime: number
-  duration: number
-}
+  trackName: string;
+  albumName: string;
+  artist: string;
+  startTime: number;
+  endTime: number;
+  duration: number;
+};
 
 export async function setDiscordRpcActivity(payload: RpcPayload) {
   try {
-    RPC.init()
+    RPC.init();
     RPC.set({
       details: payload.trackName,
       state: `${payload.artist} • ${payload.albumName}`,
@@ -23,10 +23,10 @@ export async function setDiscordRpcActivity(payload: RpcPayload) {
         large_image: DEFAULT_LARGE_IMAGE,
         small_image: DEFAULT_SMALL_IMAGE,
       },
-    })
+    });
   } catch {}
 }
 
 export function clearDiscordRpcActivity() {
-  RPC.set(null)
+  RPC.set(null);
 }

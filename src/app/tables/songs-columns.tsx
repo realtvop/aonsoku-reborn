@@ -23,7 +23,7 @@ const MemoTableSongTitle = memo(TableSongTitle);
 const MemoLink = memo(Link);
 const MemoSongTableActions = memo(SongTableActions);
 const MemoDataTableColumnHeader = memo(
-  DataTableColumnHeader
+  DataTableColumnHeader,
 ) as typeof DataTableColumnHeader;
 
 export function songsColumns(): ColumnDefType<ISong>[] {
@@ -256,10 +256,10 @@ export function songsColumns(): ColumnDefType<ISong>[] {
           ${i18n.t("table.columns.quality")}: ${suffix}
           ${i18n.t("table.columns.bitrate")}: ${bitRate} kbps
           ${i18n.t("table.columns.size")}: ${
-          size / 1024 / 1024 > 1
-            ? (size / 1024 / 1024).toFixed(2) + " MB"
-            : (size / 1024).toFixed(2) + " KB"
-        }
+            size / 1024 / 1024 > 1
+              ? (size / 1024 / 1024).toFixed(2) + " MB"
+              : (size / 1024).toFixed(2) + " KB"
+          }
           `;
         return (
           <MemoSimpleTooltip text={tooltipContent}>

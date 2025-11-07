@@ -1,6 +1,6 @@
-import { electronAPI } from '@electron-toolkit/preload'
-import { contextBridge, ipcRenderer } from 'electron'
-import { IAonsokuAPI, IpcChannels, PlayerStateListenerActions } from './types'
+import { electronAPI } from "@electron-toolkit/preload";
+import { contextBridge, ipcRenderer } from "electron";
+import { IAonsokuAPI, IpcChannels, PlayerStateListenerActions } from "./types";
 
 // Custom APIs for renderer
 const api: IAonsokuAPI = {
@@ -10,19 +10,19 @@ const api: IAonsokuAPI = {
   fullscreenStatusListener: (func) => {
     ipcRenderer.on(IpcChannels.FullscreenStatus, (_, status: boolean) =>
       func(status),
-    )
+    );
   },
   removeFullscreenStatusListener: () => {
-    ipcRenderer.removeAllListeners(IpcChannels.FullscreenStatus)
+    ipcRenderer.removeAllListeners(IpcChannels.FullscreenStatus);
   },
   isMaximized: () => ipcRenderer.invoke(IpcChannels.IsMaximized),
   maximizedStatusListener: (func) => {
     ipcRenderer.on(IpcChannels.MaximizedStatus, (_, status: boolean) =>
       func(status),
-    )
+    );
   },
   removeMaximizedStatusListener: () => {
-    ipcRenderer.removeAllListeners(IpcChannels.MaximizedStatus)
+    ipcRenderer.removeAllListeners(IpcChannels.MaximizedStatus);
   },
   toggleMaximize: (isMaximized) =>
     ipcRenderer.send(IpcChannels.ToggleMaximize, isMaximized),
@@ -37,30 +37,30 @@ const api: IAonsokuAPI = {
   downloadCompletedListener: (func) => {
     ipcRenderer.once(IpcChannels.DownloadCompleted, (_, fileId: string) =>
       func(fileId),
-    )
+    );
   },
   downloadFailedListener: (func) => {
     ipcRenderer.once(IpcChannels.DownloadFailed, (_, fileId: string) =>
       func(fileId),
-    )
+    );
   },
   updatePlayerState: (payload) => {
-    ipcRenderer.send(IpcChannels.UpdatePlayerState, payload)
+    ipcRenderer.send(IpcChannels.UpdatePlayerState, payload);
   },
   playerStateListener: (func) => {
     ipcRenderer.on(
       IpcChannels.PlayerStateListener,
       (_, state: PlayerStateListenerActions) => func(state),
-    )
+    );
   },
   setDiscordRpcActivity: (payload) => {
-    ipcRenderer.send(IpcChannels.SetDiscordRpcActivity, payload)
+    ipcRenderer.send(IpcChannels.SetDiscordRpcActivity, payload);
   },
   clearDiscordRpcActivity: () => {
-    ipcRenderer.send(IpcChannels.ClearDiscordRpcActivity)
+    ipcRenderer.send(IpcChannels.ClearDiscordRpcActivity);
   },
   saveAppSettings: (payload) => {
-    ipcRenderer.send(IpcChannels.SaveAppSettings, payload)
+    ipcRenderer.send(IpcChannels.SaveAppSettings, payload);
   },
   // LAN Control
   lanControl: {
@@ -78,33 +78,33 @@ const api: IAonsokuAPI = {
     onMessage: (callback) => {
       ipcRenderer.on(IpcChannels.LanControlMessage, (_, message) =>
         callback(message),
-      )
+      );
     },
     onRequestState: (callback) => {
-      ipcRenderer.on(IpcChannels.LanControlRequestState, () => callback())
+      ipcRenderer.on(IpcChannels.LanControlRequestState, () => callback());
     },
     removeMessageListener: () => {
-      ipcRenderer.removeAllListeners(IpcChannels.LanControlMessage)
+      ipcRenderer.removeAllListeners(IpcChannels.LanControlMessage);
     },
     removeRequestStateListener: () => {
-      ipcRenderer.removeAllListeners(IpcChannels.LanControlRequestState)
+      ipcRenderer.removeAllListeners(IpcChannels.LanControlRequestState);
     },
   },
-}
+};
 
 // Use `contextBridge` APIs to expose Electron APIs to
 // renderer only if context isolation is enabled, otherwise
 // just add to the DOM global.
 if (process.contextIsolated) {
   try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
-    contextBridge.exposeInMainWorld('api', api)
+    contextBridge.exposeInMainWorld("electron", electronAPI);
+    contextBridge.exposeInMainWorld("api", api);
   } catch (error) {
-    console.error(error)
+    console.error(error);
   }
 } else {
   // @ts-expect-error (define in dts)
-  window.electron = electronAPI
+  window.electron = electronAPI;
   // @ts-expect-error (define in dts)
-  window.api = api
+  window.api = api;
 }

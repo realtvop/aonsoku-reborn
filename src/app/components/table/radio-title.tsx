@@ -1,22 +1,22 @@
-import clsx from 'clsx'
-import { RadioIcon } from 'lucide-react'
-import { usePlayerMediaType, usePlayerSonglist } from '@/store/player.store'
+import clsx from "clsx";
+import { RadioIcon } from "lucide-react";
+import { usePlayerMediaType, usePlayerSonglist } from "@/store/player.store";
 
 interface TableRadioTitleProps {
-  name: string
+  name: string;
 }
 
 export function TableRadioTitle({ name }: TableRadioTitleProps) {
-  const { isRadio } = usePlayerMediaType()
-  const { radioList, currentSongIndex } = usePlayerSonglist()
+  const { isRadio } = usePlayerMediaType();
+  const { radioList, currentSongIndex } = usePlayerSonglist();
 
   function getRadioIsPlaying() {
-    if (!isRadio || !radioList) return false
+    if (!isRadio || !radioList) return false;
 
-    return radioList[currentSongIndex].name === name
+    return radioList[currentSongIndex].name === name;
   }
 
-  const radioIsPlaying = getRadioIsPlaying()
+  const radioIsPlaying = getRadioIsPlaying();
 
   return (
     <div className="flex gap-2 items-center min-w-[200px] 2xl:min-w-[350px]">
@@ -25,12 +25,12 @@ export function TableRadioTitle({ name }: TableRadioTitleProps) {
       </div>
       <div
         className={clsx(
-          'flex flex-col justify-center items-center',
-          radioIsPlaying && 'text-primary',
+          "flex flex-col justify-center items-center",
+          radioIsPlaying && "text-primary",
         )}
       >
         <p>{name}</p>
       </div>
     </div>
-  )
+  );
 }

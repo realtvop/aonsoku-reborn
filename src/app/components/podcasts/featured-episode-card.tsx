@@ -1,31 +1,31 @@
-import clsx from 'clsx'
-import { CircleCheckIcon, PauseIcon, PlayIcon } from 'lucide-react'
-import { ComponentPropsWithoutRef, memo } from 'react'
-import { useTranslation } from 'react-i18next'
-import { LazyLoadImage } from 'react-lazy-load-image-component'
-import { Link } from 'react-router-dom'
-import { EqualizerBars } from '@/app/components/icons/equalizer-bars'
-import { Button } from '@/app/components/ui/button'
+import clsx from "clsx";
+import { CircleCheckIcon, PauseIcon, PlayIcon } from "lucide-react";
+import { ComponentPropsWithoutRef, memo } from "react";
+import { useTranslation } from "react-i18next";
+import { LazyLoadImage } from "react-lazy-load-image-component";
+import { Link } from "react-router-dom";
+import { EqualizerBars } from "@/app/components/icons/equalizer-bars";
+import { Button } from "@/app/components/ui/button";
 import {
   useEpisodeProgress,
   useEpisodeReleaseDate,
-} from '@/app/hooks/use-episode-progress'
+} from "@/app/hooks/use-episode-progress";
 import {
   useIsEpisodePlaying,
   usePlayEpisode,
-} from '@/app/hooks/use-podcast-playing'
-import { ROUTES } from '@/routes/routesList'
-import { Episode } from '@/types/responses/podcasts'
-import { parseHtmlToText } from '@/utils/parseTexts'
-import { PodcastActionButton } from './action-button'
-import { PodcastActionOptions } from './action-options'
+} from "@/app/hooks/use-podcast-playing";
+import { ROUTES } from "@/routes/routesList";
+import { Episode } from "@/types/responses/podcasts";
+import { parseHtmlToText } from "@/utils/parseTexts";
+import { PodcastActionButton } from "./action-button";
+import { PodcastActionOptions } from "./action-options";
 
-const MemoLazyLoadImage = memo(LazyLoadImage)
-const MemoPodcastActionButton = memo(PodcastActionButton)
-const MemoPodcastActionOptions = memo(PodcastActionOptions)
+const MemoLazyLoadImage = memo(LazyLoadImage);
+const MemoPodcastActionButton = memo(PodcastActionButton);
+const MemoPodcastActionOptions = memo(PodcastActionOptions);
 
 interface FeaturedEpisodeCardProps {
-  episode: Episode
+  episode: Episode;
 }
 
 export function FeaturedEpisodeCard({ episode }: FeaturedEpisodeCardProps) {
@@ -42,7 +42,7 @@ export function FeaturedEpisodeCard({ episode }: FeaturedEpisodeCardProps) {
         </MemoPodcastActionButton>
       </div>
     </div>
-  )
+  );
 }
 
 function EpisodeImage({ episode }: FeaturedEpisodeCardProps) {
@@ -58,14 +58,14 @@ function EpisodeImage({ episode }: FeaturedEpisodeCardProps) {
         />
       </div>
     </Link>
-  )
+  );
 }
 
 function ReleaseDate({ episode }: FeaturedEpisodeCardProps) {
-  const { episodeReleaseDate } = useEpisodeReleaseDate(episode.published_at)
+  const { episodeReleaseDate } = useEpisodeReleaseDate(episode.published_at);
   const { isPlaying, isEpisodePlaying } = useIsEpisodePlaying({
     id: episode.id,
-  })
+  });
 
   return (
     <div className="flex gap-1 items-center mt-3 max-h-4">
@@ -76,21 +76,21 @@ function ReleaseDate({ episode }: FeaturedEpisodeCardProps) {
         {episodeReleaseDate}
       </span>
     </div>
-  )
+  );
 }
 
 function EpisodeContent({ episode }: FeaturedEpisodeCardProps) {
   const { isEpisodePlaying } = useIsEpisodePlaying({
     id: episode.id,
-  })
+  });
 
   return (
     <div className="flex flex-col">
       <Link to={ROUTES.EPISODES.PAGE(episode.id)}>
         <h3
           className={clsx(
-            'text-sm font-medium truncate mt-1 hover:underline',
-            isEpisodePlaying && 'text-primary',
+            "text-sm font-medium truncate mt-1 hover:underline",
+            isEpisodePlaying && "text-primary",
           )}
         >
           {episode.title}
@@ -100,17 +100,17 @@ function EpisodeContent({ episode }: FeaturedEpisodeCardProps) {
         {parseHtmlToText(episode.description)}
       </p>
     </div>
-  )
+  );
 }
 
 type ActionButtonProps = ComponentPropsWithoutRef<typeof Button> & {
-  episode: Episode
-}
+  episode: Episode;
+};
 
 function ActionButton({ children, episode, ...rest }: ActionButtonProps) {
   const { isPlaying, isEpisodePlaying, isNotPlaying } = useIsEpisodePlaying({
     id: episode.id,
-  })
+  });
 
   return (
     <Button {...rest} size="sm" className="h-8 px-2">
@@ -125,12 +125,12 @@ function ActionButton({ children, episode, ...rest }: ActionButtonProps) {
       )}
       {children}
     </Button>
-  )
+  );
 }
 
 function FeaturedEpisodeCardAction({ episode }: FeaturedEpisodeCardProps) {
-  const { t } = useTranslation()
-  const { handlePlayEpisode } = usePlayEpisode({ id: episode.id })
+  const { t } = useTranslation();
+  const { handlePlayEpisode } = usePlayEpisode({ id: episode.id });
   const {
     episodeDuration,
     hasPlaybackData,
@@ -140,23 +140,23 @@ function FeaturedEpisodeCardAction({ episode }: FeaturedEpisodeCardProps) {
   } = useEpisodeProgress({
     duration: episode.duration,
     playback: episode.playback,
-  })
+  });
 
   if (!hasPlaybackData) {
     return (
       <ActionButton onClick={handlePlayEpisode} episode={episode}>
         <span className="text-xs">{episodeDuration}</span>
       </ActionButton>
-    )
+    );
   }
 
   if (isEpisodeCompleted) {
     return (
       <div className="flex gap-2 items-center">
         <CircleCheckIcon className="w-5 h-5 fill-foreground stroke-background" />
-        <span className="text-xs">{t('podcasts.list.progress.completed')}</span>
+        <span className="text-xs">{t("podcasts.list.progress.completed")}</span>
       </div>
-    )
+    );
   }
 
   return (
@@ -171,5 +171,5 @@ function FeaturedEpisodeCardAction({ episode }: FeaturedEpisodeCardProps) {
         <span className="text-xs">{remainingTimeText}</span>
       </div>
     </ActionButton>
-  )
+  );
 }

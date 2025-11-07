@@ -1,5 +1,5 @@
-import { AppTitle } from '@/app/components/header/app-title'
-import { LoginForm } from '@/app/components/login/form'
+import { AppTitle } from "@/app/components/header/app-title";
+import { LoginForm } from "@/app/components/login/form";
 
 export default function Login() {
   return (
@@ -11,5 +11,5 @@ export default function Login() {
         <LoginForm />
       </main>
     </div>
-  )
+  );
 }

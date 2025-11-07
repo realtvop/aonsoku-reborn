@@ -1,8 +1,8 @@
-import { devtools, subscribeWithSelector } from 'zustand/middleware'
-import { immer } from 'zustand/middleware/immer'
-import { createWithEqualityFn } from 'zustand/traditional'
-import { IRadiosContext } from '@/types/radiosContext'
-import { Radio } from '@/types/responses/radios'
+import { devtools, subscribeWithSelector } from "zustand/middleware";
+import { immer } from "zustand/middleware/immer";
+import { createWithEqualityFn } from "zustand/traditional";
+import { IRadiosContext } from "@/types/radiosContext";
+import { Radio } from "@/types/responses/radios";
 
 export const useRadiosStore = createWithEqualityFn<IRadiosContext>()(
   subscribeWithSelector(
@@ -13,25 +13,25 @@ export const useRadiosStore = createWithEqualityFn<IRadiosContext>()(
         confirmDeleteState: false,
         setData: (data) => {
           set((state) => {
-            state.data = data
-          })
+            state.data = data;
+          });
         },
         setDialogState: (dialogState) => {
           set((state) => {
-            state.dialogState = dialogState
-          })
+            state.dialogState = dialogState;
+          });
         },
         setConfirmDeleteState: (deleteState) => {
           set((state) => {
-            state.confirmDeleteState = deleteState
-          })
+            state.confirmDeleteState = deleteState;
+          });
         },
       })),
       {
-        name: 'radios_store',
+        name: "radios_store",
       },
     ),
   ),
-)
+);
 
-export const useRadios = () => useRadiosStore((state) => state)
+export const useRadios = () => useRadiosStore((state) => state);

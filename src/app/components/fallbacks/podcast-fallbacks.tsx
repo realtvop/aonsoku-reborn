@@ -1,8 +1,8 @@
-import clsx from 'clsx'
-import ListWrapper from '@/app/components/list-wrapper'
-import { Separator } from '@/app/components/ui/separator'
-import { Skeleton } from '@/app/components/ui/skeleton'
-import { ShadowHeaderFallback } from './ui-fallbacks'
+import clsx from "clsx";
+import ListWrapper from "@/app/components/list-wrapper";
+import { Separator } from "@/app/components/ui/separator";
+import { Skeleton } from "@/app/components/ui/skeleton";
+import { ShadowHeaderFallback } from "./ui-fallbacks";
 
 export function PodcastFallback() {
   return (
@@ -10,7 +10,7 @@ export function PodcastFallback() {
       <PodcastHeaderFallback />
       <EpisodeListFallback />
     </div>
-  )
+  );
 }
 
 export function FeaturedEpisodeCardFallback() {
@@ -28,7 +28,7 @@ export function FeaturedEpisodeCardFallback() {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 export function LatestEpisodesFallback() {
@@ -43,11 +43,11 @@ export function LatestEpisodesFallback() {
         </div>
 
         {Array.from({ length: 12 }).map((_, index) => (
-          <EpisodeCardFallback key={'episode-fb-' + index} />
+          <EpisodeCardFallback key={"episode-fb-" + index} />
         ))}
       </ListWrapper>
     </div>
-  )
+  );
 }
 
 export function EpisodeListFallback() {
@@ -57,11 +57,11 @@ export function EpisodeListFallback() {
 
       <ListWrapper className="px-4">
         {Array.from({ length: 8 }).map((_, index) => (
-          <EpisodeCardFallback key={'episode-fb-' + index} />
+          <EpisodeCardFallback key={"episode-fb-" + index} />
         ))}
       </ListWrapper>
     </div>
-  )
+  );
 }
 
 export function EpisodeFallback() {
@@ -85,11 +85,11 @@ export function EpisodeFallback() {
         </div>
       </ListWrapper>
     </div>
-  )
+  );
 }
 
 interface PodcastHeaderProps {
-  podcast?: boolean
+  podcast?: boolean;
 }
 
 export function PodcastHeaderFallback({ podcast = true }: PodcastHeaderProps) {
@@ -99,7 +99,7 @@ export function PodcastHeaderFallback({ podcast = true }: PodcastHeaderProps) {
       <div className="flex flex-col justify-end w-full">
         <Skeleton className="h-12 w-3/5 mb-3" />
         <Skeleton className="h-6 w-2/6 mb-3" />
-        <Separator className={clsx(!podcast && 'mb-3')} />
+        <Separator className={clsx(!podcast && "mb-3")} />
         {podcast && <Skeleton className="h-4 w-5/6 my-3" />}
 
         <div className="flex gap-2 items-center">
@@ -111,7 +111,7 @@ export function PodcastHeaderFallback({ podcast = true }: PodcastHeaderProps) {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 export function PodcastFiltersFallback() {
@@ -124,7 +124,7 @@ export function PodcastFiltersFallback() {
         <Skeleton className="h-9 w-[42px]" />
       </div>
     </div>
-  )
+  );
 }
 
 export function EpisodeCardFallback() {
@@ -143,5 +143,5 @@ export function EpisodeCardFallback() {
         <Skeleton className="h-6 w-4 mr-3" />
       </div>
     </div>
-  )
+  );
 }

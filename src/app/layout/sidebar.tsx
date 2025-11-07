@@ -40,7 +40,7 @@ export function Sidebar({ className }: SidebarProps) {
       <div
         className={cn(
           "hidden xl:flex flex-col min-w-sidebar max-w-sidebar border-r fixed top-header left-0 bottom-0 pb-player bg-background z-10",
-          className
+          className,
         )}
       >
         <div className="space-y-4 py-4 pt-4">

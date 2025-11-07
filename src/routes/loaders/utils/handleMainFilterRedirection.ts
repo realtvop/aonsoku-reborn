@@ -1,21 +1,21 @@
-import { redirect } from 'react-router-dom'
-import { ROUTES } from '@/routes/routesList'
-import { AlbumListType } from '@/types/responses/album'
+import { redirect } from "react-router-dom";
+import { ROUTES } from "@/routes/routesList";
+import { AlbumListType } from "@/types/responses/album";
 import {
   AlbumsSearchParams,
   PersistedAlbumListKeys,
-} from '@/utils/albumsFilter'
+} from "@/utils/albumsFilter";
 
 export function handleMainFilterRedirection(searchParams: URLSearchParams) {
   const savedFilter = localStorage.getItem(
     PersistedAlbumListKeys.MainFilter,
-  ) as AlbumListType | null
+  ) as AlbumListType | null;
 
-  const hasMainFilter = searchParams.has(AlbumsSearchParams.MainFilter)
+  const hasMainFilter = searchParams.has(AlbumsSearchParams.MainFilter);
 
   if (savedFilter && !hasMainFilter) {
-    return redirect(ROUTES.ALBUMS.GENERIC(savedFilter))
+    return redirect(ROUTES.ALBUMS.GENERIC(savedFilter));
   }
 
-  return null
+  return null;
 }

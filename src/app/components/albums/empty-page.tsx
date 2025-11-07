@@ -1,7 +1,7 @@
-import ListWrapper from '@/app/components/list-wrapper'
-import { EmptyAlbumsInfo } from './empty-message'
-import { EmptyWrapper } from './empty-wrapper'
-import { AlbumsHeader } from './header'
+import ListWrapper from "@/app/components/list-wrapper";
+import { EmptyAlbumsInfo } from "./empty-message";
+import { EmptyWrapper } from "./empty-wrapper";
+import { AlbumsHeader } from "./header";
 
 export function EmptyAlbums() {
   return (
@@ -14,5 +14,5 @@ export function EmptyAlbums() {
         </EmptyWrapper>
       </ListWrapper>
     </div>
-  )
+  );
 }

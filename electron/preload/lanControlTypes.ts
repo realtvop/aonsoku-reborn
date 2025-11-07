@@ -3,129 +3,129 @@
  */
 
 export interface LanControlConfig {
-    enabled: boolean
-    port: number
-    password: string
-    allowNavidromeAuth: boolean
+  enabled: boolean;
+  port: number;
+  password: string;
+  allowNavidromeAuth: boolean;
 }
 
 export enum LanControlMessageType {
-    // Authentication
-    AUTH_REQUEST = 'auth_request',
-    AUTH_RESPONSE = 'auth_response',
+  // Authentication
+  AUTH_REQUEST = "auth_request",
+  AUTH_RESPONSE = "auth_response",
 
-    // Player control
-    PLAY_PAUSE = 'play_pause',
-    PLAY = 'play',
-    PAUSE = 'pause',
-    NEXT = 'next',
-    PREVIOUS = 'previous',
-    SEEK = 'seek',
-    SET_VOLUME = 'set_volume',
+  // Player control
+  PLAY_PAUSE = "play_pause",
+  PLAY = "play",
+  PAUSE = "pause",
+  NEXT = "next",
+  PREVIOUS = "previous",
+  SEEK = "seek",
+  SET_VOLUME = "set_volume",
 
-    // Playlist control
-    PLAY_SONG = 'play_song',
-    ADD_TO_QUEUE = 'add_to_queue',
-    CLEAR_QUEUE = 'clear_queue',
+  // Playlist control
+  PLAY_SONG = "play_song",
+  ADD_TO_QUEUE = "add_to_queue",
+  CLEAR_QUEUE = "clear_queue",
 
-    // Shuffle & Repeat
-    TOGGLE_SHUFFLE = 'toggle_shuffle',
-    TOGGLE_REPEAT = 'toggle_repeat',
-    SET_SHUFFLE = 'set_shuffle',
-    SET_REPEAT = 'set_repeat',
+  // Shuffle & Repeat
+  TOGGLE_SHUFFLE = "toggle_shuffle",
+  TOGGLE_REPEAT = "toggle_repeat",
+  SET_SHUFFLE = "set_shuffle",
+  SET_REPEAT = "set_repeat",
 
-    // State requests
-    GET_STATE = 'get_state',
-    GET_QUEUE = 'get_queue',
-    GET_CURRENT_SONG = 'get_current_song',
+  // State requests
+  GET_STATE = "get_state",
+  GET_QUEUE = "get_queue",
+  GET_CURRENT_SONG = "get_current_song",
 
-    // State updates (server to client)
-    STATE_UPDATE = 'state_update',
-    QUEUE_UPDATE = 'queue_update',
-    CURRENT_SONG_UPDATE = 'current_song_update',
+  // State updates (server to client)
+  STATE_UPDATE = "state_update",
+  QUEUE_UPDATE = "queue_update",
+  CURRENT_SONG_UPDATE = "current_song_update",
 
-    // Error
-    ERROR = 'error',
+  // Error
+  ERROR = "error",
 }
 
 export interface LanControlMessage {
-    type: LanControlMessageType
-    data?: unknown
-    timestamp?: number
+  type: LanControlMessageType;
+  data?: unknown;
+  timestamp?: number;
 }
 
 export interface AuthRequestData {
-    username?: string
-    password: string
-    authType: 'navidrome' | 'lan'
+  username?: string;
+  password: string;
+  authType: "navidrome" | "lan";
 }
 
 export interface AuthResponseData {
-    success: boolean
-    message?: string
-    deviceInfo?: {
-        name: string
-        version: string
-    }
+  success: boolean;
+  message?: string;
+  deviceInfo?: {
+    name: string;
+    version: string;
+  };
 }
 
 export interface PlayerStateData {
-    isPlaying: boolean
-    currentTime: number
-    duration: number
-    volume: number
-    isShuffle: boolean
-    repeatMode: 'off' | 'one' | 'all'
-    hasPrevious: boolean
-    hasNext: boolean
+  isPlaying: boolean;
+  currentTime: number;
+  duration: number;
+  volume: number;
+  isShuffle: boolean;
+  repeatMode: "off" | "one" | "all";
+  hasPrevious: boolean;
+  hasNext: boolean;
 }
 
 export interface CurrentSongData {
-    id: string
-    title: string
-    artist: string
-    album: string
-    coverArt?: string
-    duration: number
+  id: string;
+  title: string;
+  artist: string;
+  album: string;
+  coverArt?: string;
+  duration: number;
 }
 
 export interface QueueData {
-    songs: CurrentSongData[]
-    currentIndex: number
+  songs: CurrentSongData[];
+  currentIndex: number;
 }
 
 export interface SeekData {
-    time: number
+  time: number;
 }
 
 export interface VolumeData {
-    volume: number
+  volume: number;
 }
 
 export interface PlaySongData {
-    songId: string
+  songId: string;
 }
 
 export interface AddToQueueData {
-    songIds: string[]
+  songIds: string[];
 }
 
 export interface SetShuffleData {
-    enabled: boolean
+  enabled: boolean;
 }
 
 export interface SetRepeatData {
-    mode: 'off' | 'one' | 'all'
+  mode: "off" | "one" | "all";
 }
 
 export interface ErrorData {
-    message: string
-    code?: string
+  message: string;
+  code?: string;
 }
 
 export interface LanControlServerInfo {
-    running: boolean
-    port: number
-    address?: string
-    error?: string
+  running: boolean;
+  port: number;
+  address?: string;
+  error?: string;
 }

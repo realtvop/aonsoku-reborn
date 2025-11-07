@@ -1,41 +1,41 @@
-import { useEffect, useState } from 'react'
-import { useNavigate, useNavigationType } from 'react-router-dom'
+import { useEffect, useState } from "react";
+import { useNavigate, useNavigationType } from "react-router-dom";
 
 const useNavigationHistory = () => {
-  const navigationType = useNavigationType()
-  const navigate = useNavigate()
+  const navigationType = useNavigationType();
+  const navigate = useNavigate();
 
-  const [canGoBack, setCanGoBack] = useState(false)
-  const [canGoForward, setCanGoForward] = useState(false)
+  const [canGoBack, setCanGoBack] = useState(false);
+  const [canGoForward, setCanGoForward] = useState(false);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: using navigationType to trigger
   useEffect(() => {
-    setCanGoBack(false)
-    setCanGoForward(false)
+    setCanGoBack(false);
+    setCanGoForward(false);
 
     const handleHistoryChange = () => {
-      setCanGoBack(window.history.state?.idx > 0)
-      setCanGoForward(window.history.state?.idx < window.history.length - 1)
-    }
+      setCanGoBack(window.history.state?.idx > 0);
+      setCanGoForward(window.history.state?.idx < window.history.length - 1);
+    };
 
-    handleHistoryChange()
+    handleHistoryChange();
 
-    window.addEventListener('popstate', handleHistoryChange)
+    window.addEventListener("popstate", handleHistoryChange);
 
     return () => {
-      window.removeEventListener('popstate', handleHistoryChange)
-    }
-  }, [navigationType])
+      window.removeEventListener("popstate", handleHistoryChange);
+    };
+  }, [navigationType]);
 
   const goBack = () => {
-    if (canGoBack) navigate(-1)
-  }
+    if (canGoBack) navigate(-1);
+  };
 
   const goForward = () => {
-    if (canGoForward) navigate(1)
-  }
+    if (canGoForward) navigate(1);
+  };
 
-  return { canGoBack, canGoForward, goBack, goForward }
-}
+  return { canGoBack, canGoForward, goBack, goForward };
+};
 
-export default useNavigationHistory
+export default useNavigationHistory;

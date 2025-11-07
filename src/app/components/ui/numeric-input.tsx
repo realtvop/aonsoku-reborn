@@ -1,15 +1,15 @@
-import { Minus, Plus } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { Button } from './button'
-import { Input } from './input'
+import { Minus, Plus } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Button } from "./button";
+import { Input } from "./input";
 
 interface NumericInputProps {
-  value: number
-  onChange: (value: number) => void
-  min?: number
-  max?: number
-  step?: number
-  className?: string
+  value: number;
+  onChange: (value: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  className?: string;
 }
 
 export function NumericInput({
@@ -18,26 +18,26 @@ export function NumericInput({
   min,
   max,
   step = 1,
-  className = '',
+  className = "",
 }: NumericInputProps) {
   const handleDecrement = () => {
-    const newValue = value - step
+    const newValue = value - step;
     if (min === undefined || newValue >= min) {
-      onChange(newValue)
+      onChange(newValue);
     }
-  }
+  };
 
   const handleIncrement = () => {
-    const newValue = value + step
+    const newValue = value + step;
     if (max === undefined || newValue <= max) {
-      onChange(newValue)
+      onChange(newValue);
     }
-  }
+  };
 
   return (
     <div
       className={cn(
-        'relative inline-flex h-8 w-full items-center overflow-hidden whitespace-nowrap text-sm shadow-sm shadow-black/5 transition-shadow data-[focus-within]:border-ring data-[disabled]:opacity-50 data-[focus-within]:outline-none data-[focus-within]:ring-[3px] data-[focus-within]:ring-ring/20',
+        "relative inline-flex h-8 w-full items-center overflow-hidden whitespace-nowrap text-sm shadow-sm shadow-black/5 transition-shadow data-[focus-within]:border-ring data-[disabled]:opacity-50 data-[focus-within]:outline-none data-[focus-within]:ring-[3px] data-[focus-within]:ring-ring/20",
         className,
       )}
     >
@@ -61,5 +61,5 @@ export function NumericInput({
         <Plus size={16} strokeWidth={2} aria-hidden="true" />
       </Button>
     </div>
-  )
+  );
 }

@@ -1,4 +1,4 @@
-import { ReactCountryFlag } from 'react-country-flag'
+import { ReactCountryFlag } from "react-country-flag";
 import {
   Select,
   SelectContent,
@@ -6,12 +6,12 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/app/components/ui/select'
-import { languages } from '@/i18n/languages'
-import { useLang } from '@/store/lang.store'
+} from "@/app/components/ui/select";
+import { languages } from "@/i18n/languages";
+import { useLang } from "@/store/lang.store";
 
 export function LangToggle() {
-  const { langCode, setLang, flag } = useLang()
+  const { langCode, setLang, flag } = useLang();
 
   return (
     <Select value={langCode} onValueChange={(lang) => setLang(lang)}>
@@ -35,5 +35,5 @@ export function LangToggle() {
         </SelectGroup>
       </SelectContent>
     </Select>
-  )
+  );
 }

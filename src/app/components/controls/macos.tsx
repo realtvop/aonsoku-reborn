@@ -1,9 +1,9 @@
-import clsx from 'clsx'
-import { type HTMLProps, useEffect, useState } from 'react'
-import { useAppWindow } from '@/app/hooks/use-app-window'
-import { cn } from '@/lib/utils'
-import { ControlButton } from './button'
-import { Icons } from './icons'
+import clsx from "clsx";
+import { type HTMLProps, useEffect, useState } from "react";
+import { useAppWindow } from "@/app/hooks/use-app-window";
+import { cn } from "@/lib/utils";
+import { ControlButton } from "./button";
+import { Icons } from "./icons";
 
 export function MacOS({ className, ...props }: HTMLProps<HTMLDivElement>) {
   const {
@@ -13,44 +13,44 @@ export function MacOS({ className, ...props }: HTMLProps<HTMLDivElement>) {
     exitFullscreenWindow,
     closeWindow,
     isFullscreen,
-  } = useAppWindow()
+  } = useAppWindow();
 
-  const [isAltKeyPressed, setIsAltKeyPressed] = useState(false)
-  const [isHovering, setIsHovering] = useState(false)
+  const [isAltKeyPressed, setIsAltKeyPressed] = useState(false);
+  const [isHovering, setIsHovering] = useState(false);
 
   useEffect(() => {
     const handleKeyChange = (e: KeyboardEvent) => {
       if ((e.altKey || e.metaKey) !== isAltKeyPressed) {
-        setIsAltKeyPressed(e.altKey)
+        setIsAltKeyPressed(e.altKey);
       }
-    }
+    };
 
-    window.addEventListener('keydown', handleKeyChange)
-    window.addEventListener('keyup', handleKeyChange)
+    window.addEventListener("keydown", handleKeyChange);
+    window.addEventListener("keyup", handleKeyChange);
 
     return () => {
-      window.removeEventListener('keydown', handleKeyChange)
-      window.removeEventListener('keyup', handleKeyChange)
-    }
-  }, [isAltKeyPressed])
+      window.removeEventListener("keydown", handleKeyChange);
+      window.removeEventListener("keyup", handleKeyChange);
+    };
+  }, [isAltKeyPressed]);
 
   function handleMaximize() {
     if (isAltKeyPressed) {
-      maximizeWindow()
-      return
+      maximizeWindow();
+      return;
     }
 
     if (isFullscreen) {
-      exitFullscreenWindow()
+      exitFullscreenWindow();
     } else {
-      enterFullscreenWindow()
+      enterFullscreenWindow();
     }
   }
 
   return (
     <div
       className={cn(
-        'space-x-2 px-3 text-black active:text-black dark:text-black',
+        "space-x-2 px-3 text-black active:text-black dark:text-black",
         className,
       )}
       onMouseEnter={() => setIsHovering(true)}
@@ -63,8 +63,8 @@ export function MacOS({ className, ...props }: HTMLProps<HTMLDivElement>) {
       >
         <Icons.closeMac
           className={clsx(
-            'absolute transition-opacity',
-            isHovering ? 'block' : 'hidden',
+            "absolute transition-opacity",
+            isHovering ? "block" : "hidden",
           )}
         />
       </ControlButton>
@@ -74,8 +74,8 @@ export function MacOS({ className, ...props }: HTMLProps<HTMLDivElement>) {
       >
         <Icons.minMac
           className={clsx(
-            'absolute transition-opacity',
-            isHovering ? 'block' : 'hidden',
+            "absolute transition-opacity",
+            isHovering ? "block" : "hidden",
           )}
         />
       </ControlButton>
@@ -85,17 +85,17 @@ export function MacOS({ className, ...props }: HTMLProps<HTMLDivElement>) {
       >
         <Icons.fullMac
           className={clsx(
-            'absolute transition-opacity',
-            isHovering && !isAltKeyPressed ? 'opacity-100' : 'opacity-0',
+            "absolute transition-opacity",
+            isHovering && !isAltKeyPressed ? "opacity-100" : "opacity-0",
           )}
         />
         <Icons.plusMac
           className={clsx(
-            'absolute transition-opacity',
-            isHovering && isAltKeyPressed ? 'opacity-100' : 'opacity-0',
+            "absolute transition-opacity",
+            isHovering && isAltKeyPressed ? "opacity-100" : "opacity-0",
           )}
         />
       </ControlButton>
     </div>
-  )
+  );
 }

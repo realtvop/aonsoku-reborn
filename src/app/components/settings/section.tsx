@@ -1,43 +1,43 @@
-import { InfoIcon } from 'lucide-react'
-import { ComponentPropsWithoutRef, ReactNode } from 'react'
-import { Separator } from '@/app/components/ui/separator'
-import { SimpleTooltip } from '@/app/components/ui/simple-tooltip'
-import { cn } from '@/lib/utils'
+import { InfoIcon } from "lucide-react";
+import { ComponentPropsWithoutRef, ReactNode } from "react";
+import { Separator } from "@/app/components/ui/separator";
+import { SimpleTooltip } from "@/app/components/ui/simple-tooltip";
+import { cn } from "@/lib/utils";
 
-type SectionComponent = ComponentPropsWithoutRef<'div'>
+type SectionComponent = ComponentPropsWithoutRef<"div">;
 
 export function Root({ children, className, ...props }: SectionComponent) {
   return (
-    <div className={cn('w-full', className)} {...props}>
+    <div className={cn("w-full", className)} {...props}>
       {children}
     </div>
-  )
+  );
 }
 
 export function Header({ children, className, ...props }: SectionComponent) {
   return (
-    <div className={cn('w-full mb-4 space-y-2', className)} {...props}>
+    <div className={cn("w-full mb-4 space-y-2", className)} {...props}>
       {children}
     </div>
-  )
+  );
 }
 
 export function HeaderTitle({ children }: { children: ReactNode }) {
   return (
     <h3 className="font-medium leading-none text-foreground">{children}</h3>
-  )
+  );
 }
 
 export function HeaderDescription({ children }: { children: ReactNode }) {
-  return <p className="text-xs text-muted-foreground">{children}</p>
+  return <p className="text-xs text-muted-foreground">{children}</p>;
 }
 
 export function Content({ children, className, ...props }: SectionComponent) {
   return (
-    <div className={cn('space-y-2', className)} {...props}>
+    <div className={cn("space-y-2", className)} {...props}>
       {children}
     </div>
-  )
+  );
 }
 
 export function ContentItem({
@@ -47,16 +47,16 @@ export function ContentItem({
 }: SectionComponent) {
   return (
     <div
-      className={cn('flex items-center space-between min-h-8', className)}
+      className={cn("flex items-center space-between min-h-8", className)}
       {...props}
     >
       {children}
     </div>
-  )
+  );
 }
 
-interface ContentItemTitleProps extends ComponentPropsWithoutRef<'span'> {
-  info?: string
+interface ContentItemTitleProps extends ComponentPropsWithoutRef<"span"> {
+  info?: string;
 }
 
 export function ContentItemTitle({
@@ -66,7 +66,7 @@ export function ContentItemTitle({
 }: ContentItemTitleProps) {
   return (
     <div className="flex flex-1 items-center gap-1">
-      <span className={cn('text-sm leading-none text-foreground', className)}>
+      <span className={cn("text-sm leading-none text-foreground", className)}>
         {children}
       </span>
       {info && (
@@ -77,7 +77,7 @@ export function ContentItemTitle({
         </SimpleTooltip>
       )}
     </div>
-  )
+  );
 }
 
 export function ContentItemForm({
@@ -87,14 +87,14 @@ export function ContentItemForm({
 }: SectionComponent) {
   return (
     <div
-      className={cn('w-2/5 max-w-52 flex items-center justify-end', className)}
+      className={cn("w-2/5 max-w-52 flex items-center justify-end", className)}
       {...props}
     >
       {children}
     </div>
-  )
+  );
 }
 
 export function ContentSeparator() {
-  return <Separator className="mt-4" />
+  return <Separator className="mt-4" />;
 }

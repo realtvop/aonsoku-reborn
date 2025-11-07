@@ -1,20 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState } from "react";
 
 // Extend Navigator interface to include windowControlsOverlay
 declare global {
   interface WindowControlsOverlay extends EventTarget {
-    visible: boolean
-    getTitlebarAreaRect(): DOMRect
+    visible: boolean;
+    getTitlebarAreaRect(): DOMRect;
   }
 
   interface Navigator {
-    windowControlsOverlay?: WindowControlsOverlay
+    windowControlsOverlay?: WindowControlsOverlay;
   }
 }
 
 interface WindowControlsOverlayState {
-  visible: boolean
-  titlebarAreaRect: DOMRect | null
+  visible: boolean;
+  titlebarAreaRect: DOMRect | null;
 }
 
 /**
@@ -25,13 +25,13 @@ export function useWindowControlsOverlay() {
   const [overlayState, setOverlayState] = useState<WindowControlsOverlayState>({
     visible: false,
     titlebarAreaRect: null,
-  })
+  });
 
   useEffect(() => {
-    const overlay = navigator.windowControlsOverlay
+    const overlay = navigator.windowControlsOverlay;
 
     if (!overlay) {
-      return
+      return;
     }
 
     const updateOverlayState = () => {
@@ -40,23 +40,23 @@ export function useWindowControlsOverlay() {
         titlebarAreaRect: overlay.visible
           ? overlay.getTitlebarAreaRect()
           : null,
-      })
-    }
+      });
+    };
 
     // Initial state
-    updateOverlayState()
+    updateOverlayState();
 
     // Listen for geometry changes
     const handleGeometryChange = () => {
-      updateOverlayState()
-    }
+      updateOverlayState();
+    };
 
-    overlay.addEventListener('geometrychange', handleGeometryChange)
+    overlay.addEventListener("geometrychange", handleGeometryChange);
 
     return () => {
-      overlay.removeEventListener('geometrychange', handleGeometryChange)
-    }
-  }, [])
+      overlay.removeEventListener("geometrychange", handleGeometryChange);
+    };
+  }, []);
 
-  return overlayState
+  return overlayState;
 }

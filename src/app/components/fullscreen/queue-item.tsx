@@ -1,17 +1,17 @@
-import clsx from 'clsx'
-import { ComponentPropsWithRef } from 'react'
-import { LazyLoadImage } from 'react-lazy-load-image-component'
-import { getCoverArtUrl } from '@/api/httpClient'
-import { EqualizerBars } from '@/app/components/icons/equalizer-bars'
-import { ISong } from '@/types/responses/song'
-import { convertSecondsToTime } from '@/utils/convertSecondsToTime'
-import { ALBUM_ARTISTS_MAX_NUMBER } from '@/utils/multipleArtists'
+import clsx from "clsx";
+import { ComponentPropsWithRef } from "react";
+import { LazyLoadImage } from "react-lazy-load-image-component";
+import { getCoverArtUrl } from "@/api/httpClient";
+import { EqualizerBars } from "@/app/components/icons/equalizer-bars";
+import { ISong } from "@/types/responses/song";
+import { convertSecondsToTime } from "@/utils/convertSecondsToTime";
+import { ALBUM_ARTISTS_MAX_NUMBER } from "@/utils/multipleArtists";
 
-type QueueItemProps = ComponentPropsWithRef<'div'> & {
-  song: ISong
-  index: number
-  isPlaying: boolean
-}
+type QueueItemProps = ComponentPropsWithRef<"div"> & {
+  song: ISong;
+  index: number;
+  isPlaying: boolean;
+};
 
 export function QueueItem({
   song,
@@ -20,18 +20,18 @@ export function QueueItem({
   style,
   ...props
 }: QueueItemProps) {
-  const coverArtUrl = getCoverArtUrl(song.coverArt, 'song', '100')
+  const coverArtUrl = getCoverArtUrl(song.coverArt, "song", "100");
 
   return (
     <div
       className={clsx([
-        'flex items-center w-[calc(100%-10px)] h-16 text-sm rounded-md cursor-pointer',
-        'bg-black/0 hover:bg-foreground/20',
-        'data-[state=active]:bg-foreground data-[state=active]:text-secondary',
+        "flex items-center w-[calc(100%-10px)] h-16 text-sm rounded-md cursor-pointer",
+        "bg-black/0 hover:bg-foreground/20",
+        "data-[state=active]:bg-foreground data-[state=active]:text-secondary",
       ])}
       style={{
-        backfaceVisibility: 'visible',
-        willChange: 'background-color',
+        backfaceVisibility: "visible",
+        willChange: "background-color",
         ...style,
       }}
       {...props}
@@ -66,26 +66,26 @@ export function QueueItem({
         {convertSecondsToTime(song.duration)}
       </div>
     </div>
-  )
+  );
 }
 
 function QueueArtists({ song }: { song: ISong }) {
-  const { artist, artists } = song
+  const { artist, artists } = song;
 
   if (artists && artists.length > 1) {
-    const data = artists.slice(0, ALBUM_ARTISTS_MAX_NUMBER)
+    const data = artists.slice(0, ALBUM_ARTISTS_MAX_NUMBER);
 
     return (
       <div className="flex items-center gap-1 font-normal opacity-70">
         {data.map(({ id, name }, index) => (
           <div key={id} className="flex items-center text-sm">
             <p>{name}</p>
-            {index < data.length - 1 && ','}
+            {index < data.length - 1 && ","}
           </div>
         ))}
       </div>
-    )
+    );
   }
 
-  return <p className="font-normal text-sm opacity-70">{artist}</p>
+  return <p className="font-normal text-sm opacity-70">{artist}</p>;
 }

@@ -121,7 +121,7 @@ export default function ImageHeader({
       color = (await getAverageColor(img)).hex;
     } catch (_) {
       console.warn(
-        "handleLoadImage: unable to get image color. Using a random color."
+        "handleLoadImage: unable to get image color. Using a random color.",
       );
     }
 
@@ -150,7 +150,7 @@ export default function ImageHeader({
           className={cn(
             "w-full px-3 py-3 sm:px-4 sm:py-4 md:px-8 md:py-6 flex gap-2 sm:gap-3 md:gap-4 absolute inset-0",
             "bg-gradient-to-b from-background/20 to-background/50",
-            "flex-col"
+            "flex-col",
           )}
           style={{ backgroundColor: bgColor }}
         >
@@ -163,7 +163,7 @@ export default function ImageHeader({
                 "2xl:w-[250px] 2xl:h-[250px] 2xl:min-w-[250px] 2xl:min-h-[250px]",
                 "bg-skeleton aspect-square bg-cover bg-center rounded",
                 "shadow-header-image overflow-hidden",
-                "hover:scale-[1.02] ease-linear duration-100"
+                "hover:scale-[1.02] ease-linear duration-100",
               )}
             >
               <LazyLoadImage
@@ -190,7 +190,7 @@ export default function ImageHeader({
                 className={clsx(
                   "max-w-full scroll-m-20 font-bold tracking-tight antialiased drop-shadow-md break-words",
                   "line-clamp-5 sm:line-clamp-2 text-xl leading-none sm:text-[2em] mb-2",
-                  getTextSizeClass(title)
+                  getTextSizeClass(title),
                 )}
               >
                 {title}

@@ -142,8 +142,8 @@ export function RemoteControlDialog({
                       isConnected
                         ? "default"
                         : status === "error"
-                        ? "destructive"
-                        : "secondary"
+                          ? "destructive"
+                          : "secondary"
                     }
                     className="capitalize"
                   >
@@ -300,7 +300,7 @@ export function RemoteControlDialog({
                     className={clsx(
                       "rounded-md border border-transparent bg-background/40 px-3 py-2 text-sm shadow-sm",
                       queue?.currentIndex === index &&
-                        "border-primary/50 bg-primary/10 text-primary"
+                        "border-primary/50 bg-primary/10 text-primary",
                     )}
                   >
                     <div className="font-medium">{song.title}</div>

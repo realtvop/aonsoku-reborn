@@ -1,59 +1,59 @@
-import { memo, ReactNode, useEffect } from 'react'
+import { memo, ReactNode, useEffect } from "react";
 import {
   Drawer,
   DrawerClose,
   DrawerContent,
   DrawerTitle,
   DrawerTrigger,
-} from '@/app/components/ui/drawer'
-import { useAppWindow } from '@/app/hooks/use-app-window'
-import { useFullscreenPlayerSettings } from '@/store/player.store'
-import { enterFullscreen, exitFullscreen } from '@/utils/browser'
-import { isDesktop } from '@/utils/desktop'
-import { setDesktopTitleBarColors } from '@/utils/theme'
-import { FullscreenBackdrop } from './backdrop'
-import { CloseFullscreenButton } from './buttons'
-import { FullscreenDragHandler } from './drag-handler'
-import { FullscreenPlayer } from './player'
-import { FullscreenSettings } from './settings'
-import { FullscreenTabs } from './tabs'
+} from "@/app/components/ui/drawer";
+import { useAppWindow } from "@/app/hooks/use-app-window";
+import { useFullscreenPlayerSettings } from "@/store/player.store";
+import { enterFullscreen, exitFullscreen } from "@/utils/browser";
+import { isDesktop } from "@/utils/desktop";
+import { setDesktopTitleBarColors } from "@/utils/theme";
+import { FullscreenBackdrop } from "./backdrop";
+import { CloseFullscreenButton } from "./buttons";
+import { FullscreenDragHandler } from "./drag-handler";
+import { FullscreenPlayer } from "./player";
+import { FullscreenSettings } from "./settings";
+import { FullscreenTabs } from "./tabs";
 
 interface FullscreenModeProps {
-  children: ReactNode
+  children: ReactNode;
 }
 
-const MemoFullscreenBackdrop = memo(FullscreenBackdrop)
+const MemoFullscreenBackdrop = memo(FullscreenBackdrop);
 
 export default function FullscreenMode({ children }: FullscreenModeProps) {
-  const { enterFullscreenWindow, exitFullscreenWindow } = useAppWindow()
-  const { autoFullscreenEnabled } = useFullscreenPlayerSettings()
+  const { enterFullscreenWindow, exitFullscreenWindow } = useAppWindow();
+  const { autoFullscreenEnabled } = useFullscreenPlayerSettings();
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: initial useEffect
   useEffect(() => {
     return () => {
       if (isDesktop()) {
         exitFullscreenWindow().then(() => {
-          setDesktopTitleBarColors(false)
-        })
+          setDesktopTitleBarColors(false);
+        });
       } else {
-        exitFullscreen()
+        exitFullscreen();
       }
-    }
-  }, [])
+    };
+  }, []);
 
   async function handleFullscreen(open: boolean) {
     // We set title bar colors to transparent,
     // to not "unstyle" the big player appearance
-    if (isDesktop()) setDesktopTitleBarColors(open)
+    if (isDesktop()) setDesktopTitleBarColors(open);
 
-    if (!autoFullscreenEnabled) return
+    if (!autoFullscreenEnabled) return;
 
     if (isDesktop()) {
-      open ? await enterFullscreenWindow() : await exitFullscreenWindow()
-      return
+      open ? await enterFullscreenWindow() : await exitFullscreenWindow();
+      return;
     }
 
-    open ? enterFullscreen() : exitFullscreen()
+    open ? enterFullscreen() : exitFullscreen();
   }
 
   return (
@@ -99,5 +99,5 @@ export default function FullscreenMode({ children }: FullscreenModeProps) {
         </div>
       </DrawerContent>
     </Drawer>
-  )
+  );
 }

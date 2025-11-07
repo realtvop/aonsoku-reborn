@@ -1,16 +1,16 @@
-import { Link, useRouteError } from 'react-router-dom'
-import { Button } from '@/app/components/ui/button'
-import { ROUTES } from '@/routes/routesList'
+import { Link, useRouteError } from "react-router-dom";
+import { Button } from "@/app/components/ui/button";
+import { ROUTES } from "@/routes/routesList";
 
 interface IError {
-  status?: number
-  statusText?: string
-  internal?: boolean
-  data?: string
+  status?: number;
+  statusText?: string;
+  internal?: boolean;
+  data?: string;
 }
 
 export default function ErrorPage({ status, statusText }: IError) {
-  const error = useRouteError() as IError
+  const error = useRouteError() as IError;
 
   return (
     <div className="w-full h-content flex flex-col justify-center items-center">
@@ -19,15 +19,15 @@ export default function ErrorPage({ status, statusText }: IError) {
       </h1>
 
       <p className="leading-7 text-left mt-6">
-        Status Code:{' '}
+        Status Code:{" "}
         <strong className="font-semibold">
-          {(error?.status ?? status) || 'None'}
+          {(error?.status ?? status) || "None"}
         </strong>
       </p>
       <p className="leading-7 mt-2 text-left">
-        Description:{' '}
+        Description:{" "}
         <strong className="font-semibold">
-          {(error?.data ?? statusText) || 'Unhandled Error'}
+          {(error?.data ?? statusText) || "Unhandled Error"}
         </strong>
       </p>
 
@@ -35,5 +35,5 @@ export default function ErrorPage({ status, statusText }: IError) {
         <Button className="mt-6">Back to home</Button>
       </Link>
     </div>
-  )
+  );
 }

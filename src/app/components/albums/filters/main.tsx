@@ -27,11 +27,11 @@ export function AlbumsMainFilter() {
 
   const currentFilter = getSearchParam<AlbumListType>(
     AlbumsSearchParams.MainFilter,
-    AlbumsFilters.RecentlyAdded
+    AlbumsFilters.RecentlyAdded,
   );
 
   const currentFilterLabel = albumsFilterValues.filter(
-    (item) => item.key === currentFilter
+    (item) => item.key === currentFilter,
   )[0].label;
 
   function handleChangeFilter(filter: AlbumListType) {

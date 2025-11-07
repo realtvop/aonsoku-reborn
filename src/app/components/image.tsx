@@ -1,23 +1,23 @@
-import omit from 'lodash/omit'
-import { ImgHTMLAttributes } from 'react'
+import omit from "lodash/omit";
+import { ImgHTMLAttributes } from "react";
 import {
   Effect,
   LazyLoadImage,
   ScrollPosition,
   trackWindowScroll,
-} from 'react-lazy-load-image-component'
+} from "react-lazy-load-image-component";
 
 interface ImageProps extends ImgHTMLAttributes<HTMLImageElement> {
-  scrollPosition: ScrollPosition
-  effect?: Effect
+  scrollPosition: ScrollPosition;
+  effect?: Effect;
 }
 
 const Image = ({
   scrollPosition,
-  effect = 'opacity',
+  effect = "opacity",
   ...props
 }: ImageProps) => {
-  const sanitizedProps = omit(props, 'forwardRef')
+  const sanitizedProps = omit(props, "forwardRef");
 
   return (
     <div className="flex items-center">
@@ -27,7 +27,7 @@ const Image = ({
         {...sanitizedProps}
       />
     </div>
-  )
-}
+  );
+};
 
-export default trackWindowScroll(Image)
+export default trackWindowScroll(Image);

@@ -1,5 +1,5 @@
-import { LazyLoadImage } from 'react-lazy-load-image-component'
-import appIcon from '@/assets/icon_transparent.svg'
+import { LazyLoadImage } from "react-lazy-load-image-component";
+import appIcon from "@/assets/icon_transparent.svg";
 
 export function AppTitle() {
   return (
@@ -9,5 +9,5 @@ export function AppTitle() {
         Aonsoku
       </span>
     </div>
-  )
+  );
 }

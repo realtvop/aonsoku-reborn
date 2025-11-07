@@ -1,16 +1,16 @@
-import { useCallback } from 'react'
-import { useTranslation } from 'react-i18next'
-import { Playback } from '@/types/responses/podcasts'
-import { convertSecondsToHumanRead } from '@/utils/convertSecondsToTime'
-import dateTime from '@/utils/dateTime'
+import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
+import { Playback } from "@/types/responses/podcasts";
+import { convertSecondsToHumanRead } from "@/utils/convertSecondsToTime";
+import dateTime from "@/utils/dateTime";
 
 interface PlaybackBase {
-  playback: Playback[]
+  playback: Playback[];
 }
 
 interface UseEpisodeProgressProps extends PlaybackBase {
-  duration: number
-  showFullTime?: boolean
+  duration: number;
+  showFullTime?: boolean;
 }
 
 export function useEpisodeProgress({
@@ -18,19 +18,19 @@ export function useEpisodeProgress({
   playback,
   showFullTime = false,
 }: UseEpisodeProgressProps) {
-  const episodeDuration = convertSecondsToHumanRead(duration, showFullTime)
+  const episodeDuration = convertSecondsToHumanRead(duration, showFullTime);
 
-  const hasPlaybackData = playback.length === 1
-  const isEpisodeCompleted = hasPlaybackData ? playback[0].completed : false
+  const hasPlaybackData = playback.length === 1;
+  const isEpisodeCompleted = hasPlaybackData ? playback[0].completed : false;
 
-  const remainingTime = hasPlaybackData ? duration - playback[0].progress : 0
+  const remainingTime = hasPlaybackData ? duration - playback[0].progress : 0;
   const remainingTimeText = convertSecondsToHumanRead(
     remainingTime,
     showFullTime,
-  )
+  );
 
-  const listeningProgress = hasPlaybackData ? playback[0].progress : 0
-  const listeningProgressPercentage = (listeningProgress / duration) * 100
+  const listeningProgress = hasPlaybackData ? playback[0].progress : 0;
+  const listeningProgressPercentage = (listeningProgress / duration) * 100;
 
   return {
     episodeDuration,
@@ -40,44 +40,44 @@ export function useEpisodeProgress({
     remainingTimeText,
     listeningProgress,
     listeningProgressPercentage,
-  }
+  };
 }
 
 export function getEpisodePlayProgress({ playback }: PlaybackBase) {
-  const hasPlaybackData = playback.length > 0
-  let currentProgress = hasPlaybackData ? playback[0].progress : 0
-  const isCompleted = hasPlaybackData ? playback[0].completed : false
+  const hasPlaybackData = playback.length > 0;
+  let currentProgress = hasPlaybackData ? playback[0].progress : 0;
+  const isCompleted = hasPlaybackData ? playback[0].completed : false;
 
   if (hasPlaybackData && isCompleted) {
-    currentProgress = 0
+    currentProgress = 0;
   }
 
-  return currentProgress
+  return currentProgress;
 }
 
 export function useEpisodeReleaseDate(publishedAt: string) {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
 
   const formatReleaseDate = useCallback(() => {
-    const today = dateTime()
-    const targetDate = dateTime(publishedAt)
-    const diffInDays = today.diff(targetDate, 'days')
+    const today = dateTime();
+    const targetDate = dateTime(publishedAt);
+    const diffInDays = today.diff(targetDate, "days");
 
     if (today.year() !== targetDate.year()) {
-      return targetDate.format('L')
+      return targetDate.format("L");
     }
 
     if (diffInDays > 15) {
-      return targetDate.format('DD MMM')
+      return targetDate.format("DD MMM");
     }
 
-    const parsed = dateTime().from(targetDate, true)
-    return t('table.lastPlayed', { date: parsed })
-  }, [publishedAt, t])
+    const parsed = dateTime().from(targetDate, true);
+    return t("table.lastPlayed", { date: parsed });
+  }, [publishedAt, t]);
 
-  const episodeReleaseDate = formatReleaseDate()
+  const episodeReleaseDate = formatReleaseDate();
 
   return {
     episodeReleaseDate,
-  }
+  };
 }

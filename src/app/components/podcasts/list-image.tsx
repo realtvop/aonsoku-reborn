@@ -1,19 +1,19 @@
-import { useState } from 'react'
-import { LazyLoadImage } from 'react-lazy-load-image-component'
-import { Podcast } from '@/types/responses/podcasts'
+import { useState } from "react";
+import { LazyLoadImage } from "react-lazy-load-image-component";
+import { Podcast } from "@/types/responses/podcasts";
 
 interface ListImageProps {
-  podcast: Podcast
+  podcast: Podcast;
 }
 
-const placeholderSrc = '/default_podcast_art.png'
+const placeholderSrc = "/default_podcast_art.png";
 
 export function PodcastListImage({ podcast }: ListImageProps) {
-  const [imageSrc, setImageSrc] = useState(podcast.image_url)
+  const [imageSrc, setImageSrc] = useState(podcast.image_url);
 
   const handleError = () => {
-    setImageSrc(placeholderSrc)
-  }
+    setImageSrc(placeholderSrc);
+  };
 
   return (
     <LazyLoadImage
@@ -26,5 +26,5 @@ export function PodcastListImage({ podcast }: ListImageProps) {
       data-testid="podcast-card-image"
       onError={handleError}
     />
-  )
+  );
 }

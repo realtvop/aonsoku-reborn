@@ -1,11 +1,11 @@
-import { FastAverageColor } from 'fast-average-color'
+import { FastAverageColor } from "fast-average-color";
 
 export async function getAverageColor(img: HTMLImageElement | null) {
-  const fac = new FastAverageColor()
+  const fac = new FastAverageColor();
 
   return await fac.getColorAsync(img, {
-    mode: 'precision',
-    algorithm: 'dominant',
+    mode: "precision",
+    algorithm: "dominant",
     ignoredColor: [
       [255, 255, 255, 255, 90], // White
       [0, 0, 0, 255, 70], // Black
@@ -16,110 +16,110 @@ export async function getAverageColor(img: HTMLImageElement | null) {
     ],
     // if the image only contains ignored colors, returns the primary color instead.
     defaultColor: [16, 183, 127, 1],
-  })
+  });
 }
 
 export function hexToRgb(hex: string) {
-  hex = hex.replace(/^#/, '')
+  hex = hex.replace(/^#/, "");
 
-  let red: number
-  let green: number
-  let blue: number
+  let red: number;
+  let green: number;
+  let blue: number;
 
   if (hex.length === 3) {
-    red = parseInt(hex[0] + hex[0], 16)
-    green = parseInt(hex[1] + hex[1], 16)
-    blue = parseInt(hex[2] + hex[2], 16)
+    red = parseInt(hex[0] + hex[0], 16);
+    green = parseInt(hex[1] + hex[1], 16);
+    blue = parseInt(hex[2] + hex[2], 16);
   } else if (hex.length === 6) {
-    red = parseInt(hex.substring(0, 2), 16)
-    green = parseInt(hex.substring(2, 4), 16)
-    blue = parseInt(hex.substring(4, 6), 16)
+    red = parseInt(hex.substring(0, 2), 16);
+    green = parseInt(hex.substring(2, 4), 16);
+    blue = parseInt(hex.substring(4, 6), 16);
   } else {
-    return undefined
+    return undefined;
   }
 
-  return [red, green, blue]
+  return [red, green, blue];
 }
 
 export function hexToRgba(hex: string, alpha: number = 1) {
-  const colors = hexToRgb(hex)
-  if (!colors) return undefined
+  const colors = hexToRgb(hex);
+  if (!colors) return undefined;
 
-  const [r, g, b] = colors
+  const [r, g, b] = colors;
 
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 export function hslToRbg(hsl: string) {
-  const [h, s, l] = hsl.split(' ')
+  const [h, s, l] = hsl.split(" ");
 
-  const hue = parseInt(h)
-  let saturation = parseInt(s.replace('%', ''))
-  let lightness = parseInt(l.replace('%', ''))
+  const hue = parseInt(h);
+  let saturation = parseInt(s.replace("%", ""));
+  let lightness = parseInt(l.replace("%", ""));
 
   // Convert HSL to RGB
-  saturation /= 100
-  lightness /= 100
+  saturation /= 100;
+  lightness /= 100;
 
-  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation
-  const secondComponent = chroma * (1 - Math.abs(((hue / 60) % 2) - 1))
-  const matchLightness = lightness - chroma / 2
+  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+  const secondComponent = chroma * (1 - Math.abs(((hue / 60) % 2) - 1));
+  const matchLightness = lightness - chroma / 2;
 
-  let red: number
-  let green: number
-  let blue: number
+  let red: number;
+  let green: number;
+  let blue: number;
 
   if (hue < 60) {
-    red = chroma
-    green = secondComponent
-    blue = 0
+    red = chroma;
+    green = secondComponent;
+    blue = 0;
   } else if (hue < 120) {
-    red = secondComponent
-    green = chroma
-    blue = 0
+    red = secondComponent;
+    green = chroma;
+    blue = 0;
   } else if (hue < 180) {
-    red = 0
-    green = chroma
-    blue = secondComponent
+    red = 0;
+    green = chroma;
+    blue = secondComponent;
   } else if (hue < 240) {
-    red = 0
-    green = secondComponent
-    blue = chroma
+    red = 0;
+    green = secondComponent;
+    blue = chroma;
   } else if (hue < 300) {
-    red = secondComponent
-    green = 0
-    blue = chroma
+    red = secondComponent;
+    green = 0;
+    blue = chroma;
   } else {
-    red = chroma
-    green = 0
-    blue = secondComponent
+    red = chroma;
+    green = 0;
+    blue = secondComponent;
   }
 
-  red = (red + matchLightness) * 255
-  green = (green + matchLightness) * 255
-  blue = (blue + matchLightness) * 255
+  red = (red + matchLightness) * 255;
+  green = (green + matchLightness) * 255;
+  blue = (blue + matchLightness) * 255;
 
-  return [red, green, blue]
+  return [red, green, blue];
 }
 
 function toHex(value: number) {
-  const hex = Math.round(value).toString(16)
-  return hex.length === 1 ? '0' + hex : hex
+  const hex = Math.round(value).toString(16);
+  return hex.length === 1 ? "0" + hex : hex;
 }
 
 export function hslToHex(hsl: string) {
-  const [red, green, blue] = hslToRbg(hsl)
+  const [red, green, blue] = hslToRbg(hsl);
 
-  return `#${toHex(red)}${toHex(green)}${toHex(blue)}`
+  return `#${toHex(red)}${toHex(green)}${toHex(blue)}`;
 }
 
 export function isDarkColor(hsl: string) {
-  const [r, g, b] = hslToRbg(hsl)
+  const [r, g, b] = hslToRbg(hsl);
 
-  const luminance = 0.299 * r + 0.587 * g + 0.114 * b
-  const isDark = luminance < 128
+  const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+  const isDark = luminance < 128;
 
-  return isDark
+  return isDark;
 }
 
 /**
@@ -128,7 +128,7 @@ export function isDarkColor(hsl: string) {
  * @param [alpha=1] - The alpha value (opacity), default is 1.
  */
 export function hslToHsla(hsl: string, alpha = 1) {
-  const hslBaseString = hsl.split(' ').join(', ')
+  const hslBaseString = hsl.split(" ").join(", ");
 
-  return `hsla(${hslBaseString}, ${alpha})`
+  return `hsla(${hslBaseString}, ${alpha})`;
 }

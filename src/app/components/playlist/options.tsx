@@ -1,25 +1,25 @@
-import { OptionsButtons } from '@/app/components/options/buttons'
-import { DropdownMenuSeparator } from '@/app/components/ui/dropdown-menu'
-import { useOptions } from '@/app/hooks/use-options'
-import { subsonic } from '@/service/subsonic'
-import { usePlaylists, useRemovePlaylist } from '@/store/playlists.store'
-import { Playlist, PlaylistWithEntries } from '@/types/responses/playlist'
-import { ISong } from '@/types/responses/song'
+import { OptionsButtons } from "@/app/components/options/buttons";
+import { DropdownMenuSeparator } from "@/app/components/ui/dropdown-menu";
+import { useOptions } from "@/app/hooks/use-options";
+import { subsonic } from "@/service/subsonic";
+import { usePlaylists, useRemovePlaylist } from "@/store/playlists.store";
+import { Playlist, PlaylistWithEntries } from "@/types/responses/playlist";
+import { ISong } from "@/types/responses/song";
 
 interface PlaylistOptionsProps {
-  playlist: PlaylistWithEntries | Playlist
-  variant?: 'context' | 'dropdown'
-  showPlay?: boolean
-  disablePlayNext?: boolean
-  disableAddLast?: boolean
-  disableDownload?: boolean
-  disableEdit?: boolean
-  disableDelete?: boolean
+  playlist: PlaylistWithEntries | Playlist;
+  variant?: "context" | "dropdown";
+  showPlay?: boolean;
+  disablePlayNext?: boolean;
+  disableAddLast?: boolean;
+  disableDownload?: boolean;
+  disableEdit?: boolean;
+  disableDelete?: boolean;
 }
 
 export function PlaylistOptions({
   playlist,
-  variant = 'dropdown',
+  variant = "dropdown",
   showPlay = false,
   disablePlayNext = false,
   disableAddLast = false,
@@ -27,9 +27,9 @@ export function PlaylistOptions({
   disableEdit = false,
   disableDelete = false,
 }: PlaylistOptionsProps) {
-  const { setPlaylistDialogState, setData } = usePlaylists()
-  const { play, playNext, playLast, startDownload } = useOptions()
-  const { setPlaylistId, setConfirmDialogState } = useRemovePlaylist()
+  const { setPlaylistDialogState, setData } = usePlaylists();
+  const { play, playNext, playLast, startDownload } = useOptions();
+  const { setPlaylistId, setConfirmDialogState } = useRemovePlaylist();
 
   function handleEdit() {
     setData({
@@ -37,48 +37,48 @@ export function PlaylistOptions({
       name: playlist.name,
       comment: playlist.comment,
       public: playlist.public,
-    })
-    setPlaylistDialogState(true)
+    });
+    setPlaylistDialogState(true);
   }
 
   async function getSongsToQueue(callback: (songs: ISong[]) => void) {
-    const playlistWithEntries = await subsonic.playlists.getOne(playlist.id)
-    if (!playlistWithEntries) return
+    const playlistWithEntries = await subsonic.playlists.getOne(playlist.id);
+    if (!playlistWithEntries) return;
 
-    callback(playlistWithEntries.entry)
+    callback(playlistWithEntries.entry);
   }
 
   async function handlePlay() {
-    if ('entry' in playlist) {
-      play(playlist.entry)
+    if ("entry" in playlist) {
+      play(playlist.entry);
     } else {
-      await getSongsToQueue(play)
+      await getSongsToQueue(play);
     }
   }
 
   async function handlePlayNext() {
-    if ('entry' in playlist) {
-      playNext(playlist.entry)
+    if ("entry" in playlist) {
+      playNext(playlist.entry);
     } else {
-      await getSongsToQueue(playNext)
+      await getSongsToQueue(playNext);
     }
   }
 
   async function handlePlayLast() {
-    if ('entry' in playlist) {
-      playLast(playlist.entry)
+    if ("entry" in playlist) {
+      playLast(playlist.entry);
     } else {
-      await getSongsToQueue(playLast)
+      await getSongsToQueue(playLast);
     }
   }
 
   function handleDownload() {
-    startDownload(playlist.id)
+    startDownload(playlist.id);
   }
 
   return (
     <>
-      {variant === 'context' && (
+      {variant === "context" && (
         <>
           <div className="px-2 py-0.5 max-w-64">
             <span className="text-xs text-muted-foreground break-words line-clamp-4">
@@ -92,8 +92,8 @@ export function PlaylistOptions({
         <OptionsButtons.Play
           variant={variant}
           onClick={(e) => {
-            e.stopPropagation()
-            handlePlay()
+            e.stopPropagation();
+            handlePlay();
           }}
         />
       )}
@@ -101,16 +101,16 @@ export function PlaylistOptions({
         variant={variant}
         disabled={disablePlayNext}
         onClick={(e) => {
-          e.stopPropagation()
-          handlePlayNext()
+          e.stopPropagation();
+          handlePlayNext();
         }}
       />
       <OptionsButtons.PlayLast
         variant={variant}
         disabled={disableAddLast}
         onClick={(e) => {
-          e.stopPropagation()
-          handlePlayLast()
+          e.stopPropagation();
+          handlePlayLast();
         }}
       />
       <DropdownMenuSeparator />
@@ -118,28 +118,28 @@ export function PlaylistOptions({
         variant={variant}
         disabled={disableDownload}
         onClick={(e) => {
-          e.stopPropagation()
-          handleDownload()
+          e.stopPropagation();
+          handleDownload();
         }}
       />
       <DropdownMenuSeparator />
       <OptionsButtons.EditPlaylist
         variant={variant}
         onClick={(e) => {
-          e.stopPropagation()
-          handleEdit()
+          e.stopPropagation();
+          handleEdit();
         }}
         disabled={disableEdit}
       />
       <OptionsButtons.RemovePlaylist
         variant={variant}
         onClick={(e) => {
-          e.stopPropagation()
-          setPlaylistId(playlist.id)
-          setConfirmDialogState(true)
+          e.stopPropagation();
+          setPlaylistId(playlist.id);
+          setConfirmDialogState(true);
         }}
         disabled={disableDelete}
       />
     </>
-  )
+  );
 }

@@ -52,7 +52,7 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
         audioRef.current.currentTime = value;
       }
     },
-    [audioRef, isRemoteControlActive]
+    [audioRef, isRemoteControlActive],
   );
 
   const handleSeeking = useCallback((amount: number) => {
@@ -68,7 +68,7 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
       setProgress(amount);
       setLocalProgress(amount);
     },
-    [isRemoteControlActive, setProgress, updateAudioCurrentTime]
+    [isRemoteControlActive, setProgress, updateAudioCurrentTime],
   );
 
   const handleSeekedFallback = useCallback(() => {
@@ -88,7 +88,7 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
 
   const songDuration = useMemo(
     () => convertSecondsToTime(currentDuration ?? 0),
-    [currentDuration]
+    [currentDuration],
   );
 
   const sendScrobble = useCallback(async (songId: string) => {
@@ -187,7 +187,7 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
   ]);
 
   const currentTime = convertSecondsToTime(
-    isSeeking ? localProgress : progress
+    isSeeking ? localProgress : progress,
   );
 
   const isProgressLarge = useMemo(() => {
@@ -202,13 +202,13 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
     <div
       className={clsx(
         "flex w-full justify-center items-center gap-2",
-        isEmpty && "opacity-50"
+        isEmpty && "opacity-50",
       )}
     >
       <small
         className={clsx(
           "text-xs text-muted-foreground text-right",
-          isProgressLarge ? "min-w-14" : "min-w-10"
+          isProgressLarge ? "min-w-14" : "min-w-10",
         )}
         data-testid="player-current-time"
       >
@@ -243,7 +243,7 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
       <small
         className={clsx(
           "text-xs text-muted-foreground text-left",
-          isDurationLarge ? "min-w-14" : "min-w-10"
+          isDurationLarge ? "min-w-14" : "min-w-10",
         )}
         data-testid="player-duration-time"
       >

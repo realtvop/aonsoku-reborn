@@ -1,14 +1,14 @@
-import { useTranslation } from 'react-i18next'
-import { Keyboard } from '@/app/components/command/keyboard-key'
-import { IShortcut } from '@/types/shortcuts'
+import { useTranslation } from "react-i18next";
+import { Keyboard } from "@/app/components/command/keyboard-key";
+import { IShortcut } from "@/types/shortcuts";
 
 interface ShortcutsGroupProps {
-  title: string
-  shortcuts: IShortcut[]
+  title: string;
+  shortcuts: IShortcut[];
 }
 
 export function ShortcutsGroup({ title, shortcuts }: ShortcutsGroupProps) {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
 
   return (
     <div className="space-y-3">
@@ -29,5 +29,5 @@ export function ShortcutsGroup({ title, shortcuts }: ShortcutsGroupProps) {
         ))}
       </div>
     </div>
-  )
+  );
 }

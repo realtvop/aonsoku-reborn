@@ -25,7 +25,7 @@ import { isMacOS } from "@/utils/desktop";
 export function UserDropdown() {
   const { username, url, lockUser } = useAppData();
   const setLogoutDialogState = useAppStore(
-    (state) => state.actions.setLogoutDialogState
+    (state) => state.actions.setLogoutDialogState,
   );
   const { t } = useTranslation();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);

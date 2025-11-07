@@ -6,48 +6,48 @@ import {
   Headphones,
   LaptopIcon,
   Paintbrush,
-} from 'lucide-react'
-import { ComponentType } from 'react'
-import { useTranslation } from 'react-i18next'
+} from "lucide-react";
+import { ComponentType } from "react";
+import { useTranslation } from "react-i18next";
 import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from '@/app/components/ui/sidebar'
-import { useAppSettings } from '@/store/app.store'
-import { isDesktop } from '@/utils/desktop'
+} from "@/app/components/ui/sidebar";
+import { useAppSettings } from "@/store/app.store";
+import { isDesktop } from "@/utils/desktop";
 
 export type SettingsOptions =
-  | 'appearance'
-  | 'language'
-  | 'audio'
-  | 'content'
-  | 'accounts'
-  | 'desktop'
-  | 'privacy'
+  | "appearance"
+  | "language"
+  | "audio"
+  | "content"
+  | "accounts"
+  | "desktop"
+  | "privacy";
 
 interface OptionsData {
-  id: SettingsOptions
-  icon: ComponentType
+  id: SettingsOptions;
+  icon: ComponentType;
 }
 
-const accountsOption: OptionsData = { id: 'accounts', icon: CircleUserRound }
-const desktopOption: OptionsData = { id: 'desktop', icon: LaptopIcon }
+const accountsOption: OptionsData = { id: "accounts", icon: CircleUserRound };
+const desktopOption: OptionsData = { id: "desktop", icon: LaptopIcon };
 
 const options: OptionsData[] = [
-  { id: 'appearance', icon: Paintbrush },
-  { id: 'language', icon: Globe },
-  { id: 'audio', icon: Headphones },
-  { id: 'content', icon: FileText },
+  { id: "appearance", icon: Paintbrush },
+  { id: "language", icon: Globe },
+  { id: "audio", icon: Headphones },
+  { id: "content", icon: FileText },
   ...(isDesktop() ? [accountsOption, desktopOption] : []),
-  { id: 'privacy', icon: EarthLock },
-]
+  { id: "privacy", icon: EarthLock },
+];
 
 export function SettingsOptions() {
-  const { t } = useTranslation()
-  const { currentPage, setCurrentPage } = useAppSettings()
+  const { t } = useTranslation();
+  const { currentPage, setCurrentPage } = useAppSettings();
 
   return (
     <SidebarGroup>
@@ -67,5 +67,5 @@ export function SettingsOptions() {
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
-  )
+  );
 }

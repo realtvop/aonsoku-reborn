@@ -1,65 +1,65 @@
-import { useInfiniteQuery } from '@tanstack/react-query'
-import { useTranslation } from 'react-i18next'
-import { useSearchParams } from 'react-router-dom'
-import { ShadowHeader } from '@/app/components/album/shadow-header'
-import { InfinitySongListFallback } from '@/app/components/fallbacks/song-fallbacks'
-import { HeaderTitle } from '@/app/components/header-title'
-import { ClearFilterButton } from '@/app/components/search/clear-filter-button'
-import { ExpandableSearchInput } from '@/app/components/search/expandable-input'
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
+import { ShadowHeader } from "@/app/components/album/shadow-header";
+import { InfinitySongListFallback } from "@/app/components/fallbacks/song-fallbacks";
+import { HeaderTitle } from "@/app/components/header-title";
+import { ClearFilterButton } from "@/app/components/search/clear-filter-button";
+import { ExpandableSearchInput } from "@/app/components/search/expandable-input";
 import {
   SongsOrderByFilter,
   SongsSortFilter,
-} from '@/app/components/songs/songs-filters'
-import { DataTableList } from '@/app/components/ui/data-table-list'
-import { useTotalSongs } from '@/app/hooks/use-total-songs'
-import { songsColumns } from '@/app/tables/songs-columns'
-import { getArtistAllSongs, songsSearch } from '@/queries/songs'
-import { usePlayerActions } from '@/store/player.store'
-import { ColumnFilter } from '@/types/columnFilter'
+} from "@/app/components/songs/songs-filters";
+import { DataTableList } from "@/app/components/ui/data-table-list";
+import { useTotalSongs } from "@/app/hooks/use-total-songs";
+import { songsColumns } from "@/app/tables/songs-columns";
+import { getArtistAllSongs, songsSearch } from "@/queries/songs";
+import { usePlayerActions } from "@/store/player.store";
+import { ColumnFilter } from "@/types/columnFilter";
 import {
   AlbumsFilters,
   AlbumsSearchParams,
   SongsOrderByOptions,
   SortOptions,
-} from '@/utils/albumsFilter'
-import { queryKeys } from '@/utils/queryKeys'
-import { SearchParamsHandler } from '@/utils/searchParamsHandler'
+} from "@/utils/albumsFilter";
+import { queryKeys } from "@/utils/queryKeys";
+import { SearchParamsHandler } from "@/utils/searchParamsHandler";
 
-const DEFAULT_OFFSET = 100
+const DEFAULT_OFFSET = 100;
 
 export default function SongList() {
-  const { t } = useTranslation()
-  const { setSongList } = usePlayerActions()
-  const [searchParams] = useSearchParams()
-  const { getSearchParam } = new SearchParamsHandler(searchParams)
-  const columns = songsColumns()
+  const { t } = useTranslation();
+  const { setSongList } = usePlayerActions();
+  const [searchParams] = useSearchParams();
+  const { getSearchParam } = new SearchParamsHandler(searchParams);
+  const columns = songsColumns();
 
-  const filter = getSearchParam<string>(AlbumsSearchParams.MainFilter, '')
-  const query = getSearchParam<string>(AlbumsSearchParams.Query, '')
-  const artistId = getSearchParam<string>(AlbumsSearchParams.ArtistId, '')
-  const artistName = getSearchParam<string>(AlbumsSearchParams.ArtistName, '')
+  const filter = getSearchParam<string>(AlbumsSearchParams.MainFilter, "");
+  const query = getSearchParam<string>(AlbumsSearchParams.Query, "");
+  const artistId = getSearchParam<string>(AlbumsSearchParams.ArtistId, "");
+  const artistName = getSearchParam<string>(AlbumsSearchParams.ArtistName, "");
   const orderBy = getSearchParam<SongsOrderByOptions>(
-    'orderBy',
+    "orderBy",
     SongsOrderByOptions.LastAdded,
-  )
-  const sort = getSearchParam<SortOptions>('sort', SortOptions.Desc)
+  );
+  const sort = getSearchParam<SortOptions>("sort", SortOptions.Desc);
 
-  const searchFilterIsSet = filter === AlbumsFilters.Search && query !== ''
-  const filterByArtist = artistId !== '' && artistName !== ''
-  const hasSomeFilter = searchFilterIsSet || filterByArtist
+  const searchFilterIsSet = filter === AlbumsFilters.Search && query !== "";
+  const filterByArtist = artistId !== "" && artistName !== "";
+  const hasSomeFilter = searchFilterIsSet || filterByArtist;
 
   async function fetchSongs({ pageParam = 0 }) {
     if (filterByArtist) {
-      return getArtistAllSongs(artistId, { orderBy, sort })
+      return getArtistAllSongs(artistId, { orderBy, sort });
     }
 
     return songsSearch({
-      query: searchFilterIsSet ? query : '',
+      query: searchFilterIsSet ? query : "",
       songCount: DEFAULT_OFFSET,
       songOffset: pageParam,
       orderBy,
       sort,
-    })
+    });
   }
 
   const { data, isLoading, isFetchingNextPage, fetchNextPage, hasNextPage } =
@@ -68,37 +68,38 @@ export default function SongList() {
       initialPageParam: 0,
       queryFn: fetchSongs,
       getNextPageParam: (lastPage) => lastPage.nextOffset,
-    })
+    });
 
-  const { data: songCountData, isLoading: songCountIsLoading } = useTotalSongs()
+  const { data: songCountData, isLoading: songCountIsLoading } =
+    useTotalSongs();
 
   if (isLoading && !isFetchingNextPage) {
-    return <InfinitySongListFallback />
+    return <InfinitySongListFallback />;
   }
-  if (!data) return null
+  if (!data) return null;
 
-  const songlist = data.pages.flatMap((page) => page.songs) ?? []
-  const songCount = (hasSomeFilter ? songlist.length : songCountData) ?? 0
+  const songlist = data.pages.flatMap((page) => page.songs) ?? [];
+  const songCount = (hasSomeFilter ? songlist.length : songCountData) ?? 0;
 
   function handlePlaySong(index: number) {
-    if (songlist) setSongList(songlist, index)
+    if (songlist) setSongList(songlist, index);
   }
 
   const columnsToShow: ColumnFilter[] = [
-    'index',
-    'title',
+    "index",
+    "title",
     // 'artist',
-    'album',
-    'duration',
-    'playCount',
-    'played',
-    'contentType',
-    'select',
-  ]
+    "album",
+    "duration",
+    "playCount",
+    "played",
+    "contentType",
+    "select",
+  ];
 
   const title = filterByArtist
-    ? t('songs.list.byArtist', { artist: artistName })
-    : t('sidebar.songs')
+    ? t("songs.list.byArtist", { artist: artistName })
+    : t("sidebar.songs");
 
   return (
     <div className="w-full h-content">
@@ -116,7 +117,7 @@ export default function SongList() {
         <div className="flex gap-2 flex-1 justify-end">
           {filterByArtist && <ClearFilterButton />}
           <ExpandableSearchInput
-            placeholder={t('songs.list.search.placeholder')}
+            placeholder={t("songs.list.search.placeholder")}
           />
           <SongsSortFilter />
           <SongsOrderByFilter />
@@ -134,5 +135,5 @@ export default function SongList() {
         />
       </div>
     </div>
-  )
+  );
 }

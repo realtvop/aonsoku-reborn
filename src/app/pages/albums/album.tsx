@@ -35,7 +35,7 @@ export default function Album() {
     isFetched,
   } = useGetAlbum(albumId);
   const { data: artist, isLoading: moreAlbumsIsLoading } = useGetArtistAlbums(
-    album?.artistId || ""
+    album?.artistId || "",
   );
   const { data: randomAlbums, isLoading: randomAlbumsIsLoading } =
     useGetGenreAlbums(album?.genre || "");

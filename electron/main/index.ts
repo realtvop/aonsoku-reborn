@@ -1,75 +1,75 @@
-import { electronApp, optimizer } from '@electron-toolkit/utils'
-import { app, globalShortcut } from 'electron'
-import { createAppMenu } from './core/menu'
-import { createWindow, mainWindow } from './window'
-import { LanControlManager } from './core/lanControlManager'
+import { electronApp, optimizer } from "@electron-toolkit/utils";
+import { app, globalShortcut } from "electron";
+import { createAppMenu } from "./core/menu";
+import { createWindow, mainWindow } from "./window";
+import { LanControlManager } from "./core/lanControlManager";
 
-let lanControlManager: LanControlManager | null = null
+let lanControlManager: LanControlManager | null = null;
 
-const instanceLock = app.requestSingleInstanceLock()
+const instanceLock = app.requestSingleInstanceLock();
 
 if (!instanceLock) {
-  app.quit()
+  app.quit();
 } else {
-  createAppMenu()
+  createAppMenu();
 
-  app.on('second-instance', () => {
-    if (!mainWindow || mainWindow.isDestroyed()) return
+  app.on("second-instance", () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
 
-    if (mainWindow.isMinimized()) mainWindow.restore()
+    if (mainWindow.isMinimized()) mainWindow.restore();
 
-    mainWindow.focus()
-  })
+    mainWindow.focus();
+  });
 
   app.whenReady().then(() => {
-    electronApp.setAppUserModelId('com.victoralvesf.aonsoku')
+    electronApp.setAppUserModelId("com.victoralvesf.aonsoku");
 
-    createWindow()
+    createWindow();
 
     // Initialize LAN Control Manager after window is created
     if (mainWindow) {
-      lanControlManager = new LanControlManager(mainWindow)
+      lanControlManager = new LanControlManager(mainWindow);
     }
-  })
+  });
 
-  app.on('activate', function () {
+  app.on("activate", function () {
     if (!mainWindow || mainWindow.isDestroyed()) {
-      createWindow()
+      createWindow();
 
       // Re-initialize LAN Control Manager if needed
       if (mainWindow && !lanControlManager) {
-        lanControlManager = new LanControlManager(mainWindow)
+        lanControlManager = new LanControlManager(mainWindow);
       }
-      return
+      return;
     }
 
     if (mainWindow.isMinimized()) {
-      mainWindow.restore()
+      mainWindow.restore();
     } else if (!mainWindow.isVisible()) {
-      mainWindow.show()
+      mainWindow.show();
     }
 
-    mainWindow.focus()
-  })
+    mainWindow.focus();
+  });
 
-  app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
-    globalShortcut.register('F11', () => { })
-  })
+  app.on("browser-window-created", (_, window) => {
+    optimizer.watchWindowShortcuts(window);
+    globalShortcut.register("F11", () => {});
+  });
 
-  app.on('window-all-closed', () => {
+  app.on("window-all-closed", () => {
     // Cleanup LAN Control Manager
     if (lanControlManager) {
-      lanControlManager.cleanup()
-      lanControlManager = null
+      lanControlManager.cleanup();
+      lanControlManager = null;
     }
-    app.quit()
-  })
+    app.quit();
+  });
 
-  app.on('before-quit', () => {
+  app.on("before-quit", () => {
     // Ensure LAN Control server is stopped before quitting
     if (lanControlManager) {
-      lanControlManager.cleanup()
+      lanControlManager.cleanup();
     }
-  })
+  });
 }

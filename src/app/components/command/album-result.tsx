@@ -1,48 +1,48 @@
-import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
-import { CommandGroup, CommandItem } from '@/app/components/ui/command'
-import { useSongList } from '@/app/hooks/use-song-list'
-import { ROUTES } from '@/routes/routesList'
-import { usePlayerActions } from '@/store/player.store'
-import { Albums } from '@/types/responses/album'
+import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
+import { CommandGroup, CommandItem } from "@/app/components/ui/command";
+import { useSongList } from "@/app/hooks/use-song-list";
+import { ROUTES } from "@/routes/routesList";
+import { usePlayerActions } from "@/store/player.store";
+import { Albums } from "@/types/responses/album";
 import {
   CustomGroup,
   CustomGroupHeader,
   CustomHeaderLink,
-} from './command-group'
-import { CommandItemProps } from './command-menu'
-import { ResultItem } from './result-item'
+} from "./command-group";
+import { CommandItemProps } from "./command-menu";
+import { ResultItem } from "./result-item";
 
 type AlbumResultProps = CommandItemProps & {
-  query: string
-  albums: Albums[]
-}
+  query: string;
+  albums: Albums[];
+};
 
 export function CommandAlbumResult({
   query,
   albums,
   runCommand,
 }: AlbumResultProps) {
-  const { t } = useTranslation()
-  const navigate = useNavigate()
-  const { getAlbumSongs } = useSongList()
-  const { setSongList } = usePlayerActions()
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { getAlbumSongs } = useSongList();
+  const { setSongList } = usePlayerActions();
 
   async function handlePlayAlbum(albumId: string) {
-    const albumSongs = await getAlbumSongs(albumId)
-    if (albumSongs) setSongList(albumSongs, 0)
+    const albumSongs = await getAlbumSongs(albumId);
+    if (albumSongs) setSongList(albumSongs, 0);
   }
 
   return (
     <CustomGroup>
       <CustomGroupHeader>
-        <span>{t('sidebar.albums')}</span>
+        <span>{t("sidebar.albums")}</span>
         <CustomHeaderLink
           onClick={() =>
             runCommand(() => navigate(ROUTES.ALBUMS.SEARCH(query)))
           }
         >
-          {t('generic.seeMore')}
+          {t("generic.seeMore")}
         </CustomHeaderLink>
       </CustomGroupHeader>
       <CommandGroup>
@@ -53,7 +53,7 @@ export function CommandAlbumResult({
               value={`album-${album.id}`}
               className="border mb-1"
               onSelect={() => {
-                runCommand(() => navigate(ROUTES.ALBUM.PAGE(album.id)))
+                runCommand(() => navigate(ROUTES.ALBUM.PAGE(album.id)));
               }}
             >
               <ResultItem
@@ -67,5 +67,5 @@ export function CommandAlbumResult({
           ))}
       </CommandGroup>
     </CustomGroup>
-  )
+  );
 }

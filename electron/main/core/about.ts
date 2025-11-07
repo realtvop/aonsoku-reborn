@@ -1,10 +1,10 @@
-import { dialog } from 'electron'
-import os from 'os'
-import { description, productName, version } from '../../../package.json'
-import { mainWindow } from '../window'
+import { dialog } from "electron";
+import os from "os";
+import { description, productName, version } from "../../../package.json";
+import { mainWindow } from "../window";
 
 export function aboutDialog() {
-  if (!mainWindow || mainWindow.isDestroyed()) return
+  if (!mainWindow || mainWindow.isDestroyed()) return;
 
   const detail = [
     `${description} \n`,
@@ -14,12 +14,12 @@ export function aboutDialog() {
     `Node: ${process.versions.node}`,
     `V8: ${process.versions.v8}`,
     `OS: ${os.type()} ${os.arch()} ${os.release()}`,
-  ].join('\n')
+  ].join("\n");
 
   dialog.showMessageBoxSync(mainWindow, {
     title: productName,
     message: productName,
-    type: 'info',
+    type: "info",
     detail,
-  })
+  });
 }

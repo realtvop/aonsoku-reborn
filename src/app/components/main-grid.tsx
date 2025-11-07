@@ -1,8 +1,8 @@
-import { Settings2 } from 'lucide-react'
-import { ComponentPropsWithoutRef } from 'react'
-import { useTranslation } from 'react-i18next'
-import { Badge } from '@/app/components/ui/badge'
-import { Button } from '@/app/components/ui/button'
+import { Settings2 } from "lucide-react";
+import { ComponentPropsWithoutRef } from "react";
+import { useTranslation } from "react-i18next";
+import { Badge } from "@/app/components/ui/badge";
+import { Button } from "@/app/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -10,34 +10,34 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/app/components/ui/dropdown-menu'
-import { cn } from '@/lib/utils'
-import { PageViewType } from '@/types/serverConfig'
+} from "@/app/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
+import { PageViewType } from "@/types/serverConfig";
 
-type MainGridProps = ComponentPropsWithoutRef<'div'>
+type MainGridProps = ComponentPropsWithoutRef<"div">;
 
 export function MainGrid({ className, ...props }: MainGridProps) {
   return (
     <div
       className={cn(
-        'grid grid-cols-4 lg:grid-cols-6 2xl:grid-cols-8 gap-4 h-full',
+        "grid grid-cols-4 lg:grid-cols-6 2xl:grid-cols-8 gap-4 h-full",
         className,
       )}
       {...props}
     />
-  )
+  );
 }
 
 type MainViewTypeSelectorProps = {
-  viewType: PageViewType
-  setViewType: (type: PageViewType) => void
-}
+  viewType: PageViewType;
+  setViewType: (type: PageViewType) => void;
+};
 
 export function MainViewTypeSelector({
   viewType,
   setViewType,
 }: MainViewTypeSelectorProps) {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
 
   return (
     <DropdownMenu>
@@ -48,25 +48,25 @@ export function MainViewTypeSelector({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-40">
         <DropdownMenuLabel className="text-muted-foreground font-medium">
-          {t('generic.viewMode.label')}
+          {t("generic.viewMode.label")}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuCheckboxItem
-          checked={viewType === 'table'}
-          onCheckedChange={() => setViewType('table')}
+          checked={viewType === "table"}
+          onCheckedChange={() => setViewType("table")}
         >
-          <span>{t('generic.viewMode.modes.list')}</span>
+          <span>{t("generic.viewMode.modes.list")}</span>
         </DropdownMenuCheckboxItem>
         <DropdownMenuCheckboxItem
-          checked={viewType === 'grid'}
-          onCheckedChange={() => setViewType('grid')}
+          checked={viewType === "grid"}
+          onCheckedChange={() => setViewType("grid")}
         >
-          <span>{t('generic.viewMode.modes.poster')}</span>
+          <span>{t("generic.viewMode.modes.poster")}</span>
           <Badge className="ml-2" variant="beta">
-            {t('generic.beta')}
+            {t("generic.beta")}
           </Badge>
         </DropdownMenuCheckboxItem>
       </DropdownMenuContent>
     </DropdownMenu>
-  )
+  );
 }

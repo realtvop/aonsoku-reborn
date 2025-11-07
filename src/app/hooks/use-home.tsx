@@ -1,14 +1,14 @@
-import { useQuery } from '@tanstack/react-query'
-import { subsonic } from '@/service/subsonic'
-import { convertMinutesToMs } from '@/utils/convertSecondsToTime'
-import { queryKeys } from '@/utils/queryKeys'
+import { useQuery } from "@tanstack/react-query";
+import { subsonic } from "@/service/subsonic";
+import { convertMinutesToMs } from "@/utils/convertSecondsToTime";
+import { queryKeys } from "@/utils/queryKeys";
 
 export const useGetRandomSongs = () => {
   return useQuery({
     queryKey: [queryKeys.song.random],
     queryFn: () => subsonic.songs.getRandomSongs({ size: 10 }),
-  })
-}
+  });
+};
 
 export const useGetRecentlyAdded = () => {
   return useQuery({
@@ -16,10 +16,10 @@ export const useGetRecentlyAdded = () => {
     queryFn: () =>
       subsonic.albums.getAlbumList({
         size: 16,
-        type: 'newest',
+        type: "newest",
       }),
-  })
-}
+  });
+};
 
 export const useGetMostPlayed = () => {
   return useQuery({
@@ -27,10 +27,10 @@ export const useGetMostPlayed = () => {
     queryFn: () =>
       subsonic.albums.getAlbumList({
         size: 16,
-        type: 'frequent',
+        type: "frequent",
       }),
-  })
-}
+  });
+};
 
 export const useGetRecentlyPlayed = () => {
   return useQuery({
@@ -38,11 +38,11 @@ export const useGetRecentlyPlayed = () => {
     queryFn: () =>
       subsonic.albums.getAlbumList({
         size: 16,
-        type: 'recent',
+        type: "recent",
       }),
     refetchInterval: convertMinutesToMs(2),
-  })
-}
+  });
+};
 
 export const useGetRandomAlbums = () => {
   return useQuery({
@@ -50,7 +50,7 @@ export const useGetRandomAlbums = () => {
     queryFn: () =>
       subsonic.albums.getAlbumList({
         size: 16,
-        type: 'random',
+        type: "random",
       }),
-  })
-}
+  });
+};

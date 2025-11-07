@@ -1,4 +1,4 @@
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from "react-i18next";
 import {
   Content,
   ContentItem,
@@ -9,29 +9,29 @@ import {
   HeaderDescription,
   HeaderTitle,
   Root,
-} from '@/app/components/settings/section'
-import { Switch } from '@/app/components/ui/switch'
-import { useFullscreenPlayerSettings } from '@/store/player.store'
+} from "@/app/components/settings/section";
+import { Switch } from "@/app/components/ui/switch";
+import { useFullscreenPlayerSettings } from "@/store/player.store";
 
 export function FullscreenSettings() {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
   const { autoFullscreenEnabled, setAutoFullscreenEnabled } =
-    useFullscreenPlayerSettings()
+    useFullscreenPlayerSettings();
 
   return (
     <Root>
       <Header>
-        <HeaderTitle>{t('settings.appearance.general.group')}</HeaderTitle>
+        <HeaderTitle>{t("settings.appearance.general.group")}</HeaderTitle>
         <HeaderDescription>
-          {t('settings.appearance.general.description')}
+          {t("settings.appearance.general.description")}
         </HeaderDescription>
       </Header>
       <Content>
         <ContentItem>
           <ContentItemTitle
-            info={t('settings.appearance.general.fullscreen.info')}
+            info={t("settings.appearance.general.fullscreen.info")}
           >
-            {t('settings.appearance.general.fullscreen.label')}
+            {t("settings.appearance.general.fullscreen.label")}
           </ContentItemTitle>
           <ContentItemForm>
             <Switch
@@ -43,5 +43,5 @@ export function FullscreenSettings() {
       </Content>
       <ContentSeparator />
     </Root>
-  )
+  );
 }

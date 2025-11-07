@@ -78,8 +78,8 @@ export function Header() {
     ? hasWindowControls && controlsWidth.right > 0
       ? controlsWidth.right // PWA overlay: use measured width
       : isWindows
-      ? 122 // Electron Windows default
-      : 94 // Electron Linux default
+        ? 122 // Electron Windows default
+        : 94 // Electron Linux default
     : 0;
 
   // Debug logging (remove after testing)

@@ -1,78 +1,78 @@
-import { useQuery } from '@tanstack/react-query'
-import clsx from 'clsx'
-import { Check, Loader2, XIcon } from 'lucide-react'
-import { Fragment } from 'react/jsx-runtime'
-import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
-import { Dot } from '@/app/components/dot'
-import { Badge } from '@/app/components/ui/badge'
+import { useQuery } from "@tanstack/react-query";
+import clsx from "clsx";
+import { Check, Loader2, XIcon } from "lucide-react";
+import { Fragment } from "react/jsx-runtime";
+import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
+import { Dot } from "@/app/components/dot";
+import { Badge } from "@/app/components/ui/badge";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from '@/app/components/ui/dialog'
-import { ScrollArea } from '@/app/components/ui/scroll-area'
-import { ROUTES } from '@/routes/routesList'
-import { subsonic } from '@/service/subsonic'
-import { useSongInfo } from '@/store/ui.store'
-import { convertSecondsToTime } from '@/utils/convertSecondsToTime'
-import dateTime from '@/utils/dateTime'
-import { formatBytes } from '@/utils/formatBytes'
-import { RECORD_LABELS_MAX_NUMBER } from '@/utils/multipleArtists'
-import { queryKeys } from '@/utils/queryKeys'
+} from "@/app/components/ui/dialog";
+import { ScrollArea } from "@/app/components/ui/scroll-area";
+import { ROUTES } from "@/routes/routesList";
+import { subsonic } from "@/service/subsonic";
+import { useSongInfo } from "@/store/ui.store";
+import { convertSecondsToTime } from "@/utils/convertSecondsToTime";
+import dateTime from "@/utils/dateTime";
+import { formatBytes } from "@/utils/formatBytes";
+import { RECORD_LABELS_MAX_NUMBER } from "@/utils/multipleArtists";
+import { queryKeys } from "@/utils/queryKeys";
 
 export function SongInfoDialog() {
-  const { t } = useTranslation()
-  const { songId, modalOpen, reset } = useSongInfo()
+  const { t } = useTranslation();
+  const { songId, modalOpen, reset } = useSongInfo();
 
   const { data: song, isLoading } = useQuery({
     queryKey: [queryKeys.song.info, songId],
     queryFn: () => subsonic.songs.getSong(songId),
     enabled: modalOpen,
-  })
+  });
 
-  const loadedAlbumId = song ? typeof song.albumId === 'string' : false
+  const loadedAlbumId = song ? typeof song.albumId === "string" : false;
 
   const { data: album, isLoading: albumLoading } = useQuery({
     queryKey: [queryKeys.album.single, song?.albumId],
-    queryFn: () => subsonic.albums.getOne(song?.albumId ?? ''),
+    queryFn: () => subsonic.albums.getOne(song?.albumId ?? ""),
     enabled: loadedAlbumId,
-  })
+  });
 
   function handleModalChange(value: boolean) {
-    if (!value) reset()
+    if (!value) reset();
   }
 
   function handleLinkClick() {
-    reset()
+    reset();
   }
 
   function formatGenres() {
-    if (!song) return []
-    const genres: string[] = []
+    if (!song) return [];
+    const genres: string[] = [];
 
     if (song.genre) {
-      genres.push(song.genre)
+      genres.push(song.genre);
     }
 
     if (song.genres) {
       song.genres.forEach(({ name }) => {
-        if (genres.includes(name)) return
+        if (genres.includes(name)) return;
 
-        genres.push(name)
-      })
+        genres.push(name);
+      });
     }
 
-    return genres
+    return genres;
   }
 
   function formatLastPlayed() {
-    if (!song) return ''
+    if (!song) return "";
 
-    const lastPlayed = dateTime().from(dateTime(song.played), true)
+    const lastPlayed = dateTime().from(dateTime(song.played), true);
 
-    return t('table.lastPlayed', { date: lastPlayed })
+    return t("table.lastPlayed", { date: lastPlayed });
   }
 
   return (
@@ -82,7 +82,7 @@ export function SongInfoDialog() {
         aria-describedby={undefined}
       >
         <DialogHeader className="border-b p-6">
-          <DialogTitle>{t('songInfo.title')}</DialogTitle>
+          <DialogTitle>{t("songInfo.title")}</DialogTitle>
         </DialogHeader>
 
         {(isLoading || albumLoading) && (
@@ -92,7 +92,7 @@ export function SongInfoDialog() {
         )}
         {!song && !isLoading && (
           <div className="flex w-full h-32 items-center justify-center p-6">
-            <p>{t('songInfo.error')}</p>
+            <p>{t("songInfo.error")}</p>
           </div>
         )}
 
@@ -161,13 +161,13 @@ export function SongInfoDialog() {
               {!song.artists && (
                 <InfoGridItem title="artist">
                   <Link
-                    to={ROUTES.ARTIST.PAGE(song.artistId ?? '')}
+                    to={ROUTES.ARTIST.PAGE(song.artistId ?? "")}
                     className={clsx(
-                      'text-foreground',
-                      song.artistId ? 'hover:underline' : 'pointer-events-none',
+                      "text-foreground",
+                      song.artistId ? "hover:underline" : "pointer-events-none",
                     )}
                     onClick={() => {
-                      if (song.artistId) handleLinkClick()
+                      if (song.artistId) handleLinkClick();
                     }}
                   >
                     {song.artist}
@@ -287,16 +287,16 @@ export function SongInfoDialog() {
         )}
       </DialogContent>
     </Dialog>
-  )
+  );
 }
 
 interface InfoGridItemProps {
-  title: string
-  children: React.ReactNode
+  title: string;
+  children: React.ReactNode;
 }
 
 function InfoGridItem({ title, children }: InfoGridItemProps) {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
 
   return (
     <div className="grid grid-cols-4 py-1 px-2 text-sm text-muted-foreground odd:bg-background-foreground">
@@ -307,5 +307,5 @@ function InfoGridItem({ title, children }: InfoGridItemProps) {
         {children}
       </div>
     </div>
-  )
+  );
 }

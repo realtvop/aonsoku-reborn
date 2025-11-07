@@ -1,4 +1,4 @@
-import { clsx } from 'clsx'
+import { clsx } from "clsx";
 import {
   ReactNode,
   useCallback,
@@ -6,59 +6,59 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-} from 'react'
-import Marquee from 'react-fast-marquee'
+} from "react";
+import Marquee from "react-fast-marquee";
 
 interface MarqueeTitleProps {
-  children: ReactNode
-  gap: string
+  children: ReactNode;
+  gap: string;
 }
 
 export function MarqueeTitle({ children, gap }: MarqueeTitleProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const textRef = useRef<HTMLDivElement>(null)
-  const [isOverflowing, setIsOverflowing] = useState(false)
-  const [isFinished, setIsFinished] = useState(false)
-  const [marqueeKey, setMarqueeKey] = useState('')
-  const [containerKey, setContainerKey] = useState('')
+  const containerRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLDivElement>(null);
+  const [isOverflowing, setIsOverflowing] = useState(false);
+  const [isFinished, setIsFinished] = useState(false);
+  const [marqueeKey, setMarqueeKey] = useState("");
+  const [containerKey, setContainerKey] = useState("");
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: needed to calculate properly
   const calculateOverflow = useCallback(() => {
-    if (!containerRef.current || !textRef.current) return
+    if (!containerRef.current || !textRef.current) return;
 
-    const containerWidth = containerRef.current.offsetWidth
-    const textWidth = textRef.current.offsetWidth
+    const containerWidth = containerRef.current.offsetWidth;
+    const textWidth = textRef.current.offsetWidth;
 
-    const isOversizing = textWidth > containerWidth
+    const isOversizing = textWidth > containerWidth;
 
     if (isOverflowing && !isOversizing) {
-      setMarqueeKey(Math.random().toString())
+      setMarqueeKey(Math.random().toString());
     }
 
-    setIsOverflowing(isOversizing)
-  }, [containerRef, textRef, isOverflowing])
+    setIsOverflowing(isOversizing);
+  }, [containerRef, textRef, isOverflowing]);
 
   useLayoutEffect(() => {
     const handleResize = () => {
-      requestAnimationFrame(calculateOverflow)
-    }
+      requestAnimationFrame(calculateOverflow);
+    };
 
-    calculateOverflow()
-    window.addEventListener('resize', handleResize)
+    calculateOverflow();
+    window.addEventListener("resize", handleResize);
     return () => {
-      window.removeEventListener('resize', handleResize)
-    }
-  }, [calculateOverflow])
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [calculateOverflow]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: needed to reset states
   useEffect(() => {
-    setIsOverflowing(false)
-    setIsFinished(false)
-    setMarqueeKey(Math.random().toString())
-    setContainerKey(Math.random().toString())
+    setIsOverflowing(false);
+    setIsFinished(false);
+    setMarqueeKey(Math.random().toString());
+    setContainerKey(Math.random().toString());
 
-    calculateOverflow()
-  }, [calculateOverflow, children])
+    calculateOverflow();
+  }, [calculateOverflow, children]);
 
   return (
     <div className="relative">
@@ -77,8 +77,8 @@ export function MarqueeTitle({ children, gap }: MarqueeTitleProps) {
         <Marquee
           key={marqueeKey}
           className={clsx(
-            isOverflowing && !isFinished && 'maskImage-marquee-fade',
-            isFinished && 'maskImage-marquee-fade-finished',
+            isOverflowing && !isFinished && "maskImage-marquee-fade",
+            isFinished && "maskImage-marquee-fade-finished",
           )}
           speed={30}
           play={isOverflowing}
@@ -86,12 +86,12 @@ export function MarqueeTitle({ children, gap }: MarqueeTitleProps) {
           delay={3}
           pauseOnHover={true}
           onFinish={() => {
-            setIsFinished(true)
+            setIsFinished(true);
           }}
         >
           <div className={gap}>{children}</div>
         </Marquee>
       </div>
     </div>
-  )
+  );
 }

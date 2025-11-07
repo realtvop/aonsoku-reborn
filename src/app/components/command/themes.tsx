@@ -1,19 +1,19 @@
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from "react-i18next";
 import {
   ThemePlaceholder,
   ThemeTitle,
-} from '@/app/components/settings/pages/appearance/theme'
-import { CommandGroup, CommandItem } from '@/app/components/ui/command'
-import { appThemes } from '@/app/observers/theme-observer'
-import { useTheme } from '@/store/theme.store'
-import { CommandItemProps } from './command-menu'
+} from "@/app/components/settings/pages/appearance/theme";
+import { CommandGroup, CommandItem } from "@/app/components/ui/command";
+import { appThemes } from "@/app/observers/theme-observer";
+import { useTheme } from "@/store/theme.store";
+import { CommandItemProps } from "./command-menu";
 
 export function CommandThemes({ runCommand }: CommandItemProps) {
-  const { t } = useTranslation()
-  const { theme: currentTheme, setTheme } = useTheme()
+  const { t } = useTranslation();
+  const { theme: currentTheme, setTheme } = useTheme();
 
   return (
-    <CommandGroup heading={t('theme.label')}>
+    <CommandGroup heading={t("theme.label")}>
       <div className="grid grid-cols-4">
         {appThemes.map((theme) => (
           <CommandItem
@@ -29,5 +29,5 @@ export function CommandThemes({ runCommand }: CommandItemProps) {
         ))}
       </div>
     </CommandGroup>
-  )
+  );
 }

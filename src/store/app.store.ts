@@ -1,15 +1,15 @@
-import merge from 'lodash/merge'
-import omit from 'lodash/omit'
-import { devtools, persist, subscribeWithSelector } from 'zustand/middleware'
-import { immer } from 'zustand/middleware/immer'
-import { shallow } from 'zustand/shallow'
-import { createWithEqualityFn } from 'zustand/traditional'
-import { pingServer } from '@/api/pingServer'
-import { queryServerInfo } from '@/api/queryServerInfo'
-import { AuthType, IAppContext, IServerConfig } from '@/types/serverConfig'
-import { isDesktop } from '@/utils/desktop'
-import { discordRpc } from '@/utils/discordRpc'
-import { logger } from '@/utils/logger'
+import merge from "lodash/merge";
+import omit from "lodash/omit";
+import { devtools, persist, subscribeWithSelector } from "zustand/middleware";
+import { immer } from "zustand/middleware/immer";
+import { shallow } from "zustand/shallow";
+import { createWithEqualityFn } from "zustand/traditional";
+import { pingServer } from "@/api/pingServer";
+import { queryServerInfo } from "@/api/queryServerInfo";
+import { AuthType, IAppContext, IServerConfig } from "@/types/serverConfig";
+import { isDesktop } from "@/utils/desktop";
+import { discordRpc } from "@/utils/discordRpc";
+import { logger } from "@/utils/logger";
 import {
   genEncodedPassword,
   genPassword,
@@ -17,9 +17,9 @@ import {
   genUser,
   getAuthType,
   hasValidConfig,
-} from '@/utils/salt'
+} from "@/utils/salt";
 
-const { SERVER_URL, HIDE_SERVER, HIDE_RADIOS_SECTION, SERVER_TYPE } = window
+const { SERVER_URL, HIDE_SERVER, HIDE_RADIOS_SECTION, SERVER_TYPE } = window;
 
 export const useAppStore = createWithEqualityFn<IAppContext>()(
   subscribeWithSelector(
@@ -28,13 +28,13 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
         immer((set, get) => ({
           data: {
             isServerConfigured: hasValidConfig,
-            osType: '',
-            url: SERVER_URL ?? '',
+            osType: "",
+            url: SERVER_URL ?? "",
             username: genUser(),
             password: genPassword(),
             authType: getAuthType(),
-            protocolVersion: '1.16.0',
-            serverType: SERVER_TYPE ?? 'subsonic',
+            protocolVersion: "1.16.0",
+            serverType: SERVER_TYPE ?? "subsonic",
             logoutDialogState: false,
             hideServer: HIDE_SERVER ?? false,
             lockUser: hasValidConfig,
@@ -46,8 +46,8 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
               rpcEnabled: false,
               setRpcEnabled: (value) => {
                 set((state) => {
-                  state.accounts.discord.rpcEnabled = value
-                })
+                  state.accounts.discord.rpcEnabled = value;
+                });
               },
             },
           },
@@ -55,54 +55,54 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
             active: false,
             setActive: (value) => {
               set((state) => {
-                state.podcasts.active = value
-              })
+                state.podcasts.active = value;
+              });
             },
-            serviceUrl: '',
+            serviceUrl: "",
             setServiceUrl: (value) => {
               set((state) => {
-                state.podcasts.serviceUrl = value
-              })
+                state.podcasts.serviceUrl = value;
+              });
             },
             useDefaultUser: true,
             setUseDefaultUser: (value) => {
               set((state) => {
-                state.podcasts.useDefaultUser = value
-              })
+                state.podcasts.useDefaultUser = value;
+              });
             },
-            customUser: '',
+            customUser: "",
             setCustomUser: (value) => {
               set((state) => {
-                state.podcasts.customUser = value
-              })
+                state.podcasts.customUser = value;
+              });
             },
-            customUrl: '',
+            customUrl: "",
             setCustomUrl: (value) => {
               set((state) => {
-                state.podcasts.customUrl = value
-              })
+                state.podcasts.customUrl = value;
+              });
             },
           },
           pages: {
             showInfoPanel: true,
             toggleShowInfoPanel: () => {
-              const { showInfoPanel } = get().pages
+              const { showInfoPanel } = get().pages;
 
               set((state) => {
-                state.pages.showInfoPanel = !showInfoPanel
-              })
+                state.pages.showInfoPanel = !showInfoPanel;
+              });
             },
             hideRadiosSection: HIDE_RADIOS_SECTION ?? false,
             setHideRadiosSection: (value) => {
               set((state) => {
-                state.pages.hideRadiosSection = value
-              })
+                state.pages.hideRadiosSection = value;
+              });
             },
-            artistsPageViewType: 'table',
+            artistsPageViewType: "table",
             setArtistsPageViewType: (type) => {
               set((state) => {
-                state.pages.artistsPageViewType = type
-              })
+                state.pages.artistsPageViewType = type;
+              });
             },
           },
           desktop: {
@@ -112,8 +112,8 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
             actions: {
               setMinimizeToTray: (value) => {
                 set((state) => {
-                  state.desktop.data.minimizeToTray = value
-                })
+                  state.desktop.data.minimizeToTray = value;
+                });
               },
             },
           },
@@ -121,58 +121,58 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
             open: false,
             setOpen: (value) => {
               set((state) => {
-                state.command.open = value
-              })
+                state.command.open = value;
+              });
             },
           },
           update: {
             openDialog: false,
             setOpenDialog: (value) => {
               set((state) => {
-                state.update.openDialog = value
-              })
+                state.update.openDialog = value;
+              });
             },
             remindOnNextBoot: false,
             setRemindOnNextBoot: (value) => {
               set((state) => {
-                state.update.remindOnNextBoot = value
-              })
+                state.update.remindOnNextBoot = value;
+              });
             },
           },
           settings: {
             openDialog: false,
             setOpenDialog: (value) => {
               set((state) => {
-                state.settings.openDialog = value
-              })
+                state.settings.openDialog = value;
+              });
             },
-            currentPage: 'appearance',
+            currentPage: "appearance",
             setCurrentPage: (page) => {
               set((state) => {
-                state.settings.currentPage = page
-              })
+                state.settings.currentPage = page;
+              });
             },
           },
           actions: {
             setOsType: (value) => {
               set((state) => {
-                state.data.osType = value
-              })
+                state.data.osType = value;
+              });
             },
             setUrl: (value) => {
               set((state) => {
-                state.data.url = value
-              })
+                state.data.url = value;
+              });
             },
             setUsername: (value) => {
               set((state) => {
-                state.data.username = value
-              })
+                state.data.username = value;
+              });
             },
             setPassword: (value) => {
               set((state) => {
-                state.data.password = value
-              })
+                state.data.password = value;
+              });
             },
             saveConfig: async ({ url, username, password }: IServerConfig) => {
               // try both token and password methods
@@ -180,82 +180,84 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
                 const token =
                   authType === AuthType.TOKEN
                     ? genPasswordToken(password)
-                    : genEncodedPassword(password)
+                    : genEncodedPassword(password);
 
                 const canConnect = await pingServer(
                   url,
                   username,
                   token,
                   authType,
-                )
+                );
 
-                const serverInfo = await queryServerInfo(url)
+                const serverInfo = await queryServerInfo(url);
 
                 if (canConnect) {
                   set((state) => {
-                    state.data.url = url
-                    state.data.username = username
-                    state.data.password = token
-                    state.data.authType = authType
-                    state.data.protocolVersion = serverInfo.protocolVersion
-                    state.data.serverType = serverInfo.serverType
-                    state.data.isServerConfigured = true
-                  })
-                  return true
+                    state.data.url = url;
+                    state.data.username = username;
+                    state.data.password = token;
+                    state.data.authType = authType;
+                    state.data.protocolVersion = serverInfo.protocolVersion;
+                    state.data.serverType = serverInfo.serverType;
+                    state.data.isServerConfigured = true;
+                  });
+                  return true;
                 }
               }
               set((state) => {
-                state.data.isServerConfigured = false
-              })
-              return false
+                state.data.isServerConfigured = false;
+              });
+              return false;
             },
             removeConfig: () => {
               set((state) => {
-                state.data.isServerConfigured = false
-                state.data.osType = ''
-                state.data.url = ''
-                state.data.username = ''
-                state.data.password = ''
-                state.data.authType = AuthType.TOKEN
-                state.data.protocolVersion = '1.16.0'
-                state.data.serverType = 'subsonic'
-                state.data.songCount = null
-                state.data.favoriteCount = null
-                state.pages.showInfoPanel = true
-                state.pages.hideRadiosSection = HIDE_RADIOS_SECTION ?? false
-                state.pages.artistsPageViewType = 'table'
-                state.podcasts.active = false
-                state.podcasts.serviceUrl = ''
-                state.podcasts.useDefaultUser = true
-                state.podcasts.customUser = ''
-                state.podcasts.customUrl = ''
-              })
+                state.data.isServerConfigured = false;
+                state.data.osType = "";
+                state.data.url = "";
+                state.data.username = "";
+                state.data.password = "";
+                state.data.authType = AuthType.TOKEN;
+                state.data.protocolVersion = "1.16.0";
+                state.data.serverType = "subsonic";
+                state.data.songCount = null;
+                state.data.favoriteCount = null;
+                state.pages.showInfoPanel = true;
+                state.pages.hideRadiosSection = HIDE_RADIOS_SECTION ?? false;
+                state.pages.artistsPageViewType = "table";
+                state.podcasts.active = false;
+                state.podcasts.serviceUrl = "";
+                state.podcasts.useDefaultUser = true;
+                state.podcasts.customUser = "";
+                state.podcasts.customUrl = "";
+              });
             },
             setLogoutDialogState: (value) => {
               set((state) => {
-                state.data.logoutDialogState = value
-              })
+                state.data.logoutDialogState = value;
+              });
             },
           },
         })),
         {
-          name: 'app_store',
+          name: "app_store",
         },
       ),
       {
-        name: 'app_store',
+        name: "app_store",
         version: 1,
         merge: (persistedState, currentState) => {
           try {
-            const persisted = persistedState as Partial<IAppContext> | undefined
+            const persisted = persistedState as
+              | Partial<IAppContext>
+              | undefined;
 
-            let hideRadiosSection = false
+            let hideRadiosSection = false;
 
             if (persisted) {
-              hideRadiosSection = persisted.pages?.hideRadiosSection ?? false
+              hideRadiosSection = persisted.pages?.hideRadiosSection ?? false;
             }
             if (HIDE_RADIOS_SECTION !== undefined) {
-              hideRadiosSection = HIDE_RADIOS_SECTION
+              hideRadiosSection = HIDE_RADIOS_SECTION;
             }
 
             if (hasValidConfig) {
@@ -267,19 +269,19 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
                   password: genPassword(),
                   authType: getAuthType(),
                   hideServer: HIDE_SERVER ?? false,
-                  serverType: SERVER_TYPE ?? 'subsonic',
+                  serverType: SERVER_TYPE ?? "subsonic",
                   lockUser: true,
                 },
                 pages: {
                   hideRadiosSection,
                 },
-              }
+              };
 
               if (persistedState) {
-                return merge(currentState, persistedState, newState)
+                return merge(currentState, persistedState, newState);
               }
 
-              return merge(currentState, newState)
+              return merge(currentState, newState);
             }
 
             const withoutLockUser = {
@@ -289,82 +291,82 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
               pages: {
                 hideRadiosSection,
               },
-            }
+            };
 
             if (persistedState) {
-              return merge(currentState, persistedState, withoutLockUser)
+              return merge(currentState, persistedState, withoutLockUser);
             }
 
-            return merge(currentState, withoutLockUser)
+            return merge(currentState, withoutLockUser);
           } catch (error) {
-            logger.error('[AppStore] [merge] - Unable to merge states', error)
+            logger.error("[AppStore] [merge] - Unable to merge states", error);
 
-            return currentState
+            return currentState;
           }
         },
         partialize: (state) => {
           const appStore = omit(
             state,
-            'data.logoutDialogState',
-            'data.hideServer',
-            'command.open',
-            'update',
-            'settings',
-          )
+            "data.logoutDialogState",
+            "data.hideServer",
+            "command.open",
+            "update",
+            "settings",
+          );
 
-          return appStore
+          return appStore;
         },
       },
     ),
   ),
   shallow,
-)
+);
 
 useAppStore.subscribe(
   (state) => state.accounts.discord.rpcEnabled,
   (currentState) => {
     if (currentState) {
-      discordRpc.sendCurrentSong()
+      discordRpc.sendCurrentSong();
     } else {
-      discordRpc.clear()
+      discordRpc.clear();
     }
   },
-)
+);
 
 useAppStore.subscribe(
   (state) => state.desktop.data,
   (data) => {
-    if (!isDesktop()) return
+    if (!isDesktop()) return;
 
-    window.api.saveAppSettings(data)
+    window.api.saveAppSettings(data);
   },
   {
     equalityFn: shallow,
   },
-)
+);
 
-export const useAppData = () => useAppStore((state) => state.data)
-export const useAppAccounts = () => useAppStore((state) => state.accounts)
-export const useAppPodcasts = () => useAppStore((state) => state.podcasts)
-export const useAppPages = () => useAppStore((state) => state.pages)
+export const useAppData = () => useAppStore((state) => state.data);
+export const useAppAccounts = () => useAppStore((state) => state.accounts);
+export const useAppPodcasts = () => useAppStore((state) => state.podcasts);
+export const useAppPages = () => useAppStore((state) => state.pages);
 export const useAppDesktopData = () =>
-  useAppStore((state) => state.desktop.data)
+  useAppStore((state) => state.desktop.data);
 export const useAppDesktopActions = () =>
-  useAppStore((state) => state.desktop.actions)
-export const useAppActions = () => useAppStore((state) => state.actions)
-export const useAppUpdate = () => useAppStore((state) => state.update)
-export const useAppSettings = () => useAppStore((state) => state.settings)
+  useAppStore((state) => state.desktop.actions);
+export const useAppActions = () => useAppStore((state) => state.actions);
+export const useAppUpdate = () => useAppStore((state) => state.update);
+export const useAppSettings = () => useAppStore((state) => state.settings);
 export const useAppArtistsViewType = () =>
   useAppStore((state) => {
-    const { artistsPageViewType, setArtistsPageViewType } = state.pages
+    const { artistsPageViewType, setArtistsPageViewType } = state.pages;
 
-    const isTableView = artistsPageViewType === 'table'
-    const isGridView = artistsPageViewType === 'grid'
+    const isTableView = artistsPageViewType === "table";
+    const isGridView = artistsPageViewType === "grid";
 
     return {
       artistsPageViewType,
       setArtistsPageViewType,
       isTableView,
       isGridView,
-    }
-  })
+    };
+  });
