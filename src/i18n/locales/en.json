@@ -68,7 +68,7 @@
     "headline": "Playlist",
     "songCount_one": "{{count}} song",
     "songCount_other": "{{count}} songs",
-    "duration": "about {{duration}}",
+    "duration": "~ {{duration}}",
     "refresh": "Refresh playlists",
     "buttons": {
       "play": "Play {{name}}",

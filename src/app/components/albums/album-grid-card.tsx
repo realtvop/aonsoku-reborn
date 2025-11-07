@@ -1,23 +1,23 @@
-import { memo } from 'react'
-import { getCoverArtUrl } from '@/api/httpClient'
-import { PreviewCard } from '@/app/components/preview-card/card'
-import { ROUTES } from '@/routes/routesList'
-import { subsonic } from '@/service/subsonic'
-import { usePlayerActions } from '@/store/player.store'
-import { Albums } from '@/types/responses/album'
+import { memo } from "react";
+import { getCoverArtUrl } from "@/api/httpClient";
+import { PreviewCard } from "@/app/components/preview-card/card";
+import { ROUTES } from "@/routes/routesList";
+import { subsonic } from "@/service/subsonic";
+import { usePlayerActions } from "@/store/player.store";
+import { Albums } from "@/types/responses/album";
 
 type AlbumCardProps = {
-  album: Albums
-}
+  album: Albums;
+};
 
 function AlbumCard({ album }: AlbumCardProps) {
-  const { setSongList } = usePlayerActions()
+  const { setSongList } = usePlayerActions();
 
   async function handlePlayAlbum() {
-    const response = await subsonic.albums.getOne(album.id)
+    const response = await subsonic.albums.getOne(album.id);
 
     if (response) {
-      setSongList(response.song, 0)
+      setSongList(response.song, 0);
     }
   }
 
@@ -25,10 +25,12 @@ function AlbumCard({ album }: AlbumCardProps) {
     <PreviewCard.Root>
       <PreviewCard.ImageWrapper link={ROUTES.ALBUM.PAGE(album.id)}>
         <PreviewCard.Image
-          src={getCoverArtUrl(album.coverArt, 'album', '300')}
+          src={getCoverArtUrl(album.coverArt, "album", "300")}
           alt={album.name}
         />
-        <PreviewCard.PlayButton onClick={handlePlayAlbum} />
+        {window.innerWidth > 640 && (
+          <PreviewCard.PlayButton onClick={handlePlayAlbum} />
+        )}
       </PreviewCard.ImageWrapper>
       <PreviewCard.InfoWrapper>
         <PreviewCard.Title link={ROUTES.ALBUM.PAGE(album.id)}>
@@ -36,13 +38,13 @@ function AlbumCard({ album }: AlbumCardProps) {
         </PreviewCard.Title>
         <PreviewCard.Subtitle
           enableLink={album.artistId !== undefined}
-          link={ROUTES.ARTIST.PAGE(album.artistId ?? '')}
+          link={ROUTES.ARTIST.PAGE(album.artistId ?? "")}
         >
           {album.artist}
         </PreviewCard.Subtitle>
       </PreviewCard.InfoWrapper>
     </PreviewCard.Root>
-  )
+  );
 }
 
-export const AlbumGridCard = memo(AlbumCard)
+export const AlbumGridCard = memo(AlbumCard);

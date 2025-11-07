@@ -1,26 +1,26 @@
-import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
-import { getCoverArtUrl } from '@/api/httpClient'
-import { PreviewCard } from '@/app/components/preview-card/card'
+import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
+import { getCoverArtUrl } from "@/api/httpClient";
+import { PreviewCard } from "@/app/components/preview-card/card";
 import {
   Carousel,
   type CarouselApi,
   CarouselContent,
   CarouselItem,
-} from '@/app/components/ui/carousel'
-import { CarouselButton } from '@/app/components/ui/carousel-button'
-import { ROUTES } from '@/routes/routesList'
-import { subsonic } from '@/service/subsonic'
-import { usePlayerActions } from '@/store/player.store'
-import { Albums } from '@/types/responses/album'
+} from "@/app/components/ui/carousel";
+import { CarouselButton } from "@/app/components/ui/carousel-button";
+import { ROUTES } from "@/routes/routesList";
+import { subsonic } from "@/service/subsonic";
+import { usePlayerActions } from "@/store/player.store";
+import { Albums } from "@/types/responses/album";
 
 interface PreviewListProps {
-  list: Albums[]
-  title: string
-  showMore?: boolean
-  moreTitle?: string
-  moreRoute?: string
+  list: Albums[];
+  title: string;
+  showMore?: boolean;
+  moreTitle?: string;
+  moreRoute?: string;
 }
 
 export default function PreviewList({
@@ -30,39 +30,39 @@ export default function PreviewList({
   moreTitle,
   moreRoute,
 }: PreviewListProps) {
-  const [api, setApi] = useState<CarouselApi>()
-  const [canScrollPrev, setCanScrollPrev] = useState<boolean>()
-  const [canScrollNext, setCanScrollNext] = useState<boolean>()
-  const { setSongList } = usePlayerActions()
-  const { t } = useTranslation()
+  const [api, setApi] = useState<CarouselApi>();
+  const [canScrollPrev, setCanScrollPrev] = useState<boolean>();
+  const [canScrollNext, setCanScrollNext] = useState<boolean>();
+  const { setSongList } = usePlayerActions();
+  const { t } = useTranslation();
 
-  moreTitle = moreTitle || t('generic.seeMore')
+  moreTitle = moreTitle || t("generic.seeMore");
 
   if (list.length > 16) {
-    list = list.slice(0, 16)
+    list = list.slice(0, 16);
   }
 
   async function handlePlayAlbum(album: Albums) {
-    const response = await subsonic.albums.getOne(album.id)
+    const response = await subsonic.albums.getOne(album.id);
 
     if (response) {
-      setSongList(response.song, 0)
+      setSongList(response.song, 0);
     }
   }
 
   useEffect(() => {
     if (!api) {
-      return
+      return;
     }
 
-    setCanScrollPrev(api.canScrollPrev())
-    setCanScrollNext(api.canScrollNext())
+    setCanScrollPrev(api.canScrollPrev());
+    setCanScrollNext(api.canScrollNext());
 
-    api.on('select', () => {
-      setCanScrollPrev(api.canScrollPrev())
-      setCanScrollNext(api.canScrollNext())
-    })
-  }, [api])
+    api.on("select", () => {
+      setCanScrollPrev(api.canScrollPrev());
+      setCanScrollNext(api.canScrollNext());
+    });
+  }, [api]);
 
   return (
     <div className="w-full flex flex-col mt-4">
@@ -81,7 +81,7 @@ export default function PreviewList({
               </p>
             </Link>
           )}
-          <div className="flex gap-2">
+          <div className="flex gap-2 hidden sm:flex">
             <CarouselButton
               direction="prev"
               disabled={!canScrollPrev}
@@ -101,8 +101,8 @@ export default function PreviewList({
       <div className="transform-gpu">
         <Carousel
           opts={{
-            align: 'start',
-            slidesToScroll: 'auto',
+            align: "start",
+            slidesToScroll: "auto",
           }}
           setApi={setApi}
           data-testid="preview-list-carousel"
@@ -111,18 +111,20 @@ export default function PreviewList({
             {list.map((album, index) => (
               <CarouselItem
                 key={album.id}
-                className="basis-1/6 2xl:basis-1/8"
+                className="basis-1/4 sm:basis-1/6 2xl:basis-1/8"
                 data-testid={`preview-list-carousel-item-${index}`}
               >
                 <PreviewCard.Root>
                   <PreviewCard.ImageWrapper link={ROUTES.ALBUM.PAGE(album.id)}>
                     <PreviewCard.Image
-                      src={getCoverArtUrl(album.coverArt, 'album')}
+                      src={getCoverArtUrl(album.coverArt, "album")}
                       alt={album.name}
                     />
-                    <PreviewCard.PlayButton
-                      onClick={() => handlePlayAlbum(album)}
-                    />
+                    {window.innerWidth > 640 && (
+                      <PreviewCard.PlayButton
+                        onClick={() => handlePlayAlbum(album)}
+                      />
+                    )}
                   </PreviewCard.ImageWrapper>
                   <PreviewCard.InfoWrapper>
                     <PreviewCard.Title link={ROUTES.ALBUM.PAGE(album.id)}>
@@ -130,7 +132,7 @@ export default function PreviewList({
                     </PreviewCard.Title>
                     <PreviewCard.Subtitle
                       enableLink={album.artistId !== undefined}
-                      link={ROUTES.ARTIST.PAGE(album.artistId ?? '')}
+                      link={ROUTES.ARTIST.PAGE(album.artistId ?? "")}
                     >
                       {album.artist}
                     </PreviewCard.Subtitle>
@@ -142,5 +144,5 @@ export default function PreviewList({
         </Carousel>
       </div>
     </div>
-  )
+  );
 }

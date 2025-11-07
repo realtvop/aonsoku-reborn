@@ -353,10 +353,7 @@ export function LanControlObserver() {
   useEffect(() => {
     const state = buildPlayerState();
     broadcastState(state);
-  }, [
-    broadcastState,
-    buildPlayerState,
-  ]);
+  }, [broadcastState, buildPlayerState]);
 
   useEffect(() => {
     if (!isDesktopEnv) return;
