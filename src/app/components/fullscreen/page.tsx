@@ -69,7 +69,7 @@ export default function FullscreenMode({
     <Drawer
       fixed
       dismissible={true}
-      handleOnly={true}
+      handleOnly={false}
       disablePreventScroll={true}
       modal={false}
       open={open}
@@ -84,24 +84,24 @@ export default function FullscreenMode({
       >
         <MemoFullscreenBackdrop />
         <FullscreenDragHandler />
-        <div className="absolute inset-0 flex flex-col p-0 2xl:p-8 pt-10 2xl:pt-12 w-full h-full gap-4 bg-black/0 z-10">
-          {/* First Row */}
-          <div className="flex gap-2 items-center w-full h-[40px] px-16 z-20 justify-end">
+        <div className="absolute inset-0 flex flex-col p-0 sm:p-0 2xl:p-8 pt-4 sm:pt-10 2xl:pt-12 w-full h-full gap-4 bg-black/0 z-10">
+          {/* First Row - Header */}
+          <div className="flex gap-2 items-center w-full h-[40px] px-4 sm:px-16 z-20 justify-end">
             <FullscreenSettings />
             <DrawerClose>
               <CloseFullscreenButton />
             </DrawerClose>
           </div>
 
-          {/* Second Row */}
-          <div className="w-full max-h-[calc(100%-220px)] min-h-[calc(100%-220px)] px-16">
-            <div className="min-h-[300px] h-full max-h-full">
+          {/* Second Row - Content Area (Tabs/Queue for desktop, Song info for mobile) */}
+          <div className="w-full flex-1 overflow-hidden px-4 sm:px-16">
+            <div className="h-full">
               <FullscreenTabs />
             </div>
           </div>
 
-          {/* Third Row */}
-          <div className="h-[150px] min-h-[150px] px-16 py-2">
+          {/* Third Row - Controls (hidden on mobile, shows in Playing tab) */}
+          <div className="hidden sm:block h-[150px] min-h-[150px] px-16 py-2">
             <div className="flex items-center">
               <FullscreenPlayer />
             </div>

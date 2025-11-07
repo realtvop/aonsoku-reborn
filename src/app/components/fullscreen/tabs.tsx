@@ -6,6 +6,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/app/components/ui/tabs";
+import { FullscreenPlayer } from "./player";
 import { LyricsTab } from "./lyrics";
 import { FullscreenSongQueue } from "./queue";
 import { SongInfo } from "./song-info";
@@ -13,6 +14,7 @@ import { SongInfo } from "./song-info";
 const MemoSongQueue = memo(FullscreenSongQueue);
 const MemoSongInfo = memo(SongInfo);
 const MemoLyricsTab = memo(LyricsTab);
+const MemoFullscreenPlayer = memo(FullscreenPlayer);
 
 enum TabsEnum {
   Queue = "queue",
@@ -45,8 +47,11 @@ const getTransform = (currentTab: TabValue, tabValue: TabValue) => {
   return `translate3d(${translation}, 0, 0)`;
 };
 
-const tabStyles =
-  "absolute inset-0 mt-0 h-[calc(100%-64px)] overflow-y-auto transition-transform duration-300";
+const playingTabStyles =
+  "absolute inset-0 mt-0 h-[calc(100%-64px)] transition-transform duration-300 overscroll-none overflow-hidden";
+
+const scrollableTabStyles =
+  "absolute inset-0 mt-0 h-[calc(100%-64px)] overflow-y-auto transition-transform duration-300 overscroll-none";
 
 const triggerStyles =
   "w-full data-[state=active]:bg-foreground data-[state=active]:text-secondary text-foreground drop-shadow-sm";
@@ -75,7 +80,7 @@ export function FullscreenTabs() {
       <div className="relative w-full h-full">
         <TabsContent
           value={TabsEnum.Queue}
-          className={tabStyles}
+          className={scrollableTabStyles}
           style={{
             backfaceVisibility: "hidden",
             transform: getTransform(tab, TabsEnum.Queue),
@@ -86,18 +91,24 @@ export function FullscreenTabs() {
         </TabsContent>
         <TabsContent
           value={TabsEnum.Playing}
-          className={tabStyles}
+          className={playingTabStyles}
           style={{
             backfaceVisibility: "hidden",
             transform: getTransform(tab, TabsEnum.Playing),
           }}
           forceMount={true}
         >
-          <MemoSongInfo />
+          <div className="flex flex-col h-full justify-center sm:justify-start px-0">
+            <MemoSongInfo />
+            {/* Show controls on mobile */}
+            <div className="sm:hidden mt-auto pb-2 px-2">
+              <MemoFullscreenPlayer />
+            </div>
+          </div>
         </TabsContent>
         <TabsContent
           value={TabsEnum.Lyrics}
-          className={tabStyles}
+          className={scrollableTabStyles}
           style={{
             backfaceVisibility: "hidden",
             transform: getTransform(tab, TabsEnum.Lyrics),

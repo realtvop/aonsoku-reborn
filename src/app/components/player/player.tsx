@@ -24,7 +24,6 @@ import { hasPiPSupport } from "@/utils/browser";
 import { logger } from "@/utils/logger";
 import { ReplayGainParams } from "@/utils/replayGain";
 import { AudioPlayer } from "./audio";
-import FullscreenMode from "../fullscreen/page";
 import { PlayerClearQueueButton } from "./clear-queue-button";
 import { PlayerControls } from "./controls";
 import { PlayerLikeButton } from "./like-button";
@@ -195,15 +194,17 @@ export function Player() {
     return { gain: trackGain, peak: trackPeak, preAmp };
   }
 
-  const handleFooterTouch = useCallback(
-    (event: React.TouchEvent) => {
-      if (!isMobile) return;
+  const handleFooterClick = useCallback(
+    (event: React.MouseEvent) => {
+      if (!isMobile || window.innerWidth >= 640) return;
 
-      // Check if the touch target is a control button
+      // Check if the click target is a control button or interactive element
       const target = event.target as HTMLElement;
       const isControlButton = target.closest("button") !== null;
+      const isSlider = target.closest('[role="slider"]') !== null;
+      const isInteractive = isControlButton || isSlider;
 
-      if (!isControlButton) {
+      if (!isInteractive) {
         setIsFullscreenOpen(true);
       }
     },
@@ -211,132 +212,136 @@ export function Player() {
   );
 
   return (
-    <FullscreenMode open={isFullscreenOpen} onOpenChange={setIsFullscreenOpen}>
-      <footer
-        className="border-t h-[--player-height] w-full flex items-center fixed bottom-0 left-0 right-0 z-40 bg-background"
-        onTouchStart={handleFooterTouch}
-      >
-        <div className="w-full h-full grid grid-cols-[1fr_auto] gap-3 px-3 sm:grid-cols-player sm:gap-2 sm:px-4">
-          {/* Track Info */}
-          <div className="flex items-center gap-1 w-full sm:gap-2">
-            {isSong && <MemoTrackInfo song={song} />}
-            {isRadio && <MemoRadioInfo radio={radio} />}
-            {isPodcast && <MemoPodcastInfo podcast={podcast} />}
-          </div>
-          {/* Main Controls */}
-          <div className="hidden sm:col-span-2 sm:flex flex-col justify-center items-center px-4 gap-1">
-            <MemoPlayerControls
+    <footer
+      className="border-t h-[--player-height] w-full flex items-center fixed bottom-0 left-0 right-0 z-40 bg-background"
+      onClick={handleFooterClick}
+    >
+      <div className="w-full h-full grid grid-cols-[1fr_auto] gap-3 px-3 sm:grid-cols-player sm:gap-2 sm:px-4">
+        {/* Track Info */}
+        <div className="flex items-center gap-1 w-full sm:gap-2">
+          {isSong && (
+            <MemoTrackInfo
               song={song}
-              radio={radio}
-              podcast={podcast}
+              isFullscreenOpen={isFullscreenOpen}
+              setIsFullscreenOpen={setIsFullscreenOpen}
+            />
+          )}
+          {isRadio && <MemoRadioInfo radio={radio} />}
+          {isPodcast && <MemoPodcastInfo podcast={podcast} />}
+        </div>
+        {/* Main Controls */}
+        <div className="hidden sm:col-span-2 sm:flex flex-col justify-center items-center px-4 gap-1">
+          <MemoPlayerControls
+            song={song}
+            radio={radio}
+            podcast={podcast}
+            audioRef={getAudioRef()}
+          />
+
+          {(isSong || isPodcast) && (
+            <MemoPlayerProgress audioRef={getAudioRef()} />
+          )}
+        </div>
+        {/* Mobile Controls - Only Play/Pause and Next */}
+        <div className="flex sm:hidden items-center gap-1">
+          <Button
+            variant="ghost"
+            disabled={!song && !radio && !isPodcast}
+            onClick={togglePlayPause}
+            data-testid={`player-button-${isPlaying ? "pause" : "play"}`}
+            className="size-10 p-0"
+          >
+            {isPlaying ? (
+              <Pause className="text-foreground fill-foreground size-5" />
+            ) : (
+              <Play className="text-foreground fill-foreground size-5" />
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={
+              (!song && !radio && !podcast) ||
+              (!hasNext && loopState !== LoopState.All)
+            }
+            onClick={playNextSong}
+            data-testid="player-button-next-mobile"
+            className="size-10 p-0"
+          >
+            <SkipForward className="text-foreground fill-foreground size-5" />
+          </Button>
+        </div>
+        {/* Remain Controls and Volume */}
+        <div className="hidden sm:flex items-center w-full justify-end">
+          <div className="flex items-center gap-1">
+            {isSong && (
+              <>
+                <MemoPlayerLikeButton disabled={!song} />
+                <MemoLyricsButton disabled={!song} />
+                <MemoPlayerQueueButton disabled={!song} />
+              </>
+            )}
+            {isPodcast && <MemoPodcastPlaybackRate />}
+            {(isRadio || isPodcast) && (
+              <MemoPlayerClearQueueButton disabled={!radio && !podcast} />
+            )}
+
+            <MemoPlayerVolume
               audioRef={getAudioRef()}
+              disabled={!song && !radio && !podcast}
             />
 
-            {(isSong || isPodcast) && (
-              <MemoPlayerProgress audioRef={getAudioRef()} />
-            )}
-          </div>
-          {/* Mobile Controls - Only Play/Pause and Next */}
-          <div className="flex sm:hidden items-center gap-1">
-            <Button
-              variant="ghost"
-              disabled={!song && !radio && !isPodcast}
-              onClick={togglePlayPause}
-              data-testid={`player-button-${isPlaying ? "pause" : "play"}`}
-              className="size-10 p-0"
-            >
-              {isPlaying ? (
-                <Pause className="text-foreground fill-foreground size-5" />
-              ) : (
-                <Play className="text-foreground fill-foreground size-5" />
-              )}
-            </Button>
-            <Button
-              variant="ghost"
-              disabled={
-                (!song && !radio && !podcast) ||
-                (!hasNext && loopState !== LoopState.All)
-              }
-              onClick={playNextSong}
-              data-testid="player-button-next-mobile"
-              className="size-10 p-0"
-            >
-              <SkipForward className="text-foreground fill-foreground size-5" />
-            </Button>
-          </div>
-          {/* Remain Controls and Volume */}
-          <div className="hidden sm:flex items-center w-full justify-end">
-            <div className="flex items-center gap-1">
-              {isSong && (
-                <>
-                  <MemoPlayerLikeButton disabled={!song} />
-                  <MemoLyricsButton disabled={!song} />
-                  <MemoPlayerQueueButton disabled={!song} />
-                </>
-              )}
-              {isPodcast && <MemoPodcastPlaybackRate />}
-              {(isRadio || isPodcast) && (
-                <MemoPlayerClearQueueButton disabled={!radio && !podcast} />
-              )}
-
-              <MemoPlayerVolume
-                audioRef={getAudioRef()}
-                disabled={!song && !radio && !podcast}
-              />
-
-              {isSong && hasPiPSupport && <MemoMiniPlayerButton />}
-            </div>
+            {isSong && hasPiPSupport && <MemoMiniPlayerButton />}
           </div>
         </div>
+      </div>
 
-        {isSong && song && !isRemoteControlActive && (
-          <MemoAudioPlayer
-            replayGain={getTrackReplayGain()}
-            src={getSongStreamUrl(song.id)}
-            autoPlay={isPlaying}
-            audioRef={audioRef}
-            loop={loopState === LoopState.One}
-            onPlay={() => setPlayingState(true)}
-            onPause={() => setPlayingState(false)}
-            onLoadedMetadata={setupDuration}
-            onTimeUpdate={setupProgress}
-            onEnded={handleSongEnded}
-            onLoadStart={setupInitialVolume}
-            data-testid="player-song-audio"
-          />
-        )}
+      {isSong && song && !isRemoteControlActive && (
+        <MemoAudioPlayer
+          replayGain={getTrackReplayGain()}
+          src={getSongStreamUrl(song.id)}
+          autoPlay={isPlaying}
+          audioRef={audioRef}
+          loop={loopState === LoopState.One}
+          onPlay={() => setPlayingState(true)}
+          onPause={() => setPlayingState(false)}
+          onLoadedMetadata={setupDuration}
+          onTimeUpdate={setupProgress}
+          onEnded={handleSongEnded}
+          onLoadStart={setupInitialVolume}
+          data-testid="player-song-audio"
+        />
+      )}
 
-        {isRadio && radio && !isRemoteControlActive && (
-          <MemoAudioPlayer
-            src={radio.streamUrl}
-            autoPlay={isPlaying}
-            audioRef={radioRef}
-            onPlay={() => setPlayingState(true)}
-            onPause={() => setPlayingState(false)}
-            onLoadStart={setupInitialVolume}
-            data-testid="player-radio-audio"
-          />
-        )}
+      {isRadio && radio && !isRemoteControlActive && (
+        <MemoAudioPlayer
+          src={radio.streamUrl}
+          autoPlay={isPlaying}
+          audioRef={radioRef}
+          onPlay={() => setPlayingState(true)}
+          onPause={() => setPlayingState(false)}
+          onLoadStart={setupInitialVolume}
+          data-testid="player-radio-audio"
+        />
+      )}
 
-        {isPodcast && podcast && !isRemoteControlActive && (
-          <MemoAudioPlayer
-            src={getProxyURL(podcast.audio_url)}
-            autoPlay={isPlaying}
-            audioRef={podcastRef}
-            preload="auto"
-            onPlay={() => setPlayingState(true)}
-            onPause={() => setPlayingState(false)}
-            onLoadedMetadata={setupDuration}
-            onTimeUpdate={setupProgress}
-            onEnded={() => {
-              sendFinishProgress();
-              handleSongEnded();
-            }}
-            onLoadStart={setupInitialVolume}
-            data-testid="player-podcast-audio"
-          />
-        )}
-      </footer>
-    </FullscreenMode>
+      {isPodcast && podcast && !isRemoteControlActive && (
+        <MemoAudioPlayer
+          src={getProxyURL(podcast.audio_url)}
+          autoPlay={isPlaying}
+          audioRef={podcastRef}
+          preload="auto"
+          onPlay={() => setPlayingState(true)}
+          onPause={() => setPlayingState(false)}
+          onLoadedMetadata={setupDuration}
+          onTimeUpdate={setupProgress}
+          onEnded={() => {
+            sendFinishProgress();
+            handleSongEnded();
+          }}
+          onLoadStart={setupInitialVolume}
+          data-testid="player-podcast-audio"
+        />
+      )}
+    </footer>
   );
 }

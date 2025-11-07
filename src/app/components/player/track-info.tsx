@@ -1,6 +1,6 @@
 import randomCSSHexColor from "@chriscodesthings/random-css-hex-color";
 import { AudioLines, Maximize2 } from "lucide-react";
-import { useCallback } from "react";
+import { type Dispatch, useCallback } from "react";
 import { Fragment } from "react/jsx-runtime";
 import { useTranslation } from "react-i18next";
 import { LazyLoadImage } from "react-lazy-load-image-component";
@@ -19,7 +19,15 @@ import { getAverageColor } from "@/utils/getAverageColor";
 import { logger } from "@/utils/logger";
 import { ALBUM_ARTISTS_MAX_NUMBER } from "@/utils/multipleArtists";
 
-export function TrackInfo({ song }: { song: ISong | undefined }) {
+export function TrackInfo({
+  song,
+  isFullscreenOpen,
+  setIsFullscreenOpen,
+}: {
+  song: ISong | undefined;
+  isFullscreenOpen: boolean;
+  setIsFullscreenOpen: Dispatch<boolean>;
+}) {
   const { t } = useTranslation();
   const { setCurrentSongColor, currentSongColor } = useSongColor();
 
@@ -93,11 +101,14 @@ export function TrackInfo({ song }: { song: ISong | undefined }) {
             onError={handleError}
           />
         </div>
-        <FullscreenMode>
+        <FullscreenMode
+          open={isFullscreenOpen}
+          onOpenChange={setIsFullscreenOpen}
+        >
           <Button
             variant="secondary"
             size="icon"
-            className="cursor-pointer w-8 h-8 shadow-md rounded-full opacity-0 sm:group-hover:opacity-100 transition-opacity ease-in-out absolute top-1 right-1 focus-visible:opacity-100"
+            className="hidden sm:block cursor-pointer w-8 h-8 shadow-md rounded-full opacity-0 sm:group-hover:opacity-100 transition-opacity ease-in-out absolute top-1 right-1 focus-visible:opacity-100"
             data-testid="track-fullscreen-button"
           >
             <SimpleTooltip text={t("fullscreen.switchButton")} align="start">

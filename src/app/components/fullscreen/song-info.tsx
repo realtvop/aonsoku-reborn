@@ -13,23 +13,23 @@ export function SongInfo() {
   const currentSong = usePlayerStore((state) => state.songlist.currentSong);
 
   return (
-    <div className="flex items-center justify-start h-full min-h-full max-h-full gap-4 2xl:gap-6 flex-1 pt-2 overflow-hidden">
+    <div className="flex flex-col sm:flex-row items-center sm:justify-start h-auto sm:h-full sm:min-h-full sm:max-h-full gap-2 sm:gap-4 2xl:gap-6 flex-1 pt-2 overflow-hidden">
       <MemoFullscreenSongImage />
 
-      <div className="flex flex-col w-[66%] max-w-full h-full max-h-[450px] 2xl:max-h-[550px] justify-end text-left overflow-hidden">
+      <div className="flex flex-col w-full sm:w-[66%] max-w-full h-auto sm:h-full sm:max-h-[450px] 2xl:max-h-[550px] justify-center sm:justify-end text-center sm:text-left overflow-hidden px-4 sm:px-0">
         <MarqueeTitle gap="mr-6">
-          <h2 className="scroll-m-20 text-4xl 2xl:text-5xl font-bold tracking-tight py-2 2xl:py-3 drop-shadow-lg">
+          <h2 className="scroll-m-20 text-2xl sm:text-4xl 2xl:text-5xl font-bold tracking-tight py-1 sm:py-2 2xl:py-3 drop-shadow-lg">
             {currentSong.title}
           </h2>
         </MarqueeTitle>
-        <div className="text-base 2xl:text-lg flex gap-1 text-foreground/70 truncate maskImage-marquee-fade-finished">
+        <div className="text-sm sm:text-base 2xl:text-lg flex gap-1 text-foreground/70 justify-center sm:justify-start truncate maskImage-marquee-fade-finished">
           <p className="truncate drop-shadow-lg text-foreground">
             {currentSong.album}
           </p>
           <Dot className="text-foreground/70" />
           <ArtistNames song={currentSong} />
         </div>
-        <div className="flex gap-2 mt-2 2xl:mt-3 mb-[1px]">
+        <div className="flex gap-2 mt-1 sm:mt-2 2xl:mt-3 mb-[1px] justify-center sm:justify-start">
           {currentSong.genre && (
             <Badge variant="neutral">{currentSong.genre}</Badge>
           )}

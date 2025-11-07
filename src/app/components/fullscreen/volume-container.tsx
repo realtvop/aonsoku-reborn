@@ -3,11 +3,13 @@ import { MuteButton, VolumeSlider } from "@/app/components/player/volume";
 import { usePlayerVolume } from "@/store/player.store";
 import { buttonsStyle } from "./controls";
 
-export function VolumeContainer() {
+export function VolumeContainer({ className }: { className?: string }) {
   const { volume } = usePlayerVolume();
 
   return (
-    <div className="flex justify-center items-center gap-1 text-secondary-foreground">
+    <div
+      className={`flex justify-center items-center gap-1 text-secondary-foreground ${className}`}
+    >
       <MuteButton className={buttonsStyle.secondary}>
         <VolumeIcon volume={volume} className={buttonsStyle.secondaryIcon} />
       </MuteButton>

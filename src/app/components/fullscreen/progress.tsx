@@ -24,7 +24,7 @@ export function FullscreenProgress() {
         audioPlayerRef.currentTime = value;
       }
     },
-    [audioPlayerRef],
+    [audioPlayerRef]
   );
 
   const handleSeeking = useCallback((amount: number) => {
@@ -38,7 +38,7 @@ export function FullscreenProgress() {
       setProgress(amount);
       setLocalProgress(amount);
     },
-    [setProgress, updateAudioCurrentTime],
+    [setProgress, updateAudioCurrentTime]
   );
 
   const handleSeekedFallback = useCallback(() => {
@@ -49,12 +49,12 @@ export function FullscreenProgress() {
   }, [localProgress, progress, setProgress, updateAudioCurrentTime]);
 
   const currentTime = convertSecondsToTime(
-    isSeeking ? localProgress : progress,
+    isSeeking ? localProgress : progress
   );
 
   return (
-    <div className="flex items-center gap-3">
-      <div className="min-w-[50px] max-w-[60px] text-right drop-shadow-lg">
+    <div className="flex items-center gap-2 sm:gap-3">
+      <div className="min-w-[40px] sm:min-w-[50px] max-w-[50px] sm:max-w-[60px] text-right drop-shadow-lg text-sm sm:text-base">
         {currentTime}
       </div>
 
@@ -72,7 +72,7 @@ export function FullscreenProgress() {
         onMouseUp={handleSeekedFallback}
       />
 
-      <div className="min-w-[50px] max-w-[60px] text-left drop-shadow-lg">
+      <div className="min-w-[40px] sm:min-w-[50px] max-w-[50px] sm:max-w-[60px] text-left drop-shadow-lg text-sm sm:text-base">
         {convertSecondsToTime(currentDuration ?? 0)}
       </div>
     </div>

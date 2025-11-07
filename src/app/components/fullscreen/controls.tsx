@@ -41,7 +41,7 @@ export function FullscreenControls() {
         data-state={isShuffleActive && "active"}
         className={clsx(
           buttonsStyle.secondary,
-          isShuffleActive && buttonsStyle.activeDot,
+          isShuffleActive && buttonsStyle.activeDot
         )}
         style={{ ...buttonsStyle.style }}
         onClick={() => toggleShuffle()}
@@ -88,7 +88,7 @@ export function FullscreenControls() {
         data-state={loopState !== LoopState.Off && "active"}
         className={clsx(
           buttonsStyle.secondary,
-          loopState !== LoopState.Off && buttonsStyle.activeDot,
+          loopState !== LoopState.Off && buttonsStyle.activeDot
         )}
         onClick={() => toggleLoop()}
         style={{ ...buttonsStyle.style }}
@@ -108,13 +108,13 @@ export function FullscreenControls() {
 }
 
 export const buttonsStyle = {
-  main: "w-14 h-14 rounded-full shadow-lg bg-secondary-foreground hover:scale-105 transition-transform will-change-transform",
-  mainIcon: "w-6 h-6 text-secondary fill-secondary",
+  main: "w-12 h-12 sm:w-14 sm:h-14 rounded-full shadow-lg bg-secondary-foreground hover:scale-105 transition-transform will-change-transform",
+  mainIcon: "w-5 h-5 sm:w-6 sm:h-6 text-secondary fill-secondary",
   secondary:
-    "relative w-12 h-12 rounded-full text-secondary-foreground hover:text-secondary-foreground data-[state=active]:text-primary hover:bg-transparent hover:scale-110 transition-transform will-change-transform",
-  secondaryIcon: "w-6 h-6 drop-shadow-lg",
+    "relative w-10 h-10 sm:w-12 sm:h-12 rounded-full text-secondary-foreground hover:text-secondary-foreground data-[state=active]:text-primary hover:bg-transparent hover:scale-110 transition-transform will-change-transform",
+  secondaryIcon: "w-5 h-5 sm:w-6 sm:h-6 drop-shadow-lg",
   secondaryIconFilled:
-    "w-6 h-6 text-secondary-foreground fill-secondary-foreground drop-shadow-lg",
+    "w-5 h-5 sm:w-6 sm:h-6 text-secondary-foreground fill-secondary-foreground drop-shadow-lg",
   activeDot: "player-button-active",
   style: {
     backfaceVisibility: "hidden" as const,
