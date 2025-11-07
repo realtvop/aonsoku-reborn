@@ -1,5 +1,5 @@
 import {
-  LibraryIcon,
+  DiscAlbumIcon,
   ListMusicIcon,
   Mic2Icon,
   Music2Icon,
@@ -25,7 +25,7 @@ const ListMusic = memo(ListMusicIcon);
 const Mic2 = memo(Mic2Icon);
 const Music2 = memo(Music2Icon);
 const Radio = memo(RadioIcon);
-const Library = memo(LibraryIcon);
+const DiscAlbum = memo(DiscAlbumIcon);
 const Podcast = memo(PodcastIcon);
 
 const MemoSidebarGenerator = memo(SidebarGenerator);
@@ -99,7 +99,7 @@ export const libraryItems = [
     id: SidebarItems.Albums,
     title: "sidebar.albums",
     route: ROUTES.LIBRARY.ALBUMS,
-    icon: Library,
+    icon: DiscAlbum,
   },
   {
     id: SidebarItems.Playlists,
