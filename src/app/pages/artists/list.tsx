@@ -8,7 +8,7 @@ import { GridViewWrapper } from "@/app/components/grid-view-wrapper";
 import { HeaderTitle } from "@/app/components/header-title";
 import ListWrapper from "@/app/components/list-wrapper";
 import { MainViewTypeSelector } from "@/app/components/main-grid";
-import { DataTable } from "@/app/components/ui/data-table";
+import { DataTableList } from "@/app/components/ui/data-table-list";
 import { useSongList } from "@/app/hooks/use-song-list";
 import { artistsColumns } from "@/app/tables/artists-columns";
 import { subsonic } from "@/service/subsonic";
@@ -20,7 +20,7 @@ import { queryKeys } from "@/utils/queryKeys";
 const MemoShadowHeader = memo(ShadowHeader);
 const MemoHeaderTitle = memo(HeaderTitle);
 const MemoViewTypeSelector = memo(MainViewTypeSelector);
-const MemoDataTable = memo(DataTable) as typeof DataTable;
+const MemoDataTableList = memo(DataTableList) as typeof DataTableList;
 const MemoListWrapper = memo(ListWrapper);
 
 export default function ArtistsList() {
@@ -51,8 +51,12 @@ export default function ArtistsList() {
   if (!artists) return null;
 
   return (
-    <div className="w-full h-full">
-      <MemoShadowHeader className="flex justify-between">
+    <div className="w-full h-content">
+      <MemoShadowHeader
+        showGlassEffect={false}
+        fixed={false}
+        className="relative w-full justify-between items-center"
+      >
         <MemoHeaderTitle title={t("sidebar.artists")} count={artists.length} />
 
         <MemoViewTypeSelector
@@ -62,18 +66,15 @@ export default function ArtistsList() {
       </MemoShadowHeader>
 
       {isTableView && (
-        <MemoListWrapper className="pt-shadow-header-distance">
-          <MemoDataTable
+        <div className="w-full h-[calc(100%-80px)]">
+          <MemoDataTableList
             columns={columns}
             data={artists}
-            showPagination={true}
-            showSearch={true}
-            searchColumn="name"
             handlePlaySong={(row) => handlePlayArtistRadio(row.original)}
             allowRowSelection={false}
             dataType="artist"
           />
-        </MemoListWrapper>
+        </div>
       )}
 
       {isGridView && (

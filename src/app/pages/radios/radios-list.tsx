@@ -11,7 +11,7 @@ import { EmptyRadiosInfo } from "@/app/components/radios/empty-message";
 import { RadioFormDialog } from "@/app/components/radios/form-dialog";
 import { RemoveRadioDialog } from "@/app/components/radios/remove-dialog";
 import { Button } from "@/app/components/ui/button";
-import { DataTable } from "@/app/components/ui/data-table";
+import { DataTableList } from "@/app/components/ui/data-table-list";
 import { radiosColumns } from "@/app/tables/radios-columns";
 import { subsonic } from "@/service/subsonic";
 import { usePlayerActions } from "@/store/player.store";
@@ -41,8 +41,12 @@ export default function Radios() {
   const showTable = radios && radios.length > 0;
 
   return (
-    <div className={clsx("w-full", showTable ? "h-full" : "h-content")}>
-      <ShadowHeader>
+    <div className={clsx("w-full", showTable ? "h-content" : "h-content")}>
+      <ShadowHeader
+        showGlassEffect={false}
+        fixed={false}
+        className="relative w-full justify-between items-center"
+      >
         <div className="w-full flex items-center justify-between">
           <HeaderTitle
             title={t("sidebar.radios")}
@@ -62,18 +66,15 @@ export default function Radios() {
       </ShadowHeader>
 
       {showTable && (
-        <ListWrapper className="pt-[--shadow-header-distance]">
-          <DataTable
+        <div className="w-full h-[calc(100%-80px)]">
+          <DataTableList
             columns={columns}
             data={radios}
             handlePlaySong={(row) => setPlayRadio(radios, row.index)}
-            showPagination={true}
-            showSearch={true}
-            searchColumn="name"
             allowRowSelection={false}
             dataType="radio"
           />
-        </ListWrapper>
+        </div>
       )}
 
       {!showTable && (
