@@ -11,7 +11,6 @@ import {
   useRemoteControlState,
 } from "@/store/player.store";
 import { logger } from "@/utils/logger";
-import { isIOS } from "@/utils/platform";
 import { ReplayGainParams } from "@/utils/replayGain";
 
 type IAudioSource = IMediaElementAudioSourceNode<IAudioContext>;
@@ -21,17 +20,17 @@ export function useAudioContext(audio: HTMLAudioElement | null) {
   const { replayGainError, replayGainEnabled } = useReplayGainState();
   const { active: isRemoteControlActive } = useRemoteControlState();
 
-  // On iOS, when not in remote control mode, use native audio without AudioContext to avoid replay gain issues
-  const shouldUseNativeAudio = isIOS() && !isRemoteControlActive;
+  // Use native audio by default, only use AudioContext when acting as a remote controller
+  const shouldUseNativeAudio = !isRemoteControlActive;
 
   const audioContextRef = useRef<IAudioContext | null>(null);
   const sourceNodeRef = useRef<IAudioSource | null>(null);
   const gainNodeRef = useRef<IGainNode<IAudioContext> | null>(null);
 
   const setupAudioContext = useCallback(() => {
-    // Skip AudioContext setup on iOS when not in remote control mode
+    // Skip AudioContext setup when not in remote control mode - use native audio instead
     if (shouldUseNativeAudio) {
-      logger.info("Using native audio on iOS (no AudioContext)");
+      logger.info("Using native HTML5 audio (no AudioContext)");
       return;
     }
 
@@ -57,7 +56,7 @@ export function useAudioContext(audio: HTMLAudioElement | null) {
   }, [audio, isSong, replayGainError, shouldUseNativeAudio]);
 
   const resumeContext = useCallback(async () => {
-    // Skip AudioContext operations on iOS when not in remote control mode
+    // Skip AudioContext operations when not in remote control mode
     if (shouldUseNativeAudio) return;
 
     const audioContext = audioContextRef.current;
@@ -80,7 +79,7 @@ export function useAudioContext(audio: HTMLAudioElement | null) {
 
   const setupGain = useCallback(
     (gainValue: number, replayGain?: ReplayGainParams) => {
-      // Skip gain setup on iOS when not in remote control mode (no replay gain)
+      // Skip gain setup when not in remote control mode (native audio, no replay gain)
       if (shouldUseNativeAudio) return;
 
       if (audioContextRef.current && gainNodeRef.current) {

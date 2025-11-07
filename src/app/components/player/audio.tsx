@@ -19,7 +19,6 @@ import {
   useRemoteControlState,
 } from "@/store/player.store";
 import { logger } from "@/utils/logger";
-import { isIOS } from "@/utils/platform";
 import { calculateReplayGain, ReplayGainParams } from "@/utils/replayGain";
 
 type AudioPlayerProps = ComponentPropsWithoutRef<"audio"> & {
@@ -44,8 +43,8 @@ export function AudioPlayer({
   const isPlaying = usePlayerIsPlaying();
   const { active: isRemoteControlActive } = useRemoteControlState();
 
-  // On iOS, when not in remote control mode, use native audio without replay gain
-  const shouldUseNativeAudio = isIOS() && !isRemoteControlActive;
+  // Use native audio by default, only use AudioContext when acting as a remote controller
+  const shouldUseNativeAudio = !isRemoteControlActive;
 
   // Update audio source only when it actually changes and is valid
   useEffect(() => {
@@ -53,7 +52,6 @@ export function AudioPlayer({
       logger.info("Audio source changed", {
         src,
         useNativeAudio: shouldUseNativeAudio,
-        isIOS: isIOS(),
         isRemoteControlActive,
       });
       setAudioSrc(src);
@@ -63,7 +61,7 @@ export function AudioPlayer({
   const gainValue = useMemo(() => {
     const audioVolume = volume / 100;
 
-    // On iOS native audio mode, don't use replay gain - just use volume
+    // In native audio mode, don't use replay gain - just use volume
     if (shouldUseNativeAudio) {
       return audioVolume * 1;
     }
@@ -78,21 +76,21 @@ export function AudioPlayer({
 
   const { resumeContext, setupGain } = useAudioContext(audioRef.current);
 
-  // Ignore AudioContext gain on iOS native mode, when not a song, or when there's a replay gain error
+  // Ignore AudioContext gain in native mode, when not a song, or when there's a replay gain error
   const ignoreGain = shouldUseNativeAudio || !isSong || replayGainError;
 
-  // On iOS native mode, set audio volume directly instead of using gain node
+  // In native mode, set audio volume directly instead of using gain node
   useEffect(() => {
     if (!audioRef.current) return;
 
     if (shouldUseNativeAudio) {
-      // Use native volume control on iOS
+      // Use native volume control
       audioRef.current.volume = volume / 100;
-      logger.info("iOS native audio volume set:", volume / 100);
+      logger.info("Native audio volume set:", volume / 100);
       return;
     }
 
-    // Use AudioContext gain for other platforms or when not in native mode
+    // Use AudioContext gain when in remote control mode
     if (ignoreGain) return;
     if (gainValue === previousGain) return;
 
@@ -164,7 +162,7 @@ export function AudioPlayer({
 
       try {
         if (isPlaying) {
-          // Only resume AudioContext if not using native audio on iOS
+          // Only resume AudioContext if in remote control mode (not using native audio)
           if (isSong && !shouldUseNativeAudio) {
             await resumeContext();
           }
@@ -226,7 +224,7 @@ export function AudioPlayer({
   }, [handleRadioError, handleSongError, isRadio, isSong]);
 
   const crossOrigin = useMemo(() => {
-    // On iOS native audio mode, don't use crossOrigin as we're not using AudioContext
+    // In native audio mode, don't use crossOrigin as we're not using AudioContext
     if (shouldUseNativeAudio) return undefined;
 
     if (!isSong || replayGainError) return undefined;
