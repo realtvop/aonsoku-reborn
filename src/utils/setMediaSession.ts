@@ -74,12 +74,27 @@ function setPlaybackState(state: boolean | null) {
   }
 }
 
+function setPositionState(duration: number, position: number, playbackRate = 1.0) {
+  if (!navigator.mediaSession) return;
+  
+  try {
+    navigator.mediaSession.setPositionState({
+      duration: duration,
+      playbackRate: playbackRate,
+      position: position,
+    });
+  } catch (error) {
+    // Position state might not be supported on all browsers
+    console.error("Failed to set position state:", error);
+  }
+}
+
 function setHandlers() {
   const { mediaSession } = navigator;
   if (!mediaSession) return;
 
   const state = usePlayerStore.getState();
-  const { togglePlayPause, playNextSong, playPrevSong } = state.actions;
+  const { togglePlayPause, playNextSong, playPrevSong, setProgress } = state.actions;
 
   mediaSession.setActionHandler("seekbackward", null);
   mediaSession.setActionHandler("seekforward", null);
@@ -88,6 +103,17 @@ function setHandlers() {
   mediaSession.setActionHandler("pause", () => togglePlayPause());
   mediaSession.setActionHandler("previoustrack", () => playPrevSong());
   mediaSession.setActionHandler("nexttrack", () => playNextSong());
+  
+  // Support seekto for iOS and other platforms
+  mediaSession.setActionHandler("seekto", (details) => {
+    if (details.seekTime !== undefined) {
+      const audioPlayerRef = state.playerState.audioPlayerRef;
+      if (audioPlayerRef) {
+        audioPlayerRef.currentTime = details.seekTime;
+        setProgress(Math.floor(details.seekTime));
+      }
+    }
+  });
 }
 
 interface SetPodcastHandlerParams {
@@ -98,7 +124,8 @@ function setPodcastHandlers({ handleSeekAction }: SetPodcastHandlerParams) {
   const { mediaSession } = navigator;
   if (!mediaSession) return;
 
-  const { setPlayingState } = usePlayerStore.getState().actions;
+  const state = usePlayerStore.getState();
+  const { setPlayingState, setProgress } = state.actions;
 
   mediaSession.setActionHandler("previoustrack", null);
   mediaSession.setActionHandler("nexttrack", null);
@@ -107,6 +134,17 @@ function setPodcastHandlers({ handleSeekAction }: SetPodcastHandlerParams) {
   mediaSession.setActionHandler("pause", () => setPlayingState(false));
   mediaSession.setActionHandler("seekbackward", () => handleSeekAction(-15));
   mediaSession.setActionHandler("seekforward", () => handleSeekAction(30));
+  
+  // Support seekto for iOS and other platforms
+  mediaSession.setActionHandler("seekto", (details) => {
+    if (details.seekTime !== undefined) {
+      const audioPlayerRef = state.playerState.audioPlayerRef;
+      if (audioPlayerRef) {
+        audioPlayerRef.currentTime = details.seekTime;
+        setProgress(Math.floor(details.seekTime));
+      }
+    }
+  });
 }
 
 export const manageMediaSession = {
@@ -115,6 +153,7 @@ export const manageMediaSession = {
   setRadioMediaSession,
   setPodcastMediaSession,
   setPlaybackState,
+  setPositionState,
   setHandlers,
   setPodcastHandlers,
 };

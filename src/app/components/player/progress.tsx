@@ -26,11 +26,10 @@ interface PlayerProgressProps {
   audioRef: RefObject<HTMLAudioElement>;
 }
 
-let isSeeking = false;
-
 export function PlayerProgress({ audioRef }: PlayerProgressProps) {
   const progress = usePlayerProgress();
   const [localProgress, setLocalProgress] = useState(progress);
+  const [isLocalSeeking, setIsLocalSeeking] = useState(false);
   const currentDuration = usePlayerDuration();
   const isPlaying = usePlayerIsPlaying();
   const { currentSong, currentList, podcastList, currentSongIndex } =
@@ -44,41 +43,55 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
 
   const isEmpty = isSong && currentList.length === 0;
 
+  // Sync local progress with global progress when not seeking
+  useEffect(() => {
+    if (!isLocalSeeking) {
+      setLocalProgress(progress);
+    }
+  }, [progress, isLocalSeeking]);
+
   const updateAudioCurrentTime = useCallback(
     (value: number) => {
-      isSeeking = false;
       if (isRemoteControlActive) return;
       if (audioRef.current) {
+        logger.info("Seeking to:", value);
         audioRef.current.currentTime = value;
       }
     },
-    [audioRef, isRemoteControlActive],
+    [audioRef, isRemoteControlActive]
   );
 
   const handleSeeking = useCallback((amount: number) => {
-    isSeeking = true;
+    setIsLocalSeeking(true);
     setLocalProgress(amount);
   }, []);
 
   const handleSeeked = useCallback(
     (amount: number) => {
+      logger.info("Seek completed:", amount);
+      setIsLocalSeeking(false);
       if (!isRemoteControlActive) {
         updateAudioCurrentTime(amount);
       }
       setProgress(amount);
       setLocalProgress(amount);
     },
-    [isRemoteControlActive, setProgress, updateAudioCurrentTime],
+    [isRemoteControlActive, setProgress, updateAudioCurrentTime]
   );
 
   const handleSeekedFallback = useCallback(() => {
-    if (localProgress !== progress) {
-      if (!isRemoteControlActive) {
-        updateAudioCurrentTime(localProgress);
+    if (isLocalSeeking) {
+      logger.info("Seek fallback triggered:", localProgress);
+      setIsLocalSeeking(false);
+      if (localProgress !== progress) {
+        if (!isRemoteControlActive) {
+          updateAudioCurrentTime(localProgress);
+        }
+        setProgress(localProgress);
       }
-      setProgress(localProgress);
     }
   }, [
+    isLocalSeeking,
     isRemoteControlActive,
     localProgress,
     progress,
@@ -88,7 +101,7 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
 
   const songDuration = useMemo(
     () => convertSecondsToTime(currentDuration ?? 0),
-    [currentDuration],
+    [currentDuration]
   );
 
   const sendScrobble = useCallback(async (songId: string) => {
@@ -119,7 +132,7 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
   }, []);
 
   useEffect(() => {
-    if (isSeeking || !isPlaying) {
+    if (isLocalSeeking || !isPlaying) {
       return;
     }
     if (isRemoteControlActive || !isSong) return;
@@ -150,6 +163,7 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
     currentSong.id,
     isPlaying,
     isRemoteControlActive,
+    isLocalSeeking,
   ]);
 
   // Used to save listening progress to backend every 30 seconds
@@ -187,7 +201,7 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
   ]);
 
   const currentTime = convertSecondsToTime(
-    isSeeking ? localProgress : progress,
+    isLocalSeeking ? localProgress : progress
   );
 
   const isProgressLarge = useMemo(() => {
@@ -202,13 +216,13 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
     <div
       className={clsx(
         "flex w-full justify-center items-center gap-2",
-        isEmpty && "opacity-50",
+        isEmpty && "opacity-50"
       )}
     >
       <small
         className={clsx(
           "text-xs text-muted-foreground text-right",
-          isProgressLarge ? "min-w-14" : "min-w-10",
+          isProgressLarge ? "min-w-14" : "min-w-10"
         )}
         data-testid="player-current-time"
       >
@@ -217,7 +231,7 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
       {!isEmpty || isPodcast ? (
         <ProgressSlider
           defaultValue={[0]}
-          value={isSeeking ? [localProgress] : [progress]}
+          value={isLocalSeeking ? [localProgress] : [progress]}
           tooltipTransformer={convertSecondsToTime}
           max={currentDuration}
           step={1}
@@ -229,6 +243,7 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
           // see https://github.com/radix-ui/primitives/issues/1760
           onPointerUp={handleSeekedFallback}
           onMouseUp={handleSeekedFallback}
+          onTouchEnd={handleSeekedFallback}
           data-testid="player-progress-slider"
         />
       ) : (
@@ -243,7 +258,7 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
       <small
         className={clsx(
           "text-xs text-muted-foreground text-left",
-          isDurationLarge ? "min-w-14" : "min-w-10",
+          isDurationLarge ? "min-w-14" : "min-w-10"
         )}
         data-testid="player-duration-time"
       >

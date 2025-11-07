@@ -5,8 +5,13 @@ import {
   type IGainNode,
   type IMediaElementAudioSourceNode,
 } from "standardized-audio-context";
-import { usePlayerMediaType, useReplayGainState } from "@/store/player.store";
+import {
+  usePlayerMediaType,
+  useReplayGainState,
+  useRemoteControlState,
+} from "@/store/player.store";
 import { logger } from "@/utils/logger";
+import { isIOS } from "@/utils/platform";
 import { ReplayGainParams } from "@/utils/replayGain";
 
 type IAudioSource = IMediaElementAudioSourceNode<IAudioContext>;
@@ -14,12 +19,22 @@ type IAudioSource = IMediaElementAudioSourceNode<IAudioContext>;
 export function useAudioContext(audio: HTMLAudioElement | null) {
   const { isSong } = usePlayerMediaType();
   const { replayGainError, replayGainEnabled } = useReplayGainState();
+  const { active: isRemoteControlActive } = useRemoteControlState();
+
+  // On iOS, when not in remote control mode, use native audio without AudioContext to avoid replay gain issues
+  const shouldUseNativeAudio = isIOS() && !isRemoteControlActive;
 
   const audioContextRef = useRef<IAudioContext | null>(null);
   const sourceNodeRef = useRef<IAudioSource | null>(null);
   const gainNodeRef = useRef<IGainNode<IAudioContext> | null>(null);
 
   const setupAudioContext = useCallback(() => {
+    // Skip AudioContext setup on iOS when not in remote control mode
+    if (shouldUseNativeAudio) {
+      logger.info("Using native audio on iOS (no AudioContext)");
+      return;
+    }
+
     if (!audio || !isSong || replayGainError) return;
 
     if (!audioContextRef.current) {
@@ -39,24 +54,35 @@ export function useAudioContext(audio: HTMLAudioElement | null) {
       // And then we can connect the gainNode to the destination
       gainNodeRef.current.connect(audioContext.destination);
     }
-  }, [audio, isSong, replayGainError]);
+  }, [audio, isSong, replayGainError, shouldUseNativeAudio]);
 
   const resumeContext = useCallback(async () => {
+    // Skip AudioContext operations on iOS when not in remote control mode
+    if (shouldUseNativeAudio) return;
+
     const audioContext = audioContextRef.current;
     if (!audioContext || !isSong) return;
 
     logger.info("AudioContext State", { state: audioContext.state });
 
     if (audioContext.state === "suspended") {
-      await audioContext.resume();
+      try {
+        await audioContext.resume();
+        logger.info("AudioContext resumed successfully");
+      } catch (error) {
+        logger.error("Failed to resume AudioContext", error);
+      }
     }
     if (audioContext.state === "closed") {
       setupAudioContext();
     }
-  }, [isSong, setupAudioContext]);
+  }, [isSong, setupAudioContext, shouldUseNativeAudio]);
 
   const setupGain = useCallback(
     (gainValue: number, replayGain?: ReplayGainParams) => {
+      // Skip gain setup on iOS when not in remote control mode (no replay gain)
+      if (shouldUseNativeAudio) return;
+
       if (audioContextRef.current && gainNodeRef.current) {
         const currentTime = audioContextRef.current.currentTime;
 
@@ -69,7 +95,7 @@ export function useAudioContext(audio: HTMLAudioElement | null) {
         gainNodeRef.current.gain.setValueAtTime(gainValue, currentTime);
       }
     },
-    [replayGainEnabled],
+    [replayGainEnabled, shouldUseNativeAudio]
   );
 
   const resetRefs = useCallback(() => {
@@ -99,6 +125,32 @@ export function useAudioContext(audio: HTMLAudioElement | null) {
   useEffect(() => {
     if (audio) setupAudioContext();
   }, [audio, setupAudioContext]);
+
+  // Handle visibility changes to keep AudioContext alive
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      const audioContext = audioContextRef.current;
+      if (!audioContext || !isSong) return;
+
+      // When page becomes visible again, resume the context if suspended
+      if (!document.hidden && audioContext.state === "suspended") {
+        try {
+          await audioContext.resume();
+          logger.info("AudioContext resumed after visibility change");
+        } catch (error) {
+          logger.error(
+            "Failed to resume AudioContext on visibility change",
+            error
+          );
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [isSong]);
 
   return {
     audioContextRef,

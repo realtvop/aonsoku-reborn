@@ -16,8 +16,10 @@ import {
   usePlayerVolume,
   useReplayGainActions,
   useReplayGainState,
+  useRemoteControlState,
 } from "@/store/player.store";
 import { logger } from "@/utils/logger";
+import { isIOS } from "@/utils/platform";
 import { calculateReplayGain, ReplayGainParams } from "@/utils/replayGain";
 
 type AudioPlayerProps = ComponentPropsWithoutRef<"audio"> & {
@@ -28,19 +30,43 @@ type AudioPlayerProps = ComponentPropsWithoutRef<"audio"> & {
 export function AudioPlayer({
   audioRef,
   replayGain,
+  src,
   ...props
 }: AudioPlayerProps) {
   const { t } = useTranslation();
   const [previousGain, setPreviousGain] = useState(1);
+  const [audioSrc, setAudioSrc] = useState<string | undefined>(undefined);
   const { replayGainEnabled, replayGainError } = useReplayGainState();
   const { isSong, isRadio, isPodcast } = usePlayerMediaType();
   const { setPlayingState } = usePlayerActions();
   const { setReplayGainEnabled, setReplayGainError } = useReplayGainActions();
   const { volume } = usePlayerVolume();
   const isPlaying = usePlayerIsPlaying();
+  const { active: isRemoteControlActive } = useRemoteControlState();
+
+  // On iOS, when not in remote control mode, use native audio without replay gain
+  const shouldUseNativeAudio = isIOS() && !isRemoteControlActive;
+
+  // Update audio source only when it actually changes and is valid
+  useEffect(() => {
+    if (src && src !== audioSrc) {
+      logger.info("Audio source changed", {
+        src,
+        useNativeAudio: shouldUseNativeAudio,
+        isIOS: isIOS(),
+        isRemoteControlActive,
+      });
+      setAudioSrc(src);
+    }
+  }, [src, audioSrc, shouldUseNativeAudio, isRemoteControlActive]);
 
   const gainValue = useMemo(() => {
     const audioVolume = volume / 100;
+
+    // On iOS native audio mode, don't use replay gain - just use volume
+    if (shouldUseNativeAudio) {
+      return audioVolume * 1;
+    }
 
     if (!replayGain || !replayGainEnabled) {
       return audioVolume * 1;
@@ -48,43 +74,76 @@ export function AudioPlayer({
     const gain = calculateReplayGain(replayGain);
 
     return audioVolume * gain;
-  }, [replayGain, replayGainEnabled, volume]);
+  }, [replayGain, replayGainEnabled, volume, shouldUseNativeAudio]);
 
   const { resumeContext, setupGain } = useAudioContext(audioRef.current);
 
-  const ignoreGain = !isSong || replayGainError;
+  // Ignore AudioContext gain on iOS native mode, when not a song, or when there's a replay gain error
+  const ignoreGain = shouldUseNativeAudio || !isSong || replayGainError;
 
+  // On iOS native mode, set audio volume directly instead of using gain node
   useEffect(() => {
-    if (ignoreGain || !audioRef.current) return;
+    if (!audioRef.current) return;
 
+    if (shouldUseNativeAudio) {
+      // Use native volume control on iOS
+      audioRef.current.volume = volume / 100;
+      logger.info("iOS native audio volume set:", volume / 100);
+      return;
+    }
+
+    // Use AudioContext gain for other platforms or when not in native mode
+    if (ignoreGain) return;
     if (gainValue === previousGain) return;
 
     setupGain(gainValue, replayGain);
     setPreviousGain(gainValue);
-  }, [audioRef, ignoreGain, gainValue, previousGain, replayGain, setupGain]);
+  }, [
+    audioRef,
+    ignoreGain,
+    gainValue,
+    previousGain,
+    replayGain,
+    setupGain,
+    shouldUseNativeAudio,
+    volume,
+  ]);
 
   const handleSongError = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    logger.error("Audio load error", {
+    const errorDetails = {
       src: audio.src,
       networkState: audio.networkState,
       readyState: audio.readyState,
-      error: audio.error,
-    });
+      error: audio.error
+        ? {
+            code: audio.error.code,
+            message: audio.error.message,
+          }
+        : null,
+    };
 
-    toast.error(t("warnings.songError"));
+    logger.error("Audio load error", errorDetails);
 
-    if (replayGainEnabled || !replayGainError) {
+    // Only show toast and reload if this is a replay gain related error
+    // Otherwise just log the error to avoid reload loops
+    if (
+      audio.error?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED &&
+      replayGainEnabled
+    ) {
+      toast.error(t("warnings.songError"));
       setReplayGainEnabled(false);
       setReplayGainError(true);
       window.location.reload();
+    } else if (audio.error?.code !== MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
+      // Only show toast for non-source errors
+      toast.error(t("warnings.songError"));
     }
   }, [
     audioRef,
     replayGainEnabled,
-    replayGainError,
     setReplayGainEnabled,
     setReplayGainError,
     t,
@@ -105,10 +164,28 @@ export function AudioPlayer({
 
       try {
         if (isPlaying) {
-          if (isSong) await resumeContext();
-          await audio.play();
+          // Only resume AudioContext if not using native audio on iOS
+          if (isSong && !shouldUseNativeAudio) {
+            await resumeContext();
+          }
+          // Try to play, and if it fails due to autoplay policy, log it
+          const playPromise = audio.play();
+          if (playPromise !== undefined) {
+            playPromise.catch((error) => {
+              logger.error("Play was prevented:", error);
+              // If play was prevented, try to resume on next user interaction
+            });
+          }
         } else {
           audio.pause();
+          // Ensure audio is fully stopped and won't continue playing
+          // This is especially important on mobile devices
+          if (audio.currentTime > 0) {
+            // Force stop by setting currentTime to itself
+            // This clears the audio buffer on some browsers
+            const currentTime = audio.currentTime;
+            audio.currentTime = currentTime;
+          }
         }
       } catch (error) {
         logger.error("Audio playback failed", error);
@@ -116,7 +193,15 @@ export function AudioPlayer({
       }
     }
     if (isSong || isPodcast) handleSong();
-  }, [audioRef, handleSongError, isPlaying, isSong, isPodcast, resumeContext]);
+  }, [
+    audioRef,
+    handleSongError,
+    isPlaying,
+    isSong,
+    isPodcast,
+    resumeContext,
+    shouldUseNativeAudio,
+  ]);
 
   useEffect(() => {
     async function handleRadio() {
@@ -141,17 +226,23 @@ export function AudioPlayer({
   }, [handleRadioError, handleSongError, isRadio, isSong]);
 
   const crossOrigin = useMemo(() => {
+    // On iOS native audio mode, don't use crossOrigin as we're not using AudioContext
+    if (shouldUseNativeAudio) return undefined;
+
     if (!isSong || replayGainError) return undefined;
 
     return "anonymous";
-  }, [isSong, replayGainError]);
+  }, [isSong, replayGainError, shouldUseNativeAudio]);
 
   return (
     <audio
       ref={audioRef}
       {...props}
+      src={audioSrc}
       crossOrigin={crossOrigin}
       onError={handleError}
+      playsInline
+      preload="auto"
     />
   );
 }

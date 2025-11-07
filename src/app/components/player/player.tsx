@@ -18,11 +18,13 @@ import {
   useIsRemoteControlActive,
   useReplayGainState,
   usePlayerPrevAndNext,
+  usePlayerDuration,
 } from "@/store/player.store";
 import { LoopState } from "@/types/playerContext";
 import { hasPiPSupport } from "@/utils/browser";
 import { logger } from "@/utils/logger";
 import { ReplayGainParams } from "@/utils/replayGain";
+import { manageMediaSession } from "@/utils/setMediaSession";
 import { AudioPlayer } from "./audio";
 import { PlayerClearQueueButton } from "./clear-queue-button";
 import { PlayerControls } from "./controls";
@@ -75,6 +77,7 @@ export function Player() {
   const { replayGainType, replayGainPreAmp, replayGainDefaultGain } =
     useReplayGainState();
   const { hasNext } = usePlayerPrevAndNext();
+  const currentDuration = usePlayerDuration();
 
   const song = currentList[currentSongIndex];
   const radio = radioList[currentSongIndex];
@@ -155,7 +158,16 @@ export function Player() {
 
     const currentProgress = Math.floor(audio.currentTime);
     setProgress(currentProgress);
-  }, [getAudioRef, setProgress]);
+    
+    // Update media session position state for iOS and other platforms
+    if (currentDuration && currentDuration > 0) {
+      manageMediaSession.setPositionState(
+        currentDuration,
+        currentProgress,
+        audio.playbackRate
+      );
+    }
+  }, [getAudioRef, setProgress, currentDuration]);
 
   const setupInitialVolume = useCallback(() => {
     const audio = getAudioRef().current;
