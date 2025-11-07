@@ -15,7 +15,7 @@ export function PodcastInfo({ podcast }: { podcast: EpisodeWithPodcast }) {
 
   return (
     <Fragment>
-      <div className="min-w-[70px] max-w-[70px] aspect-square bg-cover bg-center bg-skeleton rounded overflow-hidden shadow-md">
+      <div className="w-12 h-12 sm:w-[70px] sm:h-[70px] sm:min-w-[70px] sm:max-w-[70px] aspect-square bg-cover bg-center bg-skeleton rounded overflow-hidden shadow-md">
         <MemoLazyLoadImage
           src={imageError ? placeholderImageSrc : podcast.image_url}
           width="100%"
@@ -30,7 +30,7 @@ export function PodcastInfo({ podcast }: { podcast: EpisodeWithPodcast }) {
         <MemoMarqueeTitle gap="mr-2">
           <Link to={ROUTES.EPISODES.PAGE(podcast.id)}>
             <span
-              className="text-sm font-medium hover:underline cursor-pointer"
+              className="text-xs sm:text-sm font-medium hover:underline cursor-pointer"
               data-testid="podcast-episode-title"
             >
               {podcast.title}
@@ -42,7 +42,7 @@ export function PodcastInfo({ podcast }: { podcast: EpisodeWithPodcast }) {
           className="w-fit inline-flex max-w-full"
           data-testid="podcast-title"
         >
-          <span className="text-xs font-regular text-muted-foreground hover:underline max-w-full truncate">
+          <span className="text-[10px] sm:text-xs font-regular text-muted-foreground hover:underline max-w-full truncate">
             {podcast.podcast.title}
           </span>
         </Link>

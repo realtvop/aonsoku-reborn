@@ -57,12 +57,15 @@ export function TrackInfo({ song }: { song: ISong | undefined }) {
   if (!song) {
     return (
       <Fragment>
-        <div className="w-[70px] h-[70px] flex justify-center items-center bg-muted rounded">
-          <AudioLines data-testid="song-no-playing-icon" />
+        <div className="w-12 h-12 sm:w-[70px] sm:h-[70px] flex justify-center items-center bg-muted rounded">
+          <AudioLines
+            data-testid="song-no-playing-icon"
+            className="size-5 sm:size-6"
+          />
         </div>
         <div className="flex flex-col justify-center">
           <span
-            className="text-sm font-medium"
+            className="text-xs sm:text-sm font-medium"
             data-testid="song-no-playing-label"
           >
             {t("player.noSongPlaying")}
@@ -75,7 +78,7 @@ export function TrackInfo({ song }: { song: ISong | undefined }) {
   return (
     <Fragment>
       <div className="group relative">
-        <div className="min-w-[70px] max-w-[70px] aspect-square bg-cover bg-center bg-skeleton rounded overflow-hidden shadow-md">
+        <div className="w-12 h-12 sm:w-[70px] sm:h-[70px] sm:min-w-[70px] sm:max-w-[70px] aspect-square bg-cover bg-center bg-skeleton rounded overflow-hidden shadow-md">
           <LazyLoadImage
             key={song.id}
             id="track-song-image"
@@ -94,7 +97,7 @@ export function TrackInfo({ song }: { song: ISong | undefined }) {
           <Button
             variant="secondary"
             size="icon"
-            className="cursor-pointer w-8 h-8 shadow-md rounded-full opacity-0 group-hover:opacity-100 transition-opacity ease-in-out absolute top-1 right-1 focus-visible:opacity-100"
+            className="cursor-pointer w-8 h-8 shadow-md rounded-full opacity-0 sm:group-hover:opacity-100 transition-opacity ease-in-out absolute top-1 right-1 focus-visible:opacity-100"
             data-testid="track-fullscreen-button"
           >
             <SimpleTooltip text={t("fullscreen.switchButton")} align="start">
@@ -105,11 +108,11 @@ export function TrackInfo({ song }: { song: ISong | undefined }) {
           </Button>
         </FullscreenMode>
       </div>
-      <div className="flex flex-col justify-center w-full overflow-hidden">
+      <div className="flex flex-col justify-center w-full overflow-hidden ml-1">
         <MarqueeTitle gap="mr-2">
           <Link to={ROUTES.ALBUM.PAGE(song.albumId)} tabIndex={-1}>
             <span
-              className="text-sm font-medium hover:underline cursor-pointer"
+              className="text-xs sm:text-sm font-medium hover:underline cursor-pointer"
               data-testid="track-title"
             >
               {song.title}
@@ -133,7 +136,7 @@ function TrackInfoArtistsLinks({ song }: TrackInfoArtistsLinksProps) {
     const reducedArtists = artists.slice(0, ALBUM_ARTISTS_MAX_NUMBER);
 
     return (
-      <div className="flex items-center gap-1 text-xs text-muted-foreground w-full maskImage-marquee-fade-finished">
+      <div className="flex items-center gap-1 text-[10px] sm:text-xs text-muted-foreground w-full maskImage-marquee-fade-finished">
         {reducedArtists.map(({ id, name }, index) => (
           <div key={id} className="flex items-center">
             <ArtistLink id={id} name={name} />
@@ -161,8 +164,8 @@ function ArtistLink({ id, name }: ArtistLinkProps) {
     >
       <span
         className={cn(
-          "text-xs text-muted-foreground text-nowrap",
-          id && "hover:underline hover:text-foreground",
+          "text-[10px] sm:text-xs text-muted-foreground text-nowrap",
+          id && "hover:underline hover:text-foreground"
         )}
       >
         {name}

@@ -25,15 +25,21 @@
     --mini-sidebar-width: 48px;
     --player-height: 96px;
     --content-height: calc(100vh - var(--header-height) - var(--player-height));
+  }
 
+  /* Mobile optimization: smaller player height */
+  @media (max-width: 640px) {
+    :root {
+      --player-height: 64px;
+    }
+  }
+
+  :root {
     --shadow-header-height: 80px;
     --shadow-header-distance: calc(var(--shadow-header-height) + 1.5rem);
 
     --toastify-toast-top: calc(var(--header-height) + 0.25rem);
-    --toastify-toast-container-height: calc(
-      var(--shadow-header-height) -
-      0.5rem
-    );
+    --toastify-toast-container-height: calc(var(--shadow-header-height) - 0.5rem);
 
     --windows-red: 5 75% 44%;
 
@@ -226,7 +232,7 @@ img {
   @apply rounded-full default-ring;
 }
 
-.user-dropdown-trigger[data-state="open"] > :first-child {
+.user-dropdown-trigger[data-state="open"]> :first-child {
   @apply bg-accent;
 }
 
@@ -267,6 +273,7 @@ svg#bars .eq-bar--4 {
 }
 
 @keyframes eq-1 {
+
   0%,
   100% {
     transform: scaleY(0.4);
@@ -278,6 +285,7 @@ svg#bars .eq-bar--4 {
 }
 
 @keyframes eq-2 {
+
   0%,
   100% {
     transform: scaleY(0.9);
@@ -289,6 +297,7 @@ svg#bars .eq-bar--4 {
 }
 
 @keyframes eq-3 {
+
   0%,
   100% {
     transform: scaleY(0.7);
@@ -300,6 +309,7 @@ svg#bars .eq-bar--4 {
 }
 
 @keyframes eq-4 {
+
   0%,
   100% {
     transform: scaleY(0.6);
@@ -312,6 +322,7 @@ svg#bars .eq-bar--4 {
 
 #sync-lyrics-box,
 .lrc-box {
+
   /* webkit */
   &::-webkit-scrollbar {
     width: 0;
@@ -335,6 +346,7 @@ svg#bars .eq-bar--4 {
 }
 
 @media all and (display-mode: picture-in-picture) {
+
   body,
   html {
     @apply w-full h-full overflow-hidden p-0 m-0;
@@ -343,6 +355,7 @@ svg#bars .eq-bar--4 {
 
 /* PWA Window Controls Overlay Support */
 @media all and (display-mode: window-controls-overlay) {
+
   /* Make header draggable as titlebar */
   header {
     -webkit-app-region: drag;
@@ -391,6 +404,7 @@ svg#bars .eq-bar--4 {
 div[data-test-id="table-row"][data-state="selected"],
 div[data-test-id="table-row"].row-active,
 div[data-test-id="table-row"]:hover {
+
   & a,
   & span {
     @apply text-foreground;

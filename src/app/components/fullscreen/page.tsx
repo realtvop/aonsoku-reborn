@@ -20,11 +20,17 @@ import { FullscreenTabs } from "./tabs";
 
 interface FullscreenModeProps {
   children: ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 const MemoFullscreenBackdrop = memo(FullscreenBackdrop);
 
-export default function FullscreenMode({ children }: FullscreenModeProps) {
+export default function FullscreenMode({
+  children,
+  open,
+  onOpenChange,
+}: FullscreenModeProps) {
   const { enterFullscreenWindow, exitFullscreenWindow } = useAppWindow();
   const { autoFullscreenEnabled } = useFullscreenPlayerSettings();
 
@@ -42,6 +48,9 @@ export default function FullscreenMode({ children }: FullscreenModeProps) {
   }, []);
 
   async function handleFullscreen(open: boolean) {
+    // Call external onOpenChange if provided (always call this for controlled mode)
+    onOpenChange?.(open);
+
     // We set title bar colors to transparent,
     // to not "unstyle" the big player appearance
     if (isDesktop()) setDesktopTitleBarColors(open);
@@ -63,6 +72,7 @@ export default function FullscreenMode({ children }: FullscreenModeProps) {
       handleOnly={true}
       disablePreventScroll={true}
       modal={false}
+      open={open}
       onOpenChange={handleFullscreen}
     >
       <DrawerTrigger asChild>{children}</DrawerTrigger>
