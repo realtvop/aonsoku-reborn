@@ -31,7 +31,8 @@ export function RemoteControlDialog({
   const serverInfo = useLanControlServerInfo();
   const {
     status,
-    address,
+    ip,
+    port,
     password,
     error,
     remoteDevice,
@@ -39,7 +40,8 @@ export function RemoteControlDialog({
     currentSong,
   } = useLanControlClientStore((state) => ({
     status: state.status,
-    address: state.address,
+    ip: state.ip,
+    port: state.port,
     password: state.password,
     error: state.error,
     remoteDevice: state.remoteDevice,
@@ -135,19 +137,35 @@ export function RemoteControlDialog({
         <div className="space-y-6 mt-6">
           <section className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
             <div className="grid gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="remote-address">
-                  {t("lanControl.remote.address")}
-                </Label>
-                <Input
-                  id="remote-address"
-                  value={address}
-                  placeholder="ws://host:5299"
-                  onChange={(event) => actions.setAddress(event.target.value)}
-                  disabled={isConnecting}
-                  spellCheck={false}
-                  autoComplete="off"
-                />
+              <div className="grid gap-2 sm:grid-cols-2 sm:items-end">
+                <div className="grid gap-2">
+                  <Label htmlFor="remote-ip">{t("lanControl.remote.ip")}</Label>
+                  <Input
+                    id="remote-ip"
+                    value={ip}
+                    placeholder="192.168.1.100"
+                    onChange={(event) => actions.setIp(event.target.value)}
+                    disabled={isConnecting}
+                    spellCheck={false}
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="remote-port">
+                    {t("lanControl.remote.port")}
+                  </Label>
+                  <Input
+                    id="remote-port"
+                    type="number"
+                    value={port}
+                    placeholder="5299"
+                    onChange={(event) =>
+                      actions.setPort(parseInt(event.target.value, 10) || 5299)
+                    }
+                    disabled={isConnecting}
+                    autoComplete="off"
+                  />
+                </div>
               </div>
               <div className="grid gap-2 sm:grid-cols-2 sm:items-center">
                 <div className="grid gap-2">

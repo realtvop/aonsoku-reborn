@@ -661,6 +661,8 @@
       "description": "连接到 LAN 控制服务器并远程管理播放。",
       "serverRunning": "此设备当前正作为 LAN 控制服务器运行。当此设备处于服务器模式时，无法控制其他设备。",
       "address": "服务器地址",
+      "ip": "IP 地址",
+      "port": "端口",
       "password": "访问验证码",
       "status": {
         "label": "状态",

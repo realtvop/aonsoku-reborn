@@ -24,7 +24,8 @@ type SendPayload = {
 };
 interface LanControlClientState {
   status: ConnectionStatus;
-  address: string;
+  ip: string;
+  port: number;
   password: string;
   error?: string;
   remoteDevice: RemoteDeviceInfo | null;
@@ -33,7 +34,8 @@ interface LanControlClientState {
   queue: QueueData | null;
   lastMessageAt: number | null;
   actions: {
-    setAddress: (address: string) => void;
+    setIp: (ip: string) => void;
+    setPort: (port: number) => void;
     setPassword: (password: string) => void;
     connect: () => void;
     disconnect: () => void;
@@ -70,25 +72,29 @@ function cleanupRemoteControl() {
 }
 
 // LocalStorage keys
-const STORAGE_KEY_ADDRESS = "lanControl.client.address";
+const STORAGE_KEY_IP = "lanControl.client.ip";
+const STORAGE_KEY_PORT = "lanControl.client.port";
 const STORAGE_KEY_PASSWORD = "lanControl.client.password";
 const STORAGE_KEY_AUTO_CONNECT = "lanControl.client.autoConnect";
 
 // Load saved connection info from localStorage
 function loadSavedConnection() {
   try {
-    const address = localStorage.getItem(STORAGE_KEY_ADDRESS);
+    const ip = localStorage.getItem(STORAGE_KEY_IP);
+    const port = localStorage.getItem(STORAGE_KEY_PORT);
     const password = localStorage.getItem(STORAGE_KEY_PASSWORD);
     const autoConnect = localStorage.getItem(STORAGE_KEY_AUTO_CONNECT) === "true";
     return {
-      address: address || "ws://localhost:5299",
+      ip: ip || "localhost",
+      port: port ? parseInt(port, 10) : 5299,
       password: password || "",
       autoConnect,
     };
   } catch (error) {
     console.error("[LAN Control Client] Failed to load saved connection", error);
     return {
-      address: "ws://localhost:5299",
+      ip: "localhost",
+      port: 5299,
       password: "",
       autoConnect: false,
     };
@@ -96,9 +102,10 @@ function loadSavedConnection() {
 }
 
 // Save connection info to localStorage
-function saveConnection(address: string, password: string) {
+function saveConnection(ip: string, port: number, password: string) {
   try {
-    localStorage.setItem(STORAGE_KEY_ADDRESS, address);
+    localStorage.setItem(STORAGE_KEY_IP, ip);
+    localStorage.setItem(STORAGE_KEY_PORT, port.toString());
     localStorage.setItem(STORAGE_KEY_PASSWORD, password);
     localStorage.setItem(STORAGE_KEY_AUTO_CONNECT, "true");
   } catch (error) {
@@ -109,7 +116,8 @@ function saveConnection(address: string, password: string) {
 // Clear saved connection
 function clearSavedConnection() {
   try {
-    localStorage.removeItem(STORAGE_KEY_ADDRESS);
+    localStorage.removeItem(STORAGE_KEY_IP);
+    localStorage.removeItem(STORAGE_KEY_PORT);
     localStorage.removeItem(STORAGE_KEY_PASSWORD);
     localStorage.removeItem(STORAGE_KEY_AUTO_CONNECT);
   } catch (error) {
@@ -123,7 +131,8 @@ export const useLanControlClientStore =
   createWithEqualityFn<LanControlClientState>()(
     (set, get) => ({
       status: "disconnected",
-      address: savedConnection.address,
+      ip: savedConnection.ip,
+      port: savedConnection.port,
       password: savedConnection.password,
       remoteDevice: null,
       playerState: null,
@@ -132,8 +141,11 @@ export const useLanControlClientStore =
       lastMessageAt: null,
       error: undefined,
       actions: {
-        setAddress: (address) => {
-          set({ address });
+        setIp: (ip) => {
+          set({ ip });
+        },
+        setPort: (port) => {
+          set({ port });
         },
         setPassword: (password) => {
           set({ password: password.toUpperCase() });
@@ -142,7 +154,7 @@ export const useLanControlClientStore =
           set({ error: undefined });
         },
         connect: () => {
-          const { status, address, password } = get();
+          const { status, ip, port, password } = get();
           if (status === "connecting" || status === "authenticating") {
             return;
           }
@@ -150,13 +162,11 @@ export const useLanControlClientStore =
           reconnectAbort = false;
           closeSocket();
 
-          let serverUrl: URL;
+          const serverUrl = `ws://${ip}:${port}`;
+
+          let parsedUrl: URL;
           try {
-            serverUrl = new URL(address, window.location.href);
-            if (!/^wss?:$/i.test(serverUrl.protocol)) {
-              serverUrl.protocol =
-                serverUrl.protocol === "https:" ? "wss:" : "ws:";
-            }
+            parsedUrl = new URL(serverUrl, window.location.href);
           } catch (error) {
             console.error("[LAN Control Client] Invalid URL", error);
             cleanupRemoteControl();
@@ -173,7 +183,7 @@ export const useLanControlClientStore =
             remoteDevice: null,
           });
 
-          socket = new WebSocket(serverUrl.toString());
+          socket = new WebSocket(parsedUrl.toString());
 
           socket.addEventListener("open", () => {
             if (reconnectAbort) return;
@@ -201,7 +211,7 @@ export const useLanControlClientStore =
                 if (success) {
                   const remoteDevice = response.deviceInfo ?? null;
                   // Save successful connection
-                  saveConnection(get().address, get().password);
+                  saveConnection(get().ip, get().port, get().password);
                   set({
                     status: "connected",
                     remoteDevice,
@@ -349,7 +359,7 @@ export const useLanControlClientStore =
 // Auto-connect function to be called on app startup
 export function tryAutoConnect() {
   const saved = loadSavedConnection();
-  if (saved.autoConnect && saved.address && saved.password) {
+  if (saved.autoConnect && saved.ip && saved.password) {
     // Delay to ensure store is initialized
     setTimeout(() => {
       const store = useLanControlClientStore.getState();
