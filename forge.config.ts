@@ -12,15 +12,6 @@ const config: ForgeConfig = {
         asar: true,
         icon: "./build/icon",
         extraResource: ["./resources"],
-        // Simple ignore function that keeps out/, package.json, and resources
-        ignore: (path: string) => {
-            // Don't ignore out/, package.json, or resources
-            if (!path || path === "/package.json" || /^\/out($|\/)/.test(path) || /^\/resources($|\/)/.test(path)) {
-                return false;
-            }
-            // Ignore source code and dev files
-            return /^\/(src|electron|node_modules|\.git|\.github|cypress|scripts|dist|build)($|\/)/.test(path);
-        },
         win32metadata: {
             CompanyName: "realtvop",
             ProductName: "Aonsoku",
