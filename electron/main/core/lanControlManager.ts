@@ -4,6 +4,7 @@
  */
 
 import { BrowserWindow, ipcMain } from "electron";
+import { networkInterfaces } from "os";
 import type {
   LanControlConfig,
   LanControlServerInfo,
@@ -25,6 +26,25 @@ export class LanControlManager {
   constructor(mainWindow: BrowserWindow) {
     this.mainWindow = mainWindow;
     this.setupIpcHandlers();
+  }
+
+  private getAllAddresses(/* port: number */): string[] {
+    const interfaces = networkInterfaces();
+    const addresses: string[] = [];
+
+    for (const interfaceName in interfaces) {
+      const interfaceInfo = interfaces[interfaceName];
+      if (!interfaceInfo) continue;
+
+      for (const info of interfaceInfo) {
+        // Only IPv4 addresses, exclude internal and loopback
+        if (info.family === 'IPv4' && !info.internal) {
+          addresses.push(`${info.address}`);
+        }
+      }
+    }
+
+    return addresses;
   }
 
   private setupIpcHandlers(): void {
@@ -132,12 +152,16 @@ export class LanControlManager {
       };
     }
 
+    const port = this.server.getPort();
+    const addresses = this.getAllAddresses(/* port */);
+
     return {
       running: this.server.isRunning(),
-      port: this.server.getPort(),
+      port,
       address: this.server.isRunning()
-        ? `http://localhost:${this.server.getPort()}`
+        ? `http://localhost:${port}`
         : undefined,
+      addresses: this.server.isRunning() ? addresses : undefined,
     };
   }
 

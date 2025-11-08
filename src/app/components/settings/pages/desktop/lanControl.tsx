@@ -12,6 +12,7 @@ import {
   HeaderTitle,
   Root,
 } from "@/app/components/settings/section";
+import { Badge } from "@/app/components/ui/badge";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { Switch } from "@/app/components/ui/switch";
@@ -64,11 +65,9 @@ export function LanControlSettings() {
     return newPassword;
   };
 
-  const handleCopyAddress = () => {
-    if (serverInfo.address) {
-      navigator.clipboard.writeText(serverInfo.address);
-      toast.success(t("settings.desktop.lanControl.addressCopied"));
-    }
+  const handleCopyAddress = (address: string) => {
+    navigator.clipboard.writeText(address);
+    toast.success(t("settings.desktop.lanControl.addressCopied"));
   };
 
   const handleCopyPassword = () => {
@@ -114,7 +113,6 @@ export function LanControlSettings() {
                   value={config.port}
                   onChange={(e) => handlePortChange(e.target.value)}
                   className="w-32"
-                  disabled={serverInfo.running}
                 />
               </ContentItemForm>
             </ContentItem>
@@ -168,33 +166,39 @@ export function LanControlSettings() {
               </ContentItemForm>
             </ContentItem>
 
-            {serverInfo.running && serverInfo.address && (
-              <ContentItem>
-                <ContentItemTitle
-                  info={t("settings.desktop.lanControl.address.info")}
-                >
-                  {t("settings.desktop.lanControl.address.label")}
-                </ContentItemTitle>
-                <ContentItemForm>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="text"
-                      value={serverInfo.address}
-                      readOnly
-                      className="flex-1 font-mono text-sm"
-                    />
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={handleCopyAddress}
-                      title={t("settings.desktop.lanControl.copyAddress")}
-                    >
-                      <Copy className="size-4" />
-                    </Button>
-                  </div>
-                </ContentItemForm>
-              </ContentItem>
-            )}
+            {serverInfo.running &&
+              serverInfo.addresses &&
+              serverInfo.addresses.length > 0 && (
+                <ContentItem>
+                  <ContentItemTitle
+                    info={t("settings.desktop.lanControl.address.info")}
+                  >
+                    {t("settings.desktop.lanControl.address.label")}
+                  </ContentItemTitle>
+                  <ContentItemForm>
+                    <div className="flex flex-wrap gap-2">
+                      {serverInfo.addresses.map((address, index) => (
+                        <div key={index} className="flex items-center gap-1">
+                          <Badge
+                            variant="secondary"
+                            className="font-mono text-sm"
+                          >
+                            {address}
+                          </Badge>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => handleCopyAddress(address)}
+                            title={t("settings.desktop.lanControl.copyAddress")}
+                          >
+                            <Copy className="size-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </ContentItemForm>
+                </ContentItem>
+              )}
           </>
         )}
       </Content>

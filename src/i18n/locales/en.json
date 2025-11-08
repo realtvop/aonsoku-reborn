@@ -728,6 +728,10 @@
           "label": "Password",
           "info": "Set a password for secure access to the LAN control server."
         },
+        "address": {
+          "label": "Server Addresses",
+          "info": "Available server addresses for LAN control access."
+        },
         "allowNavidromeAuth": {
           "label": "Allow Navidrome Authentication",
           "info": "Enable authentication using Navidrome credentials."

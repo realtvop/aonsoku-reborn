@@ -638,6 +638,10 @@
           "label": "密码",
           "info": "设置密码以安全访问 LAN 控制服务器。"
         },
+        "address": {
+          "label": "服务器地址",
+          "info": "可用的 LAN 控制访问服务器地址。"
+        },
         "allowNavidromeAuth": {
           "label": "允许 Navidrome 身份验证",
           "info": "启用使用 Navidrome 凭据进行身份验证。"

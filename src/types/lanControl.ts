@@ -155,5 +155,6 @@ export interface LanControlServerInfo {
   running: boolean;
   port: number;
   address?: string;
+  addresses?: string[];
   error?: string;
 }
