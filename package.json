@@ -64,6 +64,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "cors": "^2.8.5",
     "crypto-js": "^4.2.0",
     "dayjs": "^1.11.13",
     "discord-rpc": "^4.0.1",
@@ -136,7 +137,11 @@
     "vite": "^6.2.3"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["cypress", "electron", "esbuild"]
+    "onlyBuiltDependencies": [
+      "cypress",
+      "electron",
+      "esbuild"
+    ]
   },
   "electron": {
     "window": {
