@@ -745,6 +745,7 @@
       "menu": "Control other devices",
       "title": "Control other devices",
       "description": "Connect to a LAN control server and manage playback remotely.",
+      "serverRunning": "This device is currently running as a LAN Control server. You cannot control other devices while this device is in server mode.",
       "address": "Server address",
       "password": "Access code",
       "status": {

@@ -20,14 +20,16 @@ import { LogoutObserver } from "@/app/observers/logout-observer";
 import { RemoteControlDialog } from "@/app/components/remote-control/dialog";
 import { logoutKeys, shortcutDialogKeys, stringifyShortcut } from "@/shortcuts";
 import { useAppData, useAppStore } from "@/store/app.store";
+import { useLanControlServerInfo } from "@/store/lanControl.store";
 import { isMacOS } from "@/utils/desktop";
 
 export function UserDropdown() {
   const { username, url, lockUser } = useAppData();
   const setLogoutDialogState = useAppStore(
-    (state) => state.actions.setLogoutDialogState,
+    (state) => state.actions.setLogoutDialogState
   );
   const { t } = useTranslation();
+  const serverInfo = useLanControlServerInfo();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [remoteControlOpen, setRemoteControlOpen] = useState(false);
@@ -36,6 +38,7 @@ export function UserDropdown() {
   useHotkeys("mod+/", () => setShortcutsOpen((prev) => !prev));
 
   const alignPosition = isMacOS ? "end" : "center";
+  const isServerRunning = serverInfo.running;
 
   return (
     <Fragment>
@@ -73,10 +76,12 @@ export function UserDropdown() {
               {stringifyShortcut(shortcutDialogKeys)}
             </DropdownMenuShortcut>
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setRemoteControlOpen(true)}>
-            <Cast className="mr-2 h-4 w-4" />
-            <span>{t("lanControl.remote.menu")}</span>
-          </DropdownMenuItem>
+          {!isServerRunning && (
+            <DropdownMenuItem onClick={() => setRemoteControlOpen(true)}>
+              <Cast className="mr-2 h-4 w-4" />
+              <span>{t("lanControl.remote.menu")}</span>
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => setAboutOpen(true)}>
             <Info className="mr-2 h-4 w-4" />

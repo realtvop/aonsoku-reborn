@@ -12,6 +12,7 @@ import { Input } from "@/app/components/ui/input";
 import { Label } from "@/app/components/ui/label";
 import { Badge } from "@/app/components/ui/badge";
 import { useLanControlClientStore } from "@/store/lanControlClient.store";
+import { useLanControlServerInfo } from "@/store/lanControl.store";
 import { convertSecondsToTime } from "@/utils/convertSecondsToTime";
 import { subsonic } from "@/service/subsonic";
 import { ISong } from "@/types/responses/song";
@@ -27,6 +28,7 @@ export function RemoteControlDialog({
   onOpenChange,
 }: RemoteControlDialogProps) {
   const { t } = useTranslation();
+  const serverInfo = useLanControlServerInfo();
   const {
     status,
     address,
@@ -51,6 +53,7 @@ export function RemoteControlDialog({
 
   const isConnecting = status === "connecting" || status === "authenticating";
   const isConnected = status === "connected";
+  const isServerRunning = serverInfo.running;
 
   // Fetch full song information when currentSong changes
   useEffect(() => {
@@ -122,6 +125,12 @@ export function RemoteControlDialog({
             {t("lanControl.remote.description")}
           </DialogDescription>
         </DialogHeader>
+
+        {isServerRunning && (
+          <div className="rounded-md border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 dark:border-yellow-900 dark:bg-yellow-900/20 dark:text-yellow-300">
+            {t("lanControl.remote.serverRunning")}
+          </div>
+        )}
 
         <div className="space-y-6 mt-6">
           <section className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
@@ -200,7 +209,7 @@ export function RemoteControlDialog({
               <Button
                 variant="default"
                 onClick={handleConnect}
-                disabled={isConnecting}
+                disabled={isConnecting || isServerRunning}
               >
                 {isConnecting
                   ? t("lanControl.remote.actions.connecting")
