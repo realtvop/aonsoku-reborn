@@ -32,8 +32,5 @@ env-config.js
 .env
 .env.local
 
-out/
-
-# Electron Forge build artifacts
-out/
+# Electron Forge build artifacts (dist/ only, out/ is needed for packaging)
 dist/

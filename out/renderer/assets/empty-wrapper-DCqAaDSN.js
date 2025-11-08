@@ -1,0 +1,1 @@
+import{j as e}from"./react-BohqOKG4.js";function r({children:r}){return e.jsx("div",{className:"h-full flex flex-1 items-center justify-center rounded-lg border border-dashed shadow-sm",children:r})}export{r as E};

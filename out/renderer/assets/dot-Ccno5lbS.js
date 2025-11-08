@@ -1,0 +1,1 @@
+import{j as r}from"./react-BohqOKG4.js";import{c as s}from"./index-Dw_5HS3q.js";function a({className:a,...e}){return r.jsx("span",{className:s("mx-1 opacity-80 text-foreground",a),...e,children:"•"})}export{a as D};

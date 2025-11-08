@@ -1,0 +1,1 @@
+import{a as r}from"./react-BohqOKG4.js";import{d as e}from"./dequal-DoBxDInM.js";function u(u,t){return r.useMemo(u,function(u){const t=r.useRef(u),n=r.useRef(0);return e(u,t.current)||(t.current=u,n.current+=1),r.useMemo(()=>t.current,[n.current])}(t))}export{u};

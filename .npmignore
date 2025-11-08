@@ -1,0 +1,24 @@
+# NPM ignore file for electron packaging
+# This takes precedence over .gitignore
+
+# Source files
+src/
+electron/
+
+# Development files
+node_modules/
+.git/
+.github/
+cypress/
+scripts/
+
+# Build artifacts (dist only, not out)
+dist/
+
+# Config files
+.vscode/
+.idea/
+*.log
+.env
+.env.local
+env-config.js
