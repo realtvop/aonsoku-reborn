@@ -5,29 +5,21 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
 jobs:
   publish-electron:
-    permissions:
-      contents: write
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: "macos-latest"
-            target: "mac"
-            arch: "x64"
-          - platform: "macos-latest"
-            target: "mac"
-            arch: "arm64"
+            target: "darwin"
           - platform: "ubuntu-22.04"
             target: "linux"
-            arch: "x64"
           - platform: "windows-latest"
-            target: "win"
-            arch: "x64"
-          - platform: "windows-11-arm"
-            target: "win"
-            arch: "arm64"
+            target: "win32"
     runs-on: ${{ matrix.platform }}
     steps:
       - name: Checkout repository
@@ -45,9 +37,17 @@ jobs:
           node-version: 20
 
       - name: install frontend dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
-      - name: Build and publish Electron app
+      - name: Build Electron app
+        run: pnpm electron:build
+
+      - name: Build and publish with Electron Forge
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm run build:${{ matrix.target }} --publish=always
+          # Uncomment and add these secrets to your GitHub repository for signing:
+          # APPLE_ID: ${{ secrets.APPLE_ID }}
+          # APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # APPLE_IDENTITY: ${{ secrets.APPLE_IDENTITY }}
+        run: pnpm publish

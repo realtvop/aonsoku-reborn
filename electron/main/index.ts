@@ -3,8 +3,10 @@ import { app, globalShortcut } from "electron";
 import { createAppMenu } from "./core/menu";
 import { createWindow, mainWindow } from "./window";
 import { LanControlManager } from "./core/lanControlManager";
+import { UpdateManager } from "./core/updateManager";
 
 let lanControlManager: LanControlManager | null = null;
+let updateManager: UpdateManager | null = null;
 
 const instanceLock = app.requestSingleInstanceLock();
 
@@ -29,6 +31,7 @@ if (!instanceLock) {
     // Initialize LAN Control Manager after window is created
     if (mainWindow) {
       lanControlManager = new LanControlManager(mainWindow);
+      updateManager = new UpdateManager(mainWindow);
     }
   });
 
@@ -39,6 +42,11 @@ if (!instanceLock) {
       // Re-initialize LAN Control Manager if needed
       if (mainWindow && !lanControlManager) {
         lanControlManager = new LanControlManager(mainWindow);
+      }
+
+      // Re-initialize Update Manager if needed
+      if (mainWindow && !updateManager) {
+        updateManager = new UpdateManager(mainWindow);
       }
       return;
     }
@@ -54,7 +62,7 @@ if (!instanceLock) {
 
   app.on("browser-window-created", (_, window) => {
     optimizer.watchWindowShortcuts(window);
-    globalShortcut.register("F11", () => {});
+    globalShortcut.register("F11", () => { });
   });
 
   app.on("window-all-closed", () => {

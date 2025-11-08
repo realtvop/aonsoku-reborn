@@ -90,6 +90,19 @@ const api: IAonsokuAPI = {
       ipcRenderer.removeAllListeners(IpcChannels.LanControlRequestState);
     },
   },
+  // App Update
+  update: {
+    checkForUpdates: () => ipcRenderer.invoke("app:check-for-updates"),
+    downloadUpdate: () => ipcRenderer.invoke("app:download-update"),
+    installUpdate: () => ipcRenderer.invoke("app:install-update"),
+    getVersion: () => ipcRenderer.invoke("app:get-version"),
+    onUpdateStatus: (callback) => {
+      ipcRenderer.on(IpcChannels.UpdateStatus, (_, payload) => callback(payload));
+    },
+    removeUpdateStatusListener: () => {
+      ipcRenderer.removeAllListeners(IpcChannels.UpdateStatus);
+    },
+  },
 };
 
 // Use `contextBridge` APIs to expose Electron APIs to

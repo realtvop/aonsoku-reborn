@@ -40,6 +40,8 @@ export enum IpcChannels {
   LanControlMessage = "lan-control:message",
   LanControlRequestState = "lan-control:request-state",
   LanControlVerifyNavidromeAuth = "lan-control:verify-navidrome-auth",
+  // App Update
+  UpdateStatus = "app:update-status",
 }
 
 export type OverlayColors = {
@@ -61,6 +63,24 @@ export type PlayerStateListenerActions =
   | "skipForward"
   | "toggleShuffle"
   | "toggleRepeat";
+
+export type UpdateStatus =
+  | "checking-for-update"
+  | "update-available"
+  | "update-not-available"
+  | "error"
+  | "update-download-progress"
+  | "update-downloaded";
+
+export type UpdatePayload = {
+  status: UpdateStatus;
+  version?: string;
+  releaseDate?: string;
+  percent?: number;
+  transferred?: number;
+  total?: number;
+  message?: string;
+};
 
 export interface IAonsokuAPI {
   enterFullScreen: () => void;
@@ -99,5 +119,14 @@ export interface IAonsokuAPI {
     onRequestState: (callback: () => void) => void;
     removeMessageListener: () => void;
     removeRequestStateListener: () => void;
+  };
+  // App Update
+  update: {
+    checkForUpdates: () => Promise<void>;
+    downloadUpdate: () => Promise<void>;
+    installUpdate: () => void;
+    getVersion: () => Promise<string>;
+    onUpdateStatus: (callback: (payload: UpdatePayload) => void) => void;
+    removeUpdateStatusListener: () => void;
   };
 }

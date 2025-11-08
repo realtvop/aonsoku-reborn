@@ -30,5 +30,10 @@ cypress/videos
 # Docker env file
 env-config.js
 .env
+.env.local
 
 out/
+
+# Electron Forge build artifacts
+out/
+dist/
