@@ -45,7 +45,7 @@ jobs:
           node-version: 20
 
       - name: install frontend dependencies
-        run: pnpm install --ignore-scripts
+        run: pnpm install
 
       - name: Build and publish Electron app
         env:

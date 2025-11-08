@@ -48,7 +48,7 @@ jobs:
           node-version: 20
 
       - name: install frontend dependencies
-        run: pnpm install --ignore-scripts
+        run: pnpm install
 
       - name: Build Electron app
         run: pnpm run build:${{ matrix.target }}
