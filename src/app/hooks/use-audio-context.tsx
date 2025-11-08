@@ -94,7 +94,7 @@ export function useAudioContext(audio: HTMLAudioElement | null) {
         gainNodeRef.current.gain.setValueAtTime(gainValue, currentTime);
       }
     },
-    [replayGainEnabled, shouldUseNativeAudio]
+    [replayGainEnabled, shouldUseNativeAudio],
   );
 
   const resetRefs = useCallback(() => {
@@ -139,7 +139,7 @@ export function useAudioContext(audio: HTMLAudioElement | null) {
         } catch (error) {
           logger.error(
             "Failed to resume AudioContext on visibility change",
-            error
+            error,
           );
         }
       }

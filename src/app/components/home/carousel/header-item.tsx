@@ -31,7 +31,7 @@ export function HeaderItem({ song }: { song: ISong }) {
     <div
       className={clsx(
         "w-full h-[100px] sm:h-[250px] 2xl:h-[300px] relative",
-        isFirefox && "bg-black/60"
+        isFirefox && "bg-black/60",
       )}
     >
       <div
@@ -45,7 +45,7 @@ export function HeaderItem({ song }: { song: ISong }) {
       <div
         className={clsx(
           "w-full h-full bg-gradient-to-b from-background/40 to-background/80 absolute z-10",
-          !isFirefox && "backdrop-blur-xl"
+          !isFirefox && "backdrop-blur-xl",
         )}
       >
         <div className="flex h-full p-4 2xl:p-6 gap-4">

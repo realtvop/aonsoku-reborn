@@ -158,13 +158,13 @@ export function Player() {
 
     const currentProgress = Math.floor(audio.currentTime);
     setProgress(currentProgress);
-    
+
     // Update media session position state for iOS and other platforms
     if (currentDuration && currentDuration > 0) {
       manageMediaSession.setPositionState(
         currentDuration,
         currentProgress,
-        audio.playbackRate
+        audio.playbackRate,
       );
     }
   }, [getAudioRef, setProgress, currentDuration]);
@@ -220,7 +220,7 @@ export function Player() {
         setIsFullscreenOpen(true);
       }
     },
-    [isMobile]
+    [isMobile],
   );
 
   return (

@@ -42,7 +42,7 @@ export function PlaylistOptions({
   }
 
   async function getSongsToQueue(
-    callback: (songs: ISong[], sourceId?: { playlistId: string }) => void
+    callback: (songs: ISong[], sourceId?: { playlistId: string }) => void,
   ) {
     const playlistWithEntries = await subsonic.playlists.getOne(playlist.id);
     if (!playlistWithEntries) return;

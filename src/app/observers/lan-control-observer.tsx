@@ -136,7 +136,7 @@ export function LanControlObserver() {
       if (!latestServerInfo.current.running) return;
       window.api.lanControl.broadcastState(state);
     },
-    [config.enabled, isDesktopEnv]
+    [config.enabled, isDesktopEnv],
   );
 
   const ensureServerRunning = useCallback(async () => {
@@ -149,7 +149,7 @@ export function LanControlObserver() {
       setServerInfo(result);
       if (!result.running && result.error) {
         toast.error(
-          `${t("settings.desktop.lanControl.serverError")}: ${result.error}`
+          `${t("settings.desktop.lanControl.serverError")}: ${result.error}`,
         );
       }
     }
@@ -173,7 +173,7 @@ export function LanControlObserver() {
         setServerInfo(result);
         if (!result.running && result.error) {
           toast.error(
-            `${t("settings.desktop.lanControl.serverError")}: ${result.error}`
+            `${t("settings.desktop.lanControl.serverError")}: ${result.error}`,
           );
         } else if (result.running) {
           toast.success(t("settings.desktop.lanControl.serverStarted"));
@@ -403,7 +403,7 @@ export function LanControlObserver() {
             Promise.all(payload.songIds.map((id) => subsonic.songs.getSong(id)))
               .then((songs) => {
                 const validSongs = songs.filter(
-                  (song) => song !== null && song !== undefined
+                  (song) => song !== null && song !== undefined,
                 );
                 if (validSongs.length > 0) {
                   playerActions.setLastOnQueue(validSongs);

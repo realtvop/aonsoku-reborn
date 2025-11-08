@@ -24,7 +24,7 @@ export function FullscreenProgress() {
         audioPlayerRef.currentTime = value;
       }
     },
-    [audioPlayerRef]
+    [audioPlayerRef],
   );
 
   const handleSeeking = useCallback((amount: number) => {
@@ -38,7 +38,7 @@ export function FullscreenProgress() {
       setProgress(amount);
       setLocalProgress(amount);
     },
-    [setProgress, updateAudioCurrentTime]
+    [setProgress, updateAudioCurrentTime],
   );
 
   const handleSeekedFallback = useCallback(() => {
@@ -49,7 +49,7 @@ export function FullscreenProgress() {
   }, [localProgress, progress, setProgress, updateAudioCurrentTime]);
 
   const currentTime = convertSecondsToTime(
-    isSeeking ? localProgress : progress
+    isSeeking ? localProgress : progress,
   );
 
   return (

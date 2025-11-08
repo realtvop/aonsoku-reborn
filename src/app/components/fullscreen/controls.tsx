@@ -41,7 +41,7 @@ export function FullscreenControls() {
         data-state={isShuffleActive && "active"}
         className={clsx(
           buttonsStyle.secondary,
-          isShuffleActive && buttonsStyle.activeDot
+          isShuffleActive && buttonsStyle.activeDot,
         )}
         style={{ ...buttonsStyle.style }}
         onClick={() => toggleShuffle()}
@@ -88,7 +88,7 @@ export function FullscreenControls() {
         data-state={loopState !== LoopState.Off && "active"}
         className={clsx(
           buttonsStyle.secondary,
-          loopState !== LoopState.Off && buttonsStyle.activeDot
+          loopState !== LoopState.Off && buttonsStyle.activeDot,
         )}
         onClick={() => toggleLoop()}
         style={{ ...buttonsStyle.style }}

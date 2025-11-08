@@ -27,21 +27,21 @@ export function useOptions() {
 
   function play(
     list: ISong[],
-    sourceId?: { albumId: string } | { playlistId: string }
+    sourceId?: { albumId: string } | { playlistId: string },
   ) {
     setSongList(list, 0, false, sourceId);
   }
 
   function playNext(
     list: ISong[],
-    sourceId?: { albumId: string } | { playlistId: string }
+    sourceId?: { albumId: string } | { playlistId: string },
   ) {
     setNextOnQueue(list, sourceId);
   }
 
   function playLast(
     list: ISong[],
-    sourceId?: { albumId: string } | { playlistId: string }
+    sourceId?: { albumId: string } | { playlistId: string },
   ) {
     setLastOnQueue(list, sourceId);
   }

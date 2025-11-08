@@ -40,7 +40,15 @@ function removeMediaSession() {
 }
 
 function setMediaSession(
-  song: ISong | { title: string; artist: string; album: string; coverArt?: string; duration?: number }
+  song:
+    | ISong
+    | {
+        title: string;
+        artist: string;
+        album: string;
+        coverArt?: string;
+        duration?: number;
+      },
 ) {
   if (!isMediaSessionSupported()) {
     console.warn("[MediaSession] navigator.mediaSession not available");
@@ -50,12 +58,12 @@ function setMediaSession(
   try {
     const artwork = song.coverArt
       ? artworkSizes.map((size): MediaImage => {
-        return {
-          src: getCoverArtUrl(song.coverArt, "song", size),
-          sizes: [size, size].join("x"),
-          type: "image/jpeg",
-        };
-      })
+          return {
+            src: getCoverArtUrl(song.coverArt, "song", size),
+            sizes: [size, size].join("x"),
+            type: "image/jpeg",
+          };
+        })
       : [];
 
     const metadata = {
@@ -93,12 +101,12 @@ function setPodcastMediaSession(episode: EpisodeWithPodcast) {
       artist: episode.podcast?.author || "Unknown Author",
       artwork: episode.image_url
         ? [
-          {
-            src: episode.image_url,
-            sizes: "",
-            type: "image/jpeg",
-          },
-        ]
+            {
+              src: episode.image_url,
+              sizes: "",
+              type: "image/jpeg",
+            },
+          ]
         : [],
     };
 
@@ -150,7 +158,7 @@ function setPlaybackState(state: boolean | null) {
         "expected",
         newState,
         "got",
-        navigator.mediaSession.playbackState
+        navigator.mediaSession.playbackState,
       );
     }
   } catch (error) {
@@ -161,7 +169,7 @@ function setPlaybackState(state: boolean | null) {
 function setPositionState(
   duration: number,
   position: number,
-  playbackRate = 1.0
+  playbackRate = 1.0,
 ) {
   if (!isMediaSessionSupported()) return;
 
@@ -179,7 +187,7 @@ function setPositionState(
       "[MediaSession] Position exceeds duration:",
       position,
       ">",
-      duration
+      duration,
     );
     position = duration;
   }
@@ -292,7 +300,9 @@ interface SetPodcastHandlerParams {
 
 function setPodcastHandlers({ handleSeekAction }: SetPodcastHandlerParams) {
   if (!isMediaSessionSupported()) {
-    console.warn("[MediaSession] Cannot set podcast handlers: API not supported");
+    console.warn(
+      "[MediaSession] Cannot set podcast handlers: API not supported",
+    );
     return;
   }
 
@@ -341,7 +351,10 @@ function setPodcastHandlers({ handleSeekAction }: SetPodcastHandlerParams) {
 
     console.log("[MediaSession] Podcast action handlers set successfully");
   } catch (error) {
-    console.error("[MediaSession] Failed to set podcast action handlers:", error);
+    console.error(
+      "[MediaSession] Failed to set podcast action handlers:",
+      error,
+    );
   }
 }
 

@@ -72,6 +72,7 @@
     "electron-updater": "^6.6.2",
     "embla-carousel-autoplay": "^8.6.0",
     "embla-carousel-react": "^8.6.0",
+    "express": "^5.1.0",
     "fast-average-color": "^9.5.0",
     "html-to-text": "^9.0.5",
     "i18next": "^23.16.8",
@@ -135,11 +136,7 @@
     "vite": "^6.2.3"
   },
   "pnpm": {
-    "onlyBuiltDependencies": [
-      "cypress",
-      "electron",
-      "esbuild"
-    ]
+    "onlyBuiltDependencies": ["cypress", "electron", "esbuild"]
   },
   "electron": {
     "window": {

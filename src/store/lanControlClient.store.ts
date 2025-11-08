@@ -83,7 +83,8 @@ function loadSavedConnection() {
     const ip = localStorage.getItem(STORAGE_KEY_IP);
     const port = localStorage.getItem(STORAGE_KEY_PORT);
     const password = localStorage.getItem(STORAGE_KEY_PASSWORD);
-    const autoConnect = localStorage.getItem(STORAGE_KEY_AUTO_CONNECT) === "true";
+    const autoConnect =
+      localStorage.getItem(STORAGE_KEY_AUTO_CONNECT) === "true";
     return {
       ip: ip || "localhost",
       port: port ? parseInt(port, 10) : 5299,
@@ -91,7 +92,10 @@ function loadSavedConnection() {
       autoConnect,
     };
   } catch (error) {
-    console.error("[LAN Control Client] Failed to load saved connection", error);
+    console.error(
+      "[LAN Control Client] Failed to load saved connection",
+      error,
+    );
     return {
       ip: "localhost",
       port: 5299,
@@ -121,7 +125,10 @@ function clearSavedConnection() {
     localStorage.removeItem(STORAGE_KEY_PASSWORD);
     localStorage.removeItem(STORAGE_KEY_AUTO_CONNECT);
   } catch (error) {
-    console.error("[LAN Control Client] Failed to clear saved connection", error);
+    console.error(
+      "[LAN Control Client] Failed to clear saved connection",
+      error,
+    );
   }
 }
 

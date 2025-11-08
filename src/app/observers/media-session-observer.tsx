@@ -23,10 +23,10 @@ export function MediaSessionObserver() {
 
   // Get remote player state directly for more accurate status
   const remotePlayerState = useLanControlClientStore(
-    (state) => state.playerState
+    (state) => state.playerState,
   );
   const remoteCurrentSong = useLanControlClientStore(
-    (state) => state.currentSong
+    (state) => state.currentSong,
   );
 
   // Use ref to track last update to avoid unnecessary re-renders
@@ -44,7 +44,7 @@ export function MediaSessionObserver() {
           coverArt: remoteCurrentSong.coverArt,
           duration: remoteCurrentSong.duration,
         }
-      : currentList[currentSongIndex] ?? null;
+      : (currentList[currentSongIndex] ?? null);
   const radio = radioList[currentSongIndex] ?? null;
   const episode = podcastList[currentSongIndex] ?? null;
 
@@ -79,7 +79,7 @@ export function MediaSessionObserver() {
 
     // Use remote player state when in remote mode
     const effectiveIsPlaying = isRemoteActive
-      ? remotePlayerState?.isPlaying ?? false
+      ? (remotePlayerState?.isPlaying ?? false)
       : isPlaying;
 
     manageMediaSession.setPlaybackState(effectiveIsPlaying);
@@ -153,7 +153,7 @@ export function MediaSessionObserver() {
   useEffect(() => {
     // Use remote player state when in remote mode
     const effectiveIsPlaying = isRemoteActive
-      ? remotePlayerState?.isPlaying ?? false
+      ? (remotePlayerState?.isPlaying ?? false)
       : isPlaying;
 
     if (!effectiveIsPlaying || hasNothingPlaying || !song) {

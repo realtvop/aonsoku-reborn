@@ -139,7 +139,7 @@ export interface IPlayerActions {
     songlist: ISong[],
     index: number,
     shuffle?: boolean,
-    sourceId?: { albumId: string } | { playlistId: string }
+    sourceId?: { albumId: string } | { playlistId: string },
   ) => void;
   setCurrentSong: () => void;
   checkIsSongStarred: () => void;
@@ -165,11 +165,11 @@ export interface IPlayerActions {
   setAudioPlayerRef: (ref: HTMLAudioElement) => void;
   setNextOnQueue: (
     songlist: ISong[],
-    sourceId?: { albumId: string } | { playlistId: string }
+    sourceId?: { albumId: string } | { playlistId: string },
   ) => void;
   setLastOnQueue: (
     songlist: ISong[],
-    sourceId?: { albumId: string } | { playlistId: string }
+    sourceId?: { albumId: string } | { playlistId: string },
   ) => void;
   removeSongFromQueue: (id: string) => void;
   setMainDrawerState: (state: boolean) => void;

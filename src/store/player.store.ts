@@ -298,7 +298,7 @@ export const usePlayerStore = createWithEqualityFn<IPlayerContext>()(
                   if (songlist.length === 0) return;
 
                   // Use optimized message types when source is known
-                  if (sourceId && 'albumId' in sourceId) {
+                  if (sourceId && "albumId" in sourceId) {
                     const messageType = shuffle
                       ? LanControlMessageType.PLAY_ALBUM_SHUFFLE
                       : LanControlMessageType.PLAY_ALBUM;
@@ -306,7 +306,7 @@ export const usePlayerStore = createWithEqualityFn<IPlayerContext>()(
                       albumId: sourceId.albumId,
                       songIndex: index,
                     });
-                  } else if (sourceId && 'playlistId' in sourceId) {
+                  } else if (sourceId && "playlistId" in sourceId) {
                     const messageType = shuffle
                       ? LanControlMessageType.PLAY_PLAYLIST_SHUFFLE
                       : LanControlMessageType.PLAY_PLAYLIST;
@@ -427,11 +427,11 @@ export const usePlayerStore = createWithEqualityFn<IPlayerContext>()(
                   if (list.length === 0) return;
 
                   // Use optimized message types when source is known
-                  if (sourceId && 'albumId' in sourceId) {
+                  if (sourceId && "albumId" in sourceId) {
                     remoteSend(LanControlMessageType.ADD_ALBUM_TO_QUEUE, {
                       albumId: sourceId.albumId,
                     });
-                  } else if (sourceId && 'playlistId' in sourceId) {
+                  } else if (sourceId && "playlistId" in sourceId) {
                     remoteSend(LanControlMessageType.ADD_PLAYLIST_TO_QUEUE, {
                       playlistId: sourceId.playlistId,
                     });
@@ -487,11 +487,11 @@ export const usePlayerStore = createWithEqualityFn<IPlayerContext>()(
                   if (list.length === 0) return;
 
                   // Use optimized message types when source is known
-                  if (sourceId && 'albumId' in sourceId) {
+                  if (sourceId && "albumId" in sourceId) {
                     remoteSend(LanControlMessageType.ADD_ALBUM_TO_QUEUE, {
                       albumId: sourceId.albumId,
                     });
-                  } else if (sourceId && 'playlistId' in sourceId) {
+                  } else if (sourceId && "playlistId" in sourceId) {
                     remoteSend(LanControlMessageType.ADD_PLAYLIST_TO_QUEUE, {
                       playlistId: sourceId.playlistId,
                     });
@@ -985,7 +985,7 @@ export const usePlayerStore = createWithEqualityFn<IPlayerContext>()(
                 // Update index to fit new current list
                 const updatedCurrentIndex = Math.min(
                   currentSongIndex -
-                  (removedSongIndex < currentSongIndex ? 1 : 0),
+                    (removedSongIndex < currentSongIndex ? 1 : 0),
                   newCurrentList.length - 1,
                 );
 
@@ -995,7 +995,7 @@ export const usePlayerStore = createWithEqualityFn<IPlayerContext>()(
                 );
                 const updatedOriginalIndex = Math.min(
                   originalSongIndex -
-                  (removedOriginalIndex < originalSongIndex ? 1 : 0),
+                    (removedOriginalIndex < originalSongIndex ? 1 : 0),
                   newOriginalList.length - 1,
                 );
 

@@ -38,7 +38,7 @@ export class LanControlManager {
 
       for (const info of interfaceInfo) {
         // Only IPv4 addresses, exclude internal and loopback
-        if (info.family === 'IPv4' && !info.internal) {
+        if (info.family === "IPv4" && !info.internal) {
           addresses.push(`${info.address}`);
         }
       }
@@ -158,9 +158,7 @@ export class LanControlManager {
     return {
       running: this.server.isRunning(),
       port,
-      address: this.server.isRunning()
-        ? `http://localhost:${port}`
-        : undefined,
+      address: this.server.isRunning() ? `http://localhost:${port}` : undefined,
       addresses: this.server.isRunning() ? addresses : undefined,
     };
   }

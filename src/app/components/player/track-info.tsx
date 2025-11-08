@@ -176,7 +176,7 @@ function ArtistLink({ id, name }: ArtistLinkProps) {
       <span
         className={cn(
           "text-[10px] sm:text-xs text-muted-foreground text-nowrap",
-          id && "hover:underline hover:text-foreground"
+          id && "hover:underline hover:text-foreground",
         )}
       >
         {name}

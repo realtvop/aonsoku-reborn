@@ -193,8 +193,8 @@ export function RemoteControlDialog({
                       isConnected
                         ? "default"
                         : status === "error"
-                        ? "destructive"
-                        : "secondary"
+                          ? "destructive"
+                          : "secondary"
                     }
                     className="capitalize"
                   >
