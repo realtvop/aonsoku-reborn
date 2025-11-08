@@ -13,7 +13,7 @@ const config: ForgeConfig = {
         icon: "./build/icon",
         extraResource: ["./resources"],
         win32metadata: {
-            CompanyName: "Victor Alves",
+            CompanyName: "realtvop",
             ProductName: "Aonsoku",
         },
         osxSign: {

@@ -25,6 +25,9 @@ jobs:
           - platform: "ubuntu-22.04"
             target: "linux"
             arch: "x64"
+          - platform: "ubuntu-22.04-arm"
+            target: "linux"
+            arch: "arm64"
           - platform: "windows-latest"
             target: "win"
             arch: "x64"
@@ -51,6 +54,8 @@ jobs:
         run: pnpm install
 
       - name: Build Electron app
+        env:
+          ARCH: ${{ matrix.arch }}
         run: pnpm run build:${{ matrix.target }}
 
       - name: Upload artifacts
