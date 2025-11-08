@@ -660,7 +660,8 @@
         "noResults": "未找到结果",
         "loading": "加载中...",
         "noAlbums": "没有可用的专辑",
-        "noPlaylists": "没有可用的播放列表"
+        "noPlaylists": "没有可用的播放列表",
+        "back": "返回"
       },
       "controls": {
         "previous": "上一首",

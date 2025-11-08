@@ -25,16 +25,25 @@ export function useOptions() {
 
   const queryClient = useQueryClient();
 
-  function play(list: ISong[]) {
-    setSongList(list, 0);
+  function play(
+    list: ISong[],
+    sourceId?: { albumId: string } | { playlistId: string }
+  ) {
+    setSongList(list, 0, false, sourceId);
   }
 
-  function playNext(list: ISong[]) {
-    setNextOnQueue(list);
+  function playNext(
+    list: ISong[],
+    sourceId?: { albumId: string } | { playlistId: string }
+  ) {
+    setNextOnQueue(list, sourceId);
   }
 
-  function playLast(list: ISong[]) {
-    setLastOnQueue(list);
+  function playLast(
+    list: ISong[],
+    sourceId?: { albumId: string } | { playlistId: string }
+  ) {
+    setLastOnQueue(list, sourceId);
   }
 
   function startDownload(id: string) {

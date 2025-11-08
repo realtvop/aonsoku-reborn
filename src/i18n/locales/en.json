@@ -785,7 +785,8 @@
         "noResults": "No results found",
         "loading": "Loading...",
         "noAlbums": "No albums available",
-        "noPlaylists": "No playlists available"
+        "noPlaylists": "No playlists available",
+        "back": "Back"
       },
       "controls": {
         "previous": "Previous",

@@ -27,7 +27,13 @@ export enum LanControlMessageType {
   PLAY_SONG = "play_song",
   PLAY_ALBUM = "play_album",
   PLAY_PLAYLIST = "play_playlist",
+  PLAY_ALBUM_SHUFFLE = "play_album_shuffle",
+  PLAY_PLAYLIST_SHUFFLE = "play_playlist_shuffle",
+  PLAY_ALBUM_FROM_INDEX = "play_album_from_index",
+  PLAY_PLAYLIST_FROM_INDEX = "play_playlist_from_index",
   ADD_TO_QUEUE = "add_to_queue",
+  ADD_ALBUM_TO_QUEUE = "add_album_to_queue",
+  ADD_PLAYLIST_TO_QUEUE = "add_playlist_to_queue",
   CLEAR_QUEUE = "clear_queue",
 
   // Shuffle & Repeat
@@ -112,14 +118,24 @@ export interface PlaySongData {
 
 export interface PlayAlbumData {
   albumId: string;
+  songIndex?: number;
 }
 
 export interface PlayPlaylistData {
   playlistId: string;
+  songIndex?: number;
 }
 
 export interface AddToQueueData {
   songIds: string[];
+}
+
+export interface AddAlbumToQueueData {
+  albumId: string;
+}
+
+export interface AddPlaylistToQueueData {
+  playlistId: string;
 }
 
 export interface SetShuffleData {

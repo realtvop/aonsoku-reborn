@@ -11,18 +11,11 @@ import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { Label } from "@/app/components/ui/label";
 import { Badge } from "@/app/components/ui/badge";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/app/components/ui/tabs";
 import { useLanControlClientStore } from "@/store/lanControlClient.store";
 import { convertSecondsToTime } from "@/utils/convertSecondsToTime";
 import { subsonic } from "@/service/subsonic";
 import { ISong } from "@/types/responses/song";
 import { getCoverArtUrl } from "@/api/httpClient";
-import { LibraryBrowser } from "./library-browser";
 
 interface RemoteControlDialogProps {
   open: boolean;
@@ -122,7 +115,7 @@ export function RemoteControlDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t("lanControl.remote.title")}</DialogTitle>
           <DialogDescription>
@@ -130,168 +123,152 @@ export function RemoteControlDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="control" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="control">
-              {t("lanControl.remote.tabs.control")}
-            </TabsTrigger>
-            <TabsTrigger value="library" disabled={!isConnected}>
-              {t("lanControl.remote.tabs.library")}
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="control" className="space-y-6 mt-6">
-            <section className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
-              <div className="grid gap-4">
+        <div className="space-y-6 mt-6">
+          <section className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
+            <div className="grid gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="remote-address">
+                  {t("lanControl.remote.address")}
+                </Label>
+                <Input
+                  id="remote-address"
+                  value={address}
+                  placeholder="ws://host:5299"
+                  onChange={(event) => actions.setAddress(event.target.value)}
+                  disabled={isConnecting}
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 sm:items-center">
                 <div className="grid gap-2">
-                  <Label htmlFor="remote-address">
-                    {t("lanControl.remote.address")}
+                  <Label htmlFor="remote-password">
+                    {t("lanControl.remote.password")}
                   </Label>
                   <Input
-                    id="remote-address"
-                    value={address}
-                    placeholder="ws://host:5299"
-                    onChange={(event) => actions.setAddress(event.target.value)}
+                    id="remote-password"
+                    value={password}
+                    maxLength={6}
+                    placeholder="ABC123"
+                    onChange={(event) =>
+                      actions.setPassword(event.target.value)
+                    }
                     disabled={isConnecting}
-                    spellCheck={false}
                     autoComplete="off"
                   />
                 </div>
-                <div className="grid gap-2 sm:grid-cols-2 sm:items-center">
-                  <div className="grid gap-2">
-                    <Label htmlFor="remote-password">
-                      {t("lanControl.remote.password")}
-                    </Label>
-                    <Input
-                      id="remote-password"
-                      value={password}
-                      maxLength={6}
-                      placeholder="ABC123"
-                      onChange={(event) =>
-                        actions.setPassword(event.target.value)
-                      }
-                      disabled={isConnecting}
-                      autoComplete="off"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-2 sm:items-end">
-                    <Label className="text-xs uppercase tracking-wide">
-                      {t("lanControl.remote.status.label")}
-                    </Label>
-                    <Badge
-                      variant={
-                        isConnected
-                          ? "default"
-                          : status === "error"
-                          ? "destructive"
-                          : "secondary"
-                      }
-                      className="capitalize"
-                    >
-                      {statusLabel}
-                    </Badge>
-                  </div>
+                <div className="flex flex-col gap-2 sm:items-end">
+                  <Label className="text-xs uppercase tracking-wide">
+                    {t("lanControl.remote.status.label")}
+                  </Label>
+                  <Badge
+                    variant={
+                      isConnected
+                        ? "default"
+                        : status === "error"
+                        ? "destructive"
+                        : "secondary"
+                    }
+                    className="capitalize"
+                  >
+                    {statusLabel}
+                  </Badge>
                 </div>
-                {remoteDevice && isConnected && (
-                  <div className="rounded-md border border-border/60 bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-                    <span className="font-medium text-foreground">
-                      {remoteDevice.name ??
-                        t("lanControl.remote.unknownDevice")}
-                    </span>
-                    {remoteDevice.version && (
-                      <span className="ml-2 text-xs">
-                        {t("lanControl.remote.version", {
-                          version: remoteDevice.version,
-                        })}
-                      </span>
-                    )}
-                  </div>
-                )}
-                {error && (
-                  <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                    {error}
-                  </div>
-                )}
               </div>
-
-              <div className="flex gap-2 sm:flex-col">
-                <Button
-                  variant="default"
-                  onClick={handleConnect}
-                  disabled={isConnecting}
-                >
-                  {isConnecting
-                    ? t("lanControl.remote.actions.connecting")
-                    : t("lanControl.remote.actions.connect")}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleDisconnect}
-                  disabled={!isConnected && status !== "error"}
-                >
-                  {t("lanControl.remote.actions.disconnect")}
-                </Button>
-              </div>
-            </section>
-
-            <section className="grid gap-4 rounded-lg border border-border/60 bg-muted/40 p-4">
-              <header className="flex items-center justify-between">
-                <h3 className="font-semibold text-sm">
-                  {t("lanControl.remote.nowPlaying")}
-                </h3>
-                {playerState && (
-                  <div className="text-xs text-muted-foreground">
-                    {t("lanControl.remote.volume", {
-                      volume: playerState.volume,
-                    })}
-                  </div>
-                )}
-              </header>
-              <div className="flex gap-3">
-                {coverArtUrl && (
-                  <div className="shrink-0">
-                    <img
-                      src={coverArtUrl}
-                      alt={displayTitle}
-                      className="h-20 w-20 rounded object-cover"
-                    />
-                  </div>
-                )}
-                <div className="grid gap-1 flex-1 min-w-0">
-                  <span className="text-base font-medium truncate">
-                    {isLoadingSong ? (
-                      <span className="text-muted-foreground">
-                        {t("lanControl.remote.loadingSong")}
-                      </span>
-                    ) : (
-                      displayTitle
-                    )}
+              {remoteDevice && isConnected && (
+                <div className="rounded-md border border-border/60 bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">
+                    {remoteDevice.name ?? t("lanControl.remote.unknownDevice")}
                   </span>
-                  <span className="text-sm text-muted-foreground truncate">
-                    {displayArtist}
-                  </span>
-                  {displayAlbum && (
-                    <span className="text-xs text-muted-foreground truncate">
-                      {displayAlbum}
+                  {remoteDevice.version && (
+                    <span className="ml-2 text-xs">
+                      {t("lanControl.remote.version", {
+                        version: remoteDevice.version,
+                      })}
                     </span>
                   )}
                 </div>
-              </div>
-              {playerState && (
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>
-                    {convertSecondsToTime(playerState.currentTime ?? 0)}
-                  </span>
-                  <span>{convertSecondsToTime(playerState.duration ?? 0)}</span>
+              )}
+              {error && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                  {error}
                 </div>
               )}
-            </section>
-          </TabsContent>
+            </div>
 
-          <TabsContent value="library" className="mt-6">
-            <LibraryBrowser isConnected={isConnected} />
-          </TabsContent>
-        </Tabs>
+            <div className="flex gap-2 sm:flex-col">
+              <Button
+                variant="default"
+                onClick={handleConnect}
+                disabled={isConnecting}
+              >
+                {isConnecting
+                  ? t("lanControl.remote.actions.connecting")
+                  : t("lanControl.remote.actions.connect")}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleDisconnect}
+                disabled={!isConnected && status !== "error"}
+              >
+                {t("lanControl.remote.actions.disconnect")}
+              </Button>
+            </div>
+          </section>
+
+          <section className="grid gap-4 rounded-lg border border-border/60 bg-muted/40 p-4">
+            <header className="flex items-center justify-between">
+              <h3 className="font-semibold text-sm">
+                {t("lanControl.remote.nowPlaying")}
+              </h3>
+              {playerState && (
+                <div className="text-xs text-muted-foreground">
+                  {t("lanControl.remote.volume", {
+                    volume: playerState.volume,
+                  })}
+                </div>
+              )}
+            </header>
+            <div className="flex gap-3">
+              {coverArtUrl && (
+                <div className="shrink-0">
+                  <img
+                    src={coverArtUrl}
+                    alt={displayTitle}
+                    className="h-20 w-20 rounded object-cover"
+                  />
+                </div>
+              )}
+              <div className="grid gap-1 flex-1 min-w-0">
+                <span className="text-base font-medium truncate">
+                  {isLoadingSong ? (
+                    <span className="text-muted-foreground">
+                      {t("lanControl.remote.loadingSong")}
+                    </span>
+                  ) : (
+                    displayTitle
+                  )}
+                </span>
+                <span className="text-sm text-muted-foreground truncate">
+                  {displayArtist}
+                </span>
+                {displayAlbum && (
+                  <span className="text-xs text-muted-foreground truncate">
+                    {displayAlbum}
+                  </span>
+                )}
+              </div>
+            </div>
+            {playerState && (
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>
+                  {convertSecondsToTime(playerState.currentTime ?? 0)}
+                </span>
+                <span>{convertSecondsToTime(playerState.duration ?? 0)}</span>
+              </div>
+            )}
+          </section>
+        </div>
       </DialogContent>
     </Dialog>
   );

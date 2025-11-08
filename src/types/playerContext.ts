@@ -135,7 +135,12 @@ export interface IRemoteControlState {
 
 export interface IPlayerActions {
   playSong: (song: ISong) => void;
-  setSongList: (songlist: ISong[], index: number, shuffle?: boolean) => void;
+  setSongList: (
+    songlist: ISong[],
+    index: number,
+    shuffle?: boolean,
+    sourceId?: { albumId: string } | { playlistId: string }
+  ) => void;
   setCurrentSong: () => void;
   checkIsSongStarred: () => void;
   starSongInQueue: (id: string) => void;
@@ -158,8 +163,14 @@ export interface IPlayerActions {
   setCurrentDuration: (duration: number) => void;
   setPlayRadio: (list: Radio[], index: number) => void;
   setAudioPlayerRef: (ref: HTMLAudioElement) => void;
-  setNextOnQueue: (songlist: ISong[]) => void;
-  setLastOnQueue: (songlist: ISong[]) => void;
+  setNextOnQueue: (
+    songlist: ISong[],
+    sourceId?: { albumId: string } | { playlistId: string }
+  ) => void;
+  setLastOnQueue: (
+    songlist: ISong[],
+    sourceId?: { albumId: string } | { playlistId: string }
+  ) => void;
   removeSongFromQueue: (id: string) => void;
   setMainDrawerState: (state: boolean) => void;
   setQueueState: (state: boolean) => void;

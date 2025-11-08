@@ -41,16 +41,18 @@ export function PlaylistOptions({
     setPlaylistDialogState(true);
   }
 
-  async function getSongsToQueue(callback: (songs: ISong[]) => void) {
+  async function getSongsToQueue(
+    callback: (songs: ISong[], sourceId?: { playlistId: string }) => void
+  ) {
     const playlistWithEntries = await subsonic.playlists.getOne(playlist.id);
     if (!playlistWithEntries) return;
 
-    callback(playlistWithEntries.entry);
+    callback(playlistWithEntries.entry, { playlistId: playlist.id });
   }
 
   async function handlePlay() {
     if ("entry" in playlist) {
-      play(playlist.entry);
+      play(playlist.entry, { playlistId: playlist.id });
     } else {
       await getSongsToQueue(play);
     }
@@ -58,7 +60,7 @@ export function PlaylistOptions({
 
   async function handlePlayNext() {
     if ("entry" in playlist) {
-      playNext(playlist.entry);
+      playNext(playlist.entry, { playlistId: playlist.id });
     } else {
       await getSongsToQueue(playNext);
     }
@@ -66,7 +68,7 @@ export function PlaylistOptions({
 
   async function handlePlayLast() {
     if ("entry" in playlist) {
-      playLast(playlist.entry);
+      playLast(playlist.entry, { playlistId: playlist.id });
     } else {
       await getSongsToQueue(playLast);
     }

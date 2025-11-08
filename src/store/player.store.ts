@@ -293,22 +293,46 @@ export const usePlayerStore = createWithEqualityFn<IPlayerContext>()(
               sendCommand: null,
             },
             actions: {
-              setSongList: (songlist, index, shuffle = false) => {
+              setSongList: (songlist, index, shuffle = false, sourceId) => {
                 if (isRemoteActive()) {
                   if (songlist.length === 0) return;
-                  remoteSend(LanControlMessageType.CLEAR_QUEUE);
-                  remoteSend(LanControlMessageType.ADD_TO_QUEUE, {
-                    songIds: songlist.map((song) => song.id),
-                  });
-                  const targetSong = songlist[index];
-                  if (targetSong) {
-                    remoteSend(LanControlMessageType.PLAY_SONG, {
-                      songId: targetSong.id,
+
+                  // Use optimized message types when source is known
+                  if (sourceId && 'albumId' in sourceId) {
+                    const messageType = shuffle
+                      ? LanControlMessageType.PLAY_ALBUM_SHUFFLE
+                      : LanControlMessageType.PLAY_ALBUM;
+                    remoteSend(messageType, {
+                      albumId: sourceId.albumId,
+                      songIndex: index,
                     });
+                  } else if (sourceId && 'playlistId' in sourceId) {
+                    const messageType = shuffle
+                      ? LanControlMessageType.PLAY_PLAYLIST_SHUFFLE
+                      : LanControlMessageType.PLAY_PLAYLIST;
+                    remoteSend(messageType, {
+                      playlistId: sourceId.playlistId,
+                      songIndex: index,
+                    });
+                  } else {
+                    // Fallback to manual queue manipulation
+                    remoteSend(LanControlMessageType.CLEAR_QUEUE);
+                    remoteSend(LanControlMessageType.ADD_TO_QUEUE, {
+                      songIds: songlist.map((song) => song.id),
+                    });
+                    const targetSong = songlist[index];
+                    if (targetSong) {
+                      remoteSend(LanControlMessageType.PLAY_SONG, {
+                        songId: targetSong.id,
+                      });
+                    }
+                    if (shuffle) {
+                      remoteSend(LanControlMessageType.SET_SHUFFLE, {
+                        enabled: true,
+                      });
+                    }
                   }
-                  remoteSend(LanControlMessageType.SET_SHUFFLE, {
-                    enabled: Boolean(shuffle),
-                  });
+
                   set((state) => {
                     state.playerState.isPlaying = true;
                     state.playerState.isShuffleActive = Boolean(shuffle);
@@ -398,12 +422,24 @@ export const usePlayerStore = createWithEqualityFn<IPlayerContext>()(
                   });
                 }
               },
-              setNextOnQueue: (list) => {
+              setNextOnQueue: (list, sourceId) => {
                 if (isRemoteActive()) {
                   if (list.length === 0) return;
-                  remoteSend(LanControlMessageType.ADD_TO_QUEUE, {
-                    songIds: list.map((song) => song.id),
-                  });
+
+                  // Use optimized message types when source is known
+                  if (sourceId && 'albumId' in sourceId) {
+                    remoteSend(LanControlMessageType.ADD_ALBUM_TO_QUEUE, {
+                      albumId: sourceId.albumId,
+                    });
+                  } else if (sourceId && 'playlistId' in sourceId) {
+                    remoteSend(LanControlMessageType.ADD_PLAYLIST_TO_QUEUE, {
+                      playlistId: sourceId.playlistId,
+                    });
+                  } else {
+                    remoteSend(LanControlMessageType.ADD_TO_QUEUE, {
+                      songIds: list.map((song) => song.id),
+                    });
+                  }
                   return;
                 }
                 const {
@@ -446,12 +482,24 @@ export const usePlayerStore = createWithEqualityFn<IPlayerContext>()(
                   get().actions.setPlayingState(true);
                 }
               },
-              setLastOnQueue: (list) => {
+              setLastOnQueue: (list, sourceId) => {
                 if (isRemoteActive()) {
                   if (list.length === 0) return;
-                  remoteSend(LanControlMessageType.ADD_TO_QUEUE, {
-                    songIds: list.map((song) => song.id),
-                  });
+
+                  // Use optimized message types when source is known
+                  if (sourceId && 'albumId' in sourceId) {
+                    remoteSend(LanControlMessageType.ADD_ALBUM_TO_QUEUE, {
+                      albumId: sourceId.albumId,
+                    });
+                  } else if (sourceId && 'playlistId' in sourceId) {
+                    remoteSend(LanControlMessageType.ADD_PLAYLIST_TO_QUEUE, {
+                      playlistId: sourceId.playlistId,
+                    });
+                  } else {
+                    remoteSend(LanControlMessageType.ADD_TO_QUEUE, {
+                      songIds: list.map((song) => song.id),
+                    });
+                  }
                   return;
                 }
                 const { currentList, originalList } = get().songlist;
@@ -937,7 +985,7 @@ export const usePlayerStore = createWithEqualityFn<IPlayerContext>()(
                 // Update index to fit new current list
                 const updatedCurrentIndex = Math.min(
                   currentSongIndex -
-                    (removedSongIndex < currentSongIndex ? 1 : 0),
+                  (removedSongIndex < currentSongIndex ? 1 : 0),
                   newCurrentList.length - 1,
                 );
 
@@ -947,7 +995,7 @@ export const usePlayerStore = createWithEqualityFn<IPlayerContext>()(
                 );
                 const updatedOriginalIndex = Math.min(
                   originalSongIndex -
-                    (removedOriginalIndex < originalSongIndex ? 1 : 0),
+                  (removedOriginalIndex < originalSongIndex ? 1 : 0),
                   newOriginalList.length - 1,
                 );
 

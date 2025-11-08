@@ -21,11 +21,11 @@ export function AlbumOptions({ album }: AlbumOptionsProps) {
   } = useOptions();
 
   function handlePlayNext() {
-    playNext(album.song);
+    playNext(album.song, { albumId: album.id });
   }
 
   function handlePlayLast() {
-    playLast(album.song);
+    playLast(album.song, { albumId: album.id });
   }
 
   function handleDownload() {

@@ -35,7 +35,7 @@ export default function Album() {
     isFetched,
   } = useGetAlbum(albumId);
   const { data: artist, isLoading: moreAlbumsIsLoading } = useGetArtistAlbums(
-    album?.artistId || "",
+    album?.artistId || ""
   );
   const { data: randomAlbums, isLoading: randomAlbumsIsLoading } =
     useGetGenreAlbums(album?.genre || "");
@@ -135,7 +135,9 @@ export default function Album() {
         <DataTable
           columns={columns}
           data={album.song}
-          handlePlaySong={(row) => setSongList(album.song, row.index)}
+          handlePlaySong={(row) =>
+            setSongList(album.song, row.index, false, { albumId: album.id })
+          }
           columnFilter={columnsToShow}
           showDiscNumber={true}
           variant="modern"

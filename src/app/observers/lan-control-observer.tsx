@@ -32,6 +32,9 @@ import {
   SetRepeatData,
   SetShuffleData,
   VolumeData,
+  AddToQueueData,
+  AddAlbumToQueueData,
+  AddPlaylistToQueueData,
 } from "@/types/lanControl";
 import { LoopState } from "@/types/playerContext";
 import { isDesktop } from "@/utils/desktop";
@@ -332,7 +335,8 @@ export function LanControlObserver() {
               .getOne(payload.albumId)
               .then((album) => {
                 if (album && album.song) {
-                  playerActions.setSongList(album.song, 0);
+                  const startIndex = payload.songIndex ?? 0;
+                  playerActions.setSongList(album.song, startIndex);
                 }
               })
               .catch((error) => {
@@ -348,13 +352,103 @@ export function LanControlObserver() {
               .getOne(payload.playlistId)
               .then((playlist) => {
                 if (playlist && playlist.entry) {
-                  playerActions.setSongList(playlist.entry, 0);
+                  const startIndex = payload.songIndex ?? 0;
+                  playerActions.setSongList(playlist.entry, startIndex);
                 }
               })
               .catch((error) => {
                 console.error("Failed to play playlist:", error);
               });
           }
+          break;
+        }
+        case LanControlMessageType.PLAY_ALBUM_SHUFFLE: {
+          const payload = data as PlayAlbumData | undefined;
+          if (payload && payload.albumId) {
+            subsonic.albums
+              .getOne(payload.albumId)
+              .then((album) => {
+                if (album && album.song) {
+                  const startIndex = payload.songIndex ?? 0;
+                  playerActions.setSongList(album.song, startIndex, true);
+                }
+              })
+              .catch((error) => {
+                console.error("Failed to play album with shuffle:", error);
+              });
+          }
+          break;
+        }
+        case LanControlMessageType.PLAY_PLAYLIST_SHUFFLE: {
+          const payload = data as PlayPlaylistData | undefined;
+          if (payload && payload.playlistId) {
+            subsonic.playlists
+              .getOne(payload.playlistId)
+              .then((playlist) => {
+                if (playlist && playlist.entry) {
+                  const startIndex = payload.songIndex ?? 0;
+                  playerActions.setSongList(playlist.entry, startIndex, true);
+                }
+              })
+              .catch((error) => {
+                console.error("Failed to play playlist with shuffle:", error);
+              });
+          }
+          break;
+        }
+        case LanControlMessageType.ADD_TO_QUEUE: {
+          const payload = data as AddToQueueData | undefined;
+          if (payload && payload.songIds && payload.songIds.length > 0) {
+            // Fetch all songs and add them to queue
+            Promise.all(payload.songIds.map((id) => subsonic.songs.getSong(id)))
+              .then((songs) => {
+                const validSongs = songs.filter(
+                  (song) => song !== null && song !== undefined
+                );
+                if (validSongs.length > 0) {
+                  playerActions.setLastOnQueue(validSongs);
+                }
+              })
+              .catch((error) => {
+                console.error("Failed to add songs to queue:", error);
+              });
+          }
+          break;
+        }
+        case LanControlMessageType.ADD_ALBUM_TO_QUEUE: {
+          const payload = data as AddAlbumToQueueData | undefined;
+          if (payload && payload.albumId) {
+            subsonic.albums
+              .getOne(payload.albumId)
+              .then((album) => {
+                if (album && album.song && album.song.length > 0) {
+                  playerActions.setLastOnQueue(album.song);
+                }
+              })
+              .catch((error) => {
+                console.error("Failed to add album to queue:", error);
+              });
+          }
+          break;
+        }
+        case LanControlMessageType.ADD_PLAYLIST_TO_QUEUE: {
+          const payload = data as AddPlaylistToQueueData | undefined;
+          if (payload && payload.playlistId) {
+            subsonic.playlists
+              .getOne(payload.playlistId)
+              .then((playlist) => {
+                if (playlist && playlist.entry && playlist.entry.length > 0) {
+                  playerActions.setLastOnQueue(playlist.entry);
+                }
+              })
+              .catch((error) => {
+                console.error("Failed to add playlist to queue:", error);
+              });
+          }
+          break;
+        }
+        case LanControlMessageType.CLEAR_QUEUE: {
+          playerActions.clearPlayerState();
           break;
         }
       }
