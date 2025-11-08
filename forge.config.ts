@@ -31,7 +31,12 @@ const config: ForgeConfig = {
             }
             : undefined,
     },
-    rebuildConfig: {},
+    rebuildConfig: {
+        // Disable native module rebuilds - they fail due to network restrictions
+        // and are not required for the app to function properly
+        force: false,
+        onlyModules: ["@skip-all"],
+    },
     makers: [
         new MakerSquirrel(
             {

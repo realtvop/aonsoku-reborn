@@ -25,9 +25,9 @@
     "make": "pnpm electron:build && electron-forge make",
     "publish": "pnpm electron:build && electron-forge publish",
     "build:unpack": "pnpm electron:build",
-    "build:win": "pnpm electron:build && electron-forge make --platform win32 --arch ${ARCH:-x64}",
-    "build:mac": "pnpm electron:build && electron-forge make --platform darwin --arch ${ARCH:-x64}",
-    "build:linux": "pnpm electron:build && electron-forge make --platform linux --arch ${ARCH:-x64}",
+    "build:win": "pnpm electron:build && ELECTRON_SKIP_BINARY_DOWNLOAD=1 electron-forge make --platform win32 --arch ${ARCH:-x64}",
+    "build:mac": "pnpm electron:build && ELECTRON_SKIP_BINARY_DOWNLOAD=1 electron-forge make --platform darwin --arch ${ARCH:-x64}",
+    "build:linux": "pnpm electron:build && ELECTRON_SKIP_BINARY_DOWNLOAD=1 electron-forge make --platform linux --arch ${ARCH:-x64}",
     "prepare": "husky"
   },
   "repository": {
@@ -61,7 +61,6 @@
     "@tanstack/react-table": "^8.21.2",
     "@tanstack/react-virtual": "^3.13.6",
     "@virtual-grid/react": "^2.0.3",
-    "bufferutil": "^4.0.9",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -105,7 +104,6 @@
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
     "use-debounce": "^10.0.4",
-    "utf-8-validate": "^6.0.5",
     "vaul": "^0.9.9",
     "ws": "^8.18.3",
     "yet-another-react-lightbox": "^3.22.0",
