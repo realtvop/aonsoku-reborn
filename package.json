@@ -1,7 +1,7 @@
 {
   "name": "aonsoku",
   "private": true,
-  "version": "0.20.2",
+  "version": "0.20.3",
   "description": "A modern desktop client for Navidrome/Subsonic servers.",
   "author": {
     "name": "realtvop"
