@@ -8,7 +8,7 @@
 
   <h3 align="center">Aonsoku</h3>
   <p align="center">
-    A modern desktop client for Navidrome/Subsonic servers built with React and Rust.
+    A modern desktop client for Navidrome/Subsonic servers built with React and Electron.
     <br />
     <br />
     <a href="https://aonsoku.realtvop.top">Web App</a>
@@ -18,9 +18,10 @@
     <a href="https://github.com/realtvop/aonsoku-reborn/issues/new?labels=enhancement&template=feature-request---.md">Request Feature</a>
   </p>
 
-  [![React][React.js]][React-url] [![Tauri][Tauri]][Tauri-url] [![Rust][Rust]][Rust-url]
+[![React][React.js]][React-url] [![Tauri][Tauri]][Tauri-url] [![Electron][Electron]][Electron-url]
 
-  [![Download][Release-badge]][Release-url]
+[![Download][Release-badge]][Release-url]
+
 </div>
 
 <!-- TABLE OF CONTENTS -->
@@ -50,11 +51,12 @@
 </details>
 
 <!-- ABOUT THE PROJECT -->
+
 ## Features
 
-- **Subsonic Integration:** Aonsoku integrates with your Navidrome or Subsonic server, providing you with easy access to your music collection. 
+- **Subsonic Integration:** Aonsoku integrates with your Navidrome or Subsonic server, providing you with easy access to your music collection.
 - **Intuitive UI:** Modern, clean and user-friendly interface designed to enhance your music listening experience.
-- **Podcast Support:** With [Aonsoku Podcasts](https://github.com/realtvop/aonsoku-reborn-podcasts) you can easily access, manage, and listen to your favorites podcasts directly within the app. Enjoy advanced search options, customizable filters and seamless listening synchronization to enhance your podcast experience. 
+- **Podcast Support:** With [Aonsoku Podcasts](https://github.com/realtvop/aonsoku-reborn-podcasts) you can easily access, manage, and listen to your favorites podcasts directly within the app. Enjoy advanced search options, customizable filters and seamless listening synchronization to enhance your podcast experience.
 - **Synchronized lyrics**: Aonsoku will automatically find a synced lyric from [LRCLIB](https://lrclib.net/) if none is provided by the server.
 - **Unsynchronized lyrics**: If your songs have embedded unsynchronized lyrics, Aonsoku is able to show them.
 - **Radio:** If your server supports it, listen to radio shows directly within Aonsoku.
@@ -78,41 +80,41 @@
 
 ### Prerequisites
 
-* Node.js
-* pnpm, npm or yarn
-* Rust
-* cargo
+- Node.js
+- pnpm, npm or yarn
 
 ### Installation
 
 1. Clone the repo
+
 ```sh
 git clone https://github.com/realtvop/aonsoku-reborn.git
 ```
+
 2. Install NPM packages
+
 ```sh
 pnpm install
-```
-3. Install tauri-cli
-```sh
-cargo install tauri-cli
 ```
 
 ### Running
 
-* Web App
+- Web App
+
 ```sh
 pnpm run dev
 ```
 
-* Desktop App
+- Desktop App
+
 ```sh
-pnpm run tauri dev
+pnpm run electron:dev
 ```
 
-* Docker
+- Docker
+
 ```yml
-version: '3.8'
+version: "3.8"
 
 services:
   aonsoku:
@@ -123,7 +125,8 @@ services:
       - 8080:8080
 ```
 
-* Podman Quadlet
+- Podman Quadlet
+
 ```ini
 [Unit]
 Description=Aonsoku Container
@@ -148,7 +151,7 @@ WantedBy=multi-user.target default.target
 Below is a table describing the environment variables that can be used in this project. Adjust them as necessary in your `.env` file.
 
 | Variable              | Default    | Description                                                                                                       | Required for Automatic Login |
-|-----------------------|------------|-------------------------------------------------------------------------------------------------------------------|------------------------------|
+| --------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------- |
 | `PORT`                | `8080`     | The port the application runs on.                                                                                 |                              |
 | `SERVER_URL`          |            | If you want the app to access a predefined Subsonic server. </br> **Format:** `http://your-subsonic-server:port`. | ✅                           |
 | `HIDE_SERVER`         | `false`    | Set to `true` to hide the server URL field on login and only show username and password.                          | ✅                           |
@@ -159,11 +162,11 @@ Below is a table describing the environment variables that can be used in this p
 | `HIDE_RADIOS_SECTION` | `false`    | Set to `true` to hide the radios page from the sidebar menu.                                                      |                              |
 
 **Notes:**
+
 - **Automatic Login:** To enable automatic login across devices. This should only be used in secure local environments to avoid password compromise.
 - **Legacy Authentication:** Use `APP_AUTH_TYPE=password` only if your server does not support token-based authentication.
 
 </details>
-
 
 ### Recommended IDE Setup
 
@@ -172,6 +175,7 @@ Below is a table describing the environment variables that can be used in this p
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- ROADMAP -->
+
 ## Roadmap
 
 - Downloads:
@@ -183,12 +187,14 @@ Below is a table describing the environment variables that can be used in this p
 - [ ] Playlist editor
 - [x] Synced lyrics
 - [x] Podcast support
+- [x] Remote control support
 
 Feel free to request more cool features [here](https://github.com/realtvop/aonsoku-reborn/issues/new?labels=enhancement&template=feature-request---.md).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- CONTRIBUTING -->
+
 ## Contributing
 
 Contributions are what make the open source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
@@ -214,19 +220,20 @@ This project uses [Weblate](https://hosted.weblate.org/projects/aonsoku/) for tr
 <p align="right">(<a href="#readme-top">back to top</a>)</p> -->
 
 <!-- LICENSE -->
+
 ## License
 
 Distributed under the MIT License. See `LICENSE.txt` for more information.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-
 <!-- MARKDOWN LINKS & IMAGES -->
+
 [React.js]: https://img.shields.io/badge/React-000000?style=for-the-badge&logo=react&logoColor=61DAFB
 [React-url]: https://reactjs.org/
 [Rust]: https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=F74C00
 [Rust-url]: https://www.rust-lang.org
-[Tauri]: https://img.shields.io/badge/Tauri-000000?style=for-the-badge&logo=tauri&logoColor=24C8DB
-[Tauri-url]: https://tauri.app
+[Electron]: https://img.shields.io/badge/Electron-000000?style=for-the-badge&logo=electron&logoColor=24C8DB
+[Electron-url]: https://www.electronjs.org/
 [Release-badge]: https://img.shields.io/github/v/release/realtvop/aonsoku-reborn?display_name=release&style=for-the-badge&label=Download&labelColor=%23000&color=%2310B77F&logo=rocket&logoColor=%2310B77F&logoSize=auto
 [Release-url]: https://github.com/realtvop/aonsoku-reborn/releases/latest
