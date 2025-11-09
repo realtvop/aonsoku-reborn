@@ -48,19 +48,14 @@ jobs:
         with:
           node-version: 20
 
-      - name: install frontend dependencies
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile
         env:
-          # Skip Cypress binary download on Windows ARM (unsupported platform)
           CYPRESS_INSTALL_BINARY: ${{ matrix.platform == 'windows-11-arm' && '0' || '' }}
-
-      - name: Build Electron app
-        run: pnpm electron:build
 
       - name: Build and publish with Electron Forge
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ARCH: ${{ matrix.arch }}
           # Uncomment and add these secrets to your GitHub repository for signing:
           # APPLE_ID: ${{ secrets.APPLE_ID }}
           # APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
