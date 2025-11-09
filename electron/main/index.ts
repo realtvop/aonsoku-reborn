@@ -1,4 +1,4 @@
-import { electronApp, optimizer } from "@electron-toolkit/utils";
+import { electronApp, optimizer, platform } from "@electron-toolkit/utils";
 import { app, globalShortcut } from "electron";
 import { createAppMenu } from "./core/menu";
 import { createWindow, mainWindow } from "./window";
@@ -7,6 +7,11 @@ import { UpdateManager } from "./core/updateManager";
 
 let lanControlManager: LanControlManager | null = null;
 let updateManager: UpdateManager | null = null;
+let isQuitting = false;
+
+export function getIsQuitting(): boolean {
+  return isQuitting;
+}
 
 const instanceLock = app.requestSingleInstanceLock();
 
@@ -24,7 +29,7 @@ if (!instanceLock) {
   });
 
   app.whenReady().then(() => {
-    electronApp.setAppUserModelId("com.victoralvesf.aonsoku");
+    electronApp.setAppUserModelId("com.realtvop.aonsoku");
 
     createWindow();
 
@@ -66,18 +71,29 @@ if (!instanceLock) {
   });
 
   app.on("window-all-closed", () => {
-    // Cleanup LAN Control Manager
+    // On macOS, keep the app running even when all windows are closed
+    // This is the standard macOS behavior
+    if (platform.isMacOS && !isQuitting) {
+      return;
+    }
+
+    // Cleanup LAN Control Manager on non-macOS or when explicitly quitting
     if (lanControlManager) {
       lanControlManager.cleanup();
       lanControlManager = null;
     }
+
     app.quit();
   });
 
   app.on("before-quit", () => {
+    // Set flag to allow quitting on macOS
+    isQuitting = true;
+
     // Ensure LAN Control server is stopped before quitting
     if (lanControlManager) {
       lanControlManager.cleanup();
+      lanControlManager = null;
     }
   });
 }

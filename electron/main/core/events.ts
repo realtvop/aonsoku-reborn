@@ -5,6 +5,7 @@ import {
   OverlayColors,
   PlayerStatePayload,
 } from "../../preload/types";
+import { getIsQuitting } from "../index";
 import { tray, updateTray } from "../tray";
 import { colorsState } from "./colors";
 import {
@@ -61,7 +62,8 @@ export function setupEvents(window: BrowserWindow | null) {
   });
 
   window.on("close", (event) => {
-    if (is.dev || !getAppSetting("minimizeToTray")) {
+    // Check if app is quitting (Cmd+Q on macOS or Quit from menu)
+    if (is.dev || !getAppSetting("minimizeToTray") || getIsQuitting()) {
       if (tray && !tray.isDestroyed()) tray.destroy();
       return;
     }
