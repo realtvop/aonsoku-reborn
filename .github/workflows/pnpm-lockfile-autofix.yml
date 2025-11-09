@@ -1,0 +1,32 @@
+name: Auto-fix pnpm-lock.yaml
+
+on:
+  push:
+    paths:
+      - "pnpm-lock.yaml"
+  workflow_dispatch:
+
+jobs:
+  fix-lockfile:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Replace repo URLs
+        run: |
+          sed -i 's/repo: git@github.com:/repo: https:\/\/git@github.com\//g' pnpm-lock.yaml
+
+      - name: Commit changes
+        run: |
+          git config --local user.email "realtvop@users.noreply.github.com"
+          git config --local user.name "realtvop by Actions"
+          git add pnpm-lock.yaml
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "fix: replace SSH repo URLs with HTTPS in pnpm-lock.yaml"
+            git push
+          fi
