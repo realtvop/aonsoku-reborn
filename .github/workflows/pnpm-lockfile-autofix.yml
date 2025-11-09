@@ -2,8 +2,8 @@ name: Auto-fix pnpm-lock.yaml
 
 on:
   push:
-    paths:
-      - "pnpm-lock.yaml"
+    # paths:
+    #   - "pnpm-lock.yaml"
   workflow_dispatch:
 
 jobs:
@@ -17,7 +17,7 @@ jobs:
 
       - name: Replace repo URLs
         run: |
-          sed -i 's/repo: git@github.com:/repo: https:\/\/git@github.com\//g' pnpm-lock.yaml
+          sed -i 's|repo: git@github.com:|repo: https://git@github.com/|g' pnpm-lock.yaml
 
       - name: Commit changes
         run: |
