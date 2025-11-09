@@ -17,7 +17,7 @@ jobs:
 
       - name: Replace repo URLs
         run: |
-          sed -i 's|repo: git@github.com:|repo: https://git@github.com/|g' pnpm-lock.yaml
+          sed -i '' 's|repo: git@github.com:|repo: https://git@github.com/|g' pnpm-lock.yaml
 
       - name: Commit changes
         run: |
