@@ -1,35 +1,35 @@
-import clsx from 'clsx'
-import { Skeleton } from '@/app/components/ui/skeleton'
+import clsx from "clsx";
+import { Skeleton } from "@/app/components/ui/skeleton";
 
 interface TableFallbackProps {
-  variant?: 'classic' | 'modern'
-  type?: 'regular' | 'infinity'
-  length?: number
+  variant?: "classic" | "modern";
+  type?: "regular" | "infinity";
+  length?: number;
 }
 
 export function TableFallback({
-  variant = 'classic',
-  type = 'regular',
+  variant = "classic",
+  type = "regular",
   length = 10,
 }: TableFallbackProps) {
-  const isClassic = variant === 'classic'
-  const isModern = variant === 'modern'
-  const isRegular = type === 'regular'
+  const isClassic = variant === "classic";
+  const isModern = variant === "modern";
+  const isRegular = type === "regular";
 
   return (
     <div
       className={clsx(
-        'w-full rounded-md',
-        isClassic && 'bg-background border',
-        isModern && 'bg-transparent',
+        "w-full rounded-md",
+        isClassic && "bg-background border",
+        isModern && "bg-transparent",
       )}
     >
       <div
         className={clsx(
-          'grid grid-cols-table-fallback px-2 items-center',
-          isModern && 'border-b',
-          isModern && isRegular && 'mb-2',
-          isRegular ? 'h-12' : 'h-[41px]',
+          "grid grid-cols-table-fallback px-2 items-center",
+          isModern && "border-b",
+          isModern && isRegular && "mb-2",
+          isRegular ? "h-12" : "h-[41px]",
         )}
       >
         <Skeleton className="w-5 h-5 ml-2" />
@@ -45,8 +45,8 @@ export function TableFallback({
         <div
           key={index}
           className={clsx(
-            'grid grid-cols-table-fallback p-2 items-center',
-            isClassic && 'border-t',
+            "grid grid-cols-table-fallback p-2 items-center",
+            isClassic && "border-t",
           )}
         >
           <Skeleton className="w-5 h-5 ml-2" />
@@ -65,7 +65,7 @@ export function TableFallback({
         </div>
       ))}
     </div>
-  )
+  );
 }
 
 export function TopSongsTableFallback() {
@@ -75,5 +75,5 @@ export function TopSongsTableFallback() {
 
       <TableFallback variant="modern" />
     </div>
-  )
+  );
 }

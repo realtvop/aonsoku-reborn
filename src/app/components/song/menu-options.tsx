@@ -1,13 +1,13 @@
-import { OptionsButtons } from '@/app/components/options/buttons'
-import { ContextMenuSeparator } from '@/app/components/ui/context-menu'
-import { useOptions } from '@/app/hooks/use-options'
-import { ISong } from '@/types/responses/song'
-import { AddToPlaylistSubMenu } from './add-to-playlist'
+import { OptionsButtons } from "@/app/components/options/buttons";
+import { ContextMenuSeparator } from "@/app/components/ui/context-menu";
+import { useOptions } from "@/app/hooks/use-options";
+import { ISong } from "@/types/responses/song";
+import { AddToPlaylistSubMenu } from "./add-to-playlist";
 
 interface SongMenuOptionsProps {
-  variant: 'context' | 'dropdown'
-  song: ISong
-  index: number
+  variant: "context" | "dropdown";
+  song: ISong;
+  index: number;
 }
 
 export function SongMenuOptions({
@@ -24,23 +24,23 @@ export function SongMenuOptions({
     startDownload,
     openSongInfo,
     isOnPlaylistPage,
-  } = useOptions()
-  const songIndexes = [index.toString()]
+  } = useOptions();
+  const songIndexes = [index.toString()];
 
   return (
     <>
       <OptionsButtons.PlayNext
         variant={variant}
         onClick={(e) => {
-          e.stopPropagation()
-          playNext([song])
+          e.stopPropagation();
+          playNext([song]);
         }}
       />
       <OptionsButtons.PlayLast
         variant={variant}
         onClick={(e) => {
-          e.stopPropagation()
-          playLast([song])
+          e.stopPropagation();
+          playLast([song]);
         }}
       />
       <ContextMenuSeparator />
@@ -55,8 +55,8 @@ export function SongMenuOptions({
         <OptionsButtons.RemoveFromPlaylist
           variant={variant}
           onClick={(e) => {
-            e.stopPropagation()
-            removeSongFromPlaylist(songIndexes)
+            e.stopPropagation();
+            removeSongFromPlaylist(songIndexes);
           }}
         />
       )}
@@ -64,18 +64,18 @@ export function SongMenuOptions({
       <OptionsButtons.Download
         variant={variant}
         onClick={(e) => {
-          e.stopPropagation()
-          startDownload(song.id)
+          e.stopPropagation();
+          startDownload(song.id);
         }}
       />
       <ContextMenuSeparator />
       <OptionsButtons.SongInfo
         variant={variant}
         onClick={(e) => {
-          e.stopPropagation()
-          openSongInfo(song.id)
+          e.stopPropagation();
+          openSongInfo(song.id);
         }}
       />
     </>
-  )
+  );
 }

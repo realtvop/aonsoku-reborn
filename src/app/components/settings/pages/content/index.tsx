@@ -1,5 +1,5 @@
-import { PodcastContent } from './podcast'
-import { SidebarContent } from './sidebar'
+import { PodcastContent } from "./podcast";
+import { SidebarContent } from "./sidebar";
 
 export function Content() {
   return (
@@ -7,5 +7,5 @@ export function Content() {
       <SidebarContent />
       <PodcastContent />
     </div>
-  )
+  );
 }

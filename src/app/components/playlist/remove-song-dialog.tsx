@@ -1,7 +1,7 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useTranslation } from 'react-i18next'
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 
-import { toast } from 'react-toastify'
+import { toast } from "react-toastify";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -11,38 +11,38 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/app/components/ui/alert-dialog'
-import { subsonic } from '@/service/subsonic'
-import { usePlaylistRemoveSong } from '@/store/playlists.store'
-import { queryKeys } from '@/utils/queryKeys'
+} from "@/app/components/ui/alert-dialog";
+import { subsonic } from "@/service/subsonic";
+import { usePlaylistRemoveSong } from "@/store/playlists.store";
+import { queryKeys } from "@/utils/queryKeys";
 
 export function RemoveSongFromPlaylistDialog() {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
   const { confirmDialogState, setConfirmDialogState, actionData } =
-    usePlaylistRemoveSong()
+    usePlaylistRemoveSong();
 
-  const count = actionData.songIndexes.length
+  const count = actionData.songIndexes.length;
 
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   const updateMutation = useMutation({
     mutationFn: subsonic.playlists.update,
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: [queryKeys.playlist.single, actionData.playlistId],
-      })
-      toast.success(t('playlist.form.removeSong.toast.success', { count }))
+      });
+      toast.success(t("playlist.form.removeSong.toast.success", { count }));
     },
     onError: () => {
-      toast.error(t('playlist.form.removeSong.toast.error', { count }))
+      toast.error(t("playlist.form.removeSong.toast.error", { count }));
     },
-  })
+  });
 
   async function handleRemoveFromPlaylist() {
     await updateMutation.mutateAsync({
       playlistId: actionData.playlistId,
       songIndexToRemove: actionData.songIndexes,
-    })
+    });
   }
 
   return (
@@ -53,19 +53,19 @@ export function RemoveSongFromPlaylistDialog() {
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            {t('playlist.form.removeSong.title', { count })}
+            {t("playlist.form.removeSong.title", { count })}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {t('playlist.form.removeSong.description')}
+            {t("playlist.form.removeSong.description")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{t('logout.dialog.cancel')}</AlertDialogCancel>
+          <AlertDialogCancel>{t("logout.dialog.cancel")}</AlertDialogCancel>
           <AlertDialogAction onClick={handleRemoveFromPlaylist}>
-            {t('logout.dialog.confirm')}
+            {t("logout.dialog.confirm")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-  )
+  );
 }

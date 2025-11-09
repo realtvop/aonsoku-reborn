@@ -2,20 +2,20 @@ import {
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger,
-} from '@/app/components/ui/context-menu'
+} from "@/app/components/ui/context-menu";
 import {
+  DropdownMenuPortal,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
-  DropdownMenuPortal,
-} from '@/app/components/ui/dropdown-menu'
+} from "@/app/components/ui/dropdown-menu";
 
 type SubMenuFactoryProps = {
-  variant: 'dropdown' | 'context'
-  icon: React.ReactNode
-  label: string
-  children: React.ReactNode
-}
+  variant: "dropdown" | "context";
+  icon: React.ReactNode;
+  label: string;
+  children: React.ReactNode;
+};
 
 export function SubMenuFactory({
   variant,
@@ -28,9 +28,9 @@ export function SubMenuFactory({
       {icon}
       <span>{label}</span>
     </>
-  )
+  );
 
-  if (variant === 'context') {
+  if (variant === "context") {
     return (
       <ContextMenuSub>
         <ContextMenuSubTrigger>{content}</ContextMenuSubTrigger>
@@ -38,7 +38,7 @@ export function SubMenuFactory({
           {children}
         </ContextMenuSubContent>
       </ContextMenuSub>
-    )
+    );
   }
 
   return (
@@ -50,5 +50,5 @@ export function SubMenuFactory({
         </DropdownMenuSubContent>
       </DropdownMenuPortal>
     </DropdownMenuSub>
-  )
+  );
 }

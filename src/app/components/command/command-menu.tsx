@@ -48,7 +48,7 @@ export default function CommandMenu() {
   const isHome = activePage === "HOME";
 
   const enableQuery = Boolean(
-    byteLength(query) >= 3 && activePage !== "PLAYLISTS"
+    byteLength(query) >= 3 && activePage !== "PLAYLISTS",
   );
 
   const { data: albumData } = useQuery({
@@ -131,7 +131,7 @@ export default function CommandMenu() {
     }
     if (pathname.startsWith("/library/podcasts/") && podcastData) {
       setPageTitle(
-        podcastData.title || podcastData.description || t("sidebar.podcasts")
+        podcastData.title || podcastData.description || t("sidebar.podcasts"),
       );
       return;
     }
@@ -184,7 +184,7 @@ export default function CommandMenu() {
       clear();
       command();
     },
-    [clear, setOpen]
+    [clear, setOpen],
   );
 
   const debounced = useDebouncedCallback((value: string) => {
@@ -220,7 +220,7 @@ export default function CommandMenu() {
   };
 
   const showNotFoundMessage = Boolean(
-    enableQuery && !showAlbumGroup && !showArtistGroup && !showSongGroup
+    enableQuery && !showAlbumGroup && !showArtistGroup && !showSongGroup,
   );
 
   return (
@@ -240,12 +240,12 @@ export default function CommandMenu() {
         </div>
       </Button>
       <Button
-          variant="outline"
-          className="w-full h-fit flex flex-col justify-center items-center gap-1 md:hidden"
-          onClick={() => setOpen(true)}
-        >
-          <SearchIcon className="w-4 h-4" />
-        </Button>
+        variant="outline"
+        className="w-full h-fit flex flex-col justify-center items-center gap-1 md:hidden"
+        onClick={() => setOpen(true)}
+      >
+        <SearchIcon className="w-4 h-4" />
+      </Button>
 
       <CommandDialog
         open={open}

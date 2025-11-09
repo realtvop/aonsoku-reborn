@@ -1,22 +1,22 @@
-import clsx from 'clsx'
-import { EllipsisVertical } from 'lucide-react'
-import { ReactNode, useState } from 'react'
-import { Button } from '@/app/components/ui/button'
+import clsx from "clsx";
+import { EllipsisVertical } from "lucide-react";
+import { ReactNode, useState } from "react";
+import { Button } from "@/app/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger,
-} from '@/app/components/ui/dropdown-menu'
-import { isMobile } from 'react-device-detect'
+} from "@/app/components/ui/dropdown-menu";
+import { isMobile } from "react-device-detect";
 
 interface TableActionButtonProps {
-  optionsMenuItems?: ReactNode
+  optionsMenuItems?: ReactNode;
 }
 
 export function TableActionButton({
   optionsMenuItems,
 }: TableActionButtonProps) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(false);
 
   return (
     <DropdownMenu open={open} onOpenChange={(state) => setOpen(state)}>
@@ -28,14 +28,14 @@ export function TableActionButton({
           variant="ghost"
           size="icon"
           className={clsx(
-            'w-8 h-8 p-1 rounded-full',
-            'data-[state=open]:bg-accent data-[state=open]:opacity-100',
-            'opacity-0 group-hover/tablerow:opacity-100 transition-opacity',
-            isMobile && 'opacity-100',
+            "w-8 h-8 p-1 rounded-full",
+            "data-[state=open]:bg-accent data-[state=open]:opacity-100",
+            "opacity-0 group-hover/tablerow:opacity-100 transition-opacity",
+            isMobile && "opacity-100",
           )}
           onClick={(e) => {
-            e.stopPropagation()
-            setOpen(true)
+            e.stopPropagation();
+            setOpen(true);
           }}
         >
           <EllipsisVertical className="w-4 h-4" />
@@ -47,5 +47,5 @@ export function TableActionButton({
         </DropdownMenuContent>
       )}
     </DropdownMenu>
-  )
+  );
 }

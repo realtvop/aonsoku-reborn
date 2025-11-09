@@ -1,16 +1,16 @@
-import { ComponentPropsWithoutRef } from 'react'
-import { cn } from '@/lib/utils'
+import { ComponentPropsWithoutRef } from "react";
+import { cn } from "@/lib/utils";
 
-type EqualizerBarsProps = ComponentPropsWithoutRef<'svg'> & {
-  size?: number
-}
+type EqualizerBarsProps = ComponentPropsWithoutRef<"svg"> & {
+  size?: number;
+};
 
 const rects = [
   { x: 1, height: 14 },
   { x: 7, height: 20 },
   { x: 13, height: 18 },
   { x: 19, height: 12 },
-]
+];
 
 export function EqualizerBars({
   size = 24,
@@ -25,7 +25,7 @@ export function EqualizerBars({
       width={size}
       height={size}
       viewBox="0 0 24 24"
-      className={cn('text-foreground', className)}
+      className={cn("text-foreground", className)}
     >
       {rects.map((rect, index) => (
         <rect
@@ -41,5 +41,5 @@ export function EqualizerBars({
         />
       ))}
     </svg>
-  )
+  );
 }

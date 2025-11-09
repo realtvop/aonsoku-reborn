@@ -1,16 +1,16 @@
-import { SubsonicResponse } from './subsonicResponse'
+import { SubsonicResponse } from "./subsonicResponse";
 
 export interface CreateRadio {
-  name: string
-  streamUrl: string
-  homePageUrl: string
+  name: string;
+  streamUrl: string;
+  homePageUrl: string;
 }
 
 export interface Radio extends CreateRadio {
-  id: string
+  id: string;
 }
 export interface RadioStation {
-  internetRadioStation: Radio[]
+  internetRadioStation: Radio[];
 }
 
 export interface RadioStationsResponse

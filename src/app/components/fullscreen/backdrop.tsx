@@ -1,20 +1,20 @@
-import clsx from 'clsx'
-import { useEffect, useMemo, useState } from 'react'
-import { LazyLoadImage } from 'react-lazy-load-image-component'
-import { getCoverArtUrl } from '@/api/httpClient'
-import { usePlayerCurrentSong, useSongColor } from '@/store/player.store'
-import { isChromeOrFirefox } from '@/utils/browser'
-import { hexToRgba } from '@/utils/getAverageColor'
-import { isSafari } from '@/utils/osType'
+import clsx from "clsx";
+import { useEffect, useMemo, useState } from "react";
+import { isSafari } from "react-device-detect";
+import { LazyLoadImage } from "react-lazy-load-image-component";
+import { getCoverArtUrl } from "@/api/httpClient";
+import { usePlayerCurrentSong, useSongColor } from "@/store/player.store";
+import { isChromeOrFirefox } from "@/utils/browser";
+import { hexToRgba } from "@/utils/getAverageColor";
 
 export function FullscreenBackdrop() {
-  const { useSongColorOnBigPlayer } = useSongColor()
+  const { useSongColorOnBigPlayer } = useSongColor();
 
   if (useSongColorOnBigPlayer) {
-    return <DynamicColorBackdrop />
+    return <DynamicColorBackdrop />;
   }
 
-  return <ImageBackdrop />
+  return <ImageBackdrop />;
 }
 
 export function ImageBackdrop() {
@@ -22,24 +22,24 @@ export function ImageBackdrop() {
     <div className="absolute inset-0 w-full h-full z-0 overflow-hidden">
       {isSafari ? <MacBackdrop /> : <OtherBackdrop />}
     </div>
-  )
+  );
 }
 
 function OtherBackdrop() {
-  const { coverArt } = usePlayerCurrentSong()
-  const coverArtUrl = getCoverArtUrl(coverArt, 'song', '300')
-  const [backgroundImage, setBackgroundImage] = useState(coverArtUrl)
-  const { bigPlayerBlur } = useSongColor()
+  const { coverArt } = usePlayerCurrentSong();
+  const coverArtUrl = getCoverArtUrl(coverArt, "song", "300");
+  const [backgroundImage, setBackgroundImage] = useState(coverArtUrl);
+  const { bigPlayerBlur } = useSongColor();
 
-  const newBackgroundImage = useMemo(() => coverArtUrl, [coverArtUrl])
+  const newBackgroundImage = useMemo(() => coverArtUrl, [coverArtUrl]);
 
   useEffect(() => {
-    const img = new Image()
-    img.src = newBackgroundImage
+    const img = new Image();
+    img.src = newBackgroundImage;
     img.onload = () => {
-      setBackgroundImage(newBackgroundImage)
-    }
-  }, [newBackgroundImage])
+      setBackgroundImage(newBackgroundImage);
+    };
+  }, [newBackgroundImage]);
 
   return (
     <div className="relative w-full h-full transition-colors duration-1000 bg-black/0">
@@ -52,20 +52,20 @@ function OtherBackdrop() {
       />
       <div className="bg-background/50 absolute inset-0 w-full h-full z-0 transition-colors duration-1000" />
     </div>
-  )
+  );
 }
 
 function MacBackdrop() {
-  const { coverArt, title } = usePlayerCurrentSong()
-  const coverArtUrl = getCoverArtUrl(coverArt, 'song', '300')
-  const { bigPlayerBlur } = useSongColor()
-  const { currentSongColor, currentSongColorIntensity } = useSongColor()
+  const { coverArt, title } = usePlayerCurrentSong();
+  const coverArtUrl = getCoverArtUrl(coverArt, "song", "300");
+  const { bigPlayerBlur } = useSongColor();
+  const { currentSongColor, currentSongColorIntensity } = useSongColor();
 
   const backgroundColor = useMemo(() => {
-    if (!currentSongColor) return undefined
+    if (!currentSongColor) return undefined;
 
-    return hexToRgba(currentSongColor, currentSongColorIntensity)
-  }, [currentSongColor, currentSongColorIntensity])
+    return hexToRgba(currentSongColor, currentSongColorIntensity);
+  }, [currentSongColor, currentSongColorIntensity]);
 
   return (
     <div
@@ -88,30 +88,30 @@ function MacBackdrop() {
         }}
       />
     </div>
-  )
+  );
 }
 
 function DynamicColorBackdrop() {
-  const { currentSongColor, currentSongColorIntensity } = useSongColor()
+  const { currentSongColor, currentSongColorIntensity } = useSongColor();
 
   const backgroundColor = useMemo(() => {
-    if (!currentSongColor) return undefined
+    if (!currentSongColor) return undefined;
 
-    return hexToRgba(currentSongColor, currentSongColorIntensity)
-  }, [currentSongColor, currentSongColorIntensity])
+    return hexToRgba(currentSongColor, currentSongColorIntensity);
+  }, [currentSongColor, currentSongColorIntensity]);
 
   return (
     <div className="absolute inset-0 w-full h-full z-0 overflow-hidden">
       <div
         className={clsx(
-          'relative w-full h-full',
-          isChromeOrFirefox && 'bg-black/0',
+          "relative w-full h-full",
+          isChromeOrFirefox && "bg-black/0",
         )}
       >
         <div
           className={clsx(
-            'absolute inset-0 w-full h-full z-[1]',
-            'transition-[background-image] duration-1000 default-gradient',
+            "absolute inset-0 w-full h-full z-[1]",
+            "transition-[background-image] duration-1000 default-gradient",
           )}
         />
         <div
@@ -120,5 +120,5 @@ function DynamicColorBackdrop() {
         />
       </div>
     </div>
-  )
+  );
 }

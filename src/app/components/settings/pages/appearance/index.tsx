@@ -1,6 +1,6 @@
-import { ColorSettings } from './colors'
-import { FullscreenSettings } from './fullscreen'
-import { ThemeSettingsPicker } from './theme'
+import { ColorSettings } from "./colors";
+import { FullscreenSettings } from "./fullscreen";
+import { ThemeSettingsPicker } from "./theme";
 
 export function Appearance() {
   return (
@@ -9,5 +9,5 @@ export function Appearance() {
       <ColorSettings />
       <ThemeSettingsPicker />
     </div>
-  )
+  );
 }

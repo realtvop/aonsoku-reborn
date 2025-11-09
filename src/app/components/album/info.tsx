@@ -1,17 +1,18 @@
-import { Fragment } from 'react/jsx-runtime'
-import { CollapsibleInfo } from '@/app/components/info/collapsible-info'
-import { useGetAlbumInfo } from '@/app/hooks/use-album'
-import { SingleAlbum } from '@/types/responses/album'
-import { AlbumButtons } from './buttons'
+import { Fragment } from "react/jsx-runtime";
+import { CollapsibleInfo } from "@/app/components/info/collapsible-info";
+import { useGetAlbumInfo } from "@/app/hooks/use-album";
+import { SingleAlbum } from "@/types/responses/album";
+import { AlbumButtons } from "./buttons";
 
 interface AlbumInfoProps {
-  album: SingleAlbum
+  album: SingleAlbum;
 }
 
 export function AlbumInfo({ album }: AlbumInfoProps) {
-  const { data: albumInfo } = useGetAlbumInfo(album.id)
+  const { data: albumInfo } = useGetAlbumInfo(album.id);
 
-  const hasInfoToShow = albumInfo !== undefined && albumInfo.notes !== undefined
+  const hasInfoToShow =
+    albumInfo !== undefined && albumInfo.notes !== undefined;
 
   return (
     <Fragment>
@@ -25,5 +26,5 @@ export function AlbumInfo({ album }: AlbumInfoProps) {
         />
       )}
     </Fragment>
-  )
+  );
 }

@@ -1,4 +1,4 @@
-import { Skeleton } from '@/app/components/ui/skeleton'
+import { Skeleton } from "@/app/components/ui/skeleton";
 
 export function ShadowHeaderFallback() {
   return (
@@ -6,5 +6,5 @@ export function ShadowHeaderFallback() {
       <Skeleton className="w-28 h-8" />
       <Skeleton className="w-11 h-[22px] ml-2 rounded-full" />
     </div>
-  )
+  );
 }

@@ -1,37 +1,37 @@
-import clsx from 'clsx'
-import { Play } from 'lucide-react'
-import { isFirefox } from 'react-device-detect'
-import { LazyLoadImage } from 'react-lazy-load-image-component'
-import { Link } from 'react-router-dom'
-import { getCoverArtUrl } from '@/api/httpClient'
-import { Badge } from '@/app/components/ui/badge'
-import { Button } from '@/app/components/ui/button'
-import { ROUTES } from '@/routes/routesList'
-import { subsonic } from '@/service/subsonic'
-import { usePlayerActions } from '@/store/player.store'
-import { ISong } from '@/types/responses/song'
-import { convertSecondsToTime } from '@/utils/convertSecondsToTime'
+import clsx from "clsx";
+import { Play } from "lucide-react";
+import { isFirefox } from "react-device-detect";
+import { LazyLoadImage } from "react-lazy-load-image-component";
+import { Link } from "react-router-dom";
+import { getCoverArtUrl } from "@/api/httpClient";
+import { Badge } from "@/app/components/ui/badge";
+import { Button } from "@/app/components/ui/button";
+import { ROUTES } from "@/routes/routesList";
+import { subsonic } from "@/service/subsonic";
+import { usePlayerActions } from "@/store/player.store";
+import { ISong } from "@/types/responses/song";
+import { convertSecondsToTime } from "@/utils/convertSecondsToTime";
 
 export function HeaderItem({ song }: { song: ISong }) {
-  const { setSongList } = usePlayerActions()
+  const { setSongList } = usePlayerActions();
 
   async function handlePlaySongAlbum(song: ISong) {
-    const album = await subsonic.albums.getOne(song.albumId)
+    const album = await subsonic.albums.getOne(song.albumId);
 
     if (album) {
-      const songIndex = album.song.findIndex((item) => item.id === song.id)
+      const songIndex = album.song.findIndex((item) => item.id === song.id);
 
-      setSongList(album.song, songIndex)
+      setSongList(album.song, songIndex, false, { albumId: album.id });
     }
   }
 
-  const coverArtUrl = getCoverArtUrl(song.coverArt, 'song', '400')
+  const coverArtUrl = getCoverArtUrl(song.coverArt, "song", "400");
 
   return (
     <div
       className={clsx(
-        'w-full h-[250px] 2xl:h-[300px] relative',
-        isFirefox && 'bg-black/60',
+        "w-full h-[100px] sm:h-[250px] 2xl:h-[300px] relative",
+        isFirefox && "bg-black/60",
       )}
     >
       <div
@@ -39,13 +39,13 @@ export function HeaderItem({ song }: { song: ISong }) {
         className="absolute -inset-10 bg-cover bg-center z-0 bg-skeleton"
         style={{
           backgroundImage: `url(${coverArtUrl})`,
-          filter: isFirefox ? 'blur(24px)' : undefined,
+          filter: isFirefox ? "blur(24px)" : undefined,
         }}
       />
       <div
         className={clsx(
-          'w-full h-full bg-gradient-to-b from-background/40 to-background/80 absolute z-10',
-          !isFirefox && 'backdrop-blur-xl',
+          "w-full h-full bg-gradient-to-b from-background/40 to-background/80 absolute z-10",
+          !isFirefox && "backdrop-blur-xl",
         )}
       >
         <div className="flex h-full p-4 2xl:p-6 gap-4">
@@ -77,7 +77,7 @@ export function HeaderItem({ song }: { song: ISong }) {
             <Link to={ROUTES.ALBUM.PAGE(song.albumId)} className="w-fit">
               <h1
                 data-testid="header-title"
-                className="w-full scroll-m-20 text-3xl 2xl:text-4xl font-bold tracking-tight mb-0 2xl:mb-1 hover:underline"
+                className="w-full scroll-m-20 text-xl sm:text-3xl 2xl:text-4xl font-bold tracking-tight mb-0 2xl:mb-1 hover:underline line-clamp-2"
               >
                 {song.title}
               </h1>
@@ -85,7 +85,7 @@ export function HeaderItem({ song }: { song: ISong }) {
             {!song.artistId ? (
               <h4
                 data-testid="header-artist"
-                className="scroll-m-20 text-lg 2xl:text-xl font-semibold tracking-tight opacity-70"
+                className="scroll-m-20 text-base sm:text-lg 2xl:text-xl font-semibold tracking-tight opacity-70"
               >
                 {song.artist}
               </h4>
@@ -93,13 +93,13 @@ export function HeaderItem({ song }: { song: ISong }) {
               <Link to={ROUTES.ARTIST.PAGE(song.artistId)} className="w-fit">
                 <h4
                   data-testid="header-artist"
-                  className="scroll-m-20 text-lg 2xl:text-xl font-semibold tracking-tight opacity-70 hover:underline"
+                  className="scroll-m-20 text-base sm:text-lg 2xl:text-xl font-semibold tracking-tight opacity-70 hover:underline"
                 >
                   {song.artist}
                 </h4>
               </Link>
             )}
-            <div className="flex gap-2 mt-1 2xl:mt-2">
+            <div className="hidden sm:flex gap-2 mt-1 2xl:mt-2">
               {song.genre !== undefined && (
                 <Link to={ROUTES.ALBUMS.GENRE(song.genre)} className="flex">
                   <Badge
@@ -132,5 +132,5 @@ export function HeaderItem({ song }: { song: ISong }) {
         </div>
       </div>
     </div>
-  )
+  );
 }

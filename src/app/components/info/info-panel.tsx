@@ -1,19 +1,19 @@
-import { useTranslation } from 'react-i18next'
-import LastFmIcon from '@/app/components/icons/last-fm'
-import MusicbrainzIcon from '@/app/components/icons/musicbrainz'
-import { SimpleTooltip } from '@/app/components/ui/simple-tooltip'
-import { Skeleton } from '@/app/components/ui/skeleton'
-import { sanitizeLinks } from '@/utils/parseTexts'
+import { useTranslation } from "react-i18next";
+import LastFmIcon from "@/app/components/icons/last-fm";
+import MusicbrainzIcon from "@/app/components/icons/musicbrainz";
+import { SimpleTooltip } from "@/app/components/ui/simple-tooltip";
+import { Skeleton } from "@/app/components/ui/skeleton";
+import { sanitizeLinks } from "@/utils/parseTexts";
 
 interface InfoPanelProps {
-  title: string
-  bio?: string
-  lastFmUrl?: string
-  musicBrainzId?: string
+  title: string;
+  bio?: string;
+  lastFmUrl?: string;
+  musicBrainzId?: string;
 }
 
 const containerClasses =
-  'flex flex-col items-start gap-1 rounded-lg border p-5 text-left text-sm transition-all bg-background-foreground'
+  "flex flex-col items-start gap-1 rounded-lg border p-5 text-left text-sm transition-all bg-background-foreground";
 
 export default function InfoPanel({
   title,
@@ -21,14 +21,14 @@ export default function InfoPanel({
   lastFmUrl,
   musicBrainzId,
 }: InfoPanelProps) {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
 
-  if (!bio) return null
+  if (!bio) return null;
 
   return (
     <div className={containerClasses} id="artist-biography">
       <h3 className="scroll-m-20 mb-2 text-2xl font-semibold tracking-tight">
-        {t('album.info.about', { name: title })}
+        {t("album.info.about", { name: title })}
       </h3>
       <p
         className="html leading-6 text-muted-foreground"
@@ -37,7 +37,7 @@ export default function InfoPanel({
 
       <div className="flex w-full mt-2 gap-2">
         {lastFmUrl && (
-          <SimpleTooltip text={t('album.info.lastfm')}>
+          <SimpleTooltip text={t("album.info.lastfm")}>
             <a
               target="_blank"
               rel="nofollow noreferrer"
@@ -50,7 +50,7 @@ export default function InfoPanel({
         )}
 
         {musicBrainzId && (
-          <SimpleTooltip text={t('album.info.musicbrainz')}>
+          <SimpleTooltip text={t("album.info.musicbrainz")}>
             <a
               target="_blank"
               rel="nofollow noreferrer"
@@ -63,7 +63,7 @@ export default function InfoPanel({
         )}
       </div>
     </div>
-  )
+  );
 }
 
 export function InfoPanelFallback() {
@@ -78,5 +78,5 @@ export function InfoPanelFallback() {
         <Skeleton className="w-10 h-10 rounded-full bg-border" />
       </div>
     </div>
-  )
+  );
 }

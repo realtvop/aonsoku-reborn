@@ -1,10 +1,10 @@
-import { SubsonicResponse } from './subsonicResponse'
+import { SubsonicResponse } from "./subsonicResponse";
 
 export interface ScanStatus {
-  scanning: string
-  count: string
-  folderCount?: string
-  lastScan?: string
+  scanning: string;
+  count: string;
+  folderCount?: string;
+  lastScan?: string;
 }
 
 export interface ScanResponse

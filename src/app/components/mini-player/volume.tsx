@@ -1,5 +1,5 @@
-import { Volume2, VolumeX } from 'lucide-react'
-import { VolumeSlider } from '@/app/components/player/volume'
+import { Volume2, VolumeX } from "lucide-react";
+import { VolumeSlider } from "@/app/components/player/volume";
 
 export function MiniPlayerVolume() {
   return (
@@ -14,5 +14,5 @@ export function MiniPlayerVolume() {
 
       <Volume2 className="w-6 h-6 drop-shadow-lg" strokeWidth={1.75} />
     </div>
-  )
+  );
 }

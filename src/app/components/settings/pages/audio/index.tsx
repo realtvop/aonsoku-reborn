@@ -1,5 +1,5 @@
-import { LyricsSettings } from './lyrics'
-import { ReplayGainConfig } from './replay-gain'
+import { LyricsSettings } from "./lyrics";
+import { ReplayGainConfig } from "./replay-gain";
 
 export function Audio() {
   return (
@@ -7,5 +7,5 @@ export function Audio() {
       <ReplayGainConfig />
       <LyricsSettings />
     </div>
-  )
+  );
 }

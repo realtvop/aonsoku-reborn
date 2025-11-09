@@ -1,20 +1,20 @@
-import { SlidersHorizontal } from 'lucide-react'
-import { ComponentPropsWithoutRef, ReactNode } from 'react'
-import { useTranslation } from 'react-i18next'
-import { Button } from '@/app/components/ui/button'
+import { SlidersHorizontal } from "lucide-react";
+import { ComponentPropsWithoutRef, ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+import { Button } from "@/app/components/ui/button";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from '@/app/components/ui/popover'
-import { Separator } from '@/app/components/ui/separator'
-import { Slider } from '@/app/components/ui/slider'
-import { Switch } from '@/app/components/ui/switch'
-import { cn } from '@/lib/utils'
-import { useSongColor } from '@/store/player.store'
+} from "@/app/components/ui/popover";
+import { Separator } from "@/app/components/ui/separator";
+import { Slider } from "@/app/components/ui/slider";
+import { Switch } from "@/app/components/ui/switch";
+import { cn } from "@/lib/utils";
+import { useSongColor } from "@/store/player.store";
 
 export function FullscreenSettings() {
-  const { useSongColorOnBigPlayer } = useSongColor()
+  const { useSongColorOnBigPlayer } = useSongColor();
 
   return (
     <DynamicSettingsPopover>
@@ -24,11 +24,11 @@ export function FullscreenSettings() {
         {!useSongColorOnBigPlayer && <ImageBlurSizeOption />}
       </>
     </DynamicSettingsPopover>
-  )
+  );
 }
 
 export function QueueSettings() {
-  const { useSongColorOnQueue } = useSongColor()
+  const { useSongColorOnQueue } = useSongColor();
 
   return (
     <DynamicSettingsPopover>
@@ -37,11 +37,11 @@ export function QueueSettings() {
         {useSongColorOnQueue && <ColorIntensityOption />}
       </>
     </DynamicSettingsPopover>
-  )
+  );
 }
 
 interface PopoverProps {
-  children: ReactNode
+  children: ReactNode;
 }
 
 function DynamicSettingsPopover({ children }: PopoverProps) {
@@ -60,17 +60,21 @@ function DynamicSettingsPopover({ children }: PopoverProps) {
         <div className="flex flex-col">{children}</div>
       </PopoverContent>
     </Popover>
-  )
+  );
 }
 
-type OptionProps = Omit<ComponentPropsWithoutRef<typeof SettingWrapper>, 'text'>
+type OptionProps = Omit<
+  ComponentPropsWithoutRef<typeof SettingWrapper>,
+  "text"
+>;
 
 function DynamicColorOption(props: OptionProps) {
-  const { t } = useTranslation()
-  const { useSongColorOnBigPlayer, setUseSongColorOnBigPlayer } = useSongColor()
+  const { t } = useTranslation();
+  const { useSongColorOnBigPlayer, setUseSongColorOnBigPlayer } =
+    useSongColor();
 
   return (
-    <SettingWrapper text={t('settings.appearance.colors.group')} {...props}>
+    <SettingWrapper text={t("settings.appearance.colors.group")} {...props}>
       <Switch
         checked={useSongColorOnBigPlayer}
         onCheckedChange={() =>
@@ -78,32 +82,32 @@ function DynamicColorOption(props: OptionProps) {
         }
       />
     </SettingWrapper>
-  )
+  );
 }
 
 function QueueDynamicColorOption(props: OptionProps) {
-  const { t } = useTranslation()
-  const { useSongColorOnQueue, setUseSongColorOnQueue } = useSongColor()
+  const { t } = useTranslation();
+  const { useSongColorOnQueue, setUseSongColorOnQueue } = useSongColor();
 
   return (
-    <SettingWrapper text={t('settings.appearance.colors.group')} {...props}>
+    <SettingWrapper text={t("settings.appearance.colors.group")} {...props}>
       <Switch
         checked={useSongColorOnQueue}
         onCheckedChange={() => setUseSongColorOnQueue(!useSongColorOnQueue)}
       />
     </SettingWrapper>
-  )
+  );
 }
 
 function ColorIntensityOption(props: OptionProps) {
-  const { t } = useTranslation()
-  const { currentSongColorIntensity, setCurrentSongIntensity } = useSongColor()
+  const { t } = useTranslation();
+  const { currentSongColorIntensity, setCurrentSongIntensity } = useSongColor();
 
-  const intensityTooltip = `${Math.round(currentSongColorIntensity * 100)}%`
+  const intensityTooltip = `${Math.round(currentSongColorIntensity * 100)}%`;
 
   return (
     <SettingWrapper
-      text={t('settings.appearance.colors.queue.intensity')}
+      text={t("settings.appearance.colors.queue.intensity")}
       {...props}
     >
       <Slider
@@ -115,16 +119,16 @@ function ColorIntensityOption(props: OptionProps) {
         onValueChange={([value]) => setCurrentSongIntensity(value)}
       />
     </SettingWrapper>
-  )
+  );
 }
 
 function ImageBlurSizeOption(props: OptionProps) {
-  const { t } = useTranslation()
-  const { bigPlayerBlur, setBigPlayerBlurValue } = useSongColor()
+  const { t } = useTranslation();
+  const { bigPlayerBlur, setBigPlayerBlurValue } = useSongColor();
 
   return (
     <SettingWrapper
-      text={t('settings.appearance.colors.bigPlayer.blurSize')}
+      text={t("settings.appearance.colors.bigPlayer.blurSize")}
       {...props}
     >
       <Slider
@@ -136,13 +140,13 @@ function ImageBlurSizeOption(props: OptionProps) {
         onValueChange={([value]) => setBigPlayerBlurValue(value)}
       />
     </SettingWrapper>
-  )
+  );
 }
 
-type SettingWrapperProps = ComponentPropsWithoutRef<'div'> & {
-  text: string
-  showSeparator?: boolean
-}
+type SettingWrapperProps = ComponentPropsWithoutRef<"div"> & {
+  text: string;
+  showSeparator?: boolean;
+};
 
 function SettingWrapper({
   text,
@@ -155,12 +159,12 @@ function SettingWrapper({
     <>
       {showSeparator && <Separator />}
       <div
-        className={cn('flex items-center justify-between p-3', className)}
+        className={cn("flex items-center justify-between p-3", className)}
         {...props}
       >
         <span className="text-sm flex-1 text-balance">{text}</span>
         <div className="w-2/5 flex items-center justify-end">{children}</div>
       </div>
     </>
-  )
+  );
 }

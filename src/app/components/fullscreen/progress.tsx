@@ -1,58 +1,60 @@
-import { useCallback, useState } from 'react'
-import { ProgressSlider } from '@/app/components/ui/slider'
+import { useCallback, useState } from "react";
+import { ProgressSlider } from "@/app/components/ui/slider";
 import {
   usePlayerActions,
   usePlayerDuration,
   usePlayerProgress,
   usePlayerRef,
-} from '@/store/player.store'
-import { convertSecondsToTime } from '@/utils/convertSecondsToTime'
+} from "@/store/player.store";
+import { convertSecondsToTime } from "@/utils/convertSecondsToTime";
 
-let isSeeking = false
+let isSeeking = false;
 
 export function FullscreenProgress() {
-  const progress = usePlayerProgress()
-  const [localProgress, setLocalProgress] = useState(progress)
-  const audioPlayerRef = usePlayerRef()
-  const currentDuration = usePlayerDuration()
-  const { setProgress } = usePlayerActions()
+  const progress = usePlayerProgress();
+  const [localProgress, setLocalProgress] = useState(progress);
+  const audioPlayerRef = usePlayerRef();
+  const currentDuration = usePlayerDuration();
+  const { setProgress } = usePlayerActions();
 
   const updateAudioCurrentTime = useCallback(
     (value: number) => {
-      isSeeking = false
+      isSeeking = false;
       if (audioPlayerRef) {
-        audioPlayerRef.currentTime = value
+        audioPlayerRef.currentTime = value;
       }
     },
     [audioPlayerRef],
-  )
+  );
 
   const handleSeeking = useCallback((amount: number) => {
-    isSeeking = true
-    setLocalProgress(amount)
-  }, [])
+    isSeeking = true;
+    setLocalProgress(amount);
+  }, []);
 
   const handleSeeked = useCallback(
     (amount: number) => {
-      updateAudioCurrentTime(amount)
-      setProgress(amount)
-      setLocalProgress(amount)
+      updateAudioCurrentTime(amount);
+      setProgress(amount);
+      setLocalProgress(amount);
     },
     [setProgress, updateAudioCurrentTime],
-  )
+  );
 
   const handleSeekedFallback = useCallback(() => {
     if (localProgress !== progress) {
-      updateAudioCurrentTime(localProgress)
-      setProgress(localProgress)
+      updateAudioCurrentTime(localProgress);
+      setProgress(localProgress);
     }
-  }, [localProgress, progress, setProgress, updateAudioCurrentTime])
+  }, [localProgress, progress, setProgress, updateAudioCurrentTime]);
 
-  const currentTime = convertSecondsToTime(isSeeking ? localProgress : progress)
+  const currentTime = convertSecondsToTime(
+    isSeeking ? localProgress : progress,
+  );
 
   return (
-    <div className="flex items-center gap-3">
-      <div className="min-w-[50px] max-w-[60px] text-right drop-shadow-lg">
+    <div className="flex items-center gap-2 sm:gap-3">
+      <div className="min-w-[40px] sm:min-w-[50px] max-w-[50px] sm:max-w-[60px] text-right drop-shadow-lg text-sm sm:text-base">
         {currentTime}
       </div>
 
@@ -70,9 +72,9 @@ export function FullscreenProgress() {
         onMouseUp={handleSeekedFallback}
       />
 
-      <div className="min-w-[50px] max-w-[60px] text-left drop-shadow-lg">
+      <div className="min-w-[40px] sm:min-w-[50px] max-w-[50px] sm:max-w-[60px] text-left drop-shadow-lg text-sm sm:text-base">
         {convertSecondsToTime(currentDuration ?? 0)}
       </div>
     </div>
-  )
+  );
 }

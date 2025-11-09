@@ -1,14 +1,14 @@
-import { OptionsButtons } from '@/app/components/options/buttons'
-import { AddToPlaylistSubMenu } from '@/app/components/song/add-to-playlist'
+import { OptionsButtons } from "@/app/components/options/buttons";
+import { AddToPlaylistSubMenu } from "@/app/components/song/add-to-playlist";
 import {
   DropdownMenuGroup,
   DropdownMenuSeparator,
-} from '@/app/components/ui/dropdown-menu'
-import { useOptions } from '@/app/hooks/use-options'
-import { SingleAlbum } from '@/types/responses/album'
+} from "@/app/components/ui/dropdown-menu";
+import { useOptions } from "@/app/hooks/use-options";
+import { SingleAlbum } from "@/types/responses/album";
 
 interface AlbumOptionsProps {
-  album: SingleAlbum
+  album: SingleAlbum;
 }
 
 export function AlbumOptions({ album }: AlbumOptionsProps) {
@@ -18,30 +18,30 @@ export function AlbumOptions({ album }: AlbumOptionsProps) {
     startDownload,
     addToPlaylist,
     createNewPlaylist,
-  } = useOptions()
+  } = useOptions();
 
   function handlePlayNext() {
-    playNext(album.song)
+    playNext(album.song, { albumId: album.id });
   }
 
   function handlePlayLast() {
-    playLast(album.song)
+    playLast(album.song, { albumId: album.id });
   }
 
   function handleDownload() {
-    startDownload(album.id)
+    startDownload(album.id);
   }
 
   function handleAddToPlaylist(id: string) {
-    const songIdToAdd = album.song.map((song) => song.id)
+    const songIdToAdd = album.song.map((song) => song.id);
 
-    addToPlaylist(id, songIdToAdd)
+    addToPlaylist(id, songIdToAdd);
   }
 
   function handleCreateNewPlaylist() {
-    const songIdToAdd = album.song.map((song) => song.id)
+    const songIdToAdd = album.song.map((song) => song.id);
 
-    createNewPlaylist(album.name, songIdToAdd)
+    createNewPlaylist(album.name, songIdToAdd);
   }
 
   return (
@@ -63,5 +63,5 @@ export function AlbumOptions({ album }: AlbumOptionsProps) {
         <OptionsButtons.Download onClick={handleDownload} />
       </DropdownMenuGroup>
     </>
-  )
+  );
 }

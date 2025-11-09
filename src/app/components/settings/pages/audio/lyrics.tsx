@@ -1,4 +1,4 @@
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from "react-i18next";
 import {
   Content,
   ContentItem,
@@ -6,29 +6,29 @@ import {
   ContentItemTitle,
   ContentSeparator,
   Header,
-  HeaderTitle,
   HeaderDescription,
+  HeaderTitle,
   Root,
-} from '@/app/components/settings/section'
-import { Switch } from '@/app/components/ui/switch'
-import { useLyricsSettings } from '@/store/player.store'
+} from "@/app/components/settings/section";
+import { Switch } from "@/app/components/ui/switch";
+import { useLyricsSettings } from "@/store/player.store";
 
 export function LyricsSettings() {
-  const { t } = useTranslation()
-  const { preferSyncedLyrics, setPreferSyncedLyrics } = useLyricsSettings()
+  const { t } = useTranslation();
+  const { preferSyncedLyrics, setPreferSyncedLyrics } = useLyricsSettings();
 
   return (
     <Root>
       <Header>
-        <HeaderTitle>{t('settings.audio.lyrics.group')}</HeaderTitle>
+        <HeaderTitle>{t("settings.audio.lyrics.group")}</HeaderTitle>
         <HeaderDescription>
-          {t('settings.audio.lyrics.description')}
+          {t("settings.audio.lyrics.description")}
         </HeaderDescription>
       </Header>
       <Content>
         <ContentItem>
-          <ContentItemTitle info={t('settings.audio.lyrics.preferSynced.info')}>
-            {t('settings.audio.lyrics.preferSynced.label')}
+          <ContentItemTitle info={t("settings.audio.lyrics.preferSynced.info")}>
+            {t("settings.audio.lyrics.preferSynced.label")}
           </ContentItemTitle>
           <ContentItemForm>
             <Switch
@@ -40,5 +40,5 @@ export function LyricsSettings() {
       </Content>
       <ContentSeparator />
     </Root>
-  )
+  );
 }

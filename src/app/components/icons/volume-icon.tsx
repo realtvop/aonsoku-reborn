@@ -1,10 +1,10 @@
-import { ComponentPropsWithoutRef } from 'react'
-import { cn } from '@/lib/utils'
+import { ComponentPropsWithoutRef } from "react";
+import { cn } from "@/lib/utils";
 
-type IconProps = ComponentPropsWithoutRef<'svg'> & {
-  volume: number
-  size?: number
-}
+type IconProps = ComponentPropsWithoutRef<"svg"> & {
+  volume: number;
+  size?: number;
+};
 
 export function VolumeIcon({
   className,
@@ -12,11 +12,11 @@ export function VolumeIcon({
   size = 24,
   ...props
 }: IconProps) {
-  const higherThanHalf = volume >= 50
-  const unmuted = volume > 0
-  const muted = volume === 0
+  const higherThanHalf = volume >= 50;
+  const unmuted = volume > 0;
+  const muted = volume === 0;
 
-  const transition = 'opacity 300ms ease'
+  const transition = "opacity 300ms ease";
 
   return (
     <svg
@@ -29,7 +29,7 @@ export function VolumeIcon({
       strokeWidth={2}
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={cn('lucide lucide-volume2', className)}
+      className={cn("lucide lucide-volume2", className)}
       {...props}
     >
       {/* Base */}
@@ -51,5 +51,5 @@ export function VolumeIcon({
         style={{ transition, opacity: higherThanHalf ? 1 : 0 }}
       />
     </svg>
-  )
+  );
 }

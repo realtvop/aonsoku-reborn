@@ -1,50 +1,78 @@
-import { memo, ReactNode } from 'react'
+import { memo, ReactNode, useEffect } from "react";
 import {
   Drawer,
   DrawerClose,
   DrawerContent,
   DrawerTitle,
   DrawerTrigger,
-} from '@/app/components/ui/drawer'
-import { useAppWindow } from '@/app/hooks/use-app-window'
-import { useFullscreenPlayerSettings } from '@/store/player.store'
-import { enterFullscreen, exitFullscreen } from '@/utils/browser'
-import { isTauri } from '@/utils/tauriTools'
-import { FullscreenBackdrop } from './backdrop'
-import { CloseFullscreenButton } from './buttons'
-import { DragRegion } from './drag-region'
-import { FullscreenPlayer } from './player'
-import { FullscreenSettings } from './settings'
-import { FullscreenTabs } from './tabs'
+} from "@/app/components/ui/drawer";
+import { useAppWindow } from "@/app/hooks/use-app-window";
+import { useFullscreenPlayerSettings } from "@/store/player.store";
+import { enterFullscreen, exitFullscreen } from "@/utils/browser";
+import { isDesktop } from "@/utils/desktop";
+import { setDesktopTitleBarColors } from "@/utils/theme";
+import { FullscreenBackdrop } from "./backdrop";
+import { CloseFullscreenButton } from "./buttons";
+import { FullscreenDragHandler } from "./drag-handler";
+import { FullscreenPlayer } from "./player";
+import { FullscreenSettings } from "./settings";
+import { FullscreenTabs } from "./tabs";
 
 interface FullscreenModeProps {
-  children: ReactNode
+  children: ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-const MemoFullscreenBackdrop = memo(FullscreenBackdrop)
+const MemoFullscreenBackdrop = memo(FullscreenBackdrop);
 
-export default function FullscreenMode({ children }: FullscreenModeProps) {
-  const { enterFullscreenWindow, exitFullscreenWindow } = useAppWindow()
-  const { autoFullscreenEnabled } = useFullscreenPlayerSettings()
+export default function FullscreenMode({
+  children,
+  open,
+  onOpenChange,
+}: FullscreenModeProps) {
+  const { enterFullscreenWindow, exitFullscreenWindow } = useAppWindow();
+  const { autoFullscreenEnabled } = useFullscreenPlayerSettings();
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: initial useEffect
+  useEffect(() => {
+    return () => {
+      if (isDesktop()) {
+        exitFullscreenWindow().then(() => {
+          setDesktopTitleBarColors(false);
+        });
+      } else {
+        exitFullscreen();
+      }
+    };
+  }, []);
 
   async function handleFullscreen(open: boolean) {
-    if (!autoFullscreenEnabled) return
+    // Call external onOpenChange if provided (always call this for controlled mode)
+    onOpenChange?.(open);
 
-    if (isTauri()) {
-      open ? await enterFullscreenWindow() : await exitFullscreenWindow()
-      return
+    // We set title bar colors to transparent,
+    // to not "unstyle" the big player appearance
+    if (isDesktop()) setDesktopTitleBarColors(open);
+
+    if (!autoFullscreenEnabled) return;
+
+    if (isDesktop()) {
+      open ? await enterFullscreenWindow() : await exitFullscreenWindow();
+      return;
     }
 
-    open ? enterFullscreen() : exitFullscreen()
+    open ? enterFullscreen() : exitFullscreen();
   }
 
   return (
     <Drawer
       fixed
       dismissible={true}
-      handleOnly={true}
+      handleOnly={false}
       disablePreventScroll={true}
       modal={false}
+      open={open}
       onOpenChange={handleFullscreen}
     >
       <DrawerTrigger asChild>{children}</DrawerTrigger>
@@ -55,26 +83,25 @@ export default function FullscreenMode({ children }: FullscreenModeProps) {
         aria-describedby={undefined}
       >
         <MemoFullscreenBackdrop />
-        <div className="absolute inset-0 flex flex-col p-8 w-full h-full gap-4 bg-black/0 z-10">
-          {isTauri() && <DragRegion className="z-10" />}
-
-          {/* First Row */}
-          <div className="flex gap-2 items-center w-full h-[40px] px-16 z-20 justify-end">
+        <FullscreenDragHandler />
+        <div className="absolute inset-0 flex flex-col p-0 sm:p-0 2xl:p-8 pt-4 sm:pt-10 2xl:pt-12 w-full h-full gap-4 bg-black/0 z-10">
+          {/* First Row - Header */}
+          <div className="flex gap-2 items-center w-full h-[40px] px-4 sm:px-16 z-20 justify-end">
             <FullscreenSettings />
             <DrawerClose>
               <CloseFullscreenButton />
             </DrawerClose>
           </div>
 
-          {/* Second Row */}
-          <div className="w-full max-h-[calc(100%-220px)] min-h-[calc(100%-220px)] px-16">
-            <div className="min-h-[300px] h-full max-h-full">
+          {/* Second Row - Content Area (Tabs/Queue for desktop, Song info for mobile) */}
+          <div className="w-full flex-1 overflow-hidden px-4 sm:px-16">
+            <div className="h-full">
               <FullscreenTabs />
             </div>
           </div>
 
-          {/* Third Row */}
-          <div className="h-[150px] min-h-[150px] px-16 py-2">
+          {/* Third Row - Controls (hidden on mobile, shows in Playing tab) */}
+          <div className="hidden sm:block h-[150px] min-h-[150px] px-16 py-2">
             <div className="flex items-center">
               <FullscreenPlayer />
             </div>
@@ -82,5 +109,5 @@ export default function FullscreenMode({ children }: FullscreenModeProps) {
         </div>
       </DrawerContent>
     </Drawer>
-  )
+  );
 }

@@ -1,16 +1,16 @@
-import InfoPanel from '@/app/components/info/info-panel'
+import InfoPanel from "@/app/components/info/info-panel";
 import {
   Collapsible,
   CollapsibleContent,
-} from '@/app/components/ui/collapsible'
-import { useAppPages } from '@/store/app.store'
+} from "@/app/components/ui/collapsible";
+import { useAppPages } from "@/store/app.store";
 
 interface CollapsibleInfoProps {
-  title: string
-  bio?: string
-  lastFmUrl?: string
-  musicBrainzId?: string
-  useStateInfo?: boolean
+  title: string;
+  bio?: string;
+  lastFmUrl?: string;
+  musicBrainzId?: string;
+  useStateInfo?: boolean;
 }
 
 export function CollapsibleInfo({
@@ -20,7 +20,7 @@ export function CollapsibleInfo({
   musicBrainzId,
   useStateInfo = true,
 }: CollapsibleInfoProps) {
-  const { showInfoPanel } = useAppPages()
+  const { showInfoPanel } = useAppPages();
 
   return (
     <Collapsible open={useStateInfo ? showInfoPanel : true}>
@@ -37,5 +37,5 @@ export function CollapsibleInfo({
         </div>
       </CollapsibleContent>
     </Collapsible>
-  )
+  );
 }

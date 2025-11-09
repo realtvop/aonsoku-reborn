@@ -1,11 +1,11 @@
-import { Podcast } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
-import { EmptyWrapper } from '@/app/components/albums/empty-wrapper'
-import ListWrapper from '@/app/components/list-wrapper'
-import { PodcastsHeader } from './header'
+import { Podcast } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { EmptyWrapper } from "@/app/components/albums/empty-wrapper";
+import ListWrapper from "@/app/components/list-wrapper";
+import { PodcastsHeader } from "./header";
 
 export function EmptyPodcastsPage() {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
 
   return (
     <div className="w-full h-content">
@@ -18,14 +18,14 @@ export function EmptyPodcastsPage() {
               <Podcast className="w-8 h-8" />
             </div>
             <h3 className="text-2xl font-semibold tracking-tight">
-              {t('podcasts.emptyPage.message')}
+              {t("podcasts.emptyPage.message")}
             </h3>
             <p className="text-sm text-muted-foreground">
-              {t('podcasts.emptyPage.description')}
+              {t("podcasts.emptyPage.description")}
             </p>
           </div>
         </EmptyWrapper>
       </ListWrapper>
     </div>
-  )
+  );
 }

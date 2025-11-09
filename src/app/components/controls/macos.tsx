@@ -1,37 +1,56 @@
-import clsx from 'clsx'
-import { useEffect, useState, type HTMLProps } from 'react'
-import { useAppWindow } from '@/app/hooks/use-app-window'
-import { cn } from '@/lib/utils'
-import { ControlButton } from './button'
-import { Icons } from './icons'
+import clsx from "clsx";
+import { type HTMLProps, useEffect, useState } from "react";
+import { useAppWindow } from "@/app/hooks/use-app-window";
+import { cn } from "@/lib/utils";
+import { ControlButton } from "./button";
+import { Icons } from "./icons";
 
 export function MacOS({ className, ...props }: HTMLProps<HTMLDivElement>) {
-  const { minimizeWindow, maximizeWindow, toggleFullscreen, closeWindow } =
-    useAppWindow()
+  const {
+    minimizeWindow,
+    maximizeWindow,
+    enterFullscreenWindow,
+    exitFullscreenWindow,
+    closeWindow,
+    isFullscreen,
+  } = useAppWindow();
 
-  const [isAltKeyPressed, setIsAltKeyPressed] = useState(false)
-  const [isHovering, setIsHovering] = useState(false)
+  const [isAltKeyPressed, setIsAltKeyPressed] = useState(false);
+  const [isHovering, setIsHovering] = useState(false);
 
   useEffect(() => {
     const handleKeyChange = (e: KeyboardEvent) => {
       if ((e.altKey || e.metaKey) !== isAltKeyPressed) {
-        setIsAltKeyPressed(e.altKey)
+        setIsAltKeyPressed(e.altKey);
       }
-    }
+    };
 
-    window.addEventListener('keydown', handleKeyChange)
-    window.addEventListener('keyup', handleKeyChange)
+    window.addEventListener("keydown", handleKeyChange);
+    window.addEventListener("keyup", handleKeyChange);
 
     return () => {
-      window.removeEventListener('keydown', handleKeyChange)
-      window.removeEventListener('keyup', handleKeyChange)
+      window.removeEventListener("keydown", handleKeyChange);
+      window.removeEventListener("keyup", handleKeyChange);
+    };
+  }, [isAltKeyPressed]);
+
+  function handleMaximize() {
+    if (isAltKeyPressed) {
+      maximizeWindow();
+      return;
     }
-  }, [isAltKeyPressed])
+
+    if (isFullscreen) {
+      exitFullscreenWindow();
+    } else {
+      enterFullscreenWindow();
+    }
+  }
 
   return (
     <div
       className={cn(
-        'space-x-2 px-3 text-black active:text-black dark:text-black',
+        "space-x-2 px-3 text-black active:text-black dark:text-black",
         className,
       )}
       onMouseEnter={() => setIsHovering(true)}
@@ -44,8 +63,8 @@ export function MacOS({ className, ...props }: HTMLProps<HTMLDivElement>) {
       >
         <Icons.closeMac
           className={clsx(
-            'absolute transition-opacity',
-            isHovering ? 'block' : 'hidden',
+            "absolute transition-opacity",
+            isHovering ? "block" : "hidden",
           )}
         />
       </ControlButton>
@@ -55,28 +74,28 @@ export function MacOS({ className, ...props }: HTMLProps<HTMLDivElement>) {
       >
         <Icons.minMac
           className={clsx(
-            'absolute transition-opacity',
-            isHovering ? 'block' : 'hidden',
+            "absolute transition-opacity",
+            isHovering ? "block" : "hidden",
           )}
         />
       </ControlButton>
       <ControlButton
-        onClick={isAltKeyPressed ? maximizeWindow : toggleFullscreen}
+        onClick={handleMaximize}
         className="relative aspect-square h-3 w-3 cursor-default content-center items-center justify-center self-center rounded-full border border-black/[.12] bg-[#28c93f] text-center text-black/60 hover:bg-[#28c93f] active:bg-[#1e9930] active:text-black/60 dark:border-none"
       >
         <Icons.fullMac
           className={clsx(
-            'absolute transition-opacity',
-            isHovering && !isAltKeyPressed ? 'opacity-100' : 'opacity-0',
+            "absolute transition-opacity",
+            isHovering && !isAltKeyPressed ? "opacity-100" : "opacity-0",
           )}
         />
         <Icons.plusMac
           className={clsx(
-            'absolute transition-opacity',
-            isHovering && isAltKeyPressed ? 'opacity-100' : 'opacity-0',
+            "absolute transition-opacity",
+            isHovering && isAltKeyPressed ? "opacity-100" : "opacity-0",
           )}
         />
       </ControlButton>
     </div>
-  )
+  );
 }

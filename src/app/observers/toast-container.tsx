@@ -1,19 +1,19 @@
-import { XIcon } from 'lucide-react'
-import { ToastContainer as Container } from 'react-toastify'
-import { Button } from '@/app/components/ui/button'
-import { cn } from '@/lib/utils'
-import { toastColors } from '@/utils/toastColors'
+import { XIcon } from "lucide-react";
+import { ToastContainer as Container } from "react-toastify";
+import { Button } from "@/app/components/ui/button";
+import { cn } from "@/lib/utils";
+import { toastColors } from "@/utils/toastColors";
 
 export function ToastContainer() {
   return (
     <Container
       toastClassName={(context) => {
-        const type = context?.type === 'error' ? 'error' : 'default'
+        const type = context?.type === "error" ? "error" : "default";
 
         return cn(
           toastColors[type],
-          'flex font-sans min-h-toast rounded-md justify-between shadow-md overflow-hidden',
-        )
+          "flex font-sans min-h-toast rounded-md justify-between shadow-md overflow-hidden",
+        );
       }}
       bodyClassName="flex text-sm block p-3"
       pauseOnHover={false}
@@ -34,5 +34,5 @@ export function ToastContainer() {
         </Button>
       )}
     />
-  )
+  );
 }

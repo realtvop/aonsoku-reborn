@@ -1,21 +1,21 @@
-import { Fragment } from 'react/jsx-runtime'
-import { CollapsibleInfo } from '@/app/components/info/collapsible-info'
-import { useGetArtistInfo } from '@/app/hooks/use-artist'
-import { IArtist } from '@/types/responses/artist'
-import { ArtistButtons } from './buttons'
+import { Fragment } from "react/jsx-runtime";
+import { CollapsibleInfo } from "@/app/components/info/collapsible-info";
+import { useGetArtistInfo } from "@/app/hooks/use-artist";
+import { IArtist } from "@/types/responses/artist";
+import { ArtistButtons } from "./buttons";
 
 interface ArtistInfoProps {
-  artist: IArtist
+  artist: IArtist;
 }
 
 export function ArtistInfo({ artist }: ArtistInfoProps) {
-  const { data: artistInfo } = useGetArtistInfo(artist.id)
+  const { data: artistInfo } = useGetArtistInfo(artist.id);
 
   const hasInfoToShow =
-    artistInfo !== undefined && artistInfo.biography !== undefined
+    artistInfo !== undefined && artistInfo.biography !== undefined;
 
   const isArtistEmpty =
-    artist.albumCount === undefined || artist.albumCount === 0
+    artist.albumCount === undefined || artist.albumCount === 0;
 
   return (
     <Fragment>
@@ -35,5 +35,5 @@ export function ArtistInfo({ artist }: ArtistInfoProps) {
         />
       )}
     </Fragment>
-  )
+  );
 }

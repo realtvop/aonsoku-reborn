@@ -66,7 +66,7 @@
   },
   "playlist": {
     "headline": "播放列表",
-    "duration": "大约 {{duration}}",
+    "duration": "约 {{duration}}",
     "refresh": "刷新播放列表",
     "buttons": {
       "play": "播放 {{name}}",
@@ -613,6 +613,111 @@
         },
         "description": "管理 Aonsoku 可以访问的外部服务。"
       }
+    },
+    "desktop": {
+      "general": {
+        "group": "通用",
+        "description": "自定义桌面应用的设置。",
+        "tray": {
+          "label": "最小化到系统托盘",
+          "info": "启用后，点击关闭按钮时，应用将最小化到系统托盘而不是关闭。"
+        }
+      },
+      "lanControl": {
+        "group": "LAN 控制",
+        "description": "管理 LAN 控制设置以进行远程访问。",
+        "enable": {
+          "label": "启用 LAN 控制",
+          "info": "启用 LAN 控制以允许对此应用的远程访问。"
+        },
+        "port": {
+          "label": "端口",
+          "info": "指定 LAN 控制服务器的端口号。"
+        },
+        "password": {
+          "label": "密码",
+          "info": "设置密码以安全访问 LAN 控制服务器。"
+        },
+        "address": {
+          "label": "服务器地址",
+          "info": "可用的 LAN 控制访问服务器地址。"
+        },
+        "allowNavidromeAuth": {
+          "label": "允许 Navidrome 身份验证",
+          "info": "启用使用 Navidrome 凭据进行身份验证。"
+        },
+        "serverStarted": "LAN 控制服务器启动成功。",
+        "serverError": "启动 LAN 控制服务器失败。",
+        "passwordRegenerated": "密码已成功重新生成。",
+        "addressCopied": "服务器地址已复制到剪贴板。",
+        "passwordCopied": "密码已复制到剪贴板。"
+      }
+    }
+  },
+  "lanControl": {
+    "remote": {
+      "menu": "控制其他设备",
+      "title": "控制其他设备",
+      "description": "连接到 LAN 控制服务器并远程管理播放。",
+      "serverRunning": "此设备当前正作为 LAN 控制服务器运行。当此设备处于服务器模式时，无法控制其他设备。",
+      "address": "服务器地址",
+      "ip": "IP 地址",
+      "port": "端口",
+      "password": "访问验证码",
+      "status": {
+        "label": "状态",
+        "connected": "已连接",
+        "connecting": "连接中",
+        "authenticating": "验证中",
+        "error": "错误",
+        "disconnected": "未连接"
+      },
+      "actions": {
+        "connect": "连接",
+        "connecting": "正在连接…",
+        "disconnect": "断开连接",
+        "refresh": "刷新状态"
+      },
+      "nowPlaying": "正在播放",
+      "volume": "音量：{{volume}}%",
+      "emptyTitle": "暂无播放内容",
+      "emptyArtist": "未知艺术家",
+      "loadingSong": "加载中...",
+      "queue": "播放队列",
+      "playing": "播放中",
+      "currentlyPlaying": "当前播放",
+      "clickToPlay": "点击播放",
+      "tabs": {
+        "control": "控制",
+        "library": "音乐库"
+      },
+      "library": {
+        "search": "搜索",
+        "albums": "专辑",
+        "playlists": "播放列表",
+        "songs": "歌曲",
+        "searchPlaceholder": "搜索歌曲、专辑...",
+        "searchButton": "搜索",
+        "searching": "搜索中...",
+        "noResults": "未找到结果",
+        "loading": "加载中...",
+        "noAlbums": "没有可用的专辑",
+        "noPlaylists": "没有可用的播放列表",
+        "back": "返回"
+      },
+      "controls": {
+        "previous": "上一首",
+        "play": "播放",
+        "pause": "暂停",
+        "next": "下一首",
+        "shuffle": "切换随机播放",
+        "repeat": "切换循环"
+      },
+      "items": "项",
+      "queueEmpty": "队列为空",
+      "unknownDevice": "未知设备",
+      "version": "版本 {{version}}",
+      "autoConnectFailed": "无法连接到远程设备，进入本地播放模式"
     }
   },
   "podcasts": {

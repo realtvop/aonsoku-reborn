@@ -1,5 +1,5 @@
-import type { ButtonHTMLAttributes } from 'react'
-import { cn } from '@/lib/utils'
+import type { ButtonHTMLAttributes } from "react";
+import { cn } from "@/lib/utils";
 
 export function ControlButton({
   className,
@@ -9,7 +9,7 @@ export function ControlButton({
   return (
     <button
       className={cn(
-        'inline-flex cursor-default items-center justify-center outline-none',
+        "inline-flex cursor-default items-center justify-center outline-none",
         className,
       )}
       {...props}
@@ -17,5 +17,5 @@ export function ControlButton({
     >
       {children}
     </button>
-  )
+  );
 }

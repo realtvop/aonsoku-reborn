@@ -1,4 +1,4 @@
-import { Skeleton } from '@/app/components/ui/skeleton'
+import { Skeleton } from "@/app/components/ui/skeleton";
 
 export function HeaderFallback() {
   return (
@@ -19,7 +19,7 @@ export function HeaderFallback() {
         <Skeleton className="w-8 h-8 bg-background/50 rounded-full" />
       </div>
     </div>
-  )
+  );
 }
 
 export function HomeFallback() {
@@ -32,7 +32,7 @@ export function HomeFallback() {
       <PreviewListFallback />
       <PreviewListFallback />
     </div>
-  )
+  );
 }
 
 export function PreviewListFallback() {
@@ -40,7 +40,7 @@ export function PreviewListFallback() {
     <div className="w-full flex flex-col my-4">
       <div className="flex justify-between my-4">
         <Skeleton className="w-52 h-8 rounded" />
-        <div className="flex gap-2">
+        <div className="flex gap-2 hidden sm:flex">
           <Skeleton className="w-8 h-8 rounded-full" />
           <Skeleton className="w-8 h-8 rounded-full" />
         </div>
@@ -48,7 +48,7 @@ export function PreviewListFallback() {
 
       <SongsCarouselFallback />
     </div>
-  )
+  );
 }
 
 export function SongsCarouselFallback() {
@@ -56,7 +56,7 @@ export function SongsCarouselFallback() {
     <>
       <div className="hidden 2xl:flex gap-4">
         {Array.from({ length: 8 }).map((_, index) => (
-          <div className="basis-1/8" key={'large-' + index}>
+          <div className="basis-1/8" key={"large-" + index}>
             <Skeleton className="aspect-square" />
             <Skeleton className="h-[13px] w-11/12 mt-2" />
             <Skeleton className="h-3 w-1/2 mt-[7px]" />
@@ -64,9 +64,19 @@ export function SongsCarouselFallback() {
         ))}
       </div>
 
-      <div className="flex 2xl:hidden gap-4">
+      <div className="hidden sm:flex 2xl:hidden gap-4">
         {Array.from({ length: 6 }).map((_, index) => (
-          <div className="basis-1/5" key={'small-' + index}>
+          <div className="basis-1/6" key={"small-" + index}>
+            <Skeleton className="aspect-square" />
+            <Skeleton className="h-[13px] w-11/12 mt-2" />
+            <Skeleton className="h-3 w-1/2 mt-[7px]" />
+          </div>
+        ))}
+      </div>
+
+      <div className="flex sm:hidden gap-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div className="basis-1/4" key={"small-" + index}>
             <Skeleton className="aspect-square" />
             <Skeleton className="h-[13px] w-11/12 mt-2" />
             <Skeleton className="h-3 w-1/2 mt-[7px]" />
@@ -74,5 +84,5 @@ export function SongsCarouselFallback() {
         ))}
       </div>
     </>
-  )
+  );
 }

@@ -1,19 +1,19 @@
-import { zodResolver } from '@hookform/resolvers/zod'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useEffect } from 'react'
-import { useForm } from 'react-hook-form'
-import { useTranslation } from 'react-i18next'
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 
-import { toast } from 'react-toastify'
-import { z } from 'zod'
-import { Button } from '@/app/components/ui/button'
+import { toast } from "react-toastify";
+import { z } from "zod";
+import { Button } from "@/app/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/app/components/ui/dialog'
+} from "@/app/components/ui/dialog";
 import {
   Form,
   FormControl,
@@ -21,90 +21,90 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/app/components/ui/form'
-import { Input } from '@/app/components/ui/input'
-import { subsonic } from '@/service/subsonic'
-import { useRadios } from '@/store/radios.store'
-import { Radio } from '@/types/responses/radios'
-import { queryKeys } from '@/utils/queryKeys'
+} from "@/app/components/ui/form";
+import { Input } from "@/app/components/ui/input";
+import { subsonic } from "@/service/subsonic";
+import { useRadios } from "@/store/radios.store";
+import { Radio } from "@/types/responses/radios";
+import { queryKeys } from "@/utils/queryKeys";
 
 const radioSchema = z.object({
-  name: z.string().min(3, { message: 'radios.form.validations.name' }),
+  name: z.string().min(3, { message: "radios.form.validations.name" }),
   homePageUrl: z
     .string()
-    .url({ message: 'radios.form.validations.url' })
-    .min(10, { message: 'radios.form.validations.homepageUrlLength' })
+    .url({ message: "radios.form.validations.url" })
+    .min(10, { message: "radios.form.validations.homepageUrlLength" })
     .refine((value) => /^https?:\/\//.test(value), {
-      message: 'login.form.validations.protocol',
+      message: "login.form.validations.protocol",
     })
-    .or(z.literal('')),
+    .or(z.literal("")),
   streamUrl: z
     .string()
-    .url({ message: 'radios.form.validations.url' })
-    .min(10, { message: 'radios.form.validations.streamUrlLength' })
+    .url({ message: "radios.form.validations.url" })
+    .min(10, { message: "radios.form.validations.streamUrlLength" })
     .refine((value) => /^https?:\/\//.test(value), {
-      message: 'login.form.validations.protocol',
+      message: "login.form.validations.protocol",
     }),
-})
+});
 
-type RadioSchema = z.infer<typeof radioSchema>
+type RadioSchema = z.infer<typeof radioSchema>;
 
 const defaultValues: RadioSchema = {
-  name: '',
-  homePageUrl: '',
-  streamUrl: '',
-}
+  name: "",
+  homePageUrl: "",
+  streamUrl: "",
+};
 
 export function RadioFormDialog() {
-  const { t } = useTranslation()
-  const { data, setData, dialogState, setDialogState } = useRadios()
+  const { t } = useTranslation();
+  const { data, setData, dialogState, setDialogState } = useRadios();
 
-  const isCreation = Object.keys(data).length === 0
+  const isCreation = Object.keys(data).length === 0;
 
   const form = useForm<RadioSchema>({
     resolver: zodResolver(radioSchema),
     defaultValues,
-  })
+  });
 
   useEffect(() => {
     if (isCreation) {
-      form.reset(defaultValues)
+      form.reset(defaultValues);
     } else {
       form.reset({
-        name: data.name ?? '',
-        homePageUrl: data.homePageUrl ?? '',
-        streamUrl: data.streamUrl ?? '',
-      })
+        name: data.name ?? "",
+        homePageUrl: data.homePageUrl ?? "",
+        streamUrl: data.streamUrl ?? "",
+      });
     }
-  }, [data, form, isCreation])
+  }, [data, form, isCreation]);
 
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   const createMutation = useMutation({
     mutationFn: subsonic.radios.create,
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: [queryKeys.radio.all],
-      })
-      toast.success(t('radios.form.create.toast.success'))
+      });
+      toast.success(t("radios.form.create.toast.success"));
     },
     onError: () => {
-      toast.error(t('radios.form.create.toast.error'))
+      toast.error(t("radios.form.create.toast.error"));
     },
-  })
+  });
 
   const updateMutation = useMutation({
     mutationFn: subsonic.radios.update,
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: [queryKeys.radio.all],
-      })
-      toast.success(t('radios.form.edit.toast.success'))
+      });
+      toast.success(t("radios.form.edit.toast.success"));
     },
     onError: () => {
-      toast.success(t('radios.form.edit.toast.error'))
+      toast.success(t("radios.form.edit.toast.error"));
     },
-  })
+  });
 
   async function onSubmit({ name, homePageUrl, streamUrl }: RadioSchema) {
     if (isCreation) {
@@ -112,22 +112,22 @@ export function RadioFormDialog() {
         name,
         homePageUrl,
         streamUrl,
-      })
+      });
     } else {
       await updateMutation.mutateAsync({
         id: data.id,
         name,
         homePageUrl,
         streamUrl,
-      })
+      });
     }
 
-    setDialogState(false)
-    clear()
+    setDialogState(false);
+    clear();
   }
 
   function clear() {
-    setData({} as Radio)
+    setData({} as Radio);
   }
 
   return (
@@ -135,8 +135,8 @@ export function RadioFormDialog() {
       defaultOpen={false}
       open={dialogState}
       onOpenChange={(state) => {
-        if (!state) clear()
-        setDialogState(state)
+        if (!state) clear();
+        setDialogState(state);
       }}
     >
       <DialogContent className="max-w-[500px]" aria-describedby={undefined}>
@@ -144,7 +144,7 @@ export function RadioFormDialog() {
           <form onSubmit={form.handleSubmit(onSubmit)}>
             <DialogHeader>
               <DialogTitle>
-                {t(`radios.form.${isCreation ? 'create' : 'edit'}.title`)}
+                {t(`radios.form.${isCreation ? "create" : "edit"}.title`)}
               </DialogTitle>
             </DialogHeader>
             <div className="my-4 space-y-4">
@@ -154,7 +154,7 @@ export function RadioFormDialog() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="required">
-                      {t('radios.table.name')}
+                      {t("radios.table.name")}
                     </FormLabel>
                     <FormControl>
                       <Input {...field} id="radio-name" />
@@ -169,7 +169,7 @@ export function RadioFormDialog() {
                 name="homePageUrl"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t('radios.table.homepage')}</FormLabel>
+                    <FormLabel>{t("radios.table.homepage")}</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
@@ -190,7 +190,7 @@ export function RadioFormDialog() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="required">
-                      {t('radios.table.stream')}
+                      {t("radios.table.stream")}
                     </FormLabel>
                     <FormControl>
                       <Input
@@ -208,12 +208,12 @@ export function RadioFormDialog() {
             </div>
             <DialogFooter>
               <Button type="submit">
-                {t(`radios.form.${isCreation ? 'create' : 'edit'}.button`)}
+                {t(`radios.form.${isCreation ? "create" : "edit"}.button`)}
               </Button>
             </DialogFooter>
           </form>
         </Form>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

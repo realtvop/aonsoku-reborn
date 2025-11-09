@@ -68,7 +68,7 @@
     "headline": "Playlist",
     "songCount_one": "{{count}} song",
     "songCount_other": "{{count}} songs",
-    "duration": "about {{duration}}",
+    "duration": "~ {{duration}}",
     "refresh": "Refresh playlists",
     "buttons": {
       "play": "Play {{name}}",
@@ -605,6 +605,8 @@
       "language": "Language & Region",
       "audio": "Player & Audio",
       "content": "Content",
+      "accounts": "Accounts",
+      "desktop": "Desktop Application",
       "privacy": "Privacy & Security"
     },
     "appearance": {
@@ -692,6 +694,120 @@
           "url": "Server URL"
         }
       }
+    },
+    "accounts": {
+      "discord": {
+        "group": "Discord Rich Presence",
+        "description": "Share your currently playing song with friends on Discord.",
+        "enabled": {
+          "label": "Enable Integration"
+        }
+      }
+    },
+    "desktop": {
+      "general": {
+        "group": "General",
+        "description": "Customize preferences for the desktop application.",
+        "tray": {
+          "label": "Minimize to Tray",
+          "info": "When enabled, the app will minimize to the system tray instead of closing when you click the close button."
+        }
+      },
+      "lanControl": {
+        "group": "LAN Control",
+        "description": "Manage LAN control settings for remote access.",
+        "enable": {
+          "label": "Enable LAN Control",
+          "info": "Turn on LAN control to allow remote access to this application."
+        },
+        "port": {
+          "label": "Port",
+          "info": "Specify the port number for the LAN control server."
+        },
+        "password": {
+          "label": "Password",
+          "info": "Set a password for secure access to the LAN control server."
+        },
+        "address": {
+          "label": "Server Addresses",
+          "info": "Available server addresses for LAN control access."
+        },
+        "allowNavidromeAuth": {
+          "label": "Allow Navidrome Authentication",
+          "info": "Enable authentication using Navidrome credentials."
+        },
+        "serverStarted": "LAN control server started successfully.",
+        "serverError": "Failed to start LAN control server.",
+        "passwordRegenerated": "Password regenerated successfully.",
+        "addressCopied": "Server address copied to clipboard.",
+        "passwordCopied": "Password copied to clipboard."
+      }
+    }
+  },
+  "lanControl": {
+    "remote": {
+      "menu": "Control other devices",
+      "title": "Control other devices",
+      "description": "Connect to a LAN control server and manage playback remotely.",
+      "serverRunning": "This device is currently running as a LAN Control server. You cannot control other devices while this device is in server mode.",
+      "address": "Server address",
+      "ip": "IP Address",
+      "port": "Port",
+      "password": "Access code",
+      "status": {
+        "label": "Status",
+        "connected": "Connected",
+        "connecting": "Connecting",
+        "authenticating": "Authenticating",
+        "error": "Error",
+        "disconnected": "Disconnected"
+      },
+      "actions": {
+        "connect": "Connect",
+        "connecting": "Connecting...",
+        "disconnect": "Disconnect",
+        "refresh": "Refresh state"
+      },
+      "nowPlaying": "Now playing",
+      "volume": "Volume: {{volume}}%",
+      "emptyTitle": "No track playing",
+      "emptyArtist": "Unknown artist",
+      "loadingSong": "Loading...",
+      "queue": "Playback queue",
+      "playing": "Playing",
+      "currentlyPlaying": "Currently playing",
+      "clickToPlay": "Click to play",
+      "tabs": {
+        "control": "Control",
+        "library": "Library"
+      },
+      "library": {
+        "search": "Search",
+        "albums": "Albums",
+        "playlists": "Playlists",
+        "songs": "Songs",
+        "searchPlaceholder": "Search songs, albums...",
+        "searchButton": "Search",
+        "searching": "Searching...",
+        "noResults": "No results found",
+        "loading": "Loading...",
+        "noAlbums": "No albums available",
+        "noPlaylists": "No playlists available",
+        "back": "Back"
+      },
+      "controls": {
+        "previous": "Previous",
+        "play": "Play",
+        "pause": "Pause",
+        "next": "Next",
+        "shuffle": "Toggle shuffle",
+        "repeat": "Toggle repeat"
+      },
+      "items": "items",
+      "queueEmpty": "Queue is empty",
+      "unknownDevice": "Unknown device",
+      "version": "v{{version}}",
+      "autoConnectFailed": "Failed to connect to remote device, entering local playback mode"
     }
   },
   "dayjs": {

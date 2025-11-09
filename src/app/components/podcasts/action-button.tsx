@@ -1,16 +1,16 @@
-import clsx from 'clsx'
-import { EllipsisVertical } from 'lucide-react'
-import { ReactNode } from 'react'
-import { Button } from '@/app/components/ui/button'
+import clsx from "clsx";
+import { EllipsisVertical } from "lucide-react";
+import { ReactNode } from "react";
+import { Button } from "@/app/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger,
-} from '@/app/components/ui/dropdown-menu'
+} from "@/app/components/ui/dropdown-menu";
 
 interface PodcastActionButtonProps {
-  featured?: boolean
-  children?: ReactNode
+  featured?: boolean;
+  children?: ReactNode;
 }
 
 export function PodcastActionButton({
@@ -27,8 +27,8 @@ export function PodcastActionButton({
           variant="ghost"
           size="icon"
           className={clsx(
-            'w-8 h-8 p-1 rounded-full data-[state=open]:bg-accent',
-            !featured && 'hover:bg-background',
+            "w-8 h-8 p-1 rounded-full data-[state=open]:bg-accent",
+            !featured && "hover:bg-background",
           )}
           onClick={(e) => e.stopPropagation()}
         >
@@ -41,5 +41,5 @@ export function PodcastActionButton({
         </DropdownMenuContent>
       )}
     </DropdownMenu>
-  )
+  );
 }

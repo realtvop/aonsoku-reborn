@@ -1,4 +1,4 @@
-import type { SVGProps } from 'react'
+import type { SVGProps } from "react";
 
 export const Icons = {
   minimizeWin: (props: JSX.IntrinsicAttributes & SVGProps<SVGSVGElement>) => (
@@ -204,4 +204,4 @@ export const Icons = {
       </g>
     </svg>
   ),
-}
+};

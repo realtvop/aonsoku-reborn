@@ -1,35 +1,35 @@
-import { TooltipPortal } from '@radix-ui/react-tooltip'
-import { ReactNode } from 'react'
-import { isDesktop } from 'react-device-detect'
+import { TooltipPortal } from "@radix-ui/react-tooltip";
+import { ReactNode } from "react";
+import { isDesktop } from "react-device-detect";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from './tooltip'
+} from "./tooltip";
 
-interface TooltipContent {
-  children: ReactNode
-  text: string
-  side?: 'top' | 'right' | 'bottom' | 'left'
-  align?: 'center' | 'end' | 'start'
-  delay?: number
-  avoidCollisions?: boolean
-  disabled?: boolean
+interface SimpleTooltipProps {
+  children: ReactNode;
+  text: string;
+  side?: "top" | "right" | "bottom" | "left";
+  align?: "center" | "end" | "start";
+  delay?: number;
+  avoidCollisions?: boolean;
+  disabled?: boolean;
 }
 
 export function SimpleTooltip({
   children,
   text,
-  side = 'top',
-  align = 'center',
+  side = "top",
+  align = "center",
   delay = 700,
   avoidCollisions = true,
   disabled = false,
-}: TooltipContent) {
+}: SimpleTooltipProps) {
   // If is not desktop return only the children element
   if (!isDesktop || disabled) {
-    return <>{children}</>
+    return <>{children}</>;
   }
 
   return (
@@ -47,5 +47,5 @@ export function SimpleTooltip({
         </TooltipPortal>
       </Tooltip>
     </TooltipProvider>
-  )
+  );
 }

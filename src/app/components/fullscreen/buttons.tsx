@@ -1,5 +1,5 @@
-import { ChevronDown } from 'lucide-react'
-import { Button } from '@/app/components/ui/button'
+import { ChevronDown } from "lucide-react";
+import { Button } from "@/app/components/ui/button";
 
 export function CloseFullscreenButton() {
   return (
@@ -13,5 +13,5 @@ export function CloseFullscreenButton() {
         <ChevronDown className="size-7" />
       </div>
     </Button>
-  )
+  );
 }

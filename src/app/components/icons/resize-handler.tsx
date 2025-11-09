@@ -1,6 +1,6 @@
-import { ComponentPropsWithoutRef } from 'react'
+import { ComponentPropsWithoutRef } from "react";
 
-type ResizeHandlerProps = ComponentPropsWithoutRef<'div'>
+type ResizeHandlerProps = ComponentPropsWithoutRef<"div">;
 
 export function ResizeHandler({ ...props }: ResizeHandlerProps) {
   return (
@@ -41,5 +41,5 @@ export function ResizeHandler({ ...props }: ResizeHandlerProps) {
         </svg>
       </div>
     </div>
-  )
+  );
 }

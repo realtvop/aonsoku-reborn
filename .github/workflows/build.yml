@@ -4,52 +4,40 @@ on:
   push:
     branches:
       - main
-      - develop
+      - development
   pull_request:
     branches:
       - main
-      - develop
+      - development
 
 jobs:
-  build-tauri:
+  build-electron:
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: "macos-latest"
-            # for Arm based macs (M1 and above).
-            args: "--target aarch64-apple-darwin"
+            target: "mac"
+            arch: "x64"
           - platform: "macos-latest"
-            # for Intel based macs.
-            args: "--target x86_64-apple-darwin"
-          - platform: 'ubuntu-22.04'
-            args: ''
-        #   - platform: 'ubuntu-22.04-arm'
-        #     args: ''
+            target: "mac"
+            arch: "arm64"
+          - platform: "ubuntu-22.04"
+            target: "linux"
+            arch: "x64"
+          - platform: "ubuntu-22.04-arm"
+            target: "linux"
+            arch: "arm64"
           - platform: "windows-latest"
-            args: ""
+            target: "win"
+            arch: "x64"
           - platform: "windows-11-arm"
-            args: ""
+            target: "win"
+            arch: "arm64"
     runs-on: ${{ matrix.platform }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: install dependencies (ubuntu only)
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev patchelf
-
-      - name: install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: "./src-tauri -> target"
 
       - name: Install pnpm
         uses: pnpm/action-setup@v3
@@ -63,21 +51,23 @@ jobs:
           node-version: 20
 
       - name: install frontend dependencies
-        run: pnpm install --ignore-scripts
-
-      - uses: tauri-apps/tauri-action@v0
+        run: pnpm install
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        with:
-          args: ${{ matrix.args }}
+          # Skip Cypress binary download on Windows ARM (unsupported platform)
+          CYPRESS_INSTALL_BINARY: ${{ matrix.platform == 'windows-11-arm' && '0' || '' }}
+
+      - name: Build Electron app
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: pnpm run build:${{ matrix.target }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: tauri-app-${{ matrix.platform }}-${{ matrix.args != '' && matrix.args || 'default' }}
+          name: electron-app-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
-            src-tauri/target/release/bundle/
-            src-tauri/target/*/release/bundle/
+            dist/make/**/*.deb
+            dist/make/**/*.rpm
+            dist/make/**/*.dmg
+            dist/make/**/*.zip
           if-no-files-found: warn

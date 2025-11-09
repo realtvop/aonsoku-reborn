@@ -1,26 +1,26 @@
-import { Play } from 'lucide-react'
-import { ComponentPropsWithoutRef } from 'react'
-import { LazyLoadImage } from 'react-lazy-load-image-component'
-import { Link } from 'react-router-dom'
-import { Button } from '@/app/components/ui/button'
-import { cn } from '@/lib/utils'
+import { Play } from "lucide-react";
+import { ComponentPropsWithoutRef } from "react";
+import { LazyLoadImage } from "react-lazy-load-image-component";
+import { Link } from "react-router-dom";
+import { Button } from "@/app/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface Children {
-  children: React.ReactNode
+  children: React.ReactNode;
 }
 
-type RootProps = ComponentPropsWithoutRef<'div'>
+type RootProps = ComponentPropsWithoutRef<"div">;
 
 function Root({ className, children, ...props }: RootProps) {
   return (
-    <div className={cn('cursor-pointer', className)} {...props}>
+    <div className={cn("cursor-pointer", className)} {...props}>
       {children}
     </div>
-  )
+  );
 }
 
 interface ImageWrapperProps extends Children {
-  link: string
+  link: string;
 }
 
 function ImageWrapper({ children, link }: ImageWrapperProps) {
@@ -34,12 +34,12 @@ function ImageWrapper({ children, link }: ImageWrapperProps) {
         {children}
       </Link>
     </div>
-  )
+  );
 }
 
 interface ImageProps {
-  src: string
-  alt: string
+  src: string;
+  alt: string;
 }
 
 function Image({ src, alt }: ImageProps) {
@@ -53,11 +53,11 @@ function Image({ src, alt }: ImageProps) {
       className="aspect-square object-cover w-full h-full absolute inset-0 z-0"
       data-testid="card-image"
     />
-  )
+  );
 }
 
 interface PlayButtonProps {
-  onClick: () => void
+  onClick: () => void;
 }
 
 function PlayButton({ onClick }: PlayButtonProps) {
@@ -67,27 +67,27 @@ function PlayButton({ onClick }: PlayButtonProps) {
         className="opacity-0 group-hover:opacity-100 transition-all duration-300 rounded-full w-12 h-12 z-20"
         variant="outline"
         onClick={(e) => {
-          e.stopPropagation()
-          e.preventDefault()
-          onClick()
+          e.stopPropagation();
+          e.preventDefault();
+          onClick();
         }}
         data-testid="card-play-button"
       >
         <Play className="fill-foreground" />
       </Button>
     </div>
-  )
+  );
 }
 
 interface InfoWrapperProps extends Children {}
 
 function InfoWrapper({ children }: InfoWrapperProps) {
-  return <div className="flex flex-col cursor-default">{children}</div>
+  return <div className="flex flex-col cursor-default">{children}</div>;
 }
 
 interface TitleProps {
-  link: string
-  children: string
+  link: string;
+  children: string;
 }
 
 function Title({ link, children }: TitleProps) {
@@ -101,14 +101,14 @@ function Title({ link, children }: TitleProps) {
         {children}
       </Link>
     </div>
-  )
+  );
 }
 
 interface SubtitleProps {
-  link?: string
-  children: React.ReactNode
-  enableLink?: boolean
-  className?: string
+  link?: string;
+  children: React.ReactNode;
+  enableLink?: boolean;
+  className?: string;
 }
 
 function Subtitle({
@@ -122,7 +122,7 @@ function Subtitle({
       <div className="w-full">
         <p
           className={cn(
-            'leading-5 truncate text-xs text-muted-foreground -mt-1',
+            "leading-5 truncate text-xs text-muted-foreground -mt-1",
             className,
           )}
           data-testid="card-subtitle"
@@ -130,7 +130,7 @@ function Subtitle({
           {children}
         </p>
       </div>
-    )
+    );
   }
 
   return (
@@ -139,14 +139,14 @@ function Subtitle({
         to={link}
         data-testid="card-subtitle-link"
         className={cn(
-          'max-w-full truncate text-xs text-muted-foreground hover:underline',
+          "max-w-full truncate text-xs text-muted-foreground hover:underline",
           className,
         )}
       >
         {children}
       </Link>
     </div>
-  )
+  );
 }
 
 export const PreviewCard = {
@@ -157,4 +157,4 @@ export const PreviewCard = {
   InfoWrapper,
   Title,
   Subtitle,
-}
+};

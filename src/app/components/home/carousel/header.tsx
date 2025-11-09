@@ -1,20 +1,18 @@
-import Autoplay from 'embla-carousel-autoplay'
-import { HeaderItem } from '@/app/components/home/carousel/header-item'
+import Autoplay from "embla-carousel-autoplay";
+import { HeaderItem } from "@/app/components/home/carousel/header-item";
 import {
   Carousel,
   CarouselContent,
   CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-} from '@/app/components/ui/carousel'
-import { ISong } from '@/types/responses/song'
+} from "@/app/components/ui/carousel";
+import { ISong } from "@/types/responses/song";
 
 interface HomeHeaderProps {
-  songs: ISong[]
+  songs: ISong[];
 }
 
 export default function HomeHeader({ songs }: HomeHeaderProps) {
-  if (songs.length === 0) return null
+  if (songs.length === 0) return null;
 
   return (
     <Carousel
@@ -31,7 +29,7 @@ export default function HomeHeader({ songs }: HomeHeaderProps) {
     >
       <CarouselContent
         className="ml-0 flex transform-gpu"
-        style={{ borderRadius: 'calc(var(--radius) - 2px)' }}
+        style={{ borderRadius: "calc(var(--radius) - 2px)" }}
       >
         {songs.map((song, index) => (
           <CarouselItem
@@ -43,7 +41,7 @@ export default function HomeHeader({ songs }: HomeHeaderProps) {
           </CarouselItem>
         ))}
       </CarouselContent>
-      <div className="absolute right-[4.5rem] bottom-10">
+      {/* <div className="absolute right-[4.5rem] bottom-10">
         <CarouselPrevious
           data-testid="header-carousel-previous"
           className="-left-6 shadow-sm"
@@ -52,7 +50,7 @@ export default function HomeHeader({ songs }: HomeHeaderProps) {
           data-testid="header-carousel-next"
           className="shadow-sm"
         />
-      </div>
+      </div> */}
     </Carousel>
-  )
+  );
 }

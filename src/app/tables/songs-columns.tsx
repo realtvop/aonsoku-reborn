@@ -1,46 +1,46 @@
-import { ClockIcon, HeartIcon } from 'lucide-react'
-import { memo } from 'react'
-import { Link } from 'react-router-dom'
+import { ClockIcon, HeartIcon } from "lucide-react";
+import { memo } from "react";
+import { Link } from "react-router-dom";
 
-import { ArtistLink, ArtistsLinks } from '@/app/components/song/artist-link'
-import PlaySongButton from '@/app/components/table/play-button'
-import { SongTableActions } from '@/app/components/table/song-actions'
-import { TableSongTitle } from '@/app/components/table/song-title'
-import { Badge } from '@/app/components/ui/badge'
-import { DataTableColumnHeader } from '@/app/components/ui/data-table-column-header'
-import { SimpleTooltip } from '@/app/components/ui/simple-tooltip'
-import i18n from '@/i18n'
-import { ROUTES } from '@/routes/routesList'
-import { ColumnDefType } from '@/types/react-table/columnDef'
-import { ISong } from '@/types/responses/song'
-import { convertSecondsToTime } from '@/utils/convertSecondsToTime'
-import dateTime from '@/utils/dateTime'
+import { ArtistLink, ArtistsLinks } from "@/app/components/song/artist-link";
+import PlaySongButton from "@/app/components/table/play-button";
+import { SongTableActions } from "@/app/components/table/song-actions";
+import { TableSongTitle } from "@/app/components/table/song-title";
+import { Badge } from "@/app/components/ui/badge";
+import { DataTableColumnHeader } from "@/app/components/ui/data-table-column-header";
+import { SimpleTooltip } from "@/app/components/ui/simple-tooltip";
+import i18n from "@/i18n";
+import { ROUTES } from "@/routes/routesList";
+import { ColumnDefType } from "@/types/react-table/columnDef";
+import { ISong } from "@/types/responses/song";
+import { convertSecondsToTime } from "@/utils/convertSecondsToTime";
+import dateTime from "@/utils/dateTime";
 
-const MemoSimpleTooltip = memo(SimpleTooltip)
-const MemoBadge = memo(Badge)
-const MemoPlaySongButton = memo(PlaySongButton)
-const MemoTableSongTitle = memo(TableSongTitle)
-const MemoLink = memo(Link)
-const MemoSongTableActions = memo(SongTableActions)
+const MemoSimpleTooltip = memo(SimpleTooltip);
+const MemoBadge = memo(Badge);
+const MemoPlaySongButton = memo(PlaySongButton);
+const MemoTableSongTitle = memo(TableSongTitle);
+const MemoLink = memo(Link);
+const MemoSongTableActions = memo(SongTableActions);
 const MemoDataTableColumnHeader = memo(
   DataTableColumnHeader,
-) as typeof DataTableColumnHeader
+) as typeof DataTableColumnHeader;
 
 export function songsColumns(): ColumnDefType<ISong>[] {
   return [
     {
-      id: 'index',
-      accessorKey: 'index',
+      id: "index",
+      accessorKey: "index",
       style: {
         width: 48,
-        minWidth: '48px',
+        minWidth: "48px",
       },
       header: () => {
-        return <div className="w-full text-center">#</div>
+        return <div className="w-full text-center">#</div>;
       },
       cell: ({ row, table }) => {
-        const trackNumber = row.index + 1
-        const song = row.original
+        const trackNumber = row.index + 1;
+        const song = row.original;
 
         return (
           <MemoPlaySongButton
@@ -48,22 +48,22 @@ export function songsColumns(): ColumnDefType<ISong>[] {
             trackId={song.id}
             handlePlayButton={() => table.options.meta?.handlePlaySong?.(row)}
           />
-        )
+        );
       },
     },
     {
-      id: 'trackNumber',
-      accessorKey: 'track',
+      id: "trackNumber",
+      accessorKey: "track",
       style: {
         width: 48,
-        minWidth: '48px',
+        minWidth: "48px",
       },
       header: () => {
-        return <div className="w-full text-center">#</div>
+        return <div className="w-full text-center">#</div>;
       },
       cell: ({ row, table }) => {
-        const song = row.original
-        const trackNumber = song.track
+        const song = row.original;
+        const trackNumber = song.track;
 
         return (
           <MemoPlaySongButton
@@ -71,65 +71,65 @@ export function songsColumns(): ColumnDefType<ISong>[] {
             trackId={song.id}
             handlePlayButton={() => table.options.meta?.handlePlaySong?.(row)}
           />
-        )
+        );
       },
     },
     {
-      id: 'title',
-      accessorKey: 'title',
+      id: "title",
+      accessorKey: "title",
       style: {
         flex: 1,
-        minWidth: 250,
+        minWidth: 210,
       },
       enableSorting: true,
-      sortingFn: 'customSortFn',
+      sortingFn: "customSortFn",
       header: ({ column, table }) => (
         <MemoDataTableColumnHeader column={column} table={table}>
-          {i18n.t('table.columns.title')}
+          {i18n.t("table.columns.title")}
         </MemoDataTableColumnHeader>
       ),
       cell: ({ row }) => <MemoTableSongTitle song={row.original} />,
     },
     {
-      id: 'artist',
-      accessorKey: 'artist',
+      id: "artist",
+      accessorKey: "artist",
       style: {
-        width: '20%',
-        maxWidth: '20%',
+        width: "20%",
+        maxWidth: "20%",
       },
       enableSorting: true,
-      sortingFn: 'customSortFn',
+      sortingFn: "customSortFn",
       header: ({ column, table }) => (
         <MemoDataTableColumnHeader column={column} table={table}>
-          {i18n.t('table.columns.artist')}
+          {i18n.t("table.columns.artist")}
         </MemoDataTableColumnHeader>
       ),
       cell: ({ row }) => {
-        const { artist, artistId, artists } = row.original
+        const { artist, artistId, artists } = row.original;
 
         if (artists && artists.length > 1) {
-          return <ArtistsLinks artists={artists} />
+          return <ArtistsLinks artists={artists} />;
         }
 
-        if (!artistId) return artist
+        if (!artistId) return artist;
 
-        return <ArtistLink artistId={artistId}>{artist}</ArtistLink>
+        return <ArtistLink artistId={artistId}>{artist}</ArtistLink>;
       },
     },
     {
-      id: 'album',
-      accessorKey: 'album',
+      id: "album",
+      accessorKey: "album",
       style: {
-        width: '24%',
-        minWidth: '14%',
-        maxWidth: '24%',
+        width: "24%",
+        minWidth: "14%",
+        maxWidth: "24%",
       },
-      className: 'hidden lg:flex',
+      className: "hidden lg:flex",
       enableSorting: true,
-      sortingFn: 'customSortFn',
+      sortingFn: "customSortFn",
       header: ({ column, table }) => (
         <MemoDataTableColumnHeader column={column} table={table}>
-          {i18n.t('table.columns.album')}
+          {i18n.t("table.columns.album")}
         </MemoDataTableColumnHeader>
       ),
       cell: ({ row }) => {
@@ -138,35 +138,35 @@ export function songsColumns(): ColumnDefType<ISong>[] {
             to={ROUTES.ALBUM.PAGE(row.original.albumId)}
             className="hover:underline truncate text-foreground/70 hover:text-foreground"
             onContextMenu={(e) => {
-              e.stopPropagation()
-              e.preventDefault()
+              e.stopPropagation();
+              e.preventDefault();
             }}
           >
             {row.original.album}
           </MemoLink>
-        )
+        );
       },
     },
     {
-      id: 'year',
-      accessorKey: 'year',
-      header: i18n.t('table.columns.year'),
+      id: "year",
+      accessorKey: "year",
+      header: i18n.t("table.columns.year"),
       style: {
         width: 80,
         maxWidth: 80,
       },
     },
     {
-      id: 'duration',
-      accessorKey: 'duration',
+      id: "duration",
+      accessorKey: "duration",
       style: {
         width: 80,
         maxWidth: 80,
       },
       enableSorting: true,
-      sortingFn: 'basic',
+      sortingFn: "basic",
       header: ({ column, table }) => (
-        <MemoSimpleTooltip text={i18n.t('table.columns.duration')}>
+        <MemoSimpleTooltip text={i18n.t("table.columns.duration")}>
           <div>
             <MemoDataTableColumnHeader column={column} table={table}>
               <ClockIcon className="w-4 h-4" />
@@ -175,114 +175,114 @@ export function songsColumns(): ColumnDefType<ISong>[] {
         </MemoSimpleTooltip>
       ),
       cell: ({ row }) => {
-        const { duration } = row.original
-        const formattedDuration = convertSecondsToTime(duration ?? 0)
+        const { duration } = row.original;
+        const formattedDuration = convertSecondsToTime(duration ?? 0);
 
-        return formattedDuration
+        return formattedDuration;
       },
     },
     {
-      id: 'playCount',
-      accessorKey: 'playCount',
+      id: "playCount",
+      accessorKey: "playCount",
       style: {
         width: 140,
         maxWidth: 140,
       },
-      className: 'hidden lg:flex',
+      className: "hidden lg:flex",
       enableSorting: true,
-      sortingFn: 'basic',
+      sortingFn: "basic",
       sortUndefined: -1,
       header: ({ column, table }) => (
         <MemoDataTableColumnHeader column={column} table={table}>
-          {i18n.t('table.columns.plays')}
+          {i18n.t("table.columns.plays")}
         </MemoDataTableColumnHeader>
       ),
       cell: ({ row }) => row.original.playCount ?? 0,
     },
     {
-      id: 'played',
-      accessorKey: 'played',
-      header: i18n.t('table.columns.lastPlayed'),
+      id: "played",
+      accessorKey: "played",
+      header: i18n.t("table.columns.lastPlayed"),
       style: {
         width: 180,
         maxWidth: 180,
       },
-      className: 'hidden 2xl:flex',
+      className: "hidden 2xl:flex",
       cell: ({ row }) => {
-        const { played } = row.original
+        const { played } = row.original;
 
         if (played) {
-          const lastPlayed = dateTime().from(dateTime(played), true)
-          return i18n.t('table.lastPlayed', { date: lastPlayed })
+          const lastPlayed = dateTime().from(dateTime(played), true);
+          return i18n.t("table.lastPlayed", { date: lastPlayed });
         }
 
-        return ''
+        return "";
       },
     },
     {
-      id: 'bpm',
-      accessorKey: 'bpm',
-      header: i18n.t('table.columns.bpm'),
+      id: "bpm",
+      accessorKey: "bpm",
+      header: i18n.t("table.columns.bpm"),
       style: {
         width: 80,
         maxWidth: 80,
       },
     },
     {
-      id: 'bitRate',
-      accessorKey: 'bitRate',
-      header: i18n.t('table.columns.bitrate'),
+      id: "bitRate",
+      accessorKey: "bitRate",
+      header: i18n.t("table.columns.bitrate"),
       style: {
         width: 140,
         maxWidth: 140,
       },
-      className: 'hidden 2xl:flex',
+      className: "hidden 2xl:flex",
       cell: ({ row }) => {
-        return `${row.original.bitRate} kbps`
+        return `${row.original.bitRate} kbps`;
       },
     },
     {
-      id: 'contentType',
-      accessorKey: 'contentType',
-      header: i18n.t('table.columns.quality'),
+      id: "contentType",
+      accessorKey: "contentType",
+      header: i18n.t("table.columns.quality"),
       style: {
         width: 100,
         maxWidth: 110,
       },
-      className: 'hidden 2xl:flex',
+      className: "hidden 2xl:flex",
       cell: ({ row }) => {
-        const { suffix, bitRate, size } = row.original
+        const { suffix, bitRate, size } = row.original;
         const tooltipContent = `
-          ${i18n.t('table.columns.quality')}: ${suffix}
-          ${i18n.t('table.columns.bitrate')}: ${bitRate} kbps
-          ${i18n.t('table.columns.size')}: ${
+          ${i18n.t("table.columns.quality")}: ${suffix}
+          ${i18n.t("table.columns.bitrate")}: ${bitRate} kbps
+          ${i18n.t("table.columns.size")}: ${
             size / 1024 / 1024 > 1
-              ? (size / 1024 / 1024).toFixed(2) + ' MB'
-              : (size / 1024).toFixed(2) + ' KB'
+              ? (size / 1024 / 1024).toFixed(2) + " MB"
+              : (size / 1024).toFixed(2) + " KB"
           }
-          `
+          `;
         return (
           <MemoSimpleTooltip text={tooltipContent}>
             <div>
               <MemoBadge variant="secondary">{suffix.toUpperCase()}</MemoBadge>
             </div>
           </MemoSimpleTooltip>
-        )
+        );
       },
     },
     {
-      id: 'select',
+      id: "select",
       style: {
         width: 120,
         maxWidth: 120,
-        justifyContent: 'end',
+        justifyContent: "end",
       },
       header: () => (
-        <MemoSimpleTooltip text={i18n.t('table.columns.favorite')}>
+        <MemoSimpleTooltip text={i18n.t("table.columns.favorite")}>
           <HeartIcon className="w-4 h-4 mr-2" />
         </MemoSimpleTooltip>
       ),
       cell: ({ row }) => <MemoSongTableActions row={row} />,
     },
-  ]
+  ];
 }

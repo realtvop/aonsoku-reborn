@@ -1,8 +1,8 @@
-import { PodcastIcon, SlashIcon } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { PodcastIcon, SlashIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export function NoEpisodesFound() {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
 
   return (
     <div className="w-full px-8 mt-4">
@@ -11,8 +11,8 @@ export function NoEpisodesFound() {
           <SlashIcon className="w-6 h-6 rotate-90 absolute" />
           <PodcastIcon className="w-6 h-6" />
         </div>
-        <p>{t('podcasts.list.notFoundMessage')}</p>
+        <p>{t("podcasts.list.notFoundMessage")}</p>
       </div>
     </div>
-  )
+  );
 }

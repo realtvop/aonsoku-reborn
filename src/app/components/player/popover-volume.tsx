@@ -1,11 +1,11 @@
-import { ReactNode } from 'react'
-import { Button } from '@/app/components/ui/button'
+import { ReactNode } from "react";
+import { Button } from "@/app/components/ui/button";
 import {
   Popover,
-  PopoverTrigger,
   PopoverContent,
-} from '@/app/components/ui/popover'
-import { VolumeSlider } from './volume'
+  PopoverTrigger,
+} from "@/app/components/ui/popover";
+import { VolumeSlider } from "./volume";
 
 export function PopoverVolume({ children }: { children: ReactNode }) {
   return (
@@ -26,5 +26,5 @@ export function PopoverVolume({ children }: { children: ReactNode }) {
         <VolumeSlider className="w-24" />
       </PopoverContent>
     </Popover>
-  )
+  );
 }

@@ -1,69 +1,69 @@
 import {
   ColumnFiltersState,
-  SortingState,
   getCoreRowModel,
-  useReactTable,
+  getSortedRowModel,
   Row,
   RowData,
-  getSortedRowModel,
   SortingFn,
+  SortingState,
   Table,
-} from '@tanstack/react-table'
-import { useVirtualizer } from '@tanstack/react-virtual'
-import clsx from 'clsx'
-import debounce from 'lodash/debounce'
+  useReactTable,
+} from "@tanstack/react-table";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import clsx from "clsx";
+import debounce from "lodash/debounce";
 import {
-  useEffect,
   MouseEvent,
+  memo,
   TouchEvent,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
-  memo,
-} from 'react'
-import { isMacOs } from 'react-device-detect'
-import { useHotkeys } from 'react-hotkeys-hook'
-import { SongMenuOptions } from '@/app/components/song/menu-options'
-import { SelectedSongsMenuOptions } from '@/app/components/song/selected-options'
-import { ColumnFilter } from '@/types/columnFilter'
-import { ColumnDefType } from '@/types/react-table/columnDef'
-import { ISong } from '@/types/responses/song'
-import { MouseButton } from '@/utils/browser'
-import { computeMultiSelectedRows } from '@/utils/dataTable'
-import { DataTableListHeader } from './data-table-list-header'
-import { TableListRow } from './data-table-list-row'
-import { ScrollArea, scrollAreaViewportSelector } from './scroll-area'
+} from "react";
+import { isMacOs } from "react-device-detect";
+import { useHotkeys } from "react-hotkeys-hook";
+import { SongMenuOptions } from "@/app/components/song/menu-options";
+import { SelectedSongsMenuOptions } from "@/app/components/song/selected-options";
+import { ColumnFilter } from "@/types/columnFilter";
+import { ColumnDefType } from "@/types/react-table/columnDef";
+import { ISong } from "@/types/responses/song";
+import { MouseButton } from "@/utils/browser";
+import { computeMultiSelectedRows } from "@/utils/dataTable";
+import { DataTableListHeader } from "./data-table-list-header";
+import { TableListRow } from "./data-table-list-row";
+import { ScrollArea, scrollAreaViewportSelector } from "./scroll-area";
 
-const MemoTableListRow = memo(TableListRow) as typeof TableListRow
+const MemoTableListRow = memo(TableListRow) as typeof TableListRow;
 const MemoDataTableListHeader = memo(
   DataTableListHeader,
-) as typeof DataTableListHeader
+) as typeof DataTableListHeader;
 
-declare module '@tanstack/react-table' {
+declare module "@tanstack/react-table" {
   interface TableMeta<TData extends RowData> {
-    handlePlaySong: ((row: Row<TData>) => void) | undefined
+    handlePlaySong: ((row: Row<TData>) => void) | undefined;
   }
   interface SortingFns {
-    customSortFn: SortingFn<unknown>
+    customSortFn: SortingFn<unknown>;
   }
 }
 
 interface DataTableProps<TData, TValue> {
-  columns: ColumnDefType<TData, TValue>[]
-  data: TData[]
-  handlePlaySong?: (row: Row<TData>) => void
-  columnFilter?: ColumnFilter[]
-  noRowsMessage?: string
-  showHeader?: boolean
-  allowRowSelection?: boolean
-  showContextMenu?: boolean
-  dataType?: 'song' | 'artist' | 'playlist' | 'radio'
-  pageType?: 'general' | 'queue'
-  fetchNextPage?: () => void
-  hasNextPage?: boolean
-  scrollToIndex?: boolean
-  currentSongIndex?: number
+  columns: ColumnDefType<TData, TValue>[];
+  data: TData[];
+  handlePlaySong?: (row: Row<TData>) => void;
+  columnFilter?: ColumnFilter[];
+  noRowsMessage?: string;
+  showHeader?: boolean;
+  allowRowSelection?: boolean;
+  showContextMenu?: boolean;
+  dataType?: "song" | "artist" | "playlist" | "radio";
+  pageType?: "general" | "queue";
+  fetchNextPage?: () => void;
+  hasNextPage?: boolean;
+  scrollToIndex?: boolean;
+  currentSongIndex?: number;
 }
 
 export function DataTableList<TData, TValue>({
@@ -71,34 +71,34 @@ export function DataTableList<TData, TValue>({
   data,
   handlePlaySong,
   columnFilter,
-  noRowsMessage = 'No results.',
+  noRowsMessage = "No results.",
   showHeader = true,
   allowRowSelection = true,
   showContextMenu = true,
-  dataType = 'song',
-  pageType = 'general',
+  dataType = "song",
+  pageType = "general",
   fetchNextPage,
   hasNextPage,
   scrollToIndex = false,
   currentSongIndex,
 }: DataTableProps<TData, TValue>) {
   const newColumns = columns.filter((column) => {
-    return columnFilter?.includes(column.id as ColumnFilter)
-  })
+    return columnFilter?.includes(column.id as ColumnFilter);
+  });
 
-  const [columnSearch, setColumnSearch] = useState<ColumnFiltersState>([])
-  const [sorting, setSorting] = useState<SortingState>([])
-  const [rowSelection, setRowSelection] = useState({})
-  const [lastRowSelected, setLastRowSelected] = useState<number | null>(null)
+  const [columnSearch, setColumnSearch] = useState<ColumnFiltersState>([]);
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [rowSelection, setRowSelection] = useState({});
+  const [lastRowSelected, setLastRowSelected] = useState<number | null>(null);
 
   const selectedRows = useMemo(
     () => Object.keys(rowSelection).map(Number),
     [rowSelection],
-  )
+  );
   const isRowSelected = useCallback(
     (rowIndex: number) => selectedRows.includes(rowIndex),
     [selectedRows],
-  )
+  );
 
   const tableConfig = useMemo(
     () => ({
@@ -116,7 +116,7 @@ export function DataTableList<TData, TValue>({
           rowB: T,
           columnId: string,
         ) => {
-          return rowA.original[columnId].localeCompare(rowB.original[columnId])
+          return rowA.original[columnId].localeCompare(rowB.original[columnId]);
         },
       },
       meta: {
@@ -138,59 +138,59 @@ export function DataTableList<TData, TValue>({
       sorting,
       rowSelection,
     ],
-  )
+  );
 
-  const table = useReactTable(tableConfig)
+  const table = useReactTable(tableConfig);
 
-  const { rows } = table.getRowModel()
+  const { rows } = table.getRowModel();
 
-  const parentRef = useRef<HTMLDivElement>(null)
+  const parentRef = useRef<HTMLDivElement>(null);
 
   const getScrollElement = () => {
-    if (!parentRef.current) return null
+    if (!parentRef.current) return null;
 
-    return parentRef.current.querySelector(scrollAreaViewportSelector)
-  }
+    return parentRef.current.querySelector(scrollAreaViewportSelector);
+  };
 
-  const estimateSize = useCallback(() => 56, [])
+  const estimateSize = useCallback(() => 56, []);
 
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement,
     estimateSize,
     overscan: 5,
-  })
+  });
 
   const selectAllShortcut = useCallback(
     (state = true) => {
       if (allowRowSelection) {
-        table.toggleAllRowsSelected(state)
+        table.toggleAllRowsSelected(state);
       }
     },
     [allowRowSelection, table],
-  )
+  );
 
-  useHotkeys('mod+a', () => selectAllShortcut(), {
+  useHotkeys("mod+a", () => selectAllShortcut(), {
     preventDefault: true,
     enabled: !table.getIsAllRowsSelected(),
-  })
+  });
 
-  useHotkeys('esc', () => selectAllShortcut(false), {
+  useHotkeys("esc", () => selectAllShortcut(false), {
     preventDefault: true,
     enabled: table.getIsAllRowsSelected() || table.getIsSomeRowsSelected(),
-  })
+  });
 
   const getContextMenuOptions = useCallback(
     (row: Row<TData>) => {
-      if (!showContextMenu) return undefined
+      if (!showContextMenu) return undefined;
 
-      if (dataType === 'song') {
+      if (dataType === "song") {
         if (table.getIsSomeRowsSelected() || table.getIsAllRowsSelected()) {
           return (
             <SelectedSongsMenuOptions
               table={table as unknown as Table<ISong>}
             />
-          )
+          );
         } else {
           return (
             <SongMenuOptions
@@ -198,138 +198,138 @@ export function DataTableList<TData, TValue>({
               index={row.index}
               song={row.original as ISong}
             />
-          )
+          );
         }
       }
 
-      return undefined
+      return undefined;
     },
     [dataType, showContextMenu, table],
-  )
+  );
 
   const handleLeftClick = useCallback(
     (e: MouseEvent<HTMLDivElement>, row: Row<TData>) => {
-      if (!allowRowSelection) return
+      if (!allowRowSelection) return;
 
       // Check the correct key depending on the OS (Meta for macOS, Ctrl for others)
-      const isMultiSelectKey = isMacOs ? e.metaKey : e.ctrlKey
+      const isMultiSelectKey = isMacOs ? e.metaKey : e.ctrlKey;
 
       if (isMultiSelectKey) {
-        row.toggleSelected()
-        setLastRowSelected(row.index)
-        return
+        row.toggleSelected();
+        setLastRowSelected(row.index);
+        return;
       }
 
       if (e.shiftKey && lastRowSelected !== null) {
         const selectedRowsUpdater = computeMultiSelectedRows(
           lastRowSelected,
           row.index,
-        )
-        table.setRowSelection(selectedRowsUpdater)
-        return
+        );
+        table.setRowSelection(selectedRowsUpdater);
+        return;
       }
 
       // Deselect all rows, except current one
       table.setRowSelection({
         [row.index]: true,
-      })
-      setLastRowSelected(row.index)
+      });
+      setLastRowSelected(row.index);
     },
     [allowRowSelection, lastRowSelected, table],
-  )
+  );
 
   const handleRightClick = useCallback(
     (row: Row<TData>) => {
-      if (!allowRowSelection) return
+      if (!allowRowSelection) return;
 
-      const hasSelectedRows = selectedRows.length > 0
-      const isSelected = isRowSelected(row.index)
+      const hasSelectedRows = selectedRows.length > 0;
+      const isSelected = isRowSelected(row.index);
 
       if (hasSelectedRows && !isSelected) {
-        table.resetRowSelection()
+        table.resetRowSelection();
       }
 
-      row.toggleSelected(true)
-      setLastRowSelected(row.index)
+      row.toggleSelected(true);
+      setLastRowSelected(row.index);
     },
     [allowRowSelection, isRowSelected, selectedRows.length, table],
-  )
+  );
 
   const handleClicks = useCallback(
     (e: MouseEvent<HTMLDivElement>, row: Row<TData>) => {
       if (e.nativeEvent.button === MouseButton.Left) {
-        handleLeftClick(e, row)
+        handleLeftClick(e, row);
       }
       if (e.nativeEvent.button === MouseButton.Right) {
-        handleRightClick(row)
+        handleRightClick(row);
       }
     },
     [handleLeftClick, handleRightClick],
-  )
+  );
 
   const handleRowDbClick = useCallback(
     (e: MouseEvent<HTMLDivElement>, row: Row<TData>) => {
-      if (!handlePlaySong) return
-      e.stopPropagation()
-      handlePlaySong(row)
+      if (!handlePlaySong) return;
+      e.stopPropagation();
+      handlePlaySong(row);
     },
     [handlePlaySong],
-  )
+  );
 
   const handleRowTap = useCallback(
     (e: TouchEvent<HTMLDivElement>, row: Row<TData>) => {
-      if (!handlePlaySong) return
-      
+      if (!handlePlaySong) return;
+
       // Check if the touch target is within a button or interactive element
-      const target = e.target as HTMLElement
-      const isButton = target.closest('button')
-      const isInteractive = target.closest('[role="button"]')
-      
+      const target = e.target as HTMLElement;
+      const isButton = target.closest("button");
+      const isInteractive = target.closest('[role="button"]');
+
       // Don't trigger the row tap if touching a button or interactive element
       if (!isButton && !isInteractive) {
-        e.stopPropagation()
-        handlePlaySong(row)
+        e.stopPropagation();
+        handlePlaySong(row);
       }
     },
     [handlePlaySong],
-  )
+  );
 
   const handleScroll = useCallback(() => {
-    if (!virtualizer.scrollElement || !hasNextPage || !fetchNextPage) return
+    if (!virtualizer.scrollElement || !hasNextPage || !fetchNextPage) return;
 
-    const { scrollTop, clientHeight, scrollHeight } = virtualizer.scrollElement
+    const { scrollTop, clientHeight, scrollHeight } = virtualizer.scrollElement;
 
-    const scrollThreshold = scrollHeight - scrollHeight / 8
-    const isNearBottom = scrollTop + clientHeight >= scrollThreshold
+    const scrollThreshold = scrollHeight - scrollHeight / 8;
+    const isNearBottom = scrollTop + clientHeight >= scrollThreshold;
 
     if (isNearBottom) {
-      fetchNextPage()
+      fetchNextPage();
     }
-  }, [fetchNextPage, hasNextPage, virtualizer.scrollElement])
+  }, [fetchNextPage, hasNextPage, virtualizer.scrollElement]);
 
   const debouncedHandleScroll = useMemo(
     () => debounce(handleScroll, 200),
     [handleScroll],
-  )
+  );
 
   useEffect(() => {
-    if (!virtualizer.scrollElement) return
+    if (!virtualizer.scrollElement) return;
 
-    const scrollElement = virtualizer.scrollElement
+    const scrollElement = virtualizer.scrollElement;
 
-    scrollElement.addEventListener('scroll', debouncedHandleScroll)
+    scrollElement.addEventListener("scroll", debouncedHandleScroll);
     return () => {
-      scrollElement.removeEventListener('scroll', debouncedHandleScroll)
-    }
-  }, [virtualizer.scrollElement, debouncedHandleScroll])
+      scrollElement.removeEventListener("scroll", debouncedHandleScroll);
+    };
+  }, [virtualizer.scrollElement, debouncedHandleScroll]);
 
   useEffect(() => {
-    if (!scrollToIndex || !currentSongIndex) return
+    if (!scrollToIndex || !currentSongIndex) return;
 
     virtualizer.scrollToIndex(currentSongIndex, {
-      align: 'start',
-    })
-  }, [currentSongIndex, scrollToIndex, virtualizer])
+      align: "start",
+    });
+  }, [currentSongIndex, scrollToIndex, virtualizer]);
 
   return (
     <div className="h-full">
@@ -338,7 +338,7 @@ export function DataTableList<TData, TValue>({
         data-testid="data-table"
         role="table"
       >
-        <div className={clsx(!showHeader && 'hidden')}>
+        <div className={clsx(!showHeader && "hidden")}>
           {table.getHeaderGroups().map((headerGroup) => (
             <div
               key={headerGroup.id}
@@ -355,10 +355,10 @@ export function DataTableList<TData, TValue>({
           ref={parentRef}
           type="always"
           className={clsx(
-            '[&_div:last-child]:border-0 overflow-auto',
-            showHeader ? 'h-[calc(100%-41px)]' : 'h-full',
+            "[&_div:last-child]:border-0 overflow-auto",
+            showHeader ? "h-[calc(100%-41px)]" : "h-full",
           )}
-          thumbClassName={clsx(pageType === 'queue' && 'secondary-thumb-bar')}
+          thumbClassName={clsx(pageType === "queue" && "secondary-thumb-bar")}
         >
           <div
             className="w-full relative"
@@ -366,7 +366,7 @@ export function DataTableList<TData, TValue>({
           >
             {virtualizer.getVirtualItems().length ? (
               virtualizer.getVirtualItems().map((virtualRow) => {
-                const row = rows[virtualRow.index]
+                const row = rows[virtualRow.index];
 
                 return (
                   <MemoTableListRow
@@ -380,7 +380,7 @@ export function DataTableList<TData, TValue>({
                     dataType={dataType}
                     pageType={pageType}
                   />
-                )
+                );
               })
             ) : (
               <div role="row">
@@ -396,5 +396,5 @@ export function DataTableList<TData, TValue>({
         </ScrollArea>
       </div>
     </div>
-  )
+  );
 }

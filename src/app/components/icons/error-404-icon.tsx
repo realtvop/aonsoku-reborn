@@ -1,4 +1,4 @@
-import { SVGProps } from 'react'
+import { SVGProps } from "react";
 
 export default function Error404Icon(props: SVGProps<SVGSVGElement>) {
   return (
@@ -93,5 +93,5 @@ export default function Error404Icon(props: SVGProps<SVGSVGElement>) {
         className="fill-input"
       />
     </svg>
-  )
+  );
 }

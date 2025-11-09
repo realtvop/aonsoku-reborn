@@ -1,36 +1,36 @@
-import clsx from 'clsx'
-import { CircleCheckIcon, PauseIcon, PlayIcon } from 'lucide-react'
-import { ComponentPropsWithoutRef, memo } from 'react'
-import { useTranslation } from 'react-i18next'
-import { LazyLoadImage } from 'react-lazy-load-image-component'
-import { Link } from 'react-router-dom'
-import { EqualizerBars } from '@/app/components/icons/equalizer-bars'
-import { Button } from '@/app/components/ui/button'
-import { Separator } from '@/app/components/ui/separator'
+import clsx from "clsx";
+import { CircleCheckIcon, PauseIcon, PlayIcon } from "lucide-react";
+import { ComponentPropsWithoutRef, memo } from "react";
+import { useTranslation } from "react-i18next";
+import { LazyLoadImage } from "react-lazy-load-image-component";
+import { Link } from "react-router-dom";
+import { EqualizerBars } from "@/app/components/icons/equalizer-bars";
+import { Button } from "@/app/components/ui/button";
+import { Separator } from "@/app/components/ui/separator";
 import {
   useEpisodeProgress,
   useEpisodeReleaseDate,
-} from '@/app/hooks/use-episode-progress'
+} from "@/app/hooks/use-episode-progress";
 import {
   useIsEpisodePlaying,
   usePlayEpisode,
-} from '@/app/hooks/use-podcast-playing'
-import { ROUTES } from '@/routes/routesList'
-import { Episode } from '@/types/responses/podcasts'
-import { parseHtmlToText } from '@/utils/parseTexts'
-import { PodcastActionButton } from './action-button'
-import { PodcastActionOptions } from './action-options'
+} from "@/app/hooks/use-podcast-playing";
+import { ROUTES } from "@/routes/routesList";
+import { Episode } from "@/types/responses/podcasts";
+import { parseHtmlToText } from "@/utils/parseTexts";
+import { PodcastActionButton } from "./action-button";
+import { PodcastActionOptions } from "./action-options";
 
-const MemoEpisodeImage = memo(EpisodeImage)
-const MemoEpisodeCardInfo = memo(EpisodeCardInfo)
-const MemoPodcastActionButton = memo(PodcastActionButton)
-const MemoPodcastActionOptions = memo(PodcastActionOptions)
-const MemoEpisodeProgress = memo(EpisodeProgress)
+const MemoEpisodeImage = memo(EpisodeImage);
+const MemoEpisodeCardInfo = memo(EpisodeCardInfo);
+const MemoPodcastActionButton = memo(PodcastActionButton);
+const MemoPodcastActionOptions = memo(PodcastActionOptions);
+const MemoEpisodeProgress = memo(EpisodeProgress);
 
-type EpisodeCardProps = ComponentPropsWithoutRef<'div'> & {
-  episode: Episode
-  latest?: boolean
-}
+type EpisodeCardProps = ComponentPropsWithoutRef<"div"> & {
+  episode: Episode;
+  latest?: boolean;
+};
 
 export function EpisodeCard({
   episode,
@@ -58,15 +58,15 @@ export function EpisodeCard({
         <Separator />
       </div>
     </div>
-  )
+  );
 }
 
 export function EpisodeCardInfo({ episode }: EpisodeCardProps) {
   const { isPlaying, isEpisodePlaying } = useIsEpisodePlaying({
     id: episode.id,
-  })
+  });
 
-  const { episodeReleaseDate } = useEpisodeReleaseDate(episode.published_at)
+  const { episodeReleaseDate } = useEpisodeReleaseDate(episode.published_at);
 
   return (
     <div className="flex flex-col flex-1 space-y-1 min-w-64">
@@ -80,8 +80,8 @@ export function EpisodeCardInfo({ episode }: EpisodeCardProps) {
       </div>
       <h4
         className={clsx(
-          'text-sm font-medium w-fit max-w-full truncate',
-          isEpisodePlaying && 'text-primary',
+          "text-sm font-medium w-fit max-w-full truncate",
+          isEpisodePlaying && "text-primary",
         )}
       >
         {episode.title}
@@ -90,12 +90,12 @@ export function EpisodeCardInfo({ episode }: EpisodeCardProps) {
         {parseHtmlToText(episode.description)}
       </p>
     </div>
-  )
+  );
 }
 
 function EpisodeProgress({ episode }: EpisodeCardProps) {
-  const { t } = useTranslation()
-  const { duration, playback } = episode
+  const { t } = useTranslation();
+  const { duration, playback } = episode;
 
   const {
     episodeDuration,
@@ -103,25 +103,25 @@ function EpisodeProgress({ episode }: EpisodeCardProps) {
     isEpisodeCompleted,
     remainingTimeText,
     listeningProgressPercentage,
-  } = useEpisodeProgress({ duration, playback })
+  } = useEpisodeProgress({ duration, playback });
 
   if (!hasPlaybackData) {
-    return <span>{episodeDuration}</span>
+    return <span>{episodeDuration}</span>;
   }
 
   if (isEpisodeCompleted) {
     return (
       <div className="flex gap-1 items-center">
         <CircleCheckIcon className="w-4 h-4" />
-        <span>{t('podcasts.list.progress.completed')}</span>
+        <span>{t("podcasts.list.progress.completed")}</span>
       </div>
-    )
+    );
   }
 
   return (
     <>
       <span>
-        {t('podcasts.list.progress.remainingTime', { time: remainingTimeText })}
+        {t("podcasts.list.progress.remainingTime", { time: remainingTimeText })}
       </span>
       <div className="w-3/6 h-1 rounded-full relative bg-secondary overflow-hidden">
         <div
@@ -130,24 +130,24 @@ function EpisodeProgress({ episode }: EpisodeCardProps) {
         />
       </div>
     </>
-  )
+  );
 }
 
-const MemoLazyLoadImage = memo(LazyLoadImage)
-const MemoEpisodeImageButton = memo(EpisodeImageButton)
+const MemoLazyLoadImage = memo(LazyLoadImage);
+const MemoEpisodeImageButton = memo(EpisodeImageButton);
 
 function EpisodeImage({ episode }: EpisodeCardProps) {
   return (
     <div
       className={clsx(
-        'w-[100px] h-[100px] min-w-[100px] min-h-[100px]',
-        'bg-skeleton aspect-square bg-cover bg-center',
-        'rounded-md overflow-hidden border border-border',
-        'shadow-custom-3 relative',
+        "w-[100px] h-[100px] min-w-[100px] min-h-[100px]",
+        "bg-skeleton aspect-square bg-cover bg-center",
+        "rounded-md overflow-hidden border border-border",
+        "shadow-custom-3 relative",
       )}
       onClick={(e) => {
-        e.stopPropagation()
-        e.preventDefault()
+        e.stopPropagation();
+        e.preventDefault();
       }}
     >
       <MemoLazyLoadImage
@@ -162,14 +162,14 @@ function EpisodeImage({ episode }: EpisodeCardProps) {
         <MemoEpisodeImageButton episodeId={episode.id} />
       </div>
     </div>
-  )
+  );
 }
 
 export function EpisodeImageButton({ episodeId }: { episodeId: string }) {
   const { isPlaying, isEpisodePlaying, isNotPlaying } = useIsEpisodePlaying({
     id: episodeId,
-  })
-  const { handlePlayEpisode } = usePlayEpisode({ id: episodeId })
+  });
+  const { handlePlayEpisode } = usePlayEpisode({ id: episodeId });
 
   return (
     <Button
@@ -183,5 +183,5 @@ export function EpisodeImageButton({ episodeId }: { episodeId: string }) {
       )}
       {isNotPlaying && <PlayIcon className="w-4 h-4 fill-foreground" />}
     </Button>
-  )
+  );
 }

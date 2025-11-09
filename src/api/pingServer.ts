@@ -1,6 +1,6 @@
-import { AuthType } from '@/types/serverConfig'
-import { appName } from '@/utils/appName'
-import { authQueryParams } from './httpClient'
+import { AuthType } from "@/types/serverConfig";
+import { appName } from "@/utils/appName";
+import { authQueryParams } from "./httpClient";
 
 export async function pingServer(
   url: string,
@@ -12,22 +12,22 @@ export async function pingServer(
   try {
     const query = {
       ...authQueryParams(user, password, authType),
-      v: protocolVersion || '1.16.0',
+      v: protocolVersion || "1.16.0",
       c: appName,
-      f: 'json',
-    }
+      f: "json",
+    };
 
-    const queries = new URLSearchParams(query).toString()
+    const queries = new URLSearchParams(query).toString();
 
     const response = await fetch(`${url}/rest/ping.view?${queries}`, {
-      method: 'GET',
-    })
-    const data = await response.json()
+      method: "GET",
+    });
+    const data = await response.json();
 
     // Check if there's a version error (code 30)
     if (
-      data['subsonic-response'].status === 'failed' &&
-      data['subsonic-response'].error.code === 30 &&
+      data["subsonic-response"].status === "failed" &&
+      data["subsonic-response"].error.code === 30 &&
       !protocolVersion
     ) {
       // Retry the request with the server's preferred version
@@ -36,12 +36,12 @@ export async function pingServer(
         user,
         password,
         authType,
-        data['subsonic-response'].version,
-      )
+        data["subsonic-response"].version,
+      );
     }
 
-    return data['subsonic-response'].status === 'ok'
+    return data["subsonic-response"].status === "ok";
   } catch (_) {
-    return false
+    return false;
   }
 }

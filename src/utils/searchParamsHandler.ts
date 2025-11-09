@@ -1,8 +1,8 @@
 export class SearchParamsHandler {
-  private searchParams: URLSearchParams
+  private searchParams: URLSearchParams;
 
   constructor(searchParams: URLSearchParams) {
-    this.searchParams = searchParams
+    this.searchParams = searchParams;
   }
 
   /**
@@ -15,11 +15,11 @@ export class SearchParamsHandler {
    * @returns {T} - The value of the search parameter if found, or the fallback.
    */
   getSearchParam = <T>(param: string, fallback: T): T => {
-    const value = this.searchParams.get(param) as T
+    const value = this.searchParams.get(param) as T;
 
-    if (typeof value !== 'undefined' && value !== null) return value
-    if (typeof fallback !== 'undefined') return fallback
+    if (typeof value !== "undefined" && value !== null) return value;
+    if (typeof fallback !== "undefined") return fallback;
 
-    throw new Error(`Parameter '${param}' not found and no fallback provided.`)
-  }
+    throw new Error(`Parameter '${param}' not found and no fallback provided.`);
+  };
 }

@@ -1,17 +1,17 @@
-import { PauseIcon, PlayIcon } from 'lucide-react'
-import { EqualizerBars } from '@/app/components/icons/equalizer-bars'
-import { Button } from '@/app/components/ui/button'
+import { PauseIcon, PlayIcon } from "lucide-react";
+import { EqualizerBars } from "@/app/components/icons/equalizer-bars";
+import { Button } from "@/app/components/ui/button";
 import {
   usePlayerActions,
   usePlayerIsPlaying,
   usePlayerMediaType,
   usePlayerSonglist,
-} from '@/store/player.store'
+} from "@/store/player.store";
 
 interface PlaySongButtonProps {
-  trackNumber: number
-  trackId: string
-  handlePlayButton: () => void
+  trackNumber: number;
+  trackId: string;
+  handlePlayButton: () => void;
 }
 
 export default function PlaySongButton({
@@ -19,21 +19,21 @@ export default function PlaySongButton({
   trackId,
   handlePlayButton,
 }: PlaySongButtonProps) {
-  const { checkActiveSong, togglePlayPause } = usePlayerActions()
-  const { isSong, isRadio } = usePlayerMediaType()
-  const isPlaying = usePlayerIsPlaying()
-  const { radioList, currentSongIndex } = usePlayerSonglist()
+  const { checkActiveSong, togglePlayPause } = usePlayerActions();
+  const { isSong, isRadio } = usePlayerMediaType();
+  const isPlaying = usePlayerIsPlaying();
+  const { radioList, currentSongIndex } = usePlayerSonglist();
 
   const isCurrentSongPlaying = () => {
     if (isSong) {
-      return checkActiveSong(trackId)
+      return checkActiveSong(trackId);
     }
     if (isRadio) {
-      return radioList[currentSongIndex].id === trackId
+      return radioList[currentSongIndex].id === trackId;
     }
 
-    return false
-  }
+    return false;
+  };
 
   return (
     <div className="w-full h-full text-center text-foreground flex items-center justify-center">
@@ -44,8 +44,8 @@ export default function PlaySongButton({
             size="icon"
             variant="outline"
             onClick={(e) => {
-              e.stopPropagation()
-              togglePlayPause()
+              e.stopPropagation();
+              togglePlayPause();
             }}
           >
             <PlayIcon
@@ -68,8 +68,8 @@ export default function PlaySongButton({
               size="icon"
               variant="outline"
               onClick={(e) => {
-                e.stopPropagation()
-                togglePlayPause()
+                e.stopPropagation();
+                togglePlayPause();
               }}
             >
               <PauseIcon
@@ -91,8 +91,8 @@ export default function PlaySongButton({
               size="icon"
               variant="outline"
               onClick={(e) => {
-                e.stopPropagation()
-                handlePlayButton()
+                e.stopPropagation();
+                handlePlayButton();
               }}
             >
               <PlayIcon
@@ -104,5 +104,5 @@ export default function PlaySongButton({
         </>
       )}
     </div>
-  )
+  );
 }

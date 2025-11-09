@@ -1,22 +1,22 @@
-import { Cell, flexRender, Row } from '@tanstack/react-table'
-import clsx from 'clsx'
-import { ComponentPropsWithoutRef, memo, ReactNode, useMemo } from 'react'
-import { ContextMenuProvider } from '@/app/components/table/context-menu'
-import { usePlayerCurrentSong } from '@/store/player.store'
-import { ColumnDefType } from '@/types/react-table/columnDef'
+import { Cell, flexRender, Row } from "@tanstack/react-table";
+import clsx from "clsx";
+import { ComponentPropsWithoutRef, memo, ReactNode, useMemo } from "react";
+import { ContextMenuProvider } from "@/app/components/table/context-menu";
+import { usePlayerCurrentSong } from "@/store/player.store";
+import { ColumnDefType } from "@/types/react-table/columnDef";
 
-interface RowProps<TData> extends ComponentPropsWithoutRef<'div'> {
-  index: number
-  row: Row<TData>
-  contextMenuOptions: ReactNode
-  isPrevRowSelected: (rowIndex: number) => boolean
-  isNextRowSelected: (rowIndex: number) => boolean
-  variant?: 'classic' | 'modern'
-  dataType?: 'song' | 'artist' | 'playlist' | 'radio'
+interface RowProps<TData> extends ComponentPropsWithoutRef<"div"> {
+  index: number;
+  row: Row<TData>;
+  contextMenuOptions: ReactNode;
+  isPrevRowSelected: (rowIndex: number) => boolean;
+  isNextRowSelected: (rowIndex: number) => boolean;
+  variant?: "classic" | "modern";
+  dataType?: "song" | "artist" | "playlist" | "radio";
 }
 
-const MemoContextMenuProvider = memo(ContextMenuProvider)
-const MemoTableCell = memo(TableCell) as typeof TableCell
+const MemoContextMenuProvider = memo(ContextMenuProvider);
+const MemoTableCell = memo(TableCell) as typeof TableCell;
 
 export function TableRow<TData>({
   index,
@@ -28,17 +28,17 @@ export function TableRow<TData>({
   isNextRowSelected,
   ...props
 }: RowProps<TData>) {
-  const currentSong = usePlayerCurrentSong()
+  const currentSong = usePlayerCurrentSong();
 
-  const isClassic = variant === 'classic'
-  const isModern = variant === 'modern'
+  const isClassic = variant === "classic";
+  const isModern = variant === "modern";
 
   const isRowSongActive = useMemo(() => {
-    if (dataType !== 'song') return false
+    if (dataType !== "song") return false;
 
     // @ts-expect-error row type
-    return row.original.id === currentSong.id
-  }, [currentSong.id, dataType, row.original])
+    return row.original.id === currentSong.id;
+  }, [currentSong.id, dataType, row.original]);
 
   return (
     <MemoContextMenuProvider options={contextMenuOptions}>
@@ -46,21 +46,21 @@ export function TableRow<TData>({
         {...props}
         role="row"
         data-test-id="table-row"
-        data-state={row.getIsSelected() && 'selected'}
+        data-state={row.getIsSelected() && "selected"}
         className={clsx(
-          'group/tablerow w-full flex flex-row transition-colors',
+          "group/tablerow w-full flex flex-row transition-colors",
           isModern &&
             row.getIsSelected() &&
             !isPrevRowSelected(index) &&
-            'rounded-t-md',
+            "rounded-t-md",
           isModern &&
             row.getIsSelected() &&
             !isNextRowSelected(index) &&
-            'rounded-b-md',
-          isModern && !row.getIsSelected() && 'rounded-md',
-          'hover:bg-muted data-[state=selected]:bg-primary/75',
-          isClassic && 'border-b',
-          isRowSongActive && isModern && 'row-active bg-accent',
+            "rounded-b-md",
+          isModern && !row.getIsSelected() && "rounded-md",
+          "hover:bg-muted data-[state=selected]:bg-primary/75",
+          isClassic && "border-b",
+          isRowSongActive && isModern && "row-active bg-accent",
         )}
       >
         {row.getVisibleCells().map((cell) => (
@@ -68,21 +68,21 @@ export function TableRow<TData>({
         ))}
       </div>
     </MemoContextMenuProvider>
-  )
+  );
 }
 
 interface TableCellProps<TData, TValue> {
-  cell: Cell<TData, TValue>
+  cell: Cell<TData, TValue>;
 }
 
 function TableCell<TData, TValue>({ cell }: TableCellProps<TData, TValue>) {
-  const columnDef = cell.column.columnDef as ColumnDefType<TData>
+  const columnDef = cell.column.columnDef as ColumnDefType<TData>;
 
   return (
     <div
       key={cell.id}
       className={clsx(
-        'p-2 flex flex-row items-center justify-start [&:has([role=checkbox])]:pr-4',
+        "p-2 flex flex-row items-center justify-start [&:has([role=checkbox])]:pr-4",
         columnDef.className,
       )}
       style={columnDef.style}
@@ -90,5 +90,5 @@ function TableCell<TData, TValue>({ cell }: TableCellProps<TData, TValue>) {
     >
       {flexRender(cell.column.columnDef.cell, cell.getContext())}
     </div>
-  )
+  );
 }

@@ -1,52 +1,55 @@
-import { ListFilter } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
-import { useSearchParams } from 'react-router-dom'
-import { Button } from '@/app/components/ui/button'
+import { ListFilter } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
+import { Button } from "@/app/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuTrigger,
-} from '@/app/components/ui/dropdown-menu'
-import { AlbumListType } from '@/types/responses/album'
+} from "@/app/components/ui/dropdown-menu";
+import { AlbumListType } from "@/types/responses/album";
 import {
   AlbumsFilters,
-  albumsFilterValues,
   AlbumsSearchParams,
-} from '@/utils/albumsFilter'
-import { scrollPageToTop } from '@/utils/scrollPageToTop'
-import { SearchParamsHandler } from '@/utils/searchParamsHandler'
+  albumsFilterValues,
+  PersistedAlbumListKeys,
+} from "@/utils/albumsFilter";
+import { scrollPageToTop } from "@/utils/scrollPageToTop";
+import { SearchParamsHandler } from "@/utils/searchParamsHandler";
 
-const hiddenFilters = [AlbumsFilters.ByDiscography, AlbumsFilters.Search]
+const hiddenFilters = [AlbumsFilters.ByDiscography, AlbumsFilters.Search];
 
 export function AlbumsMainFilter() {
-  const { t } = useTranslation()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const { getSearchParam } = new SearchParamsHandler(searchParams)
+  const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { getSearchParam } = new SearchParamsHandler(searchParams);
 
   const currentFilter = getSearchParam<AlbumListType>(
     AlbumsSearchParams.MainFilter,
     AlbumsFilters.RecentlyAdded,
-  )
+  );
 
   const currentFilterLabel = albumsFilterValues.filter(
     (item) => item.key === currentFilter,
-  )[0].label
+  )[0].label;
 
   function handleChangeFilter(filter: AlbumListType) {
+    localStorage.setItem(PersistedAlbumListKeys.MainFilter, filter);
+
     setSearchParams((state) => {
-      state.set(AlbumsSearchParams.MainFilter, filter)
+      state.set(AlbumsSearchParams.MainFilter, filter);
 
-      state.delete(AlbumsSearchParams.ArtistId)
-      state.delete(AlbumsSearchParams.ArtistName)
+      state.delete(AlbumsSearchParams.ArtistId);
+      state.delete(AlbumsSearchParams.ArtistName);
       if (filter !== AlbumsFilters.ByYear)
-        state.delete(AlbumsSearchParams.YearFilter)
+        state.delete(AlbumsSearchParams.YearFilter);
       if (filter !== AlbumsFilters.ByGenre)
-        state.delete(AlbumsSearchParams.Genre)
+        state.delete(AlbumsSearchParams.Genre);
 
-      return state
-    })
-    scrollPageToTop()
+      return state;
+    });
+    scrollPageToTop();
   }
 
   return (
@@ -54,12 +57,12 @@ export function AlbumsMainFilter() {
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm">
           <ListFilter className="w-4 h-4 mr-2" />
-          {t(currentFilterLabel)}
+          <span className="hidden sm:block">{t(currentFilterLabel)}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {albumsFilterValues.map((item, index) => {
-          if (hiddenFilters.includes(item.key)) return null
+          if (hiddenFilters.includes(item.key)) return null;
 
           return (
             <DropdownMenuCheckboxItem
@@ -72,9 +75,9 @@ export function AlbumsMainFilter() {
             >
               {t(item.label)}
             </DropdownMenuCheckboxItem>
-          )
+          );
         })}
       </DropdownMenuContent>
     </DropdownMenu>
-  )
+  );
 }

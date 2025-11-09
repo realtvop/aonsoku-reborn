@@ -1,52 +1,52 @@
-import clsx from 'clsx'
-import { PictureInPicture2Icon } from 'lucide-react'
-import { memo, useCallback, useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { Button } from '@/app/components/ui/button'
-import { SimpleTooltip } from '@/app/components/ui/simple-tooltip'
-import { usePlayerCurrentList } from '@/store/player.store'
-import { MiniPlayer } from './player'
-import { MiniPlayerPortal } from './portal'
+import clsx from "clsx";
+import { PictureInPicture2Icon } from "lucide-react";
+import { memo, useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { Button } from "@/app/components/ui/button";
+import { SimpleTooltip } from "@/app/components/ui/simple-tooltip";
+import { usePlayerCurrentList } from "@/store/player.store";
+import { MiniPlayer } from "./player";
+import { MiniPlayerPortal } from "./portal";
 
-const MemoMiniPlayerPortal = memo(MiniPlayerPortal)
-const MemoMiniPlayer = memo(MiniPlayer)
+const MemoMiniPlayerPortal = memo(MiniPlayerPortal);
+const MemoMiniPlayer = memo(MiniPlayer);
 
 export function MiniPlayerButton() {
-  const { t } = useTranslation()
-  const currentList = usePlayerCurrentList()
+  const { t } = useTranslation();
+  const currentList = usePlayerCurrentList();
   const [pipWindow, setPipWindow] = useState<Window | null>(
     window.documentPictureInPicture.window,
-  )
+  );
 
   const handleClick = useCallback(async () => {
     if (pipWindow) {
-      pipWindow.close()
+      pipWindow.close();
     } else {
       const newWindow = await window.documentPictureInPicture.requestWindow({
         width: 300,
         height: 300,
-      })
-      setPipWindow(newWindow)
+      });
+      setPipWindow(newWindow);
     }
-  }, [pipWindow])
+  }, [pipWindow]);
 
   useEffect(() => {
     const handleWindowClose = (): void => {
-      setPipWindow(null)
-    }
+      setPipWindow(null);
+    };
 
-    pipWindow?.addEventListener('pagehide', handleWindowClose)
+    pipWindow?.addEventListener("pagehide", handleWindowClose);
 
     return () => {
-      pipWindow?.removeEventListener('pagehide', handleWindowClose)
-    }
-  }, [pipWindow])
+      pipWindow?.removeEventListener("pagehide", handleWindowClose);
+    };
+  }, [pipWindow]);
 
-  const disabled = currentList.length === 0
+  const disabled = currentList.length === 0;
 
   const buttonTooltip = pipWindow
-    ? t('player.tooltips.miniPlayer.close')
-    : t('player.tooltips.miniPlayer.open')
+    ? t("player.tooltips.miniPlayer.close")
+    : t("player.tooltips.miniPlayer.open");
 
   return (
     <>
@@ -56,8 +56,8 @@ export function MiniPlayerButton() {
           size="icon"
           onClick={handleClick}
           className={clsx(
-            'relative rounded-full',
-            pipWindow && 'text-primary hover:text-primary player-button-active',
+            "relative rounded-full",
+            pipWindow && "text-primary hover:text-primary player-button-active",
           )}
           onFocus={(e) => e.preventDefault()}
           disabled={disabled}
@@ -69,5 +69,5 @@ export function MiniPlayerButton() {
         <MemoMiniPlayer />
       </MemoMiniPlayerPortal>
     </>
-  )
+  );
 }

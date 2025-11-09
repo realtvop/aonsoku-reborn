@@ -1,10 +1,10 @@
-import { Loader2 } from 'lucide-react'
-import { Badge } from '@/app/components/ui/badge'
+import { Loader2 } from "lucide-react";
+import { Badge } from "@/app/components/ui/badge";
 
 interface HeaderTitleProps {
-  title: string
-  count?: number
-  loading?: boolean
+  title: string;
+  count?: number;
+  loading?: boolean;
 }
 
 export function HeaderTitle({
@@ -24,5 +24,5 @@ export function HeaderTitle({
         <Badge variant="secondary">{count}</Badge>
       )}
     </div>
-  )
+  );
 }
