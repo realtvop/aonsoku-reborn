@@ -22,20 +22,20 @@ const config: ForgeConfig = {
         // we need to ensure "out/" is not ignored during packaging
         ignore: (path: string) => {
             if (!path) return false;
-            
+
             // Never ignore package.json (required for electron app)
             if (path === "/package.json") return false;
-            
+
             // Never ignore out directory (contains electron-vite build output)
             if (path === "/out" || path.startsWith("/out/")) return false;
-            
+
             // Never ignore resources directory (extra resources for the app)
             if (path === "/resources" || path.startsWith("/resources/")) return false;
-            
+
             // Ignore node_modules and .git
             if (path.startsWith("/node_modules")) return true;
             if (path.startsWith("/.git")) return true;
-            
+
             // Ignore source code directories
             if (path.startsWith("/src")) return true;
             if (path.startsWith("/electron")) return true;
@@ -47,7 +47,7 @@ const config: ForgeConfig = {
             if (path.startsWith("/media")) return true;
             if (path.startsWith("/scripts")) return true;
             if (path.startsWith("/dist")) return true;
-            
+
             // Ignore development and config files
             if (path.endsWith(".ts")) return true;
             if (path.endsWith(".tsx")) return true;
@@ -59,7 +59,7 @@ const config: ForgeConfig = {
             if (path.includes("vite.config")) return true;
             if (path.includes("electron.vite.config")) return true;
             if (path.includes("forge.config")) return true;
-            
+
             // Allow everything else
             return false;
         },
@@ -86,9 +86,9 @@ const config: ForgeConfig = {
     makers: [
         new MakerSquirrel(
             {
-                certificateFile: process.env.WINDOWS_CERTIFICATE_FILE,
-                certificatePassword: process.env.WINDOWS_CERTIFICATE_PASSWORD,
-                signWithParams: `/f "${process.env.WINDOWS_CERTIFICATE_FILE}" /p "${process.env.WINDOWS_CERTIFICATE_PASSWORD}" /tr http://timestamp.digicert.com /td sha256`,
+                // certificateFile: process.env.WINDOWS_CERTIFICATE_FILE,
+                // certificatePassword: process.env.WINDOWS_CERTIFICATE_PASSWORD,
+                // signWithParams: `/f "${process.env.WINDOWS_CERTIFICATE_FILE}" /p "${process.env.WINDOWS_CERTIFICATE_PASSWORD}" /tr http://timestamp.digicert.com /td sha256`,
             },
             ["win32"]
         ),
