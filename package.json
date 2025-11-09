@@ -137,7 +137,7 @@
     "autoprefixer": "^10.4.21",
     "cypress": "^13.17.0",
     "cypress-real-events": "^1.14.0",
-    "electron": "^36.4.0",
+    "electron": "^39.1.1",
     "electron-vite": "^3.1.0",
     "husky": "^9.1.7",
     "postcss": "^8.5.3",
