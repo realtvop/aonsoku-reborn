@@ -52,6 +52,9 @@ jobs:
 
       - name: install frontend dependencies
         run: pnpm install
+        env:
+          # Skip Cypress binary download on Windows ARM (unsupported platform)
+          CYPRESS_INSTALL_BINARY: ${{ matrix.platform == 'windows-11-arm' && '0' || '' }}
 
       - name: Build Electron app
         env:
@@ -62,5 +65,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: electron-app-${{ matrix.platform }}-${{ matrix.arch }}
-          path: dist/
+          path: |
+            dist/make/**/*.deb
+            dist/make/**/*.rpm
+            dist/make/**/*.dmg
+            dist/make/**/*.zip
           if-no-files-found: warn
