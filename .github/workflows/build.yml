@@ -65,5 +65,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: electron-app-${{ matrix.platform }}-${{ matrix.arch }}
-          path: dist/
+          path: |
+            dist/make/**/*.deb
+            dist/make/**/*.rpm
+            dist/make/**/*.dmg
+            dist/make/**/*.zip
           if-no-files-found: warn
