@@ -41,4 +41,4 @@ jobs:
           # APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
           # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # APPLE_IDENTITY: ${{ secrets.APPLE_IDENTITY }}
-        run: pnpm publish
+        run: pnpm publish --no-git-checks
