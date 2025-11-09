@@ -1,5 +1,4 @@
 import type { ForgeConfig } from "@electron-forge/shared-types";
-import { MakerSquirrel } from "@electron-forge/maker-squirrel";
 import { MakerZIP } from "@electron-forge/maker-zip";
 import { MakerDMG } from "@electron-forge/maker-dmg";
 import { MakerRpm } from "@electron-forge/maker-rpm";
@@ -67,31 +66,15 @@ const config: ForgeConfig = {
             CompanyName: "realtvop",
             ProductName: "Aonsoku",
         },
-        osxSign: {
-            identity: process.env.APPLE_IDENTITY,
-            "hardened-runtime": true,
-            "entitlements": "./build/entitlements.mac.plist",
-            "entitlements-inherit": "./build/entitlements.mac.plist",
-            "signature-flags": "library",
-        },
-        osxNotarize: process.env.APPLE_ID
-            ? {
-                appleId: process.env.APPLE_ID,
-                appleIdPassword: process.env.APPLE_ID_PASSWORD,
-                teamId: process.env.APPLE_TEAM_ID,
-            }
-            : undefined,
+        // Code signing disabled for all platforms
+        osxSign: undefined,
+        osxNotarize: undefined,
     },
     rebuildConfig: {},
     makers: [
-        new MakerSquirrel(
-            {
-                // certificateFile: process.env.WINDOWS_CERTIFICATE_FILE,
-                // certificatePassword: process.env.WINDOWS_CERTIFICATE_PASSWORD,
-                // signWithParams: `/f "${process.env.WINDOWS_CERTIFICATE_FILE}" /p "${process.env.WINDOWS_CERTIFICATE_PASSWORD}" /tr http://timestamp.digicert.com /td sha256`,
-            },
-            ["win32"]
-        ),
+        // Use MakerZIP for Windows to avoid Squirrel.Windows issues in CI/CD
+        // MakerSquirrel requires additional build tools that may not be available
+        new MakerZIP({}, ["win32"]),
         new MakerZIP({}, ["darwin"]),
         new MakerDMG({
             format: "ULFO",

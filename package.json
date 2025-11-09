@@ -151,7 +151,8 @@
       "cypress",
       "electron",
       "esbuild",
-      "macos-alias"
+      "macos-alias",
+      "fs-xattr"
     ]
   },
   "electron": {
