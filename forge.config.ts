@@ -13,7 +13,8 @@ const config: ForgeConfig = {
         asar: true,
         icon: "./build/icon",
         extraResource: ["./resources"],
-        executableName: "Aonsoku",
+        // Use lowercase executable name on Linux for compatibility with DEB/RPM makers
+        executableName: process.platform === "linux" ? "aonsoku" : "Aonsoku",
         // Use ARCH environment variable if set, otherwise use x64 as default
         arch: (process.env.ARCH as "ia32" | "x64" | "armv7l" | "arm64" | "mips64el" | "universal" | undefined) || "x64",
         // Custom ignore function to prevent ignoring the out/ directory
