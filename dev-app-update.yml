@@ -1,3 +1,7 @@
-provider: generic
-url: https://example.com/auto-updates
-updaterCacheDirName: aonsoku-electron-updater
+# This file is used by update-electron-app for development/testing
+# In production, update-electron-app automatically uses GitHub releases
+# from the repository specified in electron/main/core/updateManager.ts
+
+# Configuration values (not typically needed as update-electron-app handles this)
+# owner: realtvop
+# repo: aonsoku
