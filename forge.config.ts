@@ -15,6 +15,8 @@ const config: ForgeConfig = {
         icon: "./build/icon",
         extraResource: ["./resources"],
         executableName: "aonsoku",
+        // Use ARCH environment variable if set, otherwise use x64 as default
+        arch: (process.env.ARCH as "ia32" | "x64" | "armv7l" | "arm64" | "mips64el" | "universal" | undefined) || "x64",
         // Custom ignore function to prevent ignoring the out/ directory
         // Since electron-vite outputs to "out/" and we changed Electron Forge's outDir to "dist/",
         // we need to ensure "out/" is not ignored during packaging

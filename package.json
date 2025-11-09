@@ -26,9 +26,9 @@
     "make": "pnpm electron:build && electron-forge make",
     "publish": "pnpm electron:build && electron-forge publish",
     "build:unpack": "pnpm electron:build",
-    "build:win": "pnpm electron:build && electron-forge make --platform win32 --arch ${ARCH:-x64}",
-    "build:mac": "pnpm electron:build && electron-forge make --platform darwin --arch ${ARCH:-x64}",
-    "build:linux": "pnpm electron:build && electron-forge make --platform linux --arch ${ARCH:-x64}",
+    "build:win": "pnpm electron:build && electron-forge make --platform win32",
+    "build:mac": "pnpm electron:build && electron-forge make --platform darwin",
+    "build:linux": "pnpm electron:build && electron-forge make --platform linux",
     "prepare": "husky"
   },
   "repository": {
@@ -150,7 +150,8 @@
     "onlyBuiltDependencies": [
       "cypress",
       "electron",
-      "esbuild"
+      "esbuild",
+      "macos-alias"
     ]
   },
   "electron": {
