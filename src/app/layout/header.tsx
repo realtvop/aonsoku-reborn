@@ -71,7 +71,7 @@ export function Header() {
   const leftSpacingWidth = needsLeftSpacing
     ? hasWindowControls && controlsWidth.left > 0
       ? controlsWidth.left
-      : 70 // Electron macOS default
+      : 80 // Electron macOS default
     : 0;
 
   const rightSpacingWidth = needsRightSpacing
@@ -81,24 +81,6 @@ export function Header() {
         ? 122 // Electron Windows default
         : 94 // Electron Linux default
     : 0;
-
-  // Debug logging (remove after testing)
-  if (typeof window !== "undefined" && import.meta.env.DEV) {
-    console.log("Header spacing debug:", {
-      isMacOS,
-      isWindows,
-      isLinux,
-      isElectronApp,
-      hasWindowControls,
-      isFullscreen,
-      shouldAddSpacing,
-      needsLeftSpacing,
-      needsRightSpacing,
-      controlsWidth,
-      leftSpacingWidth,
-      rightSpacingWidth,
-    });
-  }
 
   return (
     <header className="w-full grid grid-cols-header h-header px-4 fixed top-0 right-0 left-0 z-20 bg-background border-b electron-drag">

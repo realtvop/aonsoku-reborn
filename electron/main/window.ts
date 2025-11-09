@@ -9,10 +9,11 @@ import { appIcon } from "./core/icon";
 import { titleBarOverlay } from "./core/titleBarOverlay";
 import { StatefulBrowserWindow } from "./core/windowPosition";
 import { createTray } from "./tray";
+import { defaultWidth, defaultHeight } from "./config";
 
 export let mainWindow: BrowserWindow | null = null;
 
-const { defaultWidth, defaultHeight, defaultBgColor } = electron.window;
+const { defaultBgColor } = electron.window;
 
 export function createWindow(): void {
   const backgroundColor = colorsState.get("bgColor") ?? defaultBgColor;
@@ -20,8 +21,8 @@ export function createWindow(): void {
   mainWindow = new StatefulBrowserWindow({
     width: defaultWidth,
     height: defaultHeight,
-    minWidth: defaultWidth,
-    minHeight: defaultHeight,
+    minWidth: 800,
+    minHeight: 600,
     backgroundColor,
     supportMaximize: true,
     show: false,

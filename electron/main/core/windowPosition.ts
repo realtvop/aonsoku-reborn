@@ -4,8 +4,8 @@ import {
   Rectangle,
   screen,
 } from "electron";
-import { electron } from "../../../package.json";
 import { AonsokuStore } from "./store";
+import { defaultWidth, defaultHeight } from "../config";
 
 interface ExtraOptions {
   /** Should we automatically maximize the window, if it was last closed maximized. Defaults to `true`. */
@@ -25,8 +25,6 @@ interface State {
   /** The saved y coordinate of the loaded state. `undefined` if the state has not been saved yet. */
   y?: number;
 }
-
-const { defaultWidth, defaultHeight } = electron.window;
 
 const windowStore = new AonsokuStore<State>({
   name: "window",
@@ -76,18 +74,7 @@ function ensureWindowVisibleOnSomeDisplay(state: State) {
     return null;
   }
 
-  // for multi monitor support and scaling (devicePixelRatio)
-  const display = screen.getDisplayMatching({
-    x: state.x!,
-    y: state.y!,
-    width: state.displayBounds!.width,
-    height: state.displayBounds!.height,
-  });
-
-  const newWidth = ~~(state.width / display.scaleFactor);
-  const newHeight = ~~(state.height / display.scaleFactor);
-
-  return { ...state, width: newWidth, height: newHeight };
+  return state;
 }
 
 function windowWithinBounds(state: State, bounds: Rectangle) {
@@ -108,7 +95,7 @@ function refineOptionsAndState(
 
   try {
     savedState = windowStore.store;
-  } catch {}
+  } catch { }
 
   if (!savedState) return restOriginalOptions;
 
@@ -191,12 +178,12 @@ export class StatefulBrowserWindow extends BrowserWindow {
       if (this.isNormal()) {
         this.state!.x = winBounds.x;
         this.state!.y = winBounds.y;
-        this.state!.width = winBounds.width;
         this.state!.height = winBounds.height;
+        this.state!.width = winBounds.width;
       }
       this.state!.isMaximized = this.isMaximized();
       this.state!.displayBounds = screen.getDisplayMatching(winBounds).bounds;
-    } catch {}
+    } catch { }
   }
 
   private saveState() {
