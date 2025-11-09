@@ -13,6 +13,10 @@ export function getIsQuitting(): boolean {
   return isQuitting;
 }
 
+export function getUpdateManager(): UpdateManager | null {
+  return updateManager;
+}
+
 const instanceLock = app.requestSingleInstanceLock();
 
 if (!instanceLock) {

@@ -623,6 +623,37 @@
           "info": "启用后，点击关闭按钮时，应用将最小化到系统托盘而不是关闭。"
         }
       },
+      "updates": {
+        "group": "应用更新",
+        "description": "检查和安装应用程序更新。",
+        "currentVersion": {
+          "label": "当前版本",
+          "info": "您当前运行的 Aonsoku 版本。"
+        },
+        "status": {
+          "label": "更新状态",
+          "info": "应用程序更新的当前状态。"
+        },
+        "checkNow": {
+          "label": "检查更新",
+          "info": "手动检查可用更新。"
+        },
+        "checking": "正在检查更新...",
+        "upToDate": "已是最新版本",
+        "updateAvailable": "发现新版本",
+        "updateAvailableDesc": "版本 {{version}} 可供下载",
+        "availableVersion": "版本 {{version}} 可用",
+        "download": "下载更新",
+        "downloading": "下载中... {{percent}}%",
+        "downloadStarted": "开始下载",
+        "downloadStartedDesc": "更新下载已开始",
+        "downloadError": "下载失败",
+        "updateReady": "更新就绪",
+        "updateReadyDesc": "更新将在您重启应用时安装",
+        "readyToInstall": "准备安装（需要重启）",
+        "installNow": "安装并重启",
+        "updateError": "更新检查失败"
+      },
       "lanControl": {
         "group": "LAN 控制",
         "description": "管理 LAN 控制设置以进行远程访问。",

@@ -2,6 +2,7 @@ import { platform } from "@electron-toolkit/utils";
 import { app, Menu, shell } from "electron";
 import { repository } from "../../../package.json";
 import { aboutDialog } from "./about";
+import { getUpdateManager } from "../index";
 
 export function createAppMenu() {
   if (!platform.isMacOS) return;
@@ -13,6 +14,15 @@ export function createAppMenu() {
         {
           label: `About ${app.name}`,
           click: () => aboutDialog(),
+        },
+        {
+          label: "Check for Updates...",
+          click: () => {
+            const updateManager = getUpdateManager();
+            if (updateManager) {
+              updateManager.checkForUpdatesManually();
+            }
+          },
         },
         { type: "separator" },
         { role: "services" },

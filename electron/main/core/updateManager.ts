@@ -5,6 +5,7 @@ import { is } from "@electron-toolkit/utils";
 export class UpdateManager {
   private mainWindow: BrowserWindow | null = null;
   private isCheckingForUpdates = false;
+  private lastCheckWasManual = false;
 
   constructor(mainWindow: BrowserWindow) {
     this.mainWindow = mainWindow;
@@ -68,6 +69,18 @@ export class UpdateManager {
       console.log("Update not available:", info);
       this.sendUpdateStatus("update-not-available");
       this.isCheckingForUpdates = false;
+
+      // Show dialog for manual checks
+      if (this.lastCheckWasManual) {
+        this.lastCheckWasManual = false;
+        dialog.showMessageBox(this.mainWindow!, {
+          type: "info",
+          title: "No Updates Available",
+          message: "You're up to date!",
+          detail: `Aonsoku ${app.getVersion()} is currently the newest version available.`,
+          buttons: ["OK"],
+        });
+      }
     });
 
     autoUpdater.on("error", (error) => {
@@ -112,7 +125,7 @@ export class UpdateManager {
   private setupIpcListeners() {
     // Check for updates manually
     ipcMain.handle("app:check-for-updates", () => {
-      return this.checkForUpdates();
+      return this.checkForUpdates(true);
     });
 
     // Download update manually
@@ -131,18 +144,47 @@ export class UpdateManager {
     });
   }
 
-  private checkForUpdates() {
+  public checkForUpdatesManually() {
+    return this.checkForUpdates(true);
+  }
+
+  private checkForUpdates(isManualCheck = false) {
     if (this.isCheckingForUpdates) {
       console.log("Already checking for updates");
+      if (isManualCheck) {
+        dialog.showMessageBox(this.mainWindow!, {
+          type: "info",
+          title: "Update Check",
+          message: "Already checking for updates.",
+          buttons: ["OK"],
+        });
+      }
       return undefined;
     }
 
     try {
       this.isCheckingForUpdates = true;
+
+      // Store manual check flag for use in update-not-available handler
+      if (isManualCheck) {
+        this.lastCheckWasManual = true;
+      }
+
       return autoUpdater.checkForUpdates();
     } catch (error) {
       console.error("Error checking for updates:", error);
       this.isCheckingForUpdates = false;
+
+      if (isManualCheck) {
+        dialog.showMessageBox(this.mainWindow!, {
+          type: "error",
+          title: "Update Check Failed",
+          message: "Failed to check for updates. Please try again later.",
+          detail: error instanceof Error ? error.message : String(error),
+          buttons: ["OK"],
+        });
+      }
+
       return undefined;
     }
   }

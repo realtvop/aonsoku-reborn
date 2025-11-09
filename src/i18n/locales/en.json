@@ -713,6 +713,37 @@
           "info": "When enabled, the app will minimize to the system tray instead of closing when you click the close button."
         }
       },
+      "updates": {
+        "group": "App Updates",
+        "description": "Check for and install application updates.",
+        "currentVersion": {
+          "label": "Current Version",
+          "info": "The version of Aonsoku you are currently running."
+        },
+        "status": {
+          "label": "Update Status",
+          "info": "The current status of application updates."
+        },
+        "checkNow": {
+          "label": "Check for Updates",
+          "info": "Manually check for available updates."
+        },
+        "checking": "Checking for updates...",
+        "upToDate": "You're up to date",
+        "updateAvailable": "Update Available",
+        "updateAvailableDesc": "Version {{version}} is available",
+        "availableVersion": "Version {{version}} available",
+        "download": "Download Update",
+        "downloading": "Downloading... {{percent}}%",
+        "downloadStarted": "Download Started",
+        "downloadStartedDesc": "Update download has begun",
+        "downloadError": "Download Failed",
+        "updateReady": "Update Ready",
+        "updateReadyDesc": "Update will be installed when you restart the app",
+        "readyToInstall": "Ready to install (restart required)",
+        "installNow": "Install and Restart",
+        "updateError": "Update Check Failed"
+      },
       "lanControl": {
         "group": "LAN Control",
         "description": "Manage LAN control settings for remote access.",
