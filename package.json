@@ -72,7 +72,7 @@
     "discord-rpc": "^4.0.1",
     "electron-dl": "^4.0.0",
     "electron-store": "^10.0.1",
-    "update-electron-app": "^2.1.4",
+    "update-electron-app": "^3.1.1",
     "embla-carousel-autoplay": "^8.6.0",
     "embla-carousel-react": "^8.6.0",
     "express": "^5.1.0",
