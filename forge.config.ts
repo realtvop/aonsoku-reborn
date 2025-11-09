@@ -82,7 +82,7 @@ const config: ForgeConfig = {
   rebuildConfig: {},
   makers: [
     // Windows: Use MakerZIP as the distribution format (Squirrel requires build tools not available in CI)
-    new MakerZIP({}, ["win32"]),
+    new MakerZIP({}, ["win32", "darwin"]),
     // macOS: Only output DMG images (final product)
     new MakerDMG({
       format: "ULFO",
