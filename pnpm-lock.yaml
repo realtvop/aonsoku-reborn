@@ -921,7 +921,7 @@ packages:
     resolution:
       {
         commit: 06b29aafb7708acef8b3669835c8a7857ebc92d2,
-        repo: git@github.com:electron/node-gyp.git,
+        repo: https://git@github.com/electron/node-gyp.git,
         type: git,
       }
     version: 10.2.0-electron.1
@@ -7897,7 +7897,7 @@ packages:
     resolution:
       {
         commit: e7cc9a63a1f512565da44cb57316d9fb10750e17,
-        repo: git@github.com:devsnek/node-register-scheme.git,
+        repo: https://git@github.com/devsnek/node-register-scheme.git,
         type: git,
       }
     version: 0.0.2
