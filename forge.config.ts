@@ -72,14 +72,14 @@ const config: ForgeConfig = {
     },
     rebuildConfig: {},
     makers: [
-        // Use MakerZIP for Windows to avoid Squirrel.Windows issues in CI/CD
-        // MakerSquirrel requires additional build tools that may not be available
+        // Windows: Use MakerZIP as the distribution format (Squirrel requires build tools not available in CI)
         new MakerZIP({}, ["win32"]),
-        new MakerZIP({}, ["darwin"]),
+        // macOS: Only output DMG images (final product)
         new MakerDMG({
             format: "ULFO",
             icon: "./build/icon.icns",
         }),
+        // Linux: Output both RPM and DEB installers (final products)
         new MakerRpm({
             options: {
                 homepage: "https://github.com/realtvop/aonsoku-reborn",
