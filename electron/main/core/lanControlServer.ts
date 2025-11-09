@@ -1,4 +1,4 @@
-import type { BrowserWindow } from "electron";
+import { app, type BrowserWindow } from "electron";
 import type { IncomingMessage } from "node:http";
 import { createServer, type Server as HttpServer } from "node:http";
 import path from "node:path";
@@ -126,9 +126,9 @@ export class LanControlServer {
                     : i18n.en.auth.failed,
                   deviceInfo: authResult
                     ? {
-                        name: "Aonsoku Desktop",
-                        version: this.app.getVersion(),
-                      }
+                      name: "Aonsoku Desktop",
+                      version: app.getVersion(),
+                    }
                     : undefined,
                 } as AuthResponseData,
               };
