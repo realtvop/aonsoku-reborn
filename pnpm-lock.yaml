@@ -647,7 +647,7 @@ packages:
     engines: {node: '>=14'}
 
   '@electron/node-gyp@git+https://git@github.com:electron/node-gyp.git#06b29aafb7708acef8b3669835c8a7857ebc92d2':
-    resolution: {commit: 06b29aafb7708acef8b3669835c8a7857ebc92d2, repo: git@github.com:electron/node-gyp.git, type: git}
+    resolution: {commit: 06b29aafb7708acef8b3669835c8a7857ebc92d2, repo: https://git@github.com/electron/node-gyp.git, type: git}
     version: 10.2.0-electron.1
     engines: {node: '>=12.13.0'}
     hasBin: true
@@ -4305,7 +4305,7 @@ packages:
     engines: {node: '>= 10.13.0'}
 
   register-scheme@git+https://git@github.com:devsnek/node-register-scheme.git#e7cc9a63a1f512565da44cb57316d9fb10750e17:
-    resolution: {commit: e7cc9a63a1f512565da44cb57316d9fb10750e17, repo: git@github.com:devsnek/node-register-scheme.git, type: git}
+    resolution: {commit: e7cc9a63a1f512565da44cb57316d9fb10750e17, repo: https://git@github.com/devsnek/node-register-scheme.git, type: git}
     version: 0.0.2
 
   remark-gfm@4.0.1:
