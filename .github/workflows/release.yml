@@ -12,27 +12,7 @@ jobs:
   publish-electron:
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - platform: "macos-latest"
-            target: "darwin"
-            arch: "x64"
-          - platform: "macos-latest"
-            target: "darwin"
-            arch: "arm64"
-          - platform: "ubuntu-22.04"
-            target: "linux"
-            arch: "x64"
-          - platform: "ubuntu-22.04-arm"
-            target: "linux"
-            arch: "arm64"
-          - platform: "windows-latest"
-            target: "win32"
-            arch: "x64"
-          - platform: "windows-11-arm"
-            target: "win32"
-            arch: "arm64"
-    runs-on: ${{ matrix.platform }}
+    runs-on: macos-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -61,4 +41,4 @@ jobs:
           # APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
           # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # APPLE_IDENTITY: ${{ secrets.APPLE_IDENTITY }}
-        run: pnpm publish --arch ${{ matrix.arch }}
+        run: pnpm publish
