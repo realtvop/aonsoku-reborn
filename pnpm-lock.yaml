@@ -921,7 +921,7 @@ packages:
     resolution:
       {
         commit: 06b29aafb7708acef8b3669835c8a7857ebc92d2,
-        repo: git@github.com:electron/node-gyp.git,
+        repo: https://git@github.com:electron/node-gyp.git,
         type: git,
       }
     version: 10.2.0-electron.1
