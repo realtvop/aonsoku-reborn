@@ -32,7 +32,7 @@
     "prepare": "husky"
   },
   "repository": {
-    "url": "https://github.com/realtvop/aonsoku"
+    "url": "https://github.com/realtvop/aonsoku-reborn"
   },
   "dependencies": {
     "@chriscodesthings/random-css-hex-color": "^1.1.0",

@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import { is } from "@electron-toolkit/utils";
-import updateElectronApp from "update-electron-app";
+import { updateElectronApp } from "update-electron-app";
 
 export class UpdateManager {
   private mainWindow: BrowserWindow | null = null;
@@ -19,13 +19,13 @@ export class UpdateManager {
     try {
       updateElectronApp({
         repo: "realtvop/aonsoku-reborn",
-        owner: "realtvop",
+        // owner: "realtvop",
         // Auto-check for updates every hour (3600000ms)
-        checkInterval: 60 * 60 * 1000,
+        // checkInterval: 60 * 60 * 1000,
         // Automatically download updates in the background
-        autoDownload: true,
+        // autoDownload: true,
         // Don't auto-install on quit
-        autoInstallOnAppQuit: false,
+        // autoInstallOnAppQuit: false,
         // Use custom dialog for update notifications
         notifyUser: true,
         // Make logger optional to reduce noise
