@@ -3,7 +3,7 @@
 <br />
 <div align="center">
   <a href="https://github.com/realtvop/aonsoku-reborn">
-    <img src="./src-tauri/icons/128x128.png" alt="Aonsoku" width="80" height="80">
+    <img src="./build/icon.png" alt="Aonsoku" width="80" height="80">
   </a>
 
   <h3 align="center">Aonsoku</h3>
