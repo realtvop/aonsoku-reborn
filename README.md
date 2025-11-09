@@ -18,7 +18,7 @@
     <a href="https://github.com/realtvop/aonsoku-reborn/issues/new?labels=enhancement&template=feature-request---.md">Request Feature</a>
   </p>
 
-[![React][React.js]][React-url] [![Tauri][Tauri]][Tauri-url] [![Electron][Electron]][Electron-url]
+[![React][React.js]][React-url] [![Electron][Electron]][Electron-url]
 
 [![Download][Release-badge]][Release-url]
 
