@@ -95,7 +95,7 @@ function refineOptionsAndState(
 
   try {
     savedState = windowStore.store;
-  } catch { }
+  } catch {}
 
   if (!savedState) return restOriginalOptions;
 
@@ -183,7 +183,7 @@ export class StatefulBrowserWindow extends BrowserWindow {
       }
       this.state!.isMaximized = this.isMaximized();
       this.state!.displayBounds = screen.getDisplayMatching(winBounds).bounds;
-    } catch { }
+    } catch {}
   }
 
   private saveState() {

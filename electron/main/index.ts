@@ -67,7 +67,7 @@ if (!instanceLock) {
 
   app.on("browser-window-created", (_, window) => {
     optimizer.watchWindowShortcuts(window);
-    globalShortcut.register("F11", () => { });
+    globalShortcut.register("F11", () => {});
   });
 
   app.on("window-all-closed", () => {

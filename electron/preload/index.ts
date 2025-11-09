@@ -97,7 +97,9 @@ const api: IAonsokuAPI = {
     installUpdate: () => ipcRenderer.invoke("app:install-update"),
     getVersion: () => ipcRenderer.invoke("app:get-version"),
     onUpdateStatus: (callback) => {
-      ipcRenderer.on(IpcChannels.UpdateStatus, (_, payload) => callback(payload));
+      ipcRenderer.on(IpcChannels.UpdateStatus, (_, payload) =>
+        callback(payload),
+      );
     },
     removeUpdateStatusListener: () => {
       ipcRenderer.removeAllListeners(IpcChannels.UpdateStatus);

@@ -7,113 +7,121 @@ import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
 
 const config: ForgeConfig = {
-    // Use 'dist' instead of 'out' to avoid conflict with electron-vite's output directory
-    outDir: "dist",
-    packagerConfig: {
-        asar: true,
-        icon: "./build/icon",
-        extraResource: ["./resources"],
-        // Use lowercase executable name on Linux for compatibility with DEB/RPM makers
-        executableName: process.platform === "linux" ? "aonsoku" : "Aonsoku",
-        // Use ARCH environment variable if set, otherwise use x64 as default
-        arch: (process.env.ARCH as "ia32" | "x64" | "armv7l" | "arm64" | "mips64el" | "universal" | undefined) || "x64",
-        // Custom ignore function to prevent ignoring the out/ directory
-        // Since electron-vite outputs to "out/" and we changed Electron Forge's outDir to "dist/",
-        // we need to ensure "out/" is not ignored during packaging
-        ignore: (path: string) => {
-            if (!path) return false;
+  // Use 'dist' instead of 'out' to avoid conflict with electron-vite's output directory
+  outDir: "dist",
+  packagerConfig: {
+    asar: true,
+    icon: "./build/icon",
+    extraResource: ["./resources"],
+    // Use lowercase executable name on Linux for compatibility with DEB/RPM makers
+    executableName: process.platform === "linux" ? "aonsoku" : "Aonsoku",
+    // Use ARCH environment variable if set, otherwise use x64 as default
+    arch:
+      (process.env.ARCH as
+        | "ia32"
+        | "x64"
+        | "armv7l"
+        | "arm64"
+        | "mips64el"
+        | "universal"
+        | undefined) || "x64",
+    // Custom ignore function to prevent ignoring the out/ directory
+    // Since electron-vite outputs to "out/" and we changed Electron Forge's outDir to "dist/",
+    // we need to ensure "out/" is not ignored during packaging
+    ignore: (path: string) => {
+      if (!path) return false;
 
-            // Never ignore package.json (required for electron app)
-            if (path === "/package.json") return false;
+      // Never ignore package.json (required for electron app)
+      if (path === "/package.json") return false;
 
-            // Never ignore out directory (contains electron-vite build output)
-            if (path === "/out" || path.startsWith("/out/")) return false;
+      // Never ignore out directory (contains electron-vite build output)
+      if (path === "/out" || path.startsWith("/out/")) return false;
 
-            // Never ignore resources directory (extra resources for the app)
-            if (path === "/resources" || path.startsWith("/resources/")) return false;
+      // Never ignore resources directory (extra resources for the app)
+      if (path === "/resources" || path.startsWith("/resources/")) return false;
 
-            // Ignore node_modules and .git
-            if (path.startsWith("/node_modules")) return true;
-            if (path.startsWith("/.git")) return true;
+      // Ignore node_modules and .git
+      if (path.startsWith("/node_modules")) return true;
+      if (path.startsWith("/.git")) return true;
 
-            // Ignore source code directories
-            if (path.startsWith("/src")) return true;
-            if (path.startsWith("/electron")) return true;
-            if (path.startsWith("/public")) return true;
-            if (path.startsWith("/cypress")) return true;
-            if (path.startsWith("/.vscode")) return true;
-            if (path.startsWith("/.husky")) return true;
-            if (path.startsWith("/build")) return true;
-            if (path.startsWith("/media")) return true;
-            if (path.startsWith("/scripts")) return true;
-            if (path.startsWith("/dist")) return true;
+      // Ignore source code directories
+      if (path.startsWith("/src")) return true;
+      if (path.startsWith("/electron")) return true;
+      if (path.startsWith("/public")) return true;
+      if (path.startsWith("/cypress")) return true;
+      if (path.startsWith("/.vscode")) return true;
+      if (path.startsWith("/.husky")) return true;
+      if (path.startsWith("/build")) return true;
+      if (path.startsWith("/media")) return true;
+      if (path.startsWith("/scripts")) return true;
+      if (path.startsWith("/dist")) return true;
 
-            // Ignore development and config files
-            if (path.endsWith(".ts")) return true;
-            if (path.endsWith(".tsx")) return true;
-            if (path.endsWith(".md")) return true;
-            if (path.endsWith(".yml")) return true;
-            if (path.endsWith(".yaml")) return true;
-            if (path.includes("tsconfig")) return true;
-            if (path.includes("pnpm-lock")) return true;
-            if (path.includes("vite.config")) return true;
-            if (path.includes("electron.vite.config")) return true;
-            if (path.includes("forge.config")) return true;
+      // Ignore development and config files
+      if (path.endsWith(".ts")) return true;
+      if (path.endsWith(".tsx")) return true;
+      if (path.endsWith(".md")) return true;
+      if (path.endsWith(".yml")) return true;
+      if (path.endsWith(".yaml")) return true;
+      if (path.includes("tsconfig")) return true;
+      if (path.includes("pnpm-lock")) return true;
+      if (path.includes("vite.config")) return true;
+      if (path.includes("electron.vite.config")) return true;
+      if (path.includes("forge.config")) return true;
 
-            // Allow everything else
-            return false;
-        },
-        win32metadata: {
-            CompanyName: "realtvop",
-            ProductName: "Aonsoku",
-        },
-        // Code signing disabled for all platforms
-        osxSign: undefined,
-        osxNotarize: undefined,
+      // Allow everything else
+      return false;
     },
-    rebuildConfig: {},
-    makers: [
-        // Windows: Use MakerZIP as the distribution format (Squirrel requires build tools not available in CI)
-        new MakerZIP({}, ["win32"]),
-        // macOS: Only output DMG images (final product)
-        new MakerDMG({
-            format: "ULFO",
-            icon: "./build/icon.icns",
-        }),
-        // Linux: Output both RPM and DEB installers (final products)
-        new MakerRpm({
-            options: {
-                homepage: "https://github.com/realtvop/aonsoku-reborn",
-                categories: ["AudioVideo", "Audio"],
-            },
-        }),
-        new MakerDeb({
-            options: {
-                homepage: "https://github.com/realtvop/aonsoku-reborn",
-            },
-        }),
-    ],
-    plugins: [
-        new FusesPlugin({
-            version: FuseVersion.V1,
-            [FuseV1Options.RunAsNode]: false,
-            [FuseV1Options.EnableNodeCliInspectArguments]: false,
-            [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
-        }),
-    ],
-    publishers: [
-        {
-            name: "@electron-forge/publisher-github",
-            config: {
-                repository: {
-                    owner: "realtvop",
-                    name: "aonsoku-reborn",
-                },
-                prerelease: false,
-                draft: true,
-            },
+    win32metadata: {
+      CompanyName: "realtvop",
+      ProductName: "Aonsoku",
+    },
+    // Code signing disabled for all platforms
+    osxSign: undefined,
+    osxNotarize: undefined,
+  },
+  rebuildConfig: {},
+  makers: [
+    // Windows: Use MakerZIP as the distribution format (Squirrel requires build tools not available in CI)
+    new MakerZIP({}, ["win32"]),
+    // macOS: Only output DMG images (final product)
+    new MakerDMG({
+      format: "ULFO",
+      icon: "./build/icon.icns",
+    }),
+    // Linux: Output both RPM and DEB installers (final products)
+    new MakerRpm({
+      options: {
+        homepage: "https://github.com/realtvop/aonsoku-reborn",
+        categories: ["AudioVideo", "Audio"],
+      },
+    }),
+    new MakerDeb({
+      options: {
+        homepage: "https://github.com/realtvop/aonsoku-reborn",
+      },
+    }),
+  ],
+  plugins: [
+    new FusesPlugin({
+      version: FuseVersion.V1,
+      [FuseV1Options.RunAsNode]: false,
+      [FuseV1Options.EnableNodeCliInspectArguments]: false,
+      [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
+    }),
+  ],
+  publishers: [
+    {
+      name: "@electron-forge/publisher-github",
+      config: {
+        repository: {
+          owner: "realtvop",
+          name: "aonsoku-reborn",
         },
-    ],
+        prerelease: false,
+        draft: true,
+      },
+    },
+  ],
 };
 
 export default config;

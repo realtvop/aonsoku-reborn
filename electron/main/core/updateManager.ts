@@ -3,162 +3,165 @@ import { autoUpdater } from "electron-updater";
 import { is } from "@electron-toolkit/utils";
 
 export class UpdateManager {
-    private mainWindow: BrowserWindow | null = null;
-    private isCheckingForUpdates = false;
+  private mainWindow: BrowserWindow | null = null;
+  private isCheckingForUpdates = false;
 
-    constructor(mainWindow: BrowserWindow) {
-        this.mainWindow = mainWindow;
-        this.setupAutoUpdater();
-        this.setupIpcListeners();
-    }
+  constructor(mainWindow: BrowserWindow) {
+    this.mainWindow = mainWindow;
+    this.setupAutoUpdater();
+    this.setupIpcListeners();
+  }
 
-    private setupAutoUpdater() {
-        // Configure auto-updater
-        autoUpdater.autoDownload = false;
-        autoUpdater.autoInstallOnAppQuit = true;
+  private setupAutoUpdater() {
+    // Configure auto-updater
+    autoUpdater.autoDownload = false;
+    autoUpdater.autoInstallOnAppQuit = true;
 
-        // Only check for updates on production
-        if (is.dev) return;
+    // Only check for updates on production
+    if (is.dev) return;
 
-        // Check for updates when app is ready
-        app.whenReady().then(() => {
-            this.checkForUpdates();
+    // Check for updates when app is ready
+    app.whenReady().then(() => {
+      this.checkForUpdates();
+    });
+
+    // Check for updates every hour
+    setInterval(
+      () => {
+        this.checkForUpdates();
+      },
+      60 * 60 * 1000,
+    );
+
+    // Handle update events
+    autoUpdater.on("checking-for-update", () => {
+      console.log("Checking for updates...");
+      this.isCheckingForUpdates = true;
+      this.sendUpdateStatus("checking-for-update");
+    });
+
+    autoUpdater.on("update-available", (info) => {
+      console.log("Update available:", info);
+      this.sendUpdateStatus("update-available", {
+        version: info.version,
+        releaseDate: info.releaseDate,
+      });
+
+      // Show notification to user
+      dialog
+        .showMessageBox(this.mainWindow!, {
+          type: "info",
+          title: "Update Available",
+          message: `Version ${info.version} is available for download.`,
+          buttons: ["Download Now", "Later"],
+          defaultId: 0,
+          cancelId: 1,
+        })
+        .then((result) => {
+          if (result.response === 0) {
+            this.downloadUpdate();
+          }
         });
+    });
 
-        // Check for updates every hour
-        setInterval(() => {
-            this.checkForUpdates();
-        }, 60 * 60 * 1000);
+    autoUpdater.on("update-not-available", (info) => {
+      console.log("Update not available:", info);
+      this.sendUpdateStatus("update-not-available");
+      this.isCheckingForUpdates = false;
+    });
 
-        // Handle update events
-        autoUpdater.on("checking-for-update", () => {
-            console.log("Checking for updates...");
-            this.isCheckingForUpdates = true;
-            this.sendUpdateStatus("checking-for-update");
-        });
+    autoUpdater.on("error", (error) => {
+      console.error("Update error:", error);
+      this.sendUpdateStatus("update-error", { message: error.message });
+      this.isCheckingForUpdates = false;
+    });
 
-        autoUpdater.on("update-available", (info) => {
-            console.log("Update available:", info);
-            this.sendUpdateStatus("update-available", {
-                version: info.version,
-                releaseDate: info.releaseDate,
-            });
+    autoUpdater.on("download-progress", (progressObj) => {
+      console.log(
+        `Download progress: ${progressObj.percent.toFixed(2)}% (${progressObj.transferred}/${progressObj.total})`,
+      );
+      this.sendUpdateStatus("update-download-progress", {
+        percent: progressObj.percent,
+        transferred: progressObj.transferred,
+        total: progressObj.total,
+      });
+    });
 
-            // Show notification to user
-            dialog
-                .showMessageBox(this.mainWindow!, {
-                    type: "info",
-                    title: "Update Available",
-                    message: `Version ${info.version} is available for download.`,
-                    buttons: ["Download Now", "Later"],
-                    defaultId: 0,
-                    cancelId: 1,
-                })
-                .then((result) => {
-                    if (result.response === 0) {
-                        this.downloadUpdate();
-                    }
-                });
-        });
+    autoUpdater.on("update-downloaded", (info) => {
+      console.log("Update downloaded, will install on quit:", info);
+      this.sendUpdateStatus("update-downloaded");
 
-        autoUpdater.on("update-not-available", (info) => {
-            console.log("Update not available:", info);
-            this.sendUpdateStatus("update-not-available");
-            this.isCheckingForUpdates = false;
-        });
-
-        autoUpdater.on("error", (error) => {
-            console.error("Update error:", error);
-            this.sendUpdateStatus("update-error", { message: error.message });
-            this.isCheckingForUpdates = false;
-        });
-
-        autoUpdater.on("download-progress", (progressObj) => {
-            console.log(
-                `Download progress: ${progressObj.percent.toFixed(2)}% (${progressObj.transferred}/${progressObj.total})`
-            );
-            this.sendUpdateStatus("update-download-progress", {
-                percent: progressObj.percent,
-                transferred: progressObj.transferred,
-                total: progressObj.total,
-            });
-        });
-
-        autoUpdater.on("update-downloaded", (info) => {
-            console.log("Update downloaded, will install on quit:", info);
-            this.sendUpdateStatus("update-downloaded");
-
-            // Show notification
-            dialog
-                .showMessageBox(this.mainWindow!, {
-                    type: "info",
-                    title: "Update Ready",
-                    message: `Version ${info.version} has been downloaded and will be installed when the app is closed.`,
-                    buttons: ["Install Now", "Later"],
-                    defaultId: 0,
-                    cancelId: 1,
-                })
-                .then((result) => {
-                    if (result.response === 0) {
-                        this.quitAndInstall();
-                    }
-                });
-        });
-    }
-
-    private setupIpcListeners() {
-        // Check for updates manually
-        ipcMain.handle("app:check-for-updates", () => {
-            return this.checkForUpdates();
-        });
-
-        // Download update manually
-        ipcMain.handle("app:download-update", () => {
-            return this.downloadUpdate();
-        });
-
-        // Install update
-        ipcMain.handle("app:install-update", () => {
+      // Show notification
+      dialog
+        .showMessageBox(this.mainWindow!, {
+          type: "info",
+          title: "Update Ready",
+          message: `Version ${info.version} has been downloaded and will be installed when the app is closed.`,
+          buttons: ["Install Now", "Later"],
+          defaultId: 0,
+          cancelId: 1,
+        })
+        .then((result) => {
+          if (result.response === 0) {
             this.quitAndInstall();
+          }
         });
+    });
+  }
 
-        // Get current version
-        ipcMain.handle("app:get-version", () => {
-            return app.getVersion();
-        });
+  private setupIpcListeners() {
+    // Check for updates manually
+    ipcMain.handle("app:check-for-updates", () => {
+      return this.checkForUpdates();
+    });
+
+    // Download update manually
+    ipcMain.handle("app:download-update", () => {
+      return this.downloadUpdate();
+    });
+
+    // Install update
+    ipcMain.handle("app:install-update", () => {
+      this.quitAndInstall();
+    });
+
+    // Get current version
+    ipcMain.handle("app:get-version", () => {
+      return app.getVersion();
+    });
+  }
+
+  private checkForUpdates() {
+    if (this.isCheckingForUpdates) {
+      console.log("Already checking for updates");
+      return undefined;
     }
 
-    private checkForUpdates() {
-        if (this.isCheckingForUpdates) {
-            console.log("Already checking for updates");
-            return undefined;
-        }
-
-        try {
-            this.isCheckingForUpdates = true;
-            return autoUpdater.checkForUpdates();
-        } catch (error) {
-            console.error("Error checking for updates:", error);
-            this.isCheckingForUpdates = false;
-            return undefined;
-        }
+    try {
+      this.isCheckingForUpdates = true;
+      return autoUpdater.checkForUpdates();
+    } catch (error) {
+      console.error("Error checking for updates:", error);
+      this.isCheckingForUpdates = false;
+      return undefined;
     }
+  }
 
-    private downloadUpdate() {
-        console.log("Starting download...");
-        autoUpdater.downloadUpdate();
-    }
+  private downloadUpdate() {
+    console.log("Starting download...");
+    autoUpdater.downloadUpdate();
+  }
 
-    private quitAndInstall() {
-        autoUpdater.quitAndInstall();
-    }
+  private quitAndInstall() {
+    autoUpdater.quitAndInstall();
+  }
 
-    private sendUpdateStatus(
-        status: string,
-        data?: Record<string, unknown>
-    ) {
-        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-            this.mainWindow.webContents.send("app:update-status", { status, ...data });
-        }
+  private sendUpdateStatus(status: string, data?: Record<string, unknown>) {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send("app:update-status", {
+        status,
+        ...data,
+      });
     }
+  }
 }

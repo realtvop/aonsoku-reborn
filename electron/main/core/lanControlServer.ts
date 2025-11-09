@@ -126,9 +126,9 @@ export class LanControlServer {
                     : i18n.en.auth.failed,
                   deviceInfo: authResult
                     ? {
-                      name: "Aonsoku Desktop",
-                      version: "0.20.0",
-                    }
+                        name: "Aonsoku Desktop",
+                        version: this.app.getVersion(),
+                      }
                     : undefined,
                 } as AuthResponseData,
               };
