@@ -4,10 +4,11 @@
   "version": "0.20.0",
   "description": "A modern desktop client for Navidrome/Subsonic servers.",
   "author": {
-    "name": "realtvop & Victor Alves"
+    "name": "realtvop"
   },
   "license": "MIT",
   "main": "./out/main/index.js",
+  "version": "0.20.0",
   "type": "module",
   "productName": "Aonsoku",
   "scripts": {
