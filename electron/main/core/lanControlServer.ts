@@ -55,24 +55,36 @@ export class LanControlServer {
       this.app.use(cors());
       this.app.use(express.json());
 
-      const publicDir = path.join(__dirname, "../../../public");
+      // Determine the renderer directory path
+      // In development: serve from the built renderer output (need to build first)
+      // In production: serve from the built renderer output
+      const rendererDir = path.join(__dirname, "../../renderer");
+      console.log("[LAN Control] Serving Aonsoku web app from:", rendererDir);
 
-      // Serve static control page
-      this.app.use(express.static(publicDir));
-
-      // Serve control page on root path
-      this.app.get("/", (_req: Request, res: Response) => {
-        res.sendFile(path.join(publicDir, "control.html"));
-      });
-
-      // Health check endpoint
+      // Health check endpoint (before static files)
       this.app.get("/api/health", (_req: Request, res: Response) => {
-        res.json({ status: i18n.en.server.healthStatus, version: "1.0.0" });
+        res.json({
+          status: i18n.en.server.healthStatus,
+          version: app.getVersion(),
+          lanControlEnabled: true
+        });
       });
 
-      // Serve control page
-      this.app.get("/control", (_req: Request, res: Response) => {
-        res.sendFile(path.join(publicDir, "control.html"));
+      // Serve static files (assets, fonts, images, etc.)
+      this.app.use(express.static(rendererDir));
+
+      // Serve the main Aonsoku web application for all other routes
+      // This enables client-side routing to work properly
+      this.app.use((_req: Request, res: Response) => {
+        const indexPath = path.join(rendererDir, "index.html");
+        res.sendFile(indexPath, (err) => {
+          if (err) {
+            console.error("[LAN Control] Error serving index.html:", err);
+            res.status(404).send(
+              "Aonsoku web app not found. Please build the app first using 'pnpm electron:build'"
+            );
+          }
+        });
       });
 
       // Create HTTP server
