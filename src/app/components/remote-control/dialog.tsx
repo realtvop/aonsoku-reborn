@@ -143,7 +143,6 @@ export function RemoteControlDialog({
                   <Input
                     id="remote-ip"
                     value={ip}
-                    placeholder="192.168.1.100"
                     onChange={(event) => actions.setIp(event.target.value)}
                     disabled={isConnecting}
                     spellCheck={false}

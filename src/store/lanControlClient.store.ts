@@ -86,8 +86,8 @@ function loadSavedConnection() {
     const autoConnect =
       localStorage.getItem(STORAGE_KEY_AUTO_CONNECT) === "true";
     return {
-      ip: ip || "localhost",
-      port: port ? parseInt(port, 10) : 5299,
+      ip: ip || (location.hostname.endsWith("aonsoku.realtvop.top") ? "localhost" : location.hostname),
+      port: port ? parseInt(port, 10) : ((!location.hostname.endsWith("aonsoku.realtvop.top") && location.port) ? parseInt(location.port, 10) : 5299),
       password: password || "",
       autoConnect,
     };
@@ -97,8 +97,8 @@ function loadSavedConnection() {
       error,
     );
     return {
-      ip: "localhost",
-      port: 5299,
+      ip: location.hostname.endsWith("aonsoku.realtvop.top") ? "localhost" : location.hostname,
+      port: (!location.hostname.endsWith("aonsoku.realtvop.top") && location.port) ? parseInt(location.port, 10) : 5299,
       password: "",
       autoConnect: false,
     };
@@ -133,6 +133,7 @@ function clearSavedConnection() {
 }
 
 const savedConnection = loadSavedConnection();
+console.log(savedConnection)
 
 export const useLanControlClientStore =
   createWithEqualityFn<LanControlClientState>()(
