@@ -1,7 +1,7 @@
 import {
+  CurrentSongData,
   LanControlMessageType,
   PlayerStateData,
-  CurrentSongData,
   QueueData,
   RemoteDeviceInfo,
 } from "./lanControl";

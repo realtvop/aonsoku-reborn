@@ -5,15 +5,15 @@
 
 import { BrowserWindow, ipcMain } from "electron";
 import { networkInterfaces } from "os";
+import type { LanControlServer as LanControlServerType } from "./lanControlServer";
 import type {
+  CurrentSongData,
   LanControlConfig,
+  LanControlMessage,
   LanControlServerInfo,
   PlayerStateData,
-  CurrentSongData,
   QueueData,
-  LanControlMessage,
 } from "./lanControlTypes";
-import type { LanControlServer as LanControlServerType } from "./lanControlServer";
 
 // Import will be done dynamically when server starts
 let LanControlServer: typeof LanControlServerType | null = null;

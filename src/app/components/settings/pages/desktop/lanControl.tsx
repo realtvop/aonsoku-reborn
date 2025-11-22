@@ -1,6 +1,7 @@
 import { Copy, RefreshCw } from "lucide-react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "react-toastify";
 import {
   Content,
   ContentItem,
@@ -16,7 +17,6 @@ import { Badge } from "@/app/components/ui/badge";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { Switch } from "@/app/components/ui/switch";
-import { toast } from "react-toastify";
 import {
   useLanControlActions,
   useLanControlConfig,

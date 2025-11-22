@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { useLanControlClientStore } from "@/store/lanControlClient.store";
 import {
+  useIsRemoteControlActive,
   usePlayerIsPlaying,
   usePlayerMediaType,
-  usePlayerSonglist,
-  useIsRemoteControlActive,
   usePlayerProgress,
+  usePlayerSonglist,
 } from "@/store/player.store";
-import { useLanControlClientStore } from "@/store/lanControlClient.store";
 import { appName } from "@/utils/appName";
 import { manageMediaSession } from "@/utils/setMediaSession";
 

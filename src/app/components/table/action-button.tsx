@@ -1,13 +1,13 @@
 import clsx from "clsx";
 import { EllipsisVertical } from "lucide-react";
 import { ReactNode, useState } from "react";
+import { isMobile } from "react-device-detect";
 import { Button } from "@/app/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/app/components/ui/dropdown-menu";
-import { isMobile } from "react-device-detect";
 
 interface TableActionButtonProps {
   optionsMenuItems?: ReactNode;

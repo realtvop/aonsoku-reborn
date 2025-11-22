@@ -1,16 +1,16 @@
+import { HomeIcon } from "lucide-react";
+import { memo, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { NavigationButtons } from "@/app/components/header/navigation-buttons";
 import { UserDropdown } from "@/app/components/header/user-dropdown";
 import { SettingsButton } from "@/app/components/settings/header-button";
 import { useAppWindow } from "@/app/hooks/use-app-window";
-import { useWindowControlsOverlay } from "@/app/hooks/use-window-controls-overlay";
 import { useThemeColor } from "@/app/hooks/use-theme-color";
+import { useWindowControlsOverlay } from "@/app/hooks/use-window-controls-overlay";
 import { isDesktop, isLinux, isMacOS, isWindows } from "@/utils/desktop";
 import { isWindowControlsOverlayAvailable } from "@/utils/pwa";
 import CommandMenu from "../components/command/command-menu";
-import { memo, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { Button } from "../components/ui/button";
-import { HomeIcon } from "lucide-react";
 
 export function Header() {
   const { isFullscreen } = useAppWindow();

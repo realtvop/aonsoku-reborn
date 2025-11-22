@@ -1,8 +1,8 @@
 import { getCoverArtUrl } from "@/api/httpClient";
 import { usePlayerStore } from "@/store/player.store";
+import { LanControlMessageType } from "@/types/lanControl";
 import { EpisodeWithPodcast } from "@/types/responses/podcasts";
 import { ISong } from "@/types/responses/song";
-import { LanControlMessageType } from "@/types/lanControl";
 
 const artworkSizes = ["96", "128", "192", "256", "384", "512"];
 

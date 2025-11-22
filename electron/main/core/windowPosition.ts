@@ -4,8 +4,8 @@ import {
   Rectangle,
   screen,
 } from "electron";
+import { defaultHeight, defaultWidth } from "../config";
 import { AonsokuStore } from "./store";
-import { defaultWidth, defaultHeight } from "../config";
 
 interface ExtraOptions {
   /** Should we automatically maximize the window, if it was last closed maximized. Defaults to `true`. */

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
 import { PlusIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-
+import { useNavigate } from "react-router-dom";
 import { ShadowHeader } from "@/app/components/album/shadow-header";
 import { SongListFallback } from "@/app/components/fallbacks/song-fallbacks";
 import { HeaderTitle } from "@/app/components/header-title";
@@ -10,11 +10,10 @@ import { EmptyPlaylistsPage } from "@/app/components/playlist/empty-page";
 import { Button } from "@/app/components/ui/button";
 import { DataTableList } from "@/app/components/ui/data-table-list";
 import { playlistsColumns } from "@/app/tables/playlists-columns";
+import { ROUTES } from "@/routes/routesList";
 import { subsonic } from "@/service/subsonic";
 import { usePlaylists } from "@/store/playlists.store";
 import { queryKeys } from "@/utils/queryKeys";
-import { useNavigate } from "react-router-dom";
-import { ROUTES } from "@/routes/routesList";
 
 export default function PlaylistsPage() {
   const { setPlaylistDialogState } = usePlaylists();

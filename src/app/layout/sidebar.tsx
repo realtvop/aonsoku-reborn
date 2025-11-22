@@ -1,11 +1,11 @@
 import {
   DiscAlbumIcon,
+  HeartIcon,
   ListMusicIcon,
   Mic2Icon,
   Music2Icon,
   PodcastIcon,
   RadioIcon,
-  HeartIcon,
 } from "lucide-react";
 import { memo } from "react";
 import { useTranslation } from "react-i18next";

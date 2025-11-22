@@ -7,7 +7,6 @@ import { immer } from "zustand/middleware/immer";
 import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
 import { subsonic } from "@/service/subsonic";
-import { IPlayerContext, ISongList, LoopState } from "@/types/playerContext";
 import {
   CurrentSongData,
   LanControlMessageType,
@@ -15,6 +14,7 @@ import {
   QueueData,
   RemoteDeviceInfo,
 } from "@/types/lanControl";
+import { IPlayerContext, ISongList, LoopState } from "@/types/playerContext";
 import { ISong } from "@/types/responses/song";
 import { areSongListsEqual } from "@/utils/compareSongLists";
 import { isDesktop } from "@/utils/desktop";

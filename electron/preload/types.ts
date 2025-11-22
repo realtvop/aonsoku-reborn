@@ -2,11 +2,11 @@ import { RpcPayload } from "../main/core/discordRpc";
 import { IDownloadPayload } from "../main/core/downloads";
 import { ISettingPayload } from "../main/core/settings";
 import type {
-  LanControlConfig,
-  LanControlServerInfo,
-  LanControlMessage,
-  PlayerStateData,
   CurrentSongData,
+  LanControlConfig,
+  LanControlMessage,
+  LanControlServerInfo,
+  PlayerStateData,
   QueueData,
 } from "./lanControlTypes";
 

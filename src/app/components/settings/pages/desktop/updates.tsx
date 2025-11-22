@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "react-toastify";
 import {
   Content,
   ContentItem,
@@ -12,7 +13,6 @@ import {
   Root,
 } from "@/app/components/settings/section";
 import { Button } from "@/app/components/ui/button";
-import { toast } from "react-toastify";
 import { isDesktop } from "@/utils/desktop";
 
 function UpdateSettingsContent() {

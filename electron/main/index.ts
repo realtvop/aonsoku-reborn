@@ -1,9 +1,9 @@
 import { electronApp, optimizer, platform } from "@electron-toolkit/utils";
 import { app, globalShortcut } from "electron";
+import { updateElectronApp } from "update-electron-app";
+import { LanControlManager } from "./core/lanControlManager";
 import { createAppMenu } from "./core/menu";
 import { createWindow, mainWindow } from "./window";
-import { LanControlManager } from "./core/lanControlManager";
-import { updateElectronApp } from "update-electron-app";
 
 let lanControlManager: LanControlManager | null = null;
 let isQuitting = false;
@@ -60,7 +60,7 @@ if (!instanceLock) {
 
   app.on("browser-window-created", (_, window) => {
     optimizer.watchWindowShortcuts(window);
-    globalShortcut.register("F11", () => { });
+    globalShortcut.register("F11", () => {});
   });
 
   app.on("window-all-closed", () => {

@@ -1,10 +1,10 @@
-import type { ForgeConfig } from "@electron-forge/shared-types";
-import { MakerZIP } from "@electron-forge/maker-zip";
+import { FuseV1Options, FuseVersion } from "@electron/fuses";
+import { MakerDeb } from "@electron-forge/maker-deb";
 import { MakerDMG } from "@electron-forge/maker-dmg";
 import { MakerRpm } from "@electron-forge/maker-rpm";
-import { MakerDeb } from "@electron-forge/maker-deb";
+import { MakerZIP } from "@electron-forge/maker-zip";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
-import { FuseV1Options, FuseVersion } from "@electron/fuses";
+import type { ForgeConfig } from "@electron-forge/shared-types";
 
 const config: ForgeConfig = {
   // Use 'dist' instead of 'out' to avoid conflict with electron-vite's output directory

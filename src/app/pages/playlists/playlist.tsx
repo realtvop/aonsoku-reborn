@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { isMobile } from "react-device-detect";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import ImageHeader from "@/app/components/album/image-header";
@@ -15,7 +16,6 @@ import { usePlayerActions } from "@/store/player.store";
 import { ColumnFilter } from "@/types/columnFilter";
 import { convertSecondsToHumanRead } from "@/utils/convertSecondsToTime";
 import { queryKeys } from "@/utils/queryKeys";
-import { isMobile } from "react-device-detect";
 
 export default function Playlist() {
   const { playlistId } = useParams() as { playlistId: string };

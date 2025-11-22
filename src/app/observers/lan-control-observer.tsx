@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
+import { subsonic } from "@/service/subsonic";
 import {
   useLanControlActions,
   useLanControlConfig,
@@ -19,12 +20,15 @@ import {
   usePlayerVolume,
 } from "@/store/player.store";
 import {
+  AddAlbumToQueueData,
+  AddPlaylistToQueueData,
+  AddToQueueData,
   CurrentSongData,
   LanControlMessage,
   LanControlMessageType,
   LanControlServerInfo,
-  PlayerStateData,
   PlayAlbumData,
+  PlayerStateData,
   PlayPlaylistData,
   PlaySongData,
   QueueData,
@@ -32,13 +36,9 @@ import {
   SetRepeatData,
   SetShuffleData,
   VolumeData,
-  AddToQueueData,
-  AddAlbumToQueueData,
-  AddPlaylistToQueueData,
 } from "@/types/lanControl";
 import { LoopState } from "@/types/playerContext";
 import { isDesktop } from "@/utils/desktop";
-import { subsonic } from "@/service/subsonic";
 
 function mapLoopState(loop: LoopState): PlayerStateData["repeatMode"] {
   switch (loop) {

@@ -5,6 +5,7 @@ import { useHotkeys } from "react-hotkeys-hook";
 import { useTranslation } from "react-i18next";
 
 import { AboutDialog } from "@/app/components/about/dialog";
+import { RemoteControlDialog } from "@/app/components/remote-control/dialog";
 import { ShortcutsDialog } from "@/app/components/shortcuts/dialog";
 import { Avatar, AvatarFallback } from "@/app/components/ui/avatar";
 import {
@@ -17,7 +18,6 @@ import {
   DropdownMenuTrigger,
 } from "@/app/components/ui/dropdown-menu";
 import { LogoutObserver } from "@/app/observers/logout-observer";
-import { RemoteControlDialog } from "@/app/components/remote-control/dialog";
 import { logoutKeys, shortcutDialogKeys, stringifyShortcut } from "@/shortcuts";
 import { useAppData, useAppStore } from "@/store/app.store";
 import { useLanControlServerInfo } from "@/store/lanControl.store";

@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { getCoverArtUrl } from "@/api/httpClient";
+import { Badge } from "@/app/components/ui/badge";
+import { Button } from "@/app/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -7,16 +10,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/app/components/ui/dialog";
-import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { Label } from "@/app/components/ui/label";
-import { Badge } from "@/app/components/ui/badge";
-import { useLanControlClientStore } from "@/store/lanControlClient.store";
-import { useLanControlServerInfo } from "@/store/lanControl.store";
-import { convertSecondsToTime } from "@/utils/convertSecondsToTime";
 import { subsonic } from "@/service/subsonic";
+import { useLanControlServerInfo } from "@/store/lanControl.store";
+import { useLanControlClientStore } from "@/store/lanControlClient.store";
 import { ISong } from "@/types/responses/song";
-import { getCoverArtUrl } from "@/api/httpClient";
+import { convertSecondsToTime } from "@/utils/convertSecondsToTime";
 
 interface RemoteControlDialogProps {
   open: boolean;

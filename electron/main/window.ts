@@ -2,6 +2,7 @@ import { is, platform } from "@electron-toolkit/utils";
 import { BrowserWindow } from "electron";
 import { join } from "path";
 import { electron } from "../../package.json";
+import { defaultHeight, defaultWidth } from "./config";
 import { colorsState } from "./core/colors";
 import { setupDownloads } from "./core/downloads";
 import { setupEvents, setupIpcEvents } from "./core/events";
@@ -9,7 +10,6 @@ import { appIcon } from "./core/icon";
 import { titleBarOverlay } from "./core/titleBarOverlay";
 import { StatefulBrowserWindow } from "./core/windowPosition";
 import { createTray } from "./tray";
-import { defaultWidth, defaultHeight } from "./config";
 
 export let mainWindow: BrowserWindow | null = null;
 

@@ -14,9 +14,9 @@ import {
   usePlayerIsPlaying,
   usePlayerMediaType,
   usePlayerVolume,
+  useRemoteControlState,
   useReplayGainActions,
   useReplayGainState,
-  useRemoteControlState,
 } from "@/store/player.store";
 import { logger } from "@/utils/logger";
 import { calculateReplayGain, ReplayGainParams } from "@/utils/replayGain";

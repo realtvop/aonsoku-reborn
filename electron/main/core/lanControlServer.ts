@@ -1,20 +1,20 @@
-import { app, type BrowserWindow } from "electron";
 import type { IncomingMessage } from "node:http";
 import { createServer, type Server as HttpServer } from "node:http";
 import path from "node:path";
+import { app, type BrowserWindow } from "electron";
 import type { Express, Request, Response } from "express";
 import { WebSocket, WebSocketServer } from "ws";
+import { i18n } from "./i18n";
 import {
+  AuthRequestData,
+  AuthResponseData,
+  CurrentSongData,
   LanControlConfig,
   LanControlMessage,
   LanControlMessageType,
-  AuthRequestData,
-  AuthResponseData,
   PlayerStateData,
-  CurrentSongData,
   QueueData,
 } from "./lanControlTypes";
-import { i18n } from "./i18n";
 
 // These will be dynamically imported when server starts
 // type Express = any
@@ -66,7 +66,7 @@ export class LanControlServer {
         res.json({
           status: i18n.en.server.healthStatus,
           version: app.getVersion(),
-          lanControlEnabled: true
+          lanControlEnabled: true,
         });
       });
 
@@ -80,9 +80,11 @@ export class LanControlServer {
         res.sendFile(indexPath, (err) => {
           if (err) {
             console.error("[LAN Control] Error serving index.html:", err);
-            res.status(404).send(
-              "Aonsoku web app not found. Please build the app first using 'pnpm electron:build'"
-            );
+            res
+              .status(404)
+              .send(
+                "Aonsoku web app not found. Please build the app first using 'pnpm electron:build'",
+              );
           }
         });
       });
@@ -138,9 +140,9 @@ export class LanControlServer {
                     : i18n.en.auth.failed,
                   deviceInfo: authResult
                     ? {
-                      name: "Aonsoku Desktop",
-                      version: app.getVersion(),
-                    }
+                        name: "Aonsoku Desktop",
+                        version: app.getVersion(),
+                      }
                     : undefined,
                 } as AuthResponseData,
               };

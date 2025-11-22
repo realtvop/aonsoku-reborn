@@ -6,8 +6,8 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/app/components/ui/tabs";
-import { FullscreenPlayer } from "./player";
 import { LyricsTab } from "./lyrics";
+import { FullscreenPlayer } from "./player";
 import { FullscreenSongQueue } from "./queue";
 import { SongInfo } from "./song-info";
 

@@ -1,5 +1,5 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Pause, Play, SkipForward } from "lucide-react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { getSongStreamUrl } from "@/api/httpClient";
 import { getProxyURL } from "@/api/podcastClient";
 import { MiniPlayerButton } from "@/app/components/mini-player/button";
@@ -9,16 +9,16 @@ import { Button } from "@/app/components/ui/button";
 import { podcasts } from "@/service/podcasts";
 import {
   getVolume,
+  useIsRemoteControlActive,
   usePlayerActions,
+  usePlayerDuration,
   usePlayerIsPlaying,
   usePlayerLoop,
   usePlayerMediaType,
+  usePlayerPrevAndNext,
   usePlayerRef,
   usePlayerSonglist,
-  useIsRemoteControlActive,
   useReplayGainState,
-  usePlayerPrevAndNext,
-  usePlayerDuration,
 } from "@/store/player.store";
 import { LoopState } from "@/types/playerContext";
 import { hasPiPSupport } from "@/utils/browser";
@@ -228,7 +228,7 @@ export function Player() {
       className="border-t h-[--player-height] w-full flex items-center fixed bottom-0 left-0 right-0 z-40 bg-background"
       onClick={handleFooterClick}
       style={{
-        paddingBottom: 'env(safe-area-inset-bottom, 0px)'
+        paddingBottom: "env(safe-area-inset-bottom, 0px)",
       }}
     >
       <div className="w-full h-full grid grid-cols-[1fr_auto] gap-3 px-3 sm:grid-cols-player sm:gap-2 sm:px-4">

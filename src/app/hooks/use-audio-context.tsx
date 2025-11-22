@@ -7,8 +7,8 @@ import {
 } from "standardized-audio-context";
 import {
   usePlayerMediaType,
-  useReplayGainState,
   useRemoteControlState,
+  useReplayGainState,
 } from "@/store/player.store";
 import { logger } from "@/utils/logger";
 import { ReplayGainParams } from "@/utils/replayGain";

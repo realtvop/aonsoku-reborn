@@ -1,7 +1,7 @@
 import { clsx } from "clsx";
 import { Heart } from "lucide-react";
 import { useEffect, useState } from "react";
-
+import { isMobile } from "react-device-detect";
 import { Button } from "@/app/components/ui/button";
 import { subsonic } from "@/service/subsonic";
 import {
@@ -10,7 +10,6 @@ import {
   usePlayerSonglist,
   usePlayerSongStarred,
 } from "@/store/player.store";
-import { isMobile } from "react-device-detect";
 
 interface TableLikeButtonProps {
   type: "song" | "artist";
