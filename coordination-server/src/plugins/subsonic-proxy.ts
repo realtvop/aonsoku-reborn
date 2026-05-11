@@ -49,7 +49,7 @@ export const subsonicProxy = () =>
 
         const subPath = params["*"] ?? "";
         const url = new URL(request.url);
-        const target = new URL(`/${subPath}?${url.search}`, targetUrl);
+        const target = new URL(`/${subPath}${url.search}`, targetUrl);
 
         const targetHost = new URL(targetUrl).host;
         const headers = cleanRequestHeaders(request.headers, targetHost);
