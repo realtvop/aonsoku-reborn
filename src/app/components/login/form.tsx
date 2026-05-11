@@ -198,11 +198,20 @@ export function LoginForm() {
     const coordinationUrl = removeSlashFromUrl(
       coordinationUrlForm.getValues("coordinationUrl"),
     );
-    const proxyUrl = `${coordinationUrl}/subsonic`;
-    const fallbackUrl = subsonicInfo.url;
+
+    let serverUrl: string;
+    let fallbackUrl: string | undefined;
+
+    if (subsonicInfo.reverseProxyEnabled) {
+      serverUrl = `${coordinationUrl}/subsonic`;
+      fallbackUrl = subsonicInfo.url;
+    } else {
+      serverUrl = subsonicInfo.url;
+      fallbackUrl = undefined;
+    }
 
     const status = await saveConfig({
-      url: proxyUrl,
+      url: serverUrl,
       fallbackUrl,
       username: data.username,
       password: data.password,
