@@ -2,7 +2,6 @@ import { Loader2 } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
-import { Badge } from "@/app/components/ui/badge";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { queryClient } from "@/lib/queryClient";
@@ -95,6 +94,21 @@ export function ServerSettings() {
 
       <form onSubmit={handleSubmit}>
         <Content>
+          <ContentItem>
+            <ContentItemTitle info={t("settings.server.connectionMode.info")}>
+              {t("settings.server.connectionMode.label")}
+            </ContentItemTitle>
+            <ContentItemForm className="max-w-none w-3/5">
+              <div className="w-full rounded-md border border-input bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                {isCoordination
+                  ? t("settings.server.connectionMode.coordination")
+                  : t("settings.server.connectionMode.direct")}
+              </div>
+            </ContentItemForm>
+          </ContentItem>
+
+          <ContentSeparator />
+
           {isCoordination && coordinationUrl && (
             <ContentItem className="items-start gap-4">
               <ContentItemTitle info={t("settings.server.coordinationUrl.info")}>
@@ -104,9 +118,6 @@ export function ServerSettings() {
                 <div className="w-full rounded-md border border-input bg-muted/40 px-3 py-2 text-sm text-muted-foreground break-all">
                   {coordinationUrl}
                 </div>
-                <Badge variant="default" className="mt-1">
-                  {t("settings.server.connectionMode.coordination")}
-                </Badge>
               </ContentItemForm>
             </ContentItem>
           )}
@@ -138,7 +149,7 @@ export function ServerSettings() {
               <Input
                 value={fallbackValue}
                 onChange={(event) => setFallbackValue(event.target.value)}
-                disabled={inputsDisabled}
+                disabled={inputsDisabled || isCoordination}
                 placeholder={t("settings.server.fallbackUrl.placeholder")}
                 autoCorrect="false"
                 autoCapitalize="false"
