@@ -1,4 +1,5 @@
 import { Elysia, t } from "elysia";
+import { cors } from "@elysiajs/cors";
 import { subsonicProxy } from "./plugins/subsonic-proxy";
 
 const enableProxy = process.env.ENABLE_SUBSONIC_REVERSE_PROXY !== "false";
@@ -8,6 +9,7 @@ const app = new Elysia({
     hostname: process.env.SERVER_HOST || "127.0.0.1",
   },
 })
+  .use(cors())
   .get("/", () => "Hello World")
   .get(
     "/subsonic",
