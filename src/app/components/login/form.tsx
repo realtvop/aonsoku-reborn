@@ -6,7 +6,6 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-
 import { toast } from "react-toastify";
 import { z } from "zod";
 import { fetchSubsonicInfo } from "@/api/coordinationApi";
@@ -58,7 +57,8 @@ const directSchema = z.object({
   url: z
     .string()
     .url({ message: "login.form.validations.url" })
-    .refine((value) => /^https?:\/\//.test(value), {
+    .refine((value) =>
+ /^https?:\/\//.test(value), {
       message: "login.form.validations.protocol",
     }),
   username: z
@@ -73,7 +73,8 @@ const coordinationUrlSchema = z.object({
   coordinationUrl: z
     .string()
     .url({ message: "login.form.validations.url" })
-    .refine((value) => /^https?:\/\//.test(value), {
+    .refine((value) =>
+ /^https?:\/\//.test(value), {
       message: "login.form.validations.protocol",
     }),
 });
@@ -240,17 +241,15 @@ export function LoginForm() {
 
   return (
     <>
-      <Card className="max-w-[80vw] w-[450px] bg-background-foreground">
+      <Card className="w-full">
         <Tabs
           value={connectionMode}
           onValueChange={(v) => handleSwitchMode(v as ConnectionMode)}
         >
-          <CardHeader className="flex">
+          <CardHeader>
             <CardTitle className="flex flex-row justify-between items-center">
               {t("login.form.server")}
-              <div className="flex gap-2 items-center">
-                <LangToggle />
-              </div>
+              <LangToggle />
             </CardTitle>
             <CardDescription>{t("login.form.description")}</CardDescription>
             <TabsList className="w-full mt-2">
@@ -538,6 +537,7 @@ export function LoginForm() {
           </CardFooter>
         </Tabs>
       </Card>
+
       <Dialog
         open={serverIsIncompatible}
         onOpenChange={(state) => {
