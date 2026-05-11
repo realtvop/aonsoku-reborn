@@ -1,0 +1,14 @@
+{
+  "name": "aonsoku-reborn-coordination-server",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts"
+  },
+  "dependencies": {
+    "elysia": "latest"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  },
+  "module": "src/index.js"
+}
