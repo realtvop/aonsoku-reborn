@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "name": "Aonsoku-reborn Coordination Server",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git",
+    ".env"
+  ]
+}
