@@ -227,6 +227,17 @@
     "form": {
       "connect": "ബന്ധിപ്പിക്കുക",
       "connecting": "ബന്ധിപ്പിക്കുന്നു…",
+      "coordinationServer": "Coordination Server",
+      "direct": "Direct",
+      "coordinationUrl": "Coordination Server URL",
+      "coordinationUrlDescription": "Enter your coordination server URL",
+      "next": "Next",
+      "fetchingServerInfo": "Fetching…",
+      "discoveredSubsonicUrl": "Subsonic server",
+      "reverseProxyEnabled": "Reverse proxy enabled",
+      "reverseProxyDisabled": "Reverse proxy disabled — will connect directly",
+      "coordinationFetchError": "Failed to fetch server info from coordination server",
+      "back": "Back",
       "description": "നിങ്ങളുടെ Subsonic സെർവറിലേക്ക് ബന്ധിപ്പിക്കുക.",
       "password": "പാസ്‌വേഡ്",
       "server": "സെർവർ",
@@ -659,6 +670,13 @@
         "empty": "സെർവർ തിരഞ്ഞെടുത്തിട്ടില്ല",
         "info": "ഈ ആപ്പ് സെഷൻ നിലവിൽ ഉപയോഗിക്കുന്ന സെർവർ URL.",
         "label": "നിലവിലെ URL"
+      },
+      "connectionMode": {
+        "coordination": "Coordination Server"
+      },
+      "coordinationUrl": {
+        "info": "The coordination server URL currently in use.",
+        "label": "Coordination Server"
       },
       "description": "സ്റ്റാർട്ടപ്പിൽ ഉപയോഗിക്കുന്ന പ്രാഥമിക സെർവറും ഓപ്ഷണൽ ഫാൾബാക്ക് URL-ഉം നിയന്ത്രിക്കുക.",
       "fallbackUrl": {

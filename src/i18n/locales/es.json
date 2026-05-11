@@ -228,6 +228,17 @@
     "form": {
       "connect": "Conectar",
       "connecting": "Conectando…",
+      "coordinationServer": "Coordination Server",
+      "direct": "Direct",
+      "coordinationUrl": "Coordination Server URL",
+      "coordinationUrlDescription": "Enter your coordination server URL",
+      "next": "Next",
+      "fetchingServerInfo": "Fetching…",
+      "discoveredSubsonicUrl": "Subsonic server",
+      "reverseProxyEnabled": "Reverse proxy enabled",
+      "reverseProxyDisabled": "Reverse proxy disabled — will connect directly",
+      "coordinationFetchError": "Failed to fetch server info from coordination server",
+      "back": "Back",
       "description": "Conectar a su servidor de Subsonic.",
       "password": "Contraseña",
       "server": "Servidor",
@@ -666,6 +677,13 @@
         "empty": "Ningún servidor seleccionado",
         "info": "La URL del servidor que usa actualmente esta sesión de la aplicación.",
         "label": "URL actual"
+      },
+      "connectionMode": {
+        "coordination": "Coordination Server"
+      },
+      "coordinationUrl": {
+        "info": "The coordination server URL currently in use.",
+        "label": "Coordination Server"
       },
       "description": "Gestiona el servidor principal y la URL de respaldo opcional utilizada al iniciar.",
       "fallbackUrl": {

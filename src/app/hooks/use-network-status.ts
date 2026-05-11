@@ -7,9 +7,12 @@ let reachabilityCheckTimeout: ReturnType<typeof setTimeout> | null = null;
 let inFlightProbe: Promise<boolean> | null = null;
 
 export function getConfiguredUrls(): string[] {
-  const { primaryUrl, fallbackUrl, url } = useAppStore.getState().data;
+  const { primaryUrl, fallbackUrl, url, coordinationUrl } =
+    useAppStore.getState().data;
   return Array.from(
-    new Set([primaryUrl, fallbackUrl, url].filter(Boolean)),
+    new Set(
+      [primaryUrl, fallbackUrl, url, coordinationUrl].filter(Boolean),
+    ),
   ) as string[];
 }
 

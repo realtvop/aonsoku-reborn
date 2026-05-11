@@ -12,6 +12,8 @@ export interface IServerConfig {
   password: string;
   protocolVersion?: string;
   serverType?: string;
+  connectionMode?: ConnectionMode;
+  coordinationUrl?: string;
 }
 
 export interface IServerUrlConfig {
@@ -20,6 +22,8 @@ export interface IServerUrlConfig {
 }
 
 export type ActiveServerType = "primary" | "fallback" | null;
+
+export type ConnectionMode = "coordination" | "direct";
 
 export type PageViewType = "grid" | "table";
 
@@ -44,6 +48,8 @@ export interface IAppData extends IServerConfig {
   lockUser: boolean;
   songCount: number | null;
   favoriteCount: number | null;
+  connectionMode: ConnectionMode;
+  coordinationUrl: string;
 }
 
 export interface IAppActions {
@@ -51,6 +57,8 @@ export interface IAppActions {
   setUrl: (value: string) => void;
   setUsername: (value: string) => void;
   setPassword: (value: string) => void;
+  setCoordinationUrl: (value: string) => void;
+  setConnectionMode: (value: ConnectionMode) => void;
   saveConfig: (data: IServerConfig) => Promise<boolean>;
   saveServerUrls: (data: IServerUrlConfig) => Promise<boolean>;
   selectConfiguredServer: () => Promise<boolean>;

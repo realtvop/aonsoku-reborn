@@ -2,6 +2,7 @@ import { Loader2 } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
+import { Badge } from "@/app/components/ui/badge";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { queryClient } from "@/lib/queryClient";
@@ -21,14 +22,23 @@ import {
 
 export function ServerSettings() {
   const { t } = useTranslation();
-  const { url, primaryUrl, fallbackUrl, activeServerType, lockUser } =
-    useAppData();
+  const {
+    url,
+    primaryUrl,
+    fallbackUrl,
+    activeServerType,
+    lockUser,
+    connectionMode,
+    coordinationUrl,
+  } = useAppData();
   const { saveServerUrls } = useAppActions();
   const [primaryValue, setPrimaryValue] = useState(primaryUrl || url);
   const [fallbackValue, setFallbackValue] = useState(fallbackUrl);
   const [isSaving, setIsSaving] = useState(false);
 
   const inputsDisabled = lockUser || isSaving;
+
+  const isCoordination = connectionMode === "coordination";
 
   useEffect(() => {
     setPrimaryValue(primaryUrl || url);
@@ -85,22 +95,40 @@ export function ServerSettings() {
 
       <form onSubmit={handleSubmit}>
         <Content>
-          <ContentItem className="items-start gap-4">
-            <ContentItemTitle info={t("settings.server.primaryUrl.info")}>
-              {t("settings.server.primaryUrl.label")}
-            </ContentItemTitle>
-            <ContentItemForm className="max-w-none w-3/5">
-              <Input
-                value={primaryValue}
-                onChange={(event) => setPrimaryValue(event.target.value)}
-                disabled={inputsDisabled}
-                placeholder={t("settings.server.primaryUrl.placeholder")}
-                autoCorrect="false"
-                autoCapitalize="false"
-                spellCheck="false"
-              />
-            </ContentItemForm>
-          </ContentItem>
+          {isCoordination && coordinationUrl && (
+            <ContentItem className="items-start gap-4">
+              <ContentItemTitle info={t("settings.server.coordinationUrl.info")}>
+                {t("settings.server.coordinationUrl.label")}
+              </ContentItemTitle>
+              <ContentItemForm className="max-w-none w-3/5">
+                <div className="w-full rounded-md border border-input bg-muted/40 px-3 py-2 text-sm text-muted-foreground break-all">
+                  {coordinationUrl}
+                </div>
+                <Badge variant="default" className="mt-1">
+                  {t("settings.server.connectionMode.coordination")}
+                </Badge>
+              </ContentItemForm>
+            </ContentItem>
+          )}
+
+          {!isCoordination && (
+            <ContentItem className="items-start gap-4">
+              <ContentItemTitle info={t("settings.server.primaryUrl.info")}>
+                {t("settings.server.primaryUrl.label")}
+              </ContentItemTitle>
+              <ContentItemForm className="max-w-none w-3/5">
+                <Input
+                  value={primaryValue}
+                  onChange={(event) => setPrimaryValue(event.target.value)}
+                  disabled={inputsDisabled}
+                  placeholder={t("settings.server.primaryUrl.placeholder")}
+                  autoCorrect="false"
+                  autoCapitalize="false"
+                  spellCheck="false"
+                />
+              </ContentItemForm>
+            </ContentItem>
+          )}
 
           <ContentItem className="items-start gap-4">
             <ContentItemTitle info={t("settings.server.fallbackUrl.info")}>
@@ -149,14 +177,16 @@ export function ServerSettings() {
             </p>
           )}
 
-          <div className="flex justify-end pt-2">
-            <Button type="submit" disabled={inputsDisabled}>
-              {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isSaving
-                ? t("settings.server.saving")
-                : t("settings.server.save")}
-            </Button>
-          </div>
+          {!isCoordination && (
+            <div className="flex justify-end pt-2">
+              <Button type="submit" disabled={inputsDisabled}>
+                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isSaving
+                  ? t("settings.server.saving")
+                  : t("settings.server.save")}
+              </Button>
+            </div>
+          )}
         </Content>
       </form>
 

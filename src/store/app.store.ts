@@ -9,6 +9,7 @@ import { queryServerInfo } from "@/api/queryServerInfo";
 import {
   ActiveServerType,
   AuthType,
+  ConnectionMode,
   IAppContext,
   IServerConfig,
   IServerUrlConfig,
@@ -38,6 +39,9 @@ const HIDE_RADIOS_SECTION = configSource.HIDE_RADIOS_SECTION as
   | boolean
   | undefined;
 const SERVER_TYPE = configSource.SERVER_TYPE as string | undefined;
+const COORDINATION_URL = configSource.COORDINATION_URL as
+  | string
+  | undefined;
 
 async function getServerInfoWithOverride(
   url: string,
@@ -196,6 +200,8 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
             lockUser: hasValidConfig,
             songCount: null,
             favoriteCount: null,
+            connectionMode: "direct" as ConnectionMode,
+            coordinationUrl: COORDINATION_URL ?? "",
           },
           accounts: {
             discord: {
@@ -300,11 +306,23 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
                 state.data.password = value;
               });
             },
+            setCoordinationUrl: (value) => {
+              set((state) => {
+                state.data.coordinationUrl = value;
+              });
+            },
+            setConnectionMode: (value) => {
+              set((state) => {
+                state.data.connectionMode = value;
+              });
+            },
             saveConfig: async ({
               url,
               fallbackUrl = "",
               username,
               password,
+              connectionMode,
+              coordinationUrl,
             }: IServerConfig) => {
               const primaryUrl = normalizeServerUrl(url);
               const normalizedFallbackUrl = normalizeServerUrl(fallbackUrl);
@@ -321,7 +339,6 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
                 return false;
               }
 
-              // try both token and password methods
               for (const authType of [AuthType.TOKEN, AuthType.PASSWORD]) {
                 const token =
                   authType === AuthType.TOKEN
@@ -350,6 +367,8 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
                     state.data.protocolVersion = serverInfo.protocolVersion;
                     state.data.serverType = serverInfo.serverType;
                     state.data.isServerConfigured = true;
+                    state.data.connectionMode = connectionMode ?? "direct";
+                    state.data.coordinationUrl = coordinationUrl ?? "";
                   });
                   return true;
                 }
@@ -470,6 +489,8 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
                 state.data.serverType = "subsonic";
                 state.data.songCount = null;
                 state.data.favoriteCount = null;
+                state.data.connectionMode = "direct";
+                state.data.coordinationUrl = "";
                 state.pages.showInfoPanel = true;
                 state.pages.hideRadiosSection = HIDE_RADIOS_SECTION ?? true;
                 state.pages.artistsPageViewType = "table";
@@ -518,6 +539,8 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
                   hideServer: HIDE_SERVER ?? false,
                   serverType: SERVER_TYPE ?? "subsonic",
                   lockUser: true,
+                  connectionMode: "direct" as ConnectionMode,
+                  coordinationUrl: "",
                 },
                 pages: {
                   hideRadiosSection,
@@ -537,6 +560,10 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
                 : persisted?.data?.url || persisted?.data?.primaryUrl
                   ? "primary"
                   : null;
+            const connectionMode =
+              (persisted?.data?.connectionMode as ConnectionMode) ?? "direct";
+            const coordinationUrl =
+              persisted?.data?.coordinationUrl ?? "";
             const withoutLockUser = {
               data: {
                 lockUser: false,
@@ -545,6 +572,8 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
                 url: persisted?.data?.url ?? persisted?.data?.primaryUrl ?? "",
                 fallbackUrl: persisted?.data?.fallbackUrl ?? "",
                 activeServerType,
+                connectionMode,
+                coordinationUrl,
               },
               pages: {
                 hideRadiosSection,
