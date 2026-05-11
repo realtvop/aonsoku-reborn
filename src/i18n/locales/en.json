@@ -610,7 +610,10 @@
         "info": "The coordination server URL currently in use."
       },
       "connectionMode": {
-        "coordination": "Coordination Server"
+        "label": "Connection Mode",
+        "info": "Whether the app connects directly to a server or through a coordination server.",
+        "coordination": "Coordination Server",
+        "direct": "Direct"
       },
       "validation": {
         "primaryUrl": "Please enter a valid primary URL.",

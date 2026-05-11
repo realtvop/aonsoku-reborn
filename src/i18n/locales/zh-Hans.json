@@ -680,7 +680,10 @@
         "label": "当前 URL"
       },
       "connectionMode": {
-        "coordination": "Coordination Server"
+        "coordination": "协调服务器",
+        "direct": "直连",
+        "info": "应用是直连服务器还是通过协调服务器连接。",
+        "label": "连接模式"
       },
       "coordinationUrl": {
         "info": "The coordination server URL currently in use.",

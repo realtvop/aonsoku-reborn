@@ -672,6 +672,9 @@
         "label": "Aktuelle URL"
       },
       "connectionMode": {
+        "direct": "Direct",
+        "info": "Whether the app connects directly to a server or through a coordination server.",
+        "label": "Connection Mode",
         "coordination": "Coordination Server"
       },
       "coordinationUrl": {

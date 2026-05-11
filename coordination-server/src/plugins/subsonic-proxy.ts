@@ -6,12 +6,31 @@ const HOP_BY_HOP_HEADERS = [
   "transfer-encoding",
   "te",
   "upgrade",
+  "accept-encoding",
+];
+
+const RESPONSE_HOP_BY_HOP_HEADERS = [
+  "connection",
+  "keep-alive",
+  "transfer-encoding",
+  "te",
+  "upgrade",
+  "content-encoding",
+  "content-length",
 ];
 
 function cleanRequestHeaders(headers: Headers, targetHost: string): Headers {
   const cleaned = new Headers(headers);
   cleaned.set("host", targetHost);
   for (const header of HOP_BY_HOP_HEADERS) {
+    cleaned.delete(header);
+  }
+  return cleaned;
+}
+
+function cleanResponseHeaders(headers: Headers): Headers {
+  const cleaned = new Headers(headers);
+  for (const header of RESPONSE_HOP_BY_HOP_HEADERS) {
     cleaned.delete(header);
   }
   return cleaned;
@@ -30,7 +49,7 @@ export const subsonicProxy = () =>
 
         const subPath = params["*"] ?? "";
         const url = new URL(request.url);
-        const target = new URL(`/${subPath}?${url.search}`, targetUrl);
+        const target = new URL(`/${subPath}${url.search}`, targetUrl);
 
         const targetHost = new URL(targetUrl).host;
         const headers = cleanRequestHeaders(request.headers, targetHost);
@@ -42,7 +61,13 @@ export const subsonicProxy = () =>
         });
 
         try {
-          return await fetch(proxyRequest);
+          const upstreamResponse = await fetch(proxyRequest);
+          const cleanedHeaders = cleanResponseHeaders(upstreamResponse.headers);
+          return new Response(upstreamResponse.body, {
+            status: upstreamResponse.status,
+            statusText: upstreamResponse.statusText,
+            headers: cleanedHeaders,
+          });
         } catch {
           return new Response("Subsonic server unreachable", { status: 502 });
         }
