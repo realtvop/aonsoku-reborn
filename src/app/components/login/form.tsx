@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { ArrowLeft, Globe, Link2, Loader2, Server } from "lucide-react";
+import { ArrowLeft, Globe, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -31,7 +31,7 @@ import {
 } from "@/app/components/ui/form";
 import { Input } from "@/app/components/ui/input";
 import { Password } from "@/app/components/ui/password";
-import { Tabs, TabsContent } from "@/app/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
 import { ROUTES } from "@/routes/routesList";
 import { useAppActions, useAppData } from "@/store/app.store";
 import type { ConnectionMode } from "@/types/serverConfig";
@@ -224,16 +224,6 @@ export function LoginForm() {
     setCoordinationStep("url");
   }
 
-  const modeOptions: { value: ConnectionMode; label: string; icon: typeof Server }[] =
-    [
-      { value: "direct", label: t("login.form.direct"), icon: Link2 },
-      {
-        value: "coordination",
-        label: t("login.form.coordinationServer"),
-        icon: Server,
-      },
-    ];
-
   return (
     <>
       <div className="relative space-y-6">
@@ -254,29 +244,14 @@ export function LoginForm() {
           value={connectionMode}
           onValueChange={(v) => handleSwitchMode(v as ConnectionMode)}
         >
-          {/* Mode selector */}
-          <div className="grid grid-cols-2 gap-3">
-            {modeOptions.map((option) => {
-              const Icon = option.icon;
-              const isActive = connectionMode === option.value;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => handleSwitchMode(option.value)}
-                  className={clsx(
-                    "flex flex-col items-center justify-center gap-2 p-4 rounded-lg border-2 transition-all duration-200",
-                    isActive
-                      ? "border-primary bg-primary/5 text-primary"
-                      : "border-border bg-transparent text-muted-foreground hover:border-border/80 hover:bg-muted/50",
-                  )}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span className="text-sm font-medium">{option.label}</span>
-                </button>
-              );
-            })}
-          </div>
+          <TabsList className="w-full">
+            <TabsTrigger value="direct" className="flex-1">
+              {t("login.form.direct")}
+            </TabsTrigger>
+            <TabsTrigger value="coordination" className="flex-1">
+              {t("login.form.coordinationServer")}
+            </TabsTrigger>
+          </TabsList>
 
           {/* Direct form */}
           <TabsContent value="direct" className="mt-6 space-y-4">
