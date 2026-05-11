@@ -32,7 +32,7 @@ export default function Login() {
           <h1 className="text-xl font-semibold text-foreground">Aonsoku</h1>
         </div>
 
-        <div className="w-full max-w-[400px]">
+        <div className="w-full max-w-[420px]">
           <LoginForm />
         </div>
       </div>

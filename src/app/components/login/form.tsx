@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Globe, Link2, Loader2, Server } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -13,14 +13,6 @@ import { queryServerInfo } from "@/api/queryServerInfo";
 import { LangToggle } from "@/app/components/login/lang-toggle";
 import { Badge } from "@/app/components/ui/badge";
 import { Button } from "@/app/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/app/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -39,12 +31,7 @@ import {
 } from "@/app/components/ui/form";
 import { Input } from "@/app/components/ui/input";
 import { Password } from "@/app/components/ui/password";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/app/components/ui/tabs";
+import { Tabs, TabsContent } from "@/app/components/ui/tabs";
 import { ROUTES } from "@/routes/routesList";
 import { useAppActions, useAppData } from "@/store/app.store";
 import type { ConnectionMode } from "@/types/serverConfig";
@@ -57,8 +44,7 @@ const directSchema = z.object({
   url: z
     .string()
     .url({ message: "login.form.validations.url" })
-    .refine((value) =>
- /^https?:\/\//.test(value), {
+    .refine((value) => /^https?:\/\//.test(value), {
       message: "login.form.validations.protocol",
     }),
   username: z
@@ -73,8 +59,7 @@ const coordinationUrlSchema = z.object({
   coordinationUrl: z
     .string()
     .url({ message: "login.form.validations.url" })
-    .refine((value) =>
- /^https?:\/\//.test(value), {
+    .refine((value) => /^https?:\/\//.test(value), {
       message: "login.form.validations.protocol",
     }),
 });
@@ -239,50 +224,83 @@ export function LoginForm() {
     setCoordinationStep("url");
   }
 
+  const modeOptions: { value: ConnectionMode; label: string; icon: typeof Server }[] =
+    [
+      { value: "direct", label: t("login.form.direct"), icon: Link2 },
+      {
+        value: "coordination",
+        label: t("login.form.coordinationServer"),
+        icon: Server,
+      },
+    ];
+
   return (
     <>
-      <Card className="w-full">
+      <div className="relative space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+              {t("login.form.server")}
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              {t("login.form.description")}
+            </p>
+          </div>
+          <LangToggle />
+        </div>
+
         <Tabs
           value={connectionMode}
           onValueChange={(v) => handleSwitchMode(v as ConnectionMode)}
         >
-          <CardHeader>
-            <CardTitle className="flex flex-row justify-between items-center">
-              {t("login.form.server")}
-              <LangToggle />
-            </CardTitle>
-            <CardDescription>{t("login.form.description")}</CardDescription>
-            <TabsList className="w-full mt-2">
-              <TabsTrigger value="direct" className="flex-1">
-                {t("login.form.direct")}
-              </TabsTrigger>
-              <TabsTrigger value="coordination" className="flex-1">
-                {t("login.form.coordinationServer")}
-              </TabsTrigger>
-            </TabsList>
-          </CardHeader>
-
-          <CardContent className="space-y-2">
-            <TabsContent value="direct">
-              <Form {...directForm}>
-                <form
-                  id="direct-form"
-                  onSubmit={directForm.handleSubmit((data) =>
-                    onSubmitDirect(data),
+          {/* Mode selector */}
+          <div className="grid grid-cols-2 gap-3">
+            {modeOptions.map((option) => {
+              const Icon = option.icon;
+              const isActive = connectionMode === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => handleSwitchMode(option.value)}
+                  className={clsx(
+                    "flex flex-col items-center justify-center gap-2 p-4 rounded-lg border-2 transition-all duration-200",
+                    isActive
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-border bg-transparent text-muted-foreground hover:border-border/80 hover:bg-muted/50",
                   )}
-                  className="space-y-2"
                 >
-                  <FormField
-                    control={directForm.control}
-                    name="url"
-                    render={({ field }) => (
-                      <FormItem
-                        className={clsx(shouldHideUrlInput && "hidden")}
-                      >
-                        <FormLabel className="required">
-                          {t("login.form.url")}
-                        </FormLabel>
-                        <FormControl>
+                  <Icon className="w-5 h-5" />
+                  <span className="text-sm font-medium">{option.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Direct form */}
+          <TabsContent value="direct" className="mt-6 space-y-4">
+            <Form {...directForm}>
+              <form
+                id="direct-form"
+                onSubmit={directForm.handleSubmit((data) =>
+                  onSubmitDirect(data),
+                )}
+                className="space-y-4"
+              >
+                <FormField
+                  control={directForm.control}
+                  name="url"
+                  render={({ field }) => (
+                    <FormItem
+                      className={clsx(shouldHideUrlInput && "hidden")}
+                    >
+                      <FormLabel className="required">
+                        {t("login.form.url")}
+                      </FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                           <Input
                             {...field}
                             id="url"
@@ -291,81 +309,107 @@ export function LoginForm() {
                             autoCorrect="false"
                             autoCapitalize="false"
                             spellCheck="false"
+                            className="h-11 pl-10"
                           />
-                        </FormControl>
-                        <FormDescription>
-                          {t("login.form.urlDescription")}
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                        </div>
+                      </FormControl>
+                      <FormDescription>
+                        {t("login.form.urlDescription")}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-                  <FormField
-                    control={directForm.control}
-                    name="username"
-                    render={({ field }) => (
-                      <FormItem
-                        className={clsx(shouldHideUrlInput && "!mt-0")}
-                      >
-                        <FormLabel className="required">
-                          {t("login.form.username")}
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            value={field.value ?? ""}
-                            id="direct-username"
-                            type="text"
-                            placeholder={t("login.form.usernamePlaceholder")}
-                            autoCorrect="false"
-                            autoCapitalize="false"
-                            spellCheck="false"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                <FormField
+                  control={directForm.control}
+                  name="username"
+                  render={({ field }) => (
+                    <FormItem
+                      className={clsx(shouldHideUrlInput && "!mt-0")}
+                    >
+                      <FormLabel className="required">
+                        {t("login.form.username")}
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          value={field.value ?? ""}
+                          id="direct-username"
+                          type="text"
+                          placeholder={t("login.form.usernamePlaceholder")}
+                          autoCorrect="false"
+                          autoCapitalize="false"
+                          spellCheck="false"
+                          className="h-11"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
+                <FormField
+                  control={directForm.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="required">
+                        {t("login.form.password")}
+                      </FormLabel>
+                      <FormControl>
+                        <Password
+                          {...field}
+                          value={field.value ?? ""}
+                          className="h-11"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </form>
+            </Form>
+
+            <Button
+              type="submit"
+              form="direct-form"
+              className="w-full h-11 rounded-lg"
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {t("login.form.connecting")}
+                </>
+              ) : (
+                <>{t("login.form.connect")}</>
+              )}
+            </Button>
+          </TabsContent>
+
+          {/* Coordination form */}
+          <TabsContent value="coordination" className="mt-6 space-y-4">
+            {coordinationStep === "url" && (
+              <Form {...coordinationUrlForm}>
+                <form
+                  id="coordination-url-form"
+                  onSubmit={coordinationUrlForm.handleSubmit(
+                    onSubmitCoordinationUrl,
+                  )}
+                  className="space-y-4"
+                >
                   <FormField
-                    control={directForm.control}
-                    name="password"
+                    control={coordinationUrlForm.control}
+                    name="coordinationUrl"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="required">
-                          {t("login.form.password")}
+                          {t("login.form.coordinationUrl")}
                         </FormLabel>
                         <FormControl>
-                          <Password {...field} value={field.value ?? ""} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </form>
-              </Form>
-            </TabsContent>
-
-            <TabsContent value="coordination">
-              {coordinationStep === "url" && (
-                <Form {...coordinationUrlForm}>
-                  <form
-                    id="coordination-url-form"
-                    onSubmit={coordinationUrlForm.handleSubmit(
-                      onSubmitCoordinationUrl,
-                    )}
-                    className="space-y-2"
-                  >
-                    <FormField
-                      control={coordinationUrlForm.control}
-                      name="coordinationUrl"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="required">
-                            {t("login.form.coordinationUrl")}
-                          </FormLabel>
-                          <FormControl>
+                          <div className="relative">
+                            <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                             <Input
                               {...field}
                               id="coordinationUrl"
@@ -376,6 +420,105 @@ export function LoginForm() {
                               autoCorrect="false"
                               autoCapitalize="false"
                               spellCheck="false"
+                              className="h-11 pl-10"
+                            />
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </form>
+              </Form>
+            )}
+
+            {coordinationStep === "credentials" && subsonicInfo && (
+              <div className="space-y-4">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setCoordinationStep("url");
+                    setSubsonicInfo(null);
+                  }}
+                  className="h-8 -ml-2 text-muted-foreground hover:text-foreground"
+                >
+                  <ArrowLeft className="h-4 w-4 mr-1" />
+                  {t("login.form.back")}
+                </Button>
+
+                <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">
+                      {t("login.form.discoveredSubsonicUrl")}
+                    </span>
+                    <Badge
+                      variant={
+                        subsonicInfo.reverseProxyEnabled
+                          ? "default"
+                          : "outline"
+                      }
+                    >
+                      {subsonicInfo.reverseProxyEnabled
+                        ? t("login.form.reverseProxyEnabled")
+                        : t("login.form.reverseProxyDisabled")}
+                    </Badge>
+                  </div>
+                  <span className="text-sm text-muted-foreground break-all block">
+                    {subsonicInfo.url}
+                  </span>
+                </div>
+
+                <Form {...coordinationCredentialsForm}>
+                  <form
+                    id="coordination-credentials-form"
+                    onSubmit={coordinationCredentialsForm.handleSubmit(
+                      onSubmitCoordinationCredentials,
+                    )}
+                    className="space-y-4"
+                  >
+                    <FormField
+                      control={coordinationCredentialsForm.control}
+                      name="username"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="required">
+                            {t("login.form.username")}
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={field.value ?? ""}
+                              id="coordination-username"
+                              type="text"
+                              placeholder={t(
+                                "login.form.usernamePlaceholder",
+                              )}
+                              autoCorrect="false"
+                              autoCapitalize="false"
+                              spellCheck="false"
+                              className="h-11"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={coordinationCredentialsForm.control}
+                      name="password"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="required">
+                            {t("login.form.password")}
+                          </FormLabel>
+                          <FormControl>
+                            <Password
+                              {...field}
+                              value={field.value ?? ""}
+                              className="h-11"
                             />
                           </FormControl>
                           <FormMessage />
@@ -384,159 +527,40 @@ export function LoginForm() {
                     />
                   </form>
                 </Form>
-              )}
+              </div>
+            )}
 
-              {coordinationStep === "credentials" && subsonicInfo && (
-                <div className="space-y-4">
-                  <div className="rounded-md border border-input p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">
-                        {t("login.form.discoveredSubsonicUrl")}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          variant={
-                            subsonicInfo.reverseProxyEnabled
-                              ? "default"
-                              : "outline"
-                          }
-                        >
-                          {subsonicInfo.reverseProxyEnabled
-                            ? t("login.form.reverseProxyEnabled")
-                            : t("login.form.reverseProxyDisabled")}
-                        </Badge>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setCoordinationStep("url");
-                            setSubsonicInfo(null);
-                          }}
-                        >
-                          <ArrowLeft className="h-4 w-4 mr-1" />
-                          {t("login.form.back")}
-                        </Button>
-                      </div>
-                    </div>
-                    <span className="text-sm text-muted-foreground break-all">
-                      {subsonicInfo.url}
-                    </span>
-                  </div>
-
-                  <Form {...coordinationCredentialsForm}>
-                    <form
-                      id="coordination-credentials-form"
-                      onSubmit={coordinationCredentialsForm.handleSubmit(
-                        onSubmitCoordinationCredentials,
-                      )}
-                      className="space-y-2"
-                    >
-                      <FormField
-                        control={coordinationCredentialsForm.control}
-                        name="username"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="required">
-                              {t("login.form.username")}
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                {...field}
-                                value={field.value ?? ""}
-                                id="coordination-username"
-                                type="text"
-                                placeholder={t(
-                                  "login.form.usernamePlaceholder",
-                                )}
-                                autoCorrect="false"
-                                autoCapitalize="false"
-                                spellCheck="false"
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={coordinationCredentialsForm.control}
-                        name="password"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="required">
-                              {t("login.form.password")}
-                            </FormLabel>
-                            <FormControl>
-                              <Password
-                                {...field}
-                                value={field.value ?? ""}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </form>
-                  </Form>
-                </div>
-              )}
-            </TabsContent>
-          </CardContent>
-
-          <CardFooter className="flex">
-            {connectionMode === "direct" ? (
-              <Button
-                type="submit"
-                form="direct-form"
-                className="w-full"
-                disabled={loading}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {t("login.form.connecting")}
-                  </>
-                ) : (
-                  <>{t("login.form.connect")}</>
-                )}
-              </Button>
-            ) : coordinationStep === "url" ? (
-              <Button
-                type="submit"
-                form="coordination-url-form"
-                className="w-full"
-                disabled={fetchingInfo}
-              >
-                {fetchingInfo ? (
+            <Button
+              type="submit"
+              form={
+                coordinationStep === "url"
+                  ? "coordination-url-form"
+                  : "coordination-credentials-form"
+              }
+              className="w-full h-11 rounded-lg"
+              disabled={coordinationStep === "url" ? fetchingInfo : loading}
+            >
+              {coordinationStep === "url" ? (
+                fetchingInfo ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     {t("login.form.fetchingServerInfo")}
                   </>
                 ) : (
                   <>{t("login.form.next")}</>
-                )}
-              </Button>
-            ) : (
-              <Button
-                type="submit"
-                form="coordination-credentials-form"
-                className="w-full"
-                disabled={loading}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {t("login.form.connecting")}
-                  </>
-                ) : (
-                  <>{t("login.form.connect")}</>
-                )}
-              </Button>
-            )}
-          </CardFooter>
+                )
+              ) : loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {t("login.form.connecting")}
+                </>
+              ) : (
+                <>{t("login.form.connect")}</>
+              )}
+            </Button>
+          </TabsContent>
         </Tabs>
-      </Card>
+      </div>
 
       <Dialog
         open={serverIsIncompatible}
