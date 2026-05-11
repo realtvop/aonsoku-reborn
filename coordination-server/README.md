@@ -2,7 +2,7 @@
 
 ## Roadmap
 
-- [ ] Subsonic server reverse proxy
+- [x] Subsonic server reverse proxy
 - [ ] Settings & playback history sync
 - [ ] Cross-device playback control (replacing the existing remote conrtol)
 
