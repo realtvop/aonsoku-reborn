@@ -66,34 +66,7 @@ const api: IAonsokuAPI = {
   setAlwaysOnTop: (isAlwaysOnTop) =>
     ipcRenderer.send(IpcChannels.SetAlwaysOnTop, isAlwaysOnTop),
   isAlwaysOnTop: () => ipcRenderer.invoke(IpcChannels.IsAlwaysOnTop),
-  // LAN Control
-  lanControl: {
-    start: (config) => ipcRenderer.invoke(IpcChannels.LanControlStart, config),
-    stop: () => ipcRenderer.invoke(IpcChannels.LanControlStop),
-    getInfo: () => ipcRenderer.invoke(IpcChannels.LanControlGetInfo),
-    updateConfig: (config) =>
-      ipcRenderer.invoke(IpcChannels.LanControlUpdateConfig, config),
-    broadcastState: (state) =>
-      ipcRenderer.send(IpcChannels.LanControlBroadcastState, state),
-    broadcastSong: (song) =>
-      ipcRenderer.send(IpcChannels.LanControlBroadcastSong, song),
-    broadcastQueue: (queue) =>
-      ipcRenderer.send(IpcChannels.LanControlBroadcastQueue, queue),
-    onMessage: (callback) => {
-      ipcRenderer.on(IpcChannels.LanControlMessage, (_, message) =>
-        callback(message),
-      );
-    },
-    onRequestState: (callback) => {
-      ipcRenderer.on(IpcChannels.LanControlRequestState, () => callback());
-    },
-    removeMessageListener: () => {
-      ipcRenderer.removeAllListeners(IpcChannels.LanControlMessage);
-    },
-    removeRequestStateListener: () => {
-      ipcRenderer.removeAllListeners(IpcChannels.LanControlRequestState);
-    },
-  },
+
   // App Update
   update: {
     checkForUpdates: () => ipcRenderer.invoke("app:check-for-updates"),

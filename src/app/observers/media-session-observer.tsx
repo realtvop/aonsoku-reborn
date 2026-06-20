@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useBackgroundPlayback } from "@/app/hooks/use-background-playback";
-import { useLanControlClientStore } from "@/store/lanControlClient.store";
 import {
-  useIsRemoteControlActive,
   usePlayerCurrentSong,
   usePlayerCurrentSongIndex,
   usePlayerDuration,
@@ -30,14 +28,9 @@ export function MediaSessionObserver() {
   const progress = usePlayerProgress();
   const currentDuration = usePlayerDuration();
   const radioLabel = t("radios.label");
-  const isRemoteActive = useIsRemoteControlActive();
-
-  const remotePlayerState = useLanControlClientStore(
-    (state) => state.playerState,
-  );
-  const remoteCurrentSong = useLanControlClientStore(
-    (state) => state.currentSong,
-  );
+  const isRemoteActive = false;
+  const remotePlayerState = null;
+  const remoteCurrentSong = null;
 
   const lastMetadataRef = useRef<string>("");
 
@@ -68,7 +61,7 @@ export function MediaSessionObserver() {
       `[MediaSessionObserver] handlers | remoteControl=${isRemoteActive}`,
     );
     manageMediaSession.setHandlers();
-  }, [isRemoteActive]);
+  }, []);
 
   useEffect(() => {
     logger.info(
@@ -150,8 +143,6 @@ export function MediaSessionObserver() {
     radioLabel,
     song,
     resetAppTitle,
-    isRemoteActive,
-    remotePlayerState,
   ]);
 
   const lastPositionStateRef = useRef({
@@ -222,8 +213,6 @@ export function MediaSessionObserver() {
     isPlaying,
     hasNothingPlaying,
     song,
-    isRemoteActive,
-    remotePlayerState,
     currentDuration,
   ]);
 

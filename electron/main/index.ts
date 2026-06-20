@@ -1,12 +1,12 @@
 import { electronApp, optimizer, platform } from "@electron-toolkit/utils";
 import { app, globalShortcut } from "electron";
 import { updateElectronApp } from "update-electron-app";
-import { LanControlManager } from "./core/lanControlManager";
+
 import { createAppMenu } from "./core/menu";
 import { destroyMiniPlayerWindow } from "./mini-player";
 import { createWindow, mainWindow } from "./window";
 
-let lanControlManager: LanControlManager | null = null;
+
 let isQuitting = false;
 
 export function getIsQuitting(): boolean {
@@ -33,20 +33,14 @@ if (!instanceLock) {
 
     createWindow();
 
-    // Initialize LAN Control Manager after window is created
-    if (mainWindow) {
-      lanControlManager = new LanControlManager(mainWindow);
-    }
+
   });
 
   app.on("activate", function () {
     if (!mainWindow || mainWindow.isDestroyed()) {
       createWindow();
 
-      // Re-initialize LAN Control Manager if needed
-      if (mainWindow && !lanControlManager) {
-        lanControlManager = new LanControlManager(mainWindow);
-      }
+
       return;
     }
 
@@ -71,11 +65,7 @@ if (!instanceLock) {
       return;
     }
 
-    // Cleanup LAN Control Manager on non-macOS or when explicitly quitting
-    if (lanControlManager) {
-      lanControlManager.cleanup();
-      lanControlManager = null;
-    }
+
 
     app.quit();
   });
@@ -85,10 +75,7 @@ if (!instanceLock) {
 
     destroyMiniPlayerWindow();
 
-    if (lanControlManager) {
-      lanControlManager.cleanup();
-      lanControlManager = null;
-    }
+
   });
 }
 

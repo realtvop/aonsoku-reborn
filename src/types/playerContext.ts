@@ -1,8 +1,5 @@
 import {
-  CurrentSongData,
   LanControlMessageType,
-  PlayerStateData,
-  QueueData,
   RemoteDeviceInfo,
 } from "./lanControl";
 import { Radio } from "./responses/radios";
@@ -276,16 +273,7 @@ export interface IPlayerActions {
   setCurrentSongIntensity: (value: number) => void;
   openPipWindow: () => void;
   closePipWindow: () => void;
-  enterRemoteControl: (device: RemoteDeviceInfo | null) => void;
-  exitRemoteControl: () => void;
-  registerRemoteSender: (
-    sender: (type: LanControlMessageType, data?: unknown) => void,
-  ) => void;
-  clearRemoteSender: () => void;
-  setRemotePlayerState: (state: PlayerStateData | null) => void;
-  setRemoteCurrentSongData: (song: CurrentSongData | null) => void;
-  setRemoteQueueData: (queue: QueueData | null) => void;
-  setRemoteDevice: (device: RemoteDeviceInfo | null) => void;
+
 }
 
 export interface IPlayerContext {

@@ -12,9 +12,6 @@ export function hasElectronBridge(): boolean {
   );
 }
 
-export function hasLanControlBridge(): boolean {
-  return hasElectronBridge() && typeof window.api.lanControl !== "undefined";
-}
 
 /**
  * Detect operating system for both Electron and browser/PWA environments

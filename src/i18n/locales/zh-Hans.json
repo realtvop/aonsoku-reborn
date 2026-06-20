@@ -183,72 +183,7 @@
     "recentlyAdded": "最近添加",
     "recentlyPlayed": "最近播放"
   },
-  "lanControl": {
-    "remote": {
-      "actions": {
-        "connect": "连接",
-        "connecting": "正在连接…",
-        "disconnect": "断开连接",
-        "refresh": "刷新状态"
-      },
-      "address": "服务器地址",
-      "autoConnectFailed": "无法连接到远程设备，进入本地播放模式",
-      "clickToPlay": "点击播放",
-      "controls": {
-        "next": "下一首",
-        "pause": "暂停",
-        "play": "播放",
-        "previous": "上一首",
-        "repeat": "切换循环",
-        "shuffle": "切换随机播放"
-      },
-      "currentlyPlaying": "当前播放",
-      "description": "连接到 LAN 控制服务器并远程管理播放。",
-      "emptyArtist": "未知艺术家",
-      "emptyTitle": "暂无播放内容",
-      "ip": "IP 地址",
-      "items": "项",
-      "library": {
-        "albums": "专辑",
-        "back": "返回",
-        "loading": "加载中...",
-        "noAlbums": "没有可用的专辑",
-        "noPlaylists": "没有可用的播放列表",
-        "noResults": "未找到结果",
-        "playlists": "播放列表",
-        "search": "搜索",
-        "searchButton": "搜索",
-        "searchPlaceholder": "搜索歌曲、专辑...",
-        "searching": "搜索中...",
-        "songs": "歌曲"
-      },
-      "loadingSong": "加载中...",
-      "menu": "控制其他设备",
-      "nowPlaying": "正在播放",
-      "password": "访问验证码",
-      "playing": "播放中",
-      "port": "端口",
-      "queue": "播放队列",
-      "queueEmpty": "队列为空",
-      "serverRunning": "此设备当前正作为 LAN 控制服务器运行。当此设备处于服务器模式时，无法控制其他设备。",
-      "status": {
-        "authenticating": "验证中",
-        "connected": "已连接",
-        "connecting": "连接中",
-        "disconnected": "未连接",
-        "error": "错误",
-        "label": "状态"
-      },
-      "tabs": {
-        "control": "控制",
-        "library": "音乐库"
-      },
-      "title": "控制其他设备",
-      "unknownDevice": "未知设备",
-      "version": "版本 {{version}}",
-      "volume": "音量：{{volume}}%"
-    }
-  },
+
   "login": {
     "form": {
       "connect": "连接",
@@ -641,38 +576,7 @@
           "label": "最小化到系统托盘"
         }
       },
-      "lanControl": {
-        "address": {
-          "info": "可用的 LAN 控制访问服务器地址。",
-          "label": "服务器地址"
-        },
-        "addressCopied": "服务器地址已复制到剪贴板。",
-        "allowNavidromeAuth": {
-          "info": "启用使用 Navidrome 凭据进行身份验证。",
-          "label": "允许 Navidrome 身份验证"
-        },
-        "copyAddress": "复制地址",
-        "copyPassword": "复制密码",
-        "description": "管理 LAN 控制设置以进行远程访问。",
-        "enable": {
-          "info": "启用 LAN 控制以允许对此应用的远程访问。",
-          "label": "启用 LAN 控制"
-        },
-        "group": "LAN 控制",
-        "password": {
-          "info": "设置密码以安全访问 LAN 控制服务器。",
-          "label": "密码"
-        },
-        "passwordCopied": "密码已复制到剪贴板。",
-        "passwordRegenerated": "密码已成功重新生成。",
-        "port": {
-          "info": "指定 LAN 控制服务器的端口号。",
-          "label": "端口"
-        },
-        "regeneratePassword": "重新生成密码",
-        "serverError": "启动 LAN 控制服务器失败。",
-        "serverStarted": "LAN 控制服务器启动成功。"
-      },
+
       "updates": {
         "availableVersion": "版本 {{version}} 可用",
         "checkNow": {
