@@ -312,6 +312,7 @@ pub struct HandoffState {
 
 /// Realtime envelope (design §9.1).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Envelope {
     pub version: u32,
     pub message_id: MessageId,
@@ -361,7 +362,11 @@ impl From<crate::storage::models::Device> for DeviceSummary {
 
 /// Realtime payload (design §9.1, §9.2, §10, §11).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(
+    tag = "type",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
 pub enum Payload {
     /// Initial handshake. Client → server.
     Hello {
@@ -554,9 +559,40 @@ mod tests {
             payload: Payload::Heartbeat,
         };
         let json = serde_json::to_string(&env).unwrap();
+        assert!(json.contains("\"messageId\""));
+        assert!(json.contains("\"connectionId\""));
+        assert!(json.contains("\"serverTime\""));
+        assert!(!json.contains("message_id"));
         let back: Envelope = serde_json::from_str(&json).unwrap();
         assert_eq!(back.version, PROTOCOL_VERSION);
         assert!(matches!(back.payload, Payload::Heartbeat));
+    }
+
+    #[test]
+    fn accepts_browser_hello_wire_format() {
+        let message_id = Uuid::new_v4();
+        let device_id = Uuid::new_v4();
+        let json = serde_json::json!({
+            "version": PROTOCOL_VERSION,
+            "messageId": message_id,
+            "type": "hello",
+            "protocolVersion": PROTOCOL_VERSION,
+            "capabilities": CapabilitySet::OBSERVE.0,
+            "deviceId": device_id,
+            "ticket": "ticket",
+            "lastSeq": 0,
+        });
+
+        let envelope: Envelope = serde_json::from_value(json).unwrap();
+        assert_eq!(envelope.message_id, message_id);
+        assert!(matches!(
+            envelope.payload,
+            Payload::Hello {
+                protocol_version: PROTOCOL_VERSION,
+                device_id: Some(id),
+                ..
+            } if id == device_id
+        ));
     }
 
     #[test]
