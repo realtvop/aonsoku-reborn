@@ -14,6 +14,7 @@ import {
   usePlayerVolume,
 } from "@/store/player.store";
 import { getEffectiveIndex } from "@/store/player/queue-utils";
+import { seekPlaybackTarget } from "@/player/playback/backend-registry";
 import { LoopState } from "@/types/playerContext";
 import { logger } from "@/utils/logger";
 
@@ -140,9 +141,16 @@ export function CoordinationObserver() {
         case "next":
           playerActions.playNextSong();
           break;
-        case "seek":
-          playerActions.setProgress(command.seconds);
+        case "seek": {
+          const audio = usePlayerStore.getState().playerState.audioPlayerRef;
+          if (audio) {
+            seekPlaybackTarget(audio, command.seconds);
+          }
+          usePlayerStore.setState((state) => {
+            state.playerProgress.progress = command.seconds;
+          });
           break;
+        }
         case "set_volume":
           playerActions.setVolume(command.volume * 100);
           break;
