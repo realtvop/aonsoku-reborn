@@ -34,6 +34,8 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     companion object {
         private const val TAG = "CoordPlugin"
         private const val PREFS_NAME = "aonsoku_coordination"
+        internal const val KEY_SERVER_URL = "server_url"
+        internal const val KEY_IDENTITY_URL = "identity_url"
         /// Design §9.2: client sends heartbeat every 15 seconds.
         internal const val HEARTBEAT_INTERVAL_SECONDS = 15L
         /// OkHttp keep-alive ping to detect dead connections faster.
@@ -57,12 +59,6 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             } catch (e: org.json.JSONException) {
                 null
             }
-
-        /// Keys holding coordination tokens; kept separate from config keys so
-        /// clearTokens() can wipe credentials without losing server/identity URL.
-        internal val TOKEN_KEYS = listOf(
-            "access_token", "refresh_token", "device_id", "account_id", "history_limit",
-        )
     }
 
     private var webSocket: WebSocket? = null
@@ -80,6 +76,17 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         }
     }
 
+    /// Design §6.3: coordination tokens are encrypted with a Keystore-backed
+    /// AES-GCM key. Falls back to null when unavailable (e.g. unit tests).
+    private val tokenStore: CoordinationTokenStore? by lazy {
+        try {
+            CoordinationTokenStore(context)
+        } catch (e: Exception) {
+            Log.e(TAG, "CoordinationTokenStore unavailable", e)
+            null
+        }
+    }
+
     @PluginMethod
     fun storeTokens(call: PluginCall) {
         try {
@@ -89,13 +96,16 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             val accountId = call.getString("accountId") ?: return call.reject("missing accountId")
             val historyLimit = call.getInt("historyLimit", 100) ?: 100
 
-            val prefs = context.getSharedPreferences(PREFS_NAME, 0).edit()
-            prefs.putString("access_token", accessToken)
-            prefs.putString("refresh_token", refreshToken)
-            prefs.putString("device_id", deviceId)
-            prefs.putString("account_id", accountId)
-            prefs.putInt("history_limit", historyLimit)
-            prefs.apply()
+            val store = tokenStore ?: return call.reject("secure storage unavailable")
+            store.store(
+                CoordinationTokenBundle(
+                    accessToken = accessToken,
+                    refreshToken = refreshToken,
+                    deviceId = deviceId,
+                    accountId = accountId,
+                    historyLimit = historyLimit,
+                ),
+            )
             call.resolve()
         } catch (e: Exception) {
             call.reject("storeTokens failed: ${e.message}")
@@ -104,29 +114,19 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
 
     @PluginMethod
     fun loadTokens(call: PluginCall) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, 0)
-        val accessToken = prefs.getString("access_token", null)
-        val refreshToken = prefs.getString("refresh_token", null)
-        val deviceId = prefs.getString("device_id", null)
-        val accountId = prefs.getString("account_id", null)
-        if (accessToken == null || refreshToken == null || deviceId == null || accountId == null) {
-            return call.resolve()
-        }
-        val historyLimit = prefs.getInt("history_limit", 100)
+        val bundle = tokenStore?.retrieve() ?: return call.resolve()
         val ret = JSObject()
-        ret.put("accessToken", accessToken)
-        ret.put("refreshToken", refreshToken)
-        ret.put("deviceId", deviceId)
-        ret.put("accountId", accountId)
-        ret.put("historyLimit", historyLimit)
+        ret.put("accessToken", bundle.accessToken)
+        ret.put("refreshToken", bundle.refreshToken)
+        ret.put("deviceId", bundle.deviceId)
+        ret.put("accountId", bundle.accountId)
+        ret.put("historyLimit", bundle.historyLimit)
         call.resolve(ret)
     }
 
     @PluginMethod
     fun clearTokens(call: PluginCall) {
-        val editor = context.getSharedPreferences(PREFS_NAME, 0).edit()
-        for (key in TOKEN_KEYS) editor.remove(key)
-        editor.apply()
+        tokenStore?.delete()
         call.resolve()
     }
 
@@ -135,8 +135,8 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         val serverUrl = call.getString("serverUrl") ?: return call.reject("missing serverUrl")
         val identityUrl = call.getString("identityUrl") ?: return call.reject("missing identityUrl")
         context.getSharedPreferences(PREFS_NAME, 0).edit()
-            .putString("server_url", serverUrl)
-            .putString("identity_url", identityUrl)
+            .putString(KEY_SERVER_URL, serverUrl)
+            .putString(KEY_IDENTITY_URL, identityUrl)
             .apply()
         call.resolve()
     }
@@ -144,8 +144,8 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     @PluginMethod
     fun loadConfig(call: PluginCall) {
         val prefs = context.getSharedPreferences(PREFS_NAME, 0)
-        val serverUrl = prefs.getString("server_url", null)
-        val identityUrl = prefs.getString("identity_url", null)
+        val serverUrl = prefs.getString(KEY_SERVER_URL, null)
+        val identityUrl = prefs.getString(KEY_IDENTITY_URL, null)
         if (serverUrl == null || identityUrl == null) return call.resolve()
         val ret = JSObject()
         ret.put("serverUrl", serverUrl)
