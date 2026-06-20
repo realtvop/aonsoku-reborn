@@ -60,7 +60,7 @@ async fn healthz_works() {
 async fn challenge_requires_valid_identity_url() {
     let (_dir, state) = setup().await;
     let body = serde_json::json!({
-        "identity_url": "not-a-url",
+        "identityUrl": "not-a-url",
         "username": "alice",
     })
     .to_string();
@@ -72,7 +72,7 @@ async fn challenge_requires_valid_identity_url() {
 async fn challenge_succeeds_for_https_url() {
     let (_dir, state) = setup().await;
     let body = serde_json::json!({
-        "identity_url": "https://navidrome.example",
+        "identityUrl": "https://navidrome.example",
         "username": "Alice",
     })
     .to_string();

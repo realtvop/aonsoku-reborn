@@ -64,6 +64,7 @@ pub async fn delete_device(
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeviceDto {
     pub id: Uuid,
     pub name: String,
@@ -95,6 +96,7 @@ impl From<crate::storage::models::Device> for DeviceDto {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PatchDeviceRequest {
     pub name: String,
 }

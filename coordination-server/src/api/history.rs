@@ -196,6 +196,7 @@ pub struct HistoryQuery {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HistoryPullResponse {
     pub entries: Vec<HistoryEntryDto>,
     pub tombstones: Vec<HistoryTombstoneDto>,
@@ -205,6 +206,7 @@ pub struct HistoryPullResponse {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HistoryEntryDto {
     pub event_id: Uuid,
     pub revision: i64,
@@ -240,6 +242,7 @@ impl From<HistoryEntry> for HistoryEntryDto {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HistoryTombstoneDto {
     pub event_id: Uuid,
     pub revision: i64,
@@ -257,11 +260,13 @@ impl From<crate::storage::models::HistoryTombstone> for HistoryTombstoneDto {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HistoryPushRequest {
     pub operations: Vec<HistoryOperationInput>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HistoryOperationInput {
     pub operation_id: Uuid,
     pub kind: String,
@@ -278,11 +283,13 @@ pub struct HistoryOperationInput {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HistoryPushResponse {
     pub results: Vec<HistoryPushResult>,
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HistoryPushResult {
     pub operation_id: Uuid,
     pub revision: i64,
@@ -299,11 +306,13 @@ fn map_err(e: CoordinationError) -> (StatusCode, Json<ApiError>) {
 ///
 /// One-time legacy history import (design §8.2).
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LegacyImportRequest {
     pub entries: Vec<LegacyEntryInput>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LegacyEntryInput {
     pub song_id: String,
     pub song_title: Option<String>,
@@ -313,6 +322,7 @@ pub struct LegacyEntryInput {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LegacyImportResponse {
     pub merged_song_ids: Vec<String>,
     pub is_first_device: bool,

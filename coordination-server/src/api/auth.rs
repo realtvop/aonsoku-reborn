@@ -149,11 +149,13 @@ pub async fn post_register(
 ///
 /// Refresh an access token using a refresh token.
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TokenRefreshRequest {
     pub device_id: Uuid,
     pub refresh_token: String,
 }
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TokenRefreshResponse {
     pub access_token: String,
     pub refresh_token: String,
@@ -226,11 +228,13 @@ pub async fn post_token(
 ///
 /// Obtain a one-time WebSocket ticket. Requires a valid access token.
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WsTicketRequest {
     #[serde(default)]
     pub device_id: Option<Uuid>,
 }
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WsTicketResponse {
     pub ticket: String,
     pub expires_in: i64,
@@ -297,16 +301,19 @@ fn map_err(e: CoordinationError) -> (StatusCode, Json<ApiError>) {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ChallengeRequest {
     pub identity_url: String,
     pub username: String,
 }
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ChallengeResponse {
     pub challenge_id: Uuid,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RegisterRequest {
     pub challenge_id: Uuid,
     pub identity_url: String,
@@ -321,6 +328,7 @@ pub struct RegisterRequest {
     pub capabilities: Option<u32>,
 }
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RegisterResponse {
     pub device_id: Uuid,
     pub account_id: Uuid,
