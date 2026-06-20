@@ -1,6 +1,5 @@
 import { createStore, del, get, set } from "idb-keyval";
 import { httpClient } from "@/api/httpClient";
-import { idbSetWithRetry } from "@/store/idb";
 import { usePlayerStore } from "@/store/player.store";
 import type { LyricsSource, SelectedCustomLyrics } from "@/types/playerContext";
 import type {
@@ -14,32 +13,51 @@ import { logger } from "@/utils/logger";
 import { checkServerType } from "@/utils/servers";
 
 export const CUSTOM_LYRICS_IDB_PREFIX = "custom-lyrics:";
+export const CUSTOM_LYRICS_DB_NAME = "aonsoku-custom-lyrics";
+export const CUSTOM_LYRICS_STORE_NAME = "lyrics";
 
-const customLyricsStore = createStore("aonsoku-cache", "custom-lyrics");
+const customLyricsStore = createStore(
+  CUSTOM_LYRICS_DB_NAME,
+  CUSTOM_LYRICS_STORE_NAME,
+);
+
+async function setCustomLyricsBodyWithRetry(
+  idbKey: string,
+  lyrics: string,
+  retries = 1,
+) {
+  try {
+    await set(idbKey, lyrics, customLyricsStore);
+  } catch (err) {
+    if (retries > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      return setCustomLyricsBodyWithRetry(idbKey, lyrics, retries - 1);
+    }
+
+    throw err;
+  }
+}
 
 export async function getCustomLyricsBody(
   songKey: string,
 ): Promise<string | undefined> {
+  const idbKey = `${CUSTOM_LYRICS_IDB_PREFIX}${songKey}`;
+
   try {
-    return await get<string>(
-      `${CUSTOM_LYRICS_IDB_PREFIX}${songKey}`,
-      customLyricsStore,
-    );
+    const body = await get<string>(idbKey, customLyricsStore);
+    return body;
   } catch (err) {
     logger.warn("[lyrics] Failed to read custom lyrics body from IDB:", err);
     return undefined;
   }
 }
 
-export function setCustomLyricsBody(
+export async function setCustomLyricsBody(
   songKey: string,
   lyrics: string,
 ): Promise<void> {
-  return idbSetWithRetry(
-    `${CUSTOM_LYRICS_IDB_PREFIX}${songKey}`,
-    lyrics,
-    customLyricsStore,
-  );
+  const idbKey = `${CUSTOM_LYRICS_IDB_PREFIX}${songKey}`;
+  await setCustomLyricsBodyWithRetry(idbKey, lyrics);
 }
 
 export function deleteCustomLyricsBodies(songKeys: string[]): Promise<void[]> {

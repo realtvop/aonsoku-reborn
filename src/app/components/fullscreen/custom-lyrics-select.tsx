@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Music2, Search } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "react-toastify";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { Label } from "@/app/components/ui/label";
@@ -107,20 +108,26 @@ export function CustomLyricsSelect({ onBack }: CustomLyricsSelectProps) {
     });
   }
 
-  function handleSelect(candidate: CustomLyricsCandidate, index: number) {
+  async function handleSelect(candidate: CustomLyricsCandidate, index: number) {
     if (!songData) return;
 
     const candidateKey = getCustomLyricsCandidateKey(candidate, index);
     const lyrics = candidate.lyrics?.trim();
     if (!lyrics) return;
 
-    setSelectedCustomLyrics(songKey, {
-      key: candidateKey,
-      id: candidate.id,
-      title: candidate.title || submittedSearch.title || songData.title,
-      artist: candidate.artist || submittedSearch.artist || songData.artist,
-      lyrics,
-    });
+    try {
+      await setSelectedCustomLyrics(songKey, {
+        key: candidateKey,
+        id: candidate.id,
+        title: candidate.title || submittedSearch.title || songData.title,
+        artist: candidate.artist || submittedSearch.artist || songData.artist,
+        lyrics,
+      });
+    } catch {
+      toast.error(t("lyrics.customSelect.saveError"));
+      return;
+    }
+
     queryClient.invalidateQueries({ queryKey: queryKeys.lyrics.plain });
     onBack();
   }

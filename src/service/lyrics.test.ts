@@ -34,7 +34,9 @@ vi.mock("@/utils/logger", () => ({
 }));
 
 import {
+  CUSTOM_LYRICS_DB_NAME,
   CUSTOM_LYRICS_IDB_PREFIX,
+  CUSTOM_LYRICS_STORE_NAME,
   deleteCustomLyricsBodies,
   type GetLyricsData,
   getCustomLyricsBody,
@@ -173,7 +175,10 @@ describe("getSelectedCustomLyrics", () => {
 describe("custom lyrics IDB operations", () => {
   beforeEach(async () => {
     const { createStore, clear } = await import("idb-keyval");
-    const store = createStore("aonsoku-cache", "custom-lyrics");
+    const store = createStore(
+      CUSTOM_LYRICS_DB_NAME,
+      CUSTOM_LYRICS_STORE_NAME,
+    );
     await clear(store);
   });
 
@@ -199,7 +204,10 @@ describe("custom lyrics IDB operations", () => {
   it("stores with correct IDB key prefix", async () => {
     const { get } = await import("idb-keyval");
     const { createStore } = await import("idb-keyval");
-    const store = createStore("aonsoku-cache", "custom-lyrics");
+    const store = createStore(
+      CUSTOM_LYRICS_DB_NAME,
+      CUSTOM_LYRICS_STORE_NAME,
+    );
     const songKey = "test-prefix-key";
     await setCustomLyricsBody(songKey, "some lyrics");
     const stored = await get<string>(

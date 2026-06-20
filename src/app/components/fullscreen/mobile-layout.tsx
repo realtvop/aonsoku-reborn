@@ -179,11 +179,10 @@ const MobilePlayingView = memo(function MobilePlayingView() {
     <div className="flex flex-col items-center justify-center w-full flex-1 min-h-0">
       {/* Artwork Section: AlbumName + Artwork */}
       <ArtworkWithInfo
-        fitArtworkContent
         largeArtwork
         showInfo={false}
         showTouchDragSurface={isTouchPrimary}
-        className="w-full"
+        className="w-full flex-1 min-h-0"
       />
 
       {/* Info Section: Visually centered between artwork and progress */}

@@ -163,7 +163,7 @@ interface ILyrics {
   setSelectedCustomLyrics: (
     songKey: string,
     lyrics: SelectedCustomLyricsInput,
-  ) => void;
+  ) => Promise<void>;
 }
 
 export interface IPrivacySettings {

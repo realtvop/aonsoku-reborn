@@ -326,6 +326,7 @@
       "search": "Search",
       "select": "Select",
       "selected": "Selected",
+      "saveError": "Failed to save selected lyrics.",
       "currentSelection": "Current selection: {{title}} by {{artist}}",
       "lyricsId": "ID: {{id}}",
       "noPreview": "No preview available."

@@ -109,24 +109,21 @@ export function createInitialSettings(set: SetFn): IPlayerContext["settings"] {
         });
       },
       selectedCustomLyrics: {},
-      setSelectedCustomLyrics: (songKey, selection) => {
+      setSelectedCustomLyrics: async (songKey, selection) => {
         const { lyrics: body, ...meta } = selection;
+        if (body) {
+          try {
+            const { setCustomLyricsBody } = await import("@/service/lyrics");
+            await setCustomLyricsBody(songKey, body);
+          } catch (err) {
+            logger.warn("[player] Failed to persist custom lyrics body:", err);
+            throw err;
+          }
+        }
         set((state) => {
           state.settings.lyrics.selectedCustomLyrics ||= {};
           state.settings.lyrics.selectedCustomLyrics[songKey] = meta;
         });
-        if (body) {
-          import("@/service/lyrics")
-            .then(({ setCustomLyricsBody }) =>
-              setCustomLyricsBody(songKey, body),
-            )
-            .catch((err) => {
-              logger.warn(
-                "[player] Failed to persist custom lyrics body:",
-                err,
-              );
-            });
-        }
       },
     },
     replayGain: {
