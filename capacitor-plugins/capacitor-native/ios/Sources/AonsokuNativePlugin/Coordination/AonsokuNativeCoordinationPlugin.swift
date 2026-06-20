@@ -125,7 +125,6 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         task?.resume()
 
         self.isConnecting = true
-        self.startHeartbeat()
         self.notifyState("connecting")
 
         call.resolve()
@@ -240,11 +239,15 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     public func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenProtocolWithProtocol protocol: String?) {
         self.isConnecting = false
         self.reconnectAttempts = 0
+        self.startHeartbeat()
         self.notifyState("connected")
         self.receiveMessage()
     }
 
     public func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
+        self.isConnecting = false
+        self.heartbeatTimer?.invalidate()
+        self.heartbeatTimer = nil
         self.notifyState("disconnected")
         self.scheduleReconnect()
     }
@@ -293,6 +296,9 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
                 }
                 self.receiveMessage()
             case .failure:
+                self.isConnecting = false
+                self.heartbeatTimer?.invalidate()
+                self.heartbeatTimer = nil
                 self.notifyState("error")
                 self.scheduleReconnect()
             }
