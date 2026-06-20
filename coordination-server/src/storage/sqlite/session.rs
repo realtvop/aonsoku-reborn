@@ -53,14 +53,15 @@ impl SessionRepository for SqliteSessionRepository {
     ) -> Result<PlaybackSession, CoordinationError> {
         let now = Utc::now();
         sqlx::query(
-            "INSERT INTO playback_sessions (id, device_id, account_id, generation, snapshot_revision, status, last_snapshot, last_snapshot_at, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "INSERT INTO playback_sessions (id, device_id, account_id, generation, snapshot_revision, status, last_snapshot, last_snapshot_at, offline_at, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(id) DO UPDATE SET
                generation = excluded.generation,
                snapshot_revision = excluded.snapshot_revision,
                status = excluded.status,
                last_snapshot = excluded.last_snapshot,
                last_snapshot_at = excluded.last_snapshot_at,
+               offline_at = COALESCE(excluded.offline_at, offline_at),
                updated_at = excluded.updated_at",
         )
         .bind(session.id.to_string())
@@ -70,7 +71,8 @@ impl SessionRepository for SqliteSessionRepository {
         .bind(session.snapshot_revision)
         .bind(session.status.as_str())
         .bind(snapshot_json)
-        .bind(now)
+        .bind(session.last_snapshot_at.unwrap_or(now))
+        .bind(session.offline_at)
         .bind(session.created_at)
         .bind(now)
         .execute(&self.pool)

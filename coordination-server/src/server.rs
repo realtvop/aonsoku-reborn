@@ -15,6 +15,7 @@ use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLaye
 
 use crate::config::Config;
 use crate::errors::{ApiError, CoordinationError};
+use crate::handoff::HandoffCoordinator;
 use crate::realtime::ConnectionRegistry;
 use crate::storage::sqlite::SqliteRepositories;
 
@@ -25,6 +26,7 @@ pub struct AppState {
     pub pool: SqlitePool,
     pub repos: SqliteRepositories,
     pub realtime: Arc<ConnectionRegistry>,
+    pub handoff: Arc<HandoffCoordinator>,
     ready: Arc<std::sync::atomic::AtomicBool>,
 }
 
@@ -35,6 +37,7 @@ impl AppState {
             pool,
             repos,
             realtime: Arc::new(ConnectionRegistry::new()),
+            handoff: Arc::new(HandoffCoordinator::new()),
             ready: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }

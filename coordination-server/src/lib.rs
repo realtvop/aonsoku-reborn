@@ -13,6 +13,7 @@ pub mod api;
 pub mod auth;
 pub mod config;
 pub mod errors;
+pub mod handoff;
 pub mod history;
 pub mod identity;
 pub mod legacy_import;

@@ -534,9 +534,63 @@ async fn handle_inbound(
                 }
             }
         }
+        Payload::TargetReady {
+            transaction_id,
+            generation,
+            snapshot_revision,
+        } => {
+            // B has preloaded and is ready (design §11.1 step 3).
+            // Start the handoff transaction: validate source, send prepare_relinquish to A.
+            // We need the source session id; look it up from the transaction's
+            // pending state. For the first version, we create the transaction
+            // using the HandoffCandidate that was sent earlier. Since we don't
+            // persist the pending transaction here, we rely on the
+            // HandoffCoordinator to look up the source session.
+            // In a full implementation, the HandoffCandidate would carry the
+            // source_session_id; B echoes it back. For now, we use the session_id
+            // from the envelope if present.
+            if let Some(session_id) = env.session_id {
+                let _ = state
+                    .handoff
+                    .start_transaction(
+                        &state.repos.sessions,
+                        registry,
+                        *transaction_id,
+                        device_id, // B is the target; source is looked up by session
+                        session_id,
+                        *generation,
+                        *snapshot_revision,
+                        env.source_device_id.unwrap_or(device_id),
+                        15,
+                    )
+                    .await;
+            }
+        }
+        Payload::RelinquishAck {
+            transaction_id,
+            snapshot,
+        } => {
+            // A confirmed relinquish with final snapshot (design §11.1 step 5-6).
+            match state
+                .handoff
+                .commit_relinquish(
+                    &state.repos.sessions,
+                    registry,
+                    *transaction_id,
+                    snapshot.clone(),
+                )
+                .await
+            {
+                Ok(_new_gen) => {
+                    // Success: B has been notified by commit_relinquish.
+                }
+                Err(e) => {
+                    state.handoff.mark_failed(*transaction_id, e.code);
+                }
+            }
+        }
         _ => {
-            // Other payloads (TargetReady, RelinquishAck, etc.) are handled
-            // by the handoff module (step 6).
+            // Other payloads are not handled in this version.
         }
     }
 }
