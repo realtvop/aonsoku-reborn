@@ -51,10 +51,7 @@ impl AppState {
 
 /// Build the Axum router.
 pub fn build_router(state: AppState) -> Router {
-    let v1 = Router::new()
-        .route("/healthz", get(healthz))
-        .route("/readyz", get(readyz));
-
+    let v1 = crate::api::router();
     Router::new()
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))

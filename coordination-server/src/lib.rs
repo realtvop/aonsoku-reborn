@@ -9,12 +9,17 @@
 #![forbid(unsafe_code)]
 #![warn(clippy::dbg_macro, clippy::print_stdout, clippy::print_stderr)]
 
+pub mod api;
+pub mod auth;
 pub mod config;
 pub mod errors;
+pub mod identity;
 pub mod observability;
 pub mod protocol;
 pub mod server;
+pub mod ssrf;
 pub mod storage;
+pub mod verification;
 
 pub use config::{Config, DeploymentMode};
 pub use errors::{ApiError, CoordinationError, ErrorCode};
