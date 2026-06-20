@@ -6,6 +6,7 @@ import { Linux } from "@/app/components/controls/linux";
 import { SettingsDialog } from "@/app/components/settings/dialog";
 import { useNetworkStatusObserver } from "@/app/hooks/use-network-status";
 import { LanControlObserver } from "@/app/observers/lan-control-observer";
+import { CoordinationObserver } from "@/app/observers/coordination-observer";
 import { LangObserver } from "@/app/observers/lang-observer";
 import { LibraryMigrationObserver } from "@/app/observers/library-migration-observer";
 import { MediaSessionObserver } from "@/app/observers/media-session-observer";
@@ -74,6 +75,7 @@ function App() {
       <AndroidBackButtonObserver />
       <NativeAuthObserver />
       <LanControlObserver />
+      <CoordinationObserver />
       <VolumeHUDObserver />
       <NowPlayingLikeObserver />
       <LibraryMigrationObserver />
