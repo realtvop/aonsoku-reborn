@@ -40,6 +40,10 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         internal const val HEARTBEAT_INTERVAL_SECONDS = 15L
         /// OkHttp keep-alive ping to detect dead connections faster.
         internal const val PING_INTERVAL_SECONDS = 15L
+        /// §13: exponential backoff. Base 1s, doubled per attempt, capped at 30s.
+        internal const val BASE_RECONNECT_DELAY_MS = 1000L
+        internal const val MAX_RECONNECT_DELAY_MS = 30_000L
+        internal const val MAX_RECONNECT_ATTEMPTS = 10
 
         /// Design §9.2: heartbeat envelope. messageId is assigned at send time.
         internal fun buildHeartbeatEnvelope(protocolVersion: Int): JSONObject {
@@ -74,6 +78,13 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             sendEnvelope(buildHeartbeatEnvelope(protocolVersion))
             mainHandler.postDelayed(this, HEARTBEAT_INTERVAL_SECONDS * 1000)
         }
+    }
+    private val reconnectRunnable = Runnable {
+        // §6.3: tickets are one-time and expire in 30s, so the native layer
+        // cannot self-reconnect. Ask the WebView to fetch a fresh ticket and
+        // call connect() again.
+        reconnectAttempts += 1
+        notifyReconnectNeeded(reconnectAttempts)
     }
 
     /// Design §6.3: coordination tokens are encrypted with a Keystore-backed
@@ -297,6 +308,8 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
 
     private fun disconnectInternal() {
         stopHeartbeat()
+        mainHandler.removeCallbacks(reconnectRunnable)
+        reconnectAttempts = 0
         webSocket?.close(1000, "disconnect")
         webSocket = null
         client = null
@@ -321,9 +334,20 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     }
 
     private fun scheduleReconnect() {
-        reconnectAttempts++
-        // Best-effort reconnect; in production, re-fetch a ws ticket first.
+        // §13: exponential backoff with a cap. Tickets expire in 30s so the
+        // native layer only emits the request; the WebView performs the
+        // actual reconnect after refreshing the ticket.
+        val attempt = (reconnectAttempts + 1).coerceAtMost(MAX_RECONNECT_ATTEMPTS)
+        val delayMs = (BASE_RECONNECT_DELAY_MS * (1L shl (attempt - 1)))
+            .coerceAtMost(MAX_RECONNECT_DELAY_MS)
         notifyState("reconnecting")
+        mainHandler.postDelayed(reconnectRunnable, delayMs)
+    }
+
+    private fun notifyReconnectNeeded(attempt: Int) {
+        val ret = JSObject()
+        ret.put("attempt", attempt)
+        notifyListeners("coordinationReconnectNeeded", ret)
     }
 
     private fun notifyState(state: String) {

@@ -126,6 +126,16 @@ export interface AonsokuNativeCoordinationPlugin extends Plugin {
     eventName: "coordinationStateChange",
     listenerFunc: (data: CoordinationStateResult) => void,
   ): Promise<PluginListenerHandle>;
+
+  /// Add a listener for reconnect requests. After an unexpected disconnect
+  /// the plugin fires this event with exponential backoff so the WebView can
+  /// fetch a fresh WebSocket ticket (§6.3: tickets are one-time and expire in
+  /// 30s, so the native layer cannot self-reconnect) and call connect() again.
+  /// `attempt` is the 1-based reconnect attempt number.
+  addListener(
+    eventName: "coordinationReconnectNeeded",
+    listenerFunc: (data: { attempt: number }) => void,
+  ): Promise<PluginListenerHandle>;
 }
 
 /// Re-exported from @capacitor/core for the listener handle type.

@@ -52,4 +52,16 @@ export class AonsokuNativeCoordinationWeb
   async sendRelinquishAck(): Promise<void> {
     throw new Error("coordination: native plugin not available on web");
   }
+  async addListener(
+    eventName: string,
+    _listenerFunc: (data: unknown) => void,
+  ): Promise<import("@capacitor/core").PluginListenerHandle> {
+    // The web runtime uses CoordinationWsClient directly; no native events.
+    return await Promise.reject(
+      new Error(`coordination: native plugin not available on web (${eventName})`),
+    );
+  }
+  async removeAllListeners(): Promise<void> {
+    // No-op on web
+  }
 }

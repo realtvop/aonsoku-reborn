@@ -11,6 +11,11 @@ import Capacitor
 /// this plugin when running on capacitor-ios.
 @objc(AonsokuNativeCoordination)
 public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDelegate {
+    /// §13: exponential backoff. Base 1s, doubled per attempt, capped at 30s.
+    private static let baseReconnectDelay: TimeInterval = 1.0
+    private static let maxReconnectDelay: TimeInterval = 30.0
+    private static let maxReconnectAttempts = 10
+
     private var webSocketTask: URLSessionWebSocketTask?
     private var session: URLSession?
     private var reconnectAttempts = 0
@@ -19,6 +24,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     private var capabilities: Int = 0
     private var protocolVersion: Int = 1
     private var heartbeatTimer: Timer?
+    private var reconnectWorkItem: DispatchWorkItem?
     private var keychainService = "aonsoku-coordination"
 
     // MARK: - Token & Config Storage
@@ -248,6 +254,9 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     private func disconnectInternal() {
         self.heartbeatTimer?.invalidate()
         self.heartbeatTimer = nil
+        self.reconnectWorkItem?.cancel()
+        self.reconnectWorkItem = nil
+        self.reconnectAttempts = 0
         self.webSocketTask?.cancel()
         self.webSocketTask = nil
         self.session?.invalidateAndCancel()
@@ -304,10 +313,29 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
 
     private func scheduleReconnect() {
         self.reconnectAttempts += 1
-        let delay = min(pow(2.0, Double(self.reconnectAttempts)), 30.0)
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            // Best-effort reconnect; in production, re-fetch a ws ticket first.
-            self?.notifyState("reconnecting")
+        // §13: exponential backoff with a cap. Tickets expire in 30s so the
+        // native layer only emits the request; the WebView performs the
+        // actual reconnect after refreshing the ticket (§6.3).
+        let attempt = min(self.reconnectAttempts, Self.maxReconnectAttempts)
+        let delay = min(
+            Self.baseReconnectDelay * pow(2.0, Double(attempt - 1)),
+            Self.maxReconnectDelay,
+        )
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            self.notifyReconnectNeeded(attempt: attempt)
+        }
+        self.reconnectWorkItem = workItem
+        self.notifyState("reconnecting")
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+    }
+
+    private func notifyReconnectNeeded(attempt: Int) {
+        DispatchQueue.main.async {
+            self.notifyListeners(
+                "coordinationReconnectNeeded",
+                data: ["attempt": attempt],
+            )
         }
     }
 
