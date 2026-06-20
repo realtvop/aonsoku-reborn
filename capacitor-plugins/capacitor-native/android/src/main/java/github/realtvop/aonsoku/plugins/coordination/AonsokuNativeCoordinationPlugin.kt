@@ -1,6 +1,5 @@
 package github.realtvop.aonsoku.plugins.coordination
 
-import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -34,7 +33,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
 
     companion object {
         private const val TAG = "CoordPlugin"
-        private const val PREFS_NAME = "aonsoku_coordination"
+        internal const val PREFS_NAME = "aonsoku_coordination"
         internal const val KEY_SERVER_URL = "server_url"
         internal const val KEY_IDENTITY_URL = "identity_url"
         /// Design §9.2: client sends heartbeat every 15 seconds.
@@ -67,10 +66,13 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
 
         /// Append the one-time WebSocket ticket as a URL-encoded query
         /// parameter so tickets containing &/=/?/# do not break the URL.
+        /// Uses URLEncoder (pure Java) rather than android.net.Uri.encode,
+        /// which is not available in unit tests.
         internal fun buildTicketUrl(wsUrl: String, ticket: String): String {
             val base = wsUrl
             val separator = if (base.contains("?")) "&" else "?"
-            return base + separator + "ticket=" + Uri.encode(ticket)
+            val encoded = java.net.URLEncoder.encode(ticket, "UTF-8")
+            return base + separator + "ticket=" + encoded
         }
     }
 
