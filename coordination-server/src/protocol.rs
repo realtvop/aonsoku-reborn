@@ -449,10 +449,19 @@ pub enum Payload {
         deadline: i64,
     },
     /// B → server: B has preloaded and is ready (design §11.1 step 3).
+    ///
+    /// `source_device_id` and `session_id` are carried in the variant because
+    /// the `Envelope` routing fields are `#[serde(skip_deserializing)]` and
+    /// would otherwise be lost on incoming messages, causing the handoff to
+    /// silently time out.
     TargetReady {
         transaction_id: Uuid,
         generation: SessionGeneration,
         snapshot_revision: SnapshotRevision,
+        #[serde(default)]
+        source_device_id: Option<DeviceId>,
+        #[serde(default)]
+        session_id: Option<SessionId>,
     },
     /// Server → A: pause and relinquish (design §11.1 step 4).
     PrepareRelinquish {

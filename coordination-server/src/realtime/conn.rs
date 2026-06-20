@@ -600,33 +600,43 @@ async fn handle_inbound(
             transaction_id,
             generation,
             snapshot_revision,
+            source_device_id,
+            session_id,
         } => {
             // B has preloaded and is ready (design §11.1 step 3).
             // Start the handoff transaction: validate source, send prepare_relinquish to A.
-            // We need the source session id; look it up from the transaction's
-            // pending state. For the first version, we create the transaction
-            // using the HandoffCandidate that was sent earlier. Since we don't
-            // persist the pending transaction here, we rely on the
-            // HandoffCoordinator to look up the source session.
-            // In a full implementation, the HandoffCandidate would carry the
-            // source_session_id; B echoes it back. For now, we use the session_id
-            // from the envelope if present.
-            if let Some(session_id) = env.session_id {
-                let _ = state
-                    .handoff
-                    .start_transaction(
-                        &state.repos.sessions,
-                        registry,
-                        *transaction_id,
-                        env.source_device_id.unwrap_or(device_id), // A is the source
-                        session_id,
-                        *generation,
-                        *snapshot_revision,
-                        device_id, // B is the target
-                        15,
-                    )
-                    .await;
-            }
+            // The source session id and source device id are carried in the
+            // variant because the Envelope routing fields are
+            // `#[serde(skip_deserializing)]` and always deserialize to `None`.
+            let (source_device, session) = match (source_device_id, session_id) {
+                (Some(d), Some(s)) => (*d, *s),
+                _ => {
+                    let _ = registry.send(
+                        device_id,
+                        error_envelope(
+                            env.message_id,
+                            ErrorCode::BadMessage,
+                            "target_ready missing source_device_id or session_id",
+                            server_time,
+                        ),
+                    );
+                    return;
+                }
+            };
+            let _ = state
+                .handoff
+                .start_transaction(
+                    &state.repos.sessions,
+                    registry,
+                    *transaction_id,
+                    source_device,
+                    session,
+                    *generation,
+                    *snapshot_revision,
+                    device_id, // B is the target
+                    15,
+                )
+                .await;
         }
         Payload::RelinquishAck {
             transaction_id,
