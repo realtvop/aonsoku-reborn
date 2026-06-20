@@ -18,6 +18,7 @@ pub mod identity;
 pub mod legacy_import;
 pub mod observability;
 pub mod protocol;
+pub mod realtime;
 pub mod server;
 pub mod ssrf;
 pub mod storage;

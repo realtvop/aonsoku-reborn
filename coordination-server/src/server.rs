@@ -15,6 +15,7 @@ use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLaye
 
 use crate::config::Config;
 use crate::errors::{ApiError, CoordinationError};
+use crate::realtime::ConnectionRegistry;
 use crate::storage::sqlite::SqliteRepositories;
 
 /// Shared application state.
@@ -23,6 +24,7 @@ pub struct AppState {
     pub config: Arc<Config>,
     pub pool: SqlitePool,
     pub repos: SqliteRepositories,
+    pub realtime: Arc<ConnectionRegistry>,
     ready: Arc<std::sync::atomic::AtomicBool>,
 }
 
@@ -32,6 +34,7 @@ impl AppState {
             config,
             pool,
             repos,
+            realtime: Arc::new(ConnectionRegistry::new()),
             ready: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
@@ -51,7 +54,7 @@ impl AppState {
 
 /// Build the Axum router.
 pub fn build_router(state: AppState) -> Router {
-    let v1 = crate::api::router();
+    let v1 = crate::api::router().route("/realtime", get(crate::realtime::handle_ws));
     Router::new()
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
