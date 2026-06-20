@@ -10,6 +10,7 @@
 //! - `DELETE /v1/devices/{id}` — revoke a device.
 //! - `GET  /v1/history` — incremental history sync.
 //! - `POST /v1/history` — upload history operations.
+//! - `POST /v1/history/legacy-import` — one-time legacy history import.
 //! - `DELETE /v1/account` — delete coordination data for this account.
 
 pub mod auth;
@@ -42,5 +43,6 @@ pub fn router() -> Router<AppState> {
             "/history",
             get(history::get_history).post(history::post_history),
         )
+        .route("/history/legacy-import", post(history::legacy_import))
         .route("/account", delete(auth::delete_account))
 }

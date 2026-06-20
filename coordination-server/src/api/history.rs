@@ -294,3 +294,57 @@ fn map_err(e: CoordinationError) -> (StatusCode, Json<ApiError>) {
     let status = StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     (status, Json(ApiError::from(&e)))
 }
+
+/// POST /v1/history/legacy-import
+///
+/// One-time legacy history import (design §8.2).
+#[derive(Debug, Deserialize)]
+pub struct LegacyImportRequest {
+    pub entries: Vec<LegacyEntryInput>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LegacyEntryInput {
+    pub song_id: String,
+    pub song_title: Option<String>,
+    pub song_artist: Option<String>,
+    pub song_album: Option<String>,
+    pub song_duration: Option<f64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LegacyImportResponse {
+    pub merged_song_ids: Vec<String>,
+    pub is_first_device: bool,
+}
+
+pub async fn legacy_import(
+    State(state): State<AppState>,
+    Authenticated(claims): Authenticated,
+    Json(body): Json<LegacyImportRequest>,
+) -> Result<Json<LegacyImportResponse>, (StatusCode, Json<ApiError>)> {
+    let service = crate::history::HistoryService::new(
+        state.repos.accounts.clone(),
+        state.repos.devices.clone(),
+        state.repos.history.clone(),
+    );
+    let entries: Vec<crate::legacy_import::LegacyEntry> = body
+        .entries
+        .into_iter()
+        .map(|e| crate::legacy_import::LegacyEntry {
+            song_id: e.song_id,
+            song_title: e.song_title,
+            song_artist: e.song_artist,
+            song_album: e.song_album,
+            song_duration: e.song_duration,
+        })
+        .collect();
+    let result = service
+        .legacy_import(claims.device_id, claims.account_id, entries)
+        .await
+        .map_err(map_err)?;
+    Ok(Json(LegacyImportResponse {
+        merged_song_ids: result.merged_song_ids,
+        is_first_device: result.is_first_device,
+    }))
+}
