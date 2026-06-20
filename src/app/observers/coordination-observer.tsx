@@ -51,6 +51,11 @@ export function CoordinationObserver() {
   const generationRef = useRef<number>(1);
   const snapshotRevisionRef = useRef<number>(0);
 
+  // Load coordination state and auto-connect on mount
+  useEffect(() => {
+    coordStore.loadState();
+  }, [coordStore]);
+
   // Publish snapshot when playback state changes (design §9.2).
   useEffect(() => {
     if (!coordStore.isConnected || !currentSong) return;

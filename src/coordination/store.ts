@@ -78,6 +78,16 @@ export const useCoordinationStore = create<CoordinationState>()(
         set((s) => {
           s.deviceId = manager.getDeviceId();
         });
+        if (manager.isConfigured() && manager.getDeviceId()) {
+          try {
+            await manager.reconnect();
+            await get().refreshDevices();
+          } catch (err) {
+            set((s) => {
+              s.error = `Auto-reconnect failed: ${String(err)}`;
+            });
+          }
+        }
       },
 
       saveConfig: async (config) => {

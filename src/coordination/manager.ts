@@ -90,10 +90,25 @@ export class CoordinationManager {
     this.config = await loadConfig();
     this.tokens = await loadTokens();
     if (this.config && this.tokens) {
-      this.httpClient = new CoordinationHttpClient(this.config.serverUrl);
+      this.httpClient = new CoordinationHttpClient(
+        this.config.serverUrl,
+        fetch.bind(globalThis),
+        async (tokens) => {
+          this.tokens = tokens;
+          await saveTokens(tokens);
+        },
+      );
       this.httpClient.setTokens(this.tokens);
       this.deviceId = this.tokens.deviceId;
     }
+  }
+
+  async reconnect(): Promise<void> {
+    if (!this.config || !this.tokens) return;
+    if (this.wsClient) return; // Already connected or connecting
+
+    await this.openWebSocket();
+    this.startOutboxProcessor();
   }
 
   async saveConfig(config: CoordinationConfig): Promise<void> {
@@ -109,7 +124,14 @@ export class CoordinationManager {
   ): Promise<void> {
     if (!this.config)
       throw new Error("coordination: server URL not configured");
-    this.httpClient = new CoordinationHttpClient(this.config.serverUrl);
+    this.httpClient = new CoordinationHttpClient(
+      this.config.serverUrl,
+      fetch.bind(globalThis),
+      async (tokens) => {
+        this.tokens = tokens;
+        await saveTokens(tokens);
+      },
+    );
 
     // 1. Request a one-time challenge.
     const challenge = await this.httpClient.requestChallenge({

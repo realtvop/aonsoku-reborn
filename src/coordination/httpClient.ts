@@ -43,8 +43,11 @@ export class CoordinationHttpClient {
   private refreshPromise: Promise<void> | null = null;
 
   constructor(
-    baseUrl: string,
+    readonly baseUrl: string,
     private readonly fetchImpl: typeof fetch = fetch.bind(globalThis),
+    private readonly onTokensUpdated?: (
+      tokens: StoredDeviceTokens | null,
+    ) => Promise<void> | void,
   ) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
   }
@@ -82,8 +85,8 @@ export class CoordinationHttpClient {
     }
     if (!resp.ok) {
       const body = await resp
-        .json()
-        .catch(() => ({ code: "internal", reason: resp.statusText }));
+          .json()
+          .catch(() => ({ code: "internal", reason: resp.statusText }));
       const error = new CoordinationApiError(
         body.code ?? "internal",
         body.reason ?? "unknown error",
@@ -128,12 +131,14 @@ export class CoordinationHttpClient {
         refreshToken: resp.refreshToken,
         accessTokenExpiresAt: Date.now() + resp.expiresIn * 1000,
       };
+      this.onTokensUpdated?.(this.tokens);
     } catch (e) {
       if (
         e instanceof CoordinationApiError &&
         (e.code === "device_revoked" || e.code === "authentication_failed")
       ) {
         this.tokens = null;
+        this.onTokensUpdated?.(null);
       }
       throw e;
     }
@@ -167,6 +172,7 @@ export class CoordinationHttpClient {
       accessTokenExpiresAt: Date.now() + resp.expiresIn * 1000,
       historyLimit: resp.historyLimit,
     };
+    this.onTokensUpdated?.(this.tokens);
     return resp;
   }
 
