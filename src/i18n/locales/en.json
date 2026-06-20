@@ -606,7 +606,8 @@
       "desktop": "Desktop Application",
       "server": "Server",
       "privacy": "Privacy & Security",
-      "storage": "Offline Experience"
+      "storage": "Offline Experience",
+      "cross-device": "Cross-Device"
     },
     "server": {
       "group": "Server",
