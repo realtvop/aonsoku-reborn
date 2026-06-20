@@ -41,11 +41,15 @@ export interface CoordinationManagerCallbacks {
     deviceId: DeviceId,
     snapshot: PlaybackSnapshot,
     isOnline: boolean,
+    generation: SessionGeneration,
+    snapshotRevision: SnapshotRevision,
   ) => void;
   onRemoteCommand: (command: RemoteCommand, sourceDeviceId: DeviceId) => void;
   onHandoffCandidate: (
     snapshot: PlaybackSnapshot,
     transactionId: string,
+    generation: SessionGeneration,
+    snapshotRevision: SnapshotRevision,
   ) => void;
   onPrepareRelinquish: (
     transactionId: string,
@@ -192,6 +196,8 @@ export class CoordinationManager {
             env.deviceId,
             env.snapshot,
             env.isOnline,
+            env.generation,
+            env.snapshotRevision,
           );
         }
       },
@@ -202,7 +208,12 @@ export class CoordinationManager {
       },
       onHandoffCandidate: (env) => {
         if (env.type === "handoff_candidate") {
-          this.callbacks.onHandoffCandidate(env.snapshot, env.transactionId);
+          this.callbacks.onHandoffCandidate(
+            env.snapshot,
+            env.transactionId,
+            env.generation,
+            env.snapshotRevision,
+          );
         }
       },
       onPrepareRelinquish: (env) => {

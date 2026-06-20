@@ -1,17 +1,5 @@
-// Coordination observer — bridges the coordination protocol with the player
-// store and playback backend (design §9.2, §10, §11).
-//
-// This component is mounted at the root (like LanControlObserver) and:
-// 1. Publishes playback snapshots to the coordination server on state changes.
-// 2. Handles incoming remote commands by dispatching to playerActions.
-// 3. Handles handoff prepare_relinquish by pausing the local player.
-// 4. Applies handoff_committed snapshots to resume playback on B.
-//
-// Multi-stack consistency: the same RemoteCommand → playerAction mapping is
-// used for both Web/Electron and native (via the existing playback-actions
-// branch that delegates to getNativeQueueController() on iOS/Android).
-
 import { useEffect, useRef } from "react";
+import { toast } from "react-toastify";
 import { useCoordinationStore } from "@/coordination/store";
 import type { PlaybackSnapshot, RemoteCommand } from "@/coordination/types";
 import {
@@ -26,6 +14,7 @@ import {
 } from "@/store/player.store";
 import { getEffectiveIndex } from "@/store/player/queue-utils";
 import { LoopState } from "@/types/playerContext";
+import { logger } from "@/utils/logger";
 
 function mapLoopState(loop: LoopState): "off" | "one" | "all" {
   switch (loop) {
@@ -42,6 +31,11 @@ export function CoordinationObserver() {
   const isConnected = useCoordinationStore((state) => state.isConnected);
   const loadState = useCoordinationStore((state) => state.loadState);
   const manager = useCoordinationStore((state) => state.manager);
+  const controlledDeviceId = useCoordinationStore((state) => state.controlledDeviceId);
+  const controlledSnapshot = useCoordinationStore((state) =>
+    controlledDeviceId ? state.deviceSnapshots[controlledDeviceId] : null
+  );
+
   const playerActions = usePlayerActions();
   const currentSong = usePlayerCurrentSong();
   const currentList = usePlayerCurrentList();
@@ -62,6 +56,8 @@ export function CoordinationObserver() {
   useEffect(() => {
     if (!isConnected || !currentSong) return;
     const state = usePlayerStore.getState();
+    if (state.remoteControl.active) return;
+
     const snapshot: PlaybackSnapshot = {
       sessionId: sessionIdRef.current,
       logicalPlaybackSessionId: sessionIdRef.current,
@@ -146,9 +142,6 @@ export function CoordinationObserver() {
           playerActions.clearUserQueue();
           break;
         default:
-          // Media commands (play_song, play_album, etc.) require fetching
-          // metadata from Navidrome — handled in a future iteration
-          // with the same subsonic service used by LanControlObserver.
           break;
       }
     };
@@ -165,10 +158,7 @@ export function CoordinationObserver() {
       transactionId: string,
       _expectedRevision: number,
     ) => {
-      // Pause the local playback backend (Web or native, via playerActions
-      // which branches to the native controller when available).
       playerActions.setPlayingState(false);
-      // Build the final precise snapshot and send relinquish_ack.
       if (currentSong) {
         const state = usePlayerStore.getState();
         const finalSnapshot: PlaybackSnapshot = {
@@ -212,8 +202,40 @@ export function CoordinationObserver() {
     volume,
   ]);
 
-  // Handle handoff_committed: apply the final snapshot and start playback
-  // on B (design §11.1 step 7).
+  // Handle handoff_candidate: fetch metadata, load song paused, seek progress, and send target_ready (design §11.1 step 2-3).
+  useEffect(() => {
+    if (!isConnected) return;
+    const original = manager.callbacks.onHandoffCandidate;
+    manager.callbacks.onHandoffCandidate = (
+      snapshot: PlaybackSnapshot,
+      transactionId: string,
+      generation: number,
+      snapshotRevision: number,
+    ) => {
+      if (snapshot.songId) {
+        import("@/service/subsonic").then(({ subsonic }) => {
+          subsonic.songs
+            .getSong(snapshot.songId)
+            .then((song) => {
+              if (song) {
+                playerActions.playSong(song);
+                playerActions.setPlayingState(false);
+                playerActions.setProgress(snapshot.progressSeconds);
+                manager.sendTargetReady(transactionId, generation, snapshotRevision);
+              }
+            })
+            .catch((err) => {
+              logger.error("[CoordinationObserver] Handoff candidate load failed:", err);
+            });
+        });
+      }
+    };
+    return () => {
+      manager.callbacks.onHandoffCandidate = original;
+    };
+  }, [isConnected, manager, playerActions]);
+
+  // Handle handoff_committed: apply final snapshot and start playback (design §11.1 step 7).
   useEffect(() => {
     if (!isConnected) return;
     const original = manager.callbacks.onHandoffCommitted;
@@ -221,7 +243,6 @@ export function CoordinationObserver() {
       snapshot: PlaybackSnapshot,
       _newGeneration: number,
     ) => {
-      // Seek to the handoff progress and start playing.
       if (snapshot.songId) {
         playerActions.setProgress(snapshot.progressSeconds);
         playerActions.setPlayingState(true);
@@ -231,6 +252,74 @@ export function CoordinationObserver() {
       manager.callbacks.onHandoffCommitted = original;
     };
   }, [isConnected, manager, playerActions]);
+
+  // Handle handoff_failed
+  useEffect(() => {
+    if (!isConnected) return;
+    const original = manager.callbacks.onHandoffFailed;
+    manager.callbacks.onHandoffFailed = (_transactionId: string, code: string) => {
+      toast.error(`Relay failed: ${code}`);
+    };
+    return () => {
+      manager.callbacks.onHandoffFailed = original;
+    };
+  }, [isConnected, manager]);
+
+  // Sync controlled device snapshot state to local player store
+  useEffect(() => {
+    if (!controlledDeviceId || !controlledSnapshot) return;
+    const { snapshot } = controlledSnapshot;
+
+    usePlayerStore.setState((state) => {
+      state.playerState.isPlaying = snapshot.isPlaying;
+      state.playerState.currentDuration = snapshot.durationSeconds;
+      if (!state.playerProgress.isScrubbing) {
+        state.playerProgress.progress = snapshot.progressSeconds;
+      }
+    });
+
+    const currentLocalSong = usePlayerStore.getState().songlist.currentSong;
+    if (snapshot.songId && currentLocalSong?.id !== snapshot.songId) {
+      import("@/service/subsonic").then(({ subsonic }) => {
+        subsonic.songs
+          .getSong(snapshot.songId)
+          .then((song) => {
+            if (song) {
+              usePlayerStore.setState((state) => {
+                state.songlist.currentSong = song;
+                state.songlist.contextQueue.songs = [song];
+                state.songlist.contextQueue.currentIndex = 0;
+                state.playerState.mediaType = "song";
+              });
+            }
+          })
+          .catch((err) => {
+            logger.error("[CoordinationObserver] Failed to fetch remote song:", err);
+          });
+      });
+    }
+  }, [controlledDeviceId, controlledSnapshot]);
+
+  // Interpolate controlled device progress between snapshots
+  useEffect(() => {
+    if (!controlledDeviceId || !controlledSnapshot) return;
+    const { snapshot } = controlledSnapshot;
+    if (!snapshot.isPlaying) return;
+
+    const interval = setInterval(() => {
+      usePlayerStore.setState((state) => {
+        if (!state.playerProgress.isScrubbing) {
+          const newProgress = Math.min(
+            state.playerProgress.progress + 0.1,
+            state.playerState.currentDuration,
+          );
+          state.playerProgress.progress = newProgress;
+        }
+      });
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [controlledDeviceId, controlledSnapshot]);
 
   return null;
 }

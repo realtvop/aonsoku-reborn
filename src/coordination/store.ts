@@ -6,7 +6,7 @@ import { immer } from "zustand/middleware/immer";
 import { CoordinationManager } from "./manager";
 import type { CoordinationCredentials } from "./httpClient";
 import type { ConnectionState } from "./wsClient";
-import type { DeviceDto, DeviceId } from "./types";
+import type { DeviceDto, DeviceId, PlaybackSnapshot } from "./types";
 
 interface CoordinationState {
   manager: CoordinationManager;
@@ -16,6 +16,16 @@ interface CoordinationState {
   deviceId: DeviceId | null;
   lastSyncAt: number | null;
   error: string | null;
+  deviceSnapshots: Record<
+    DeviceId,
+    {
+      snapshot: PlaybackSnapshot;
+      isOnline: boolean;
+      generation: number;
+      snapshotRevision: number;
+    }
+  >;
+  controlledDeviceId: DeviceId | null;
 
   loadState: () => Promise<void>;
   saveConfig: (config: {
@@ -33,6 +43,7 @@ interface CoordinationState {
   renameDevice: (id: DeviceId, name: string) => Promise<void>;
   revokeDevice: (id: DeviceId) => Promise<void>;
   setError: (error: string | null) => void;
+  setControlledDevice: (id: DeviceId | null) => void;
 }
 
 const callbacks = {
@@ -64,6 +75,16 @@ export const useCoordinationStore = create<CoordinationState>()(
           s.lastSyncAt = Date.now();
         });
       },
+      onDeviceSnapshot: (deviceId, snapshot, isOnline, generation, snapshotRevision) => {
+        set((s) => {
+          s.deviceSnapshots[deviceId] = {
+            snapshot,
+            isOnline,
+            generation,
+            snapshotRevision,
+          };
+        });
+      },
       onError: (code, reason) => {
         set((s) => {
           s.error = `${code}: ${reason}`;
@@ -76,6 +97,8 @@ export const useCoordinationStore = create<CoordinationState>()(
       isConnected: false,
       connectionState: "disconnected",
       devices: [],
+      deviceSnapshots: {},
+      controlledDeviceId: null,
       deviceId: null,
       lastSyncAt: null,
       error: null,
@@ -129,6 +152,8 @@ export const useCoordinationStore = create<CoordinationState>()(
           s.isConnected = false;
           s.deviceId = null;
           s.devices = [];
+          s.deviceSnapshots = {};
+          s.controlledDeviceId = null;
         });
       },
 
@@ -138,6 +163,8 @@ export const useCoordinationStore = create<CoordinationState>()(
           s.isConnected = false;
           s.deviceId = null;
           s.devices = [];
+          s.deviceSnapshots = {};
+          s.controlledDeviceId = null;
         });
       },
 
@@ -152,6 +179,12 @@ export const useCoordinationStore = create<CoordinationState>()(
       setError: (error) => {
         set((s) => {
           s.error = error;
+        });
+      },
+
+      setControlledDevice: (id) => {
+        set((s) => {
+          s.controlledDeviceId = id;
         });
       },
     };
