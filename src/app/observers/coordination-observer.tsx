@@ -183,10 +183,7 @@ export function CoordinationObserver() {
                 if (song) playerActions.playSong(song);
               })
               .catch((err) =>
-                logger.error(
-                  "[CoordinationObserver] play_song failed:",
-                  err,
-                ),
+                logger.error("[CoordinationObserver] play_song failed:", err),
               );
           });
           break;
@@ -210,10 +207,7 @@ export function CoordinationObserver() {
                 }
               })
               .catch((err) =>
-                logger.error(
-                  "[CoordinationObserver] play_album failed:",
-                  err,
-                ),
+                logger.error("[CoordinationObserver] play_album failed:", err),
               );
           });
           break;
@@ -246,9 +240,13 @@ export function CoordinationObserver() {
           break;
         case "add_to_queue_next":
           import("@/service/subsonic").then(({ subsonic }) => {
-            Promise.all(command.song_ids.map((id) => subsonic.songs.getSong(id)))
+            Promise.all(
+              command.song_ids.map((id) => subsonic.songs.getSong(id)),
+            )
               .then((songs) => {
-                const valid = songs.filter((s): s is NonNullable<typeof s> => !!s);
+                const valid = songs.filter(
+                  (s): s is NonNullable<typeof s> => !!s,
+                );
                 if (valid.length > 0) playerActions.setNextOnQueue(valid);
               })
               .catch((err) =>
@@ -261,9 +259,13 @@ export function CoordinationObserver() {
           break;
         case "add_to_queue_last":
           import("@/service/subsonic").then(({ subsonic }) => {
-            Promise.all(command.song_ids.map((id) => subsonic.songs.getSong(id)))
+            Promise.all(
+              command.song_ids.map((id) => subsonic.songs.getSong(id)),
+            )
               .then((songs) => {
-                const valid = songs.filter((s): s is NonNullable<typeof s> => !!s);
+                const valid = songs.filter(
+                  (s): s is NonNullable<typeof s> => !!s,
+                );
                 if (valid.length > 0) playerActions.setLastOnQueue(valid);
               })
               .catch((err) =>
@@ -283,9 +285,11 @@ export function CoordinationObserver() {
           playerActions.reorderQueue(command.from, command.to);
           break;
         case "toggle_like":
-          playerActions.starCurrentSong().catch((err) =>
-            logger.error("[CoordinationObserver] toggle_like failed:", err),
-          );
+          playerActions
+            .starCurrentSong()
+            .catch((err) =>
+              logger.error("[CoordinationObserver] toggle_like failed:", err),
+            );
           break;
         default:
           break;
@@ -366,9 +370,20 @@ export function CoordinationObserver() {
             .getSong(snapshot.songId)
             .then((song) => {
               if (song) {
+                const state = usePlayerStore.getState();
+                const isSameSong = state.songlist.currentSong?.id === song.id;
+
                 playerActions.playSong(song);
                 playerActions.setPlayingState(false);
                 playerActions.setProgress(snapshot.progressSeconds);
+
+                if (isSameSong) {
+                  const audio = state.playerState.audioPlayerRef;
+                  if (audio) {
+                    seekPlaybackTarget(audio, snapshot.progressSeconds);
+                  }
+                }
+
                 manager.sendTargetReady(
                   transactionId,
                   generation,
@@ -401,8 +416,18 @@ export function CoordinationObserver() {
       _newGeneration: number,
     ) => {
       if (snapshot.songId) {
+        const state = usePlayerStore.getState();
+        const isSameSong = state.songlist.currentSong?.id === snapshot.songId;
+
         playerActions.setProgress(snapshot.progressSeconds);
         playerActions.setPlayingState(true);
+
+        if (isSameSong) {
+          const audio = state.playerState.audioPlayerRef;
+          if (audio) {
+            seekPlaybackTarget(audio, snapshot.progressSeconds);
+          }
+        }
       }
     };
     return () => {
@@ -458,15 +483,14 @@ export function CoordinationObserver() {
     if (snapshot.songId && currentLocalSong?.id !== snapshot.songId) {
       import("@/service/subsonic").then(({ subsonic }) => {
         const idsToFetch = Array.from(
-          new Set([
-            snapshot.songId,
-            ...remoteQueueIds,
-            ...remoteUserQueueIds,
-          ]),
+          new Set([snapshot.songId, ...remoteQueueIds, ...remoteUserQueueIds]),
         );
         Promise.all(idsToFetch.map((id) => subsonic.songs.getSong(id)))
           .then((fetched) => {
-            const songMap = new Map<string, NonNullable<(typeof fetched)[number]>>();
+            const songMap = new Map<
+              string,
+              NonNullable<(typeof fetched)[number]>
+            >();
             for (const s of fetched) {
               if (s) songMap.set(s.id, s);
             }
@@ -481,8 +505,7 @@ export function CoordinationObserver() {
                 .filter((s): s is NonNullable<typeof s> => !!s);
               state.songlist.currentSong = current;
               state.songlist.contextQueue = {
-                songs:
-                  contextSongs.length > 0 ? contextSongs : [current],
+                songs: contextSongs.length > 0 ? contextSongs : [current],
                 currentIndex: Math.max(
                   0,
                   Math.min(
@@ -523,7 +546,10 @@ export function CoordinationObserver() {
         );
         Promise.all(idsToFetch.map((id) => subsonic.songs.getSong(id)))
           .then((fetched) => {
-            const songMap = new Map<string, NonNullable<(typeof fetched)[number]>>();
+            const songMap = new Map<
+              string,
+              NonNullable<(typeof fetched)[number]>
+            >();
             for (const s of fetched) {
               if (s) songMap.set(s.id, s);
             }

@@ -89,8 +89,7 @@ function mapLanControlToRemoteCommand(
         : null;
     case LanControlMessageType.TOGGLE_REPEAT: {
       const ls = usePlayerStore.getState().playerState.loopState;
-      const nextMode =
-        ls === 0 ? "all" : ls === 1 ? "one" : "off";
+      const nextMode = ls === 0 ? "all" : ls === 1 ? "one" : "off";
       return { type: "set_repeat", mode: nextMode };
     }
     case LanControlMessageType.SET_REPEAT:
