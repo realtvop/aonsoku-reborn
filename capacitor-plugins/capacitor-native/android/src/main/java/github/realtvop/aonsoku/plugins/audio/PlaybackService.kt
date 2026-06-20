@@ -41,6 +41,7 @@ import github.realtvop.aonsoku.plugins.bridge.AndroidCredentialStore
 import github.realtvop.aonsoku.plugins.bridge.SubsonicHttpClient
 import github.realtvop.aonsoku.plugins.data.db.AonsokuDatabase
 import github.realtvop.aonsoku.plugins.data.image.ImageCacheManager
+import github.realtvop.aonsoku.plugins.coordination.AonsokuNativeCoordinationPlugin
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -818,6 +819,11 @@ class PlaybackService : MediaSessionService() {
         NativeLogger.info("PlaybackService onTaskRemoved", "playback-service")
         val currentPlayer = player
         if (currentPlayer == null || !currentPlayer.isPlaying) {
+            // §2.1.8: the service is being stopped, so detach the coordination
+            // socket from the foreground service. The plugin keeps the socket
+            // in plugin-owned mode; it degrades gracefully and resumes on the
+            // next foreground entry.
+            AonsokuNativeCoordinationPlugin.detachActiveForegroundService()
             persistence.stopProgressTracking()
             persistence.flushNow()
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -829,6 +835,10 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // §2.1.8: while the foreground service is (re)starting, attach the
+        // coordination WebSocket so the OS keeps the socket alive in the
+        // background. No-op if the plugin is not loaded or no socket is open.
+        AonsokuNativeCoordinationPlugin.attachToActiveForegroundService()
         when (intent?.action) {
             ACTION_PLAY_PAUSE -> {
                 val currentPlayer = player ?: return START_STICKY
@@ -874,6 +884,8 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         NativeLogger.info("PlaybackService destroyed", "playback-service")
+        // §2.1.8: release the foreground-service association before teardown.
+        AonsokuNativeCoordinationPlugin.detachActiveForegroundService()
         handleScrobbleSongEnded()
         CoroutineScope(Dispatchers.IO).launch {
             val credentials = credentialStore.retrieve()

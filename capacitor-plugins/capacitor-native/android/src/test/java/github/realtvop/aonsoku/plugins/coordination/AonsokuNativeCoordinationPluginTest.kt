@@ -1,5 +1,7 @@
 package github.realtvop.aonsoku.plugins.coordination
 
+import okhttp3.OkHttpClient
+import okhttp3.WebSocket
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

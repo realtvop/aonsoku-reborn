@@ -1,31 +1,79 @@
 import Foundation
+import AVFoundation
 import Capacitor
+import UIKit
 
 /// Native coordination plugin for iOS — maintains a background WebSocket
 /// connection to the coordination server, bridging remote commands and
 /// handoff events to the native queue controller (design §8, §9, §10, §11).
+///
+/// Background lifecycle (design §2.1.8, §5.2): the coordination URLSession uses
+/// `URLSessionConfiguration.background` with a unique identifier
+/// (`com.aonsoku.coordination`) and
+/// `shouldUseExtendedBackgroundIdleMode = true` so iOS keeps the WebSocket
+/// eligible for execution while the app is backgrounded, as long as the audio
+/// session is active. The plugin mirrors the AVAudioSession interruption /
+/// route-change observer pattern used by `AonsokuNativeAudioPlugin`: when the
+/// audio session is active the coordination session is kept eligible for
+/// background execution; when the audio session is interrupted (e.g. another
+/// app takes audio, battery saver, or background audio is disabled) the plugin
+/// degrades gracefully — stops the heartbeat, emits `disconnected` via
+/// `coordinationStateChange`, and resumes on the next foreground entry or
+/// `urlSessionDidFinishEvents(forBackgroundURLSession:)` relaunch.
 ///
 /// Multi-stack consistency: the plugin receives the same RemoteCommand types
 /// as the Web/Electron observer and dispatches them through the native audio
 /// plugin's queue engine. The WebView-side CoordinationManager delegates to
 /// this plugin when running on capacitor-ios.
 @objc(AonsokuNativeCoordination)
-public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDelegate {
+public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDelegate, URLSessionDelegate {
     /// §13: exponential backoff. Base 1s, doubled per attempt, capped at 30s.
     private static let baseReconnectDelay: TimeInterval = 1.0
     private static let maxReconnectDelay: TimeInterval = 30.0
     private static let maxReconnectAttempts = 10
+    /// Background URLSession identifier used to relaunch the app and to
+    /// re-enqueue events when iOS finishes background work (design §2.1.8).
+    private static let backgroundSessionIdentifier = "com.aonsoku.coordination"
 
     private var webSocketTask: URLSessionWebSocketTask?
     private var session: URLSession?
     private var reconnectAttempts = 0
     private var isConnecting = false
+    /// True after an explicit `disconnect()`. Prevents the auto-reconnect path
+    /// from firing for a user-initiated close.
+    private var manualDisconnect = false
     private var deviceId: String?
     private var capabilities: Int = 0
     private var protocolVersion: Int = 1
     private var heartbeatTimer: Timer?
     private var reconnectWorkItem: DispatchWorkItem?
     private var keychainService = "aonsoku-coordination"
+
+    /// Saved by the app delegate when iOS relaunches the app for a background
+    /// URLSession completion. Invoked from
+    /// `urlSessionDidFinishEvents(forBackgroundURLSession:)` so a relaunch in
+    /// the background reconnects cleanly (design §2.1.8).
+    private var backgroundCompletionHandler: (() -> Void)?
+
+    /// Audio-session observers mirroring AonsokuNativeAudioPlugin's pattern.
+    /// When the audio session is active the coordination URLSession is kept
+    /// eligible for background execution; when interrupted, the plugin
+    /// degrades gracefully.
+    private var interruptionObserver: NSObjectProtocol?
+    private var routeChangeObserver: NSObjectProtocol?
+    private var didEnterBackgroundObserver: NSObjectProtocol?
+    private var willEnterForegroundObserver: NSObjectProtocol?
+
+    // MARK: - Plugin Lifecycle
+
+    public override func load() {
+        super.load()
+        registerAudioSessionObservers()
+    }
+
+    deinit {
+        removeAudioSessionObservers()
+    }
 
     // MARK: - Token & Config Storage
 
@@ -108,16 +156,37 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         self.capabilities = call.getInt("capabilities") ?? 0
         self.protocolVersion = call.getInt("protocolVersion") ?? 1
 
-        let urlWithTicket = buildTicketUrl(wsUrl, ticket: ticket)
+        // Lifecycle correctness (§2.1.8): if the socket is already open, do
+        // not create a second one when the app returns to the foreground or
+        // iOS relaunches the app for the background session. Reuse the
+        // existing connection.
+        if let task = self.webSocketTask, !self.isConnecting, task.state == .running {
+            call.resolve()
+            return
+        }
+
+        let urlWithTicket = CoordinationURL.buildTicketUrl(wsUrl, ticket: ticket)
         guard let url = URL(string: urlWithTicket) else {
             call.reject("invalid URL")
             return
         }
 
-        disconnectInternal()
+        self.manualDisconnect = false
+        self.disconnectInternal()
 
-        let config = URLSessionConfiguration.default
+        // §2.1.8: use a background URLSession so iOS keeps the WebSocket
+        // eligible for execution while the app is backgrounded, as long as
+        // the audio session is active. Extended idle mode keeps the session
+        // from being torn down during short idle periods.
+        let config: URLSessionConfiguration
+        if let existing = URLSessionConfiguration.background(withIdentifier: Self.backgroundSessionIdentifier) {
+            config = existing
+        } else {
+            config = URLSessionConfiguration.background(withIdentifier: Self.backgroundSessionIdentifier)
+        }
+        config.shouldUseExtendedBackgroundIdleMode = true
         config.waitsForConnectivity = true
+        config.isDiscretionary = false
         self.session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
 
         let task = self.session?.webSocketTask(with: url)
@@ -131,7 +200,8 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     }
 
     @objc func disconnect(_ call: CAPPluginCall) {
-        disconnectInternal()
+        self.manualDisconnect = true
+        self.disconnectInternal()
         call.resolve()
     }
 
@@ -249,7 +319,149 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         self.heartbeatTimer?.invalidate()
         self.heartbeatTimer = nil
         self.notifyState("disconnected")
-        self.scheduleReconnect()
+        // §2.1.8 / §6.3: only schedule a reconnect for OS-initiated closes,
+        // not for an explicit user disconnect.
+        if !self.manualDisconnect { self.scheduleReconnect() }
+    }
+
+    // MARK: - Background URLSession completion (§2.1.8)
+
+    /// Called by iOS when all enqueued background URLSession work is done and
+    /// the app may have been relaunched in the background. If the app was
+    /// relaunched we must invoke the completion handler the app delegate
+    /// saved, otherwise iOS will keep the app alive needlessly. If the
+    /// coordination socket dropped in the background we surface it via
+    /// `coordinationStateChange` so the WebView reconnects on the next
+    /// foreground entry.
+    public func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            if let handler = self.backgroundCompletionHandler {
+                self.backgroundCompletionHandler = nil
+                handler()
+            }
+            // If the socket is gone after the background session finished,
+            // emit a state change so the WebView re-arms a reconnect.
+            if self.webSocketTask == nil || self.webSocketTask?.state != .running {
+                self.notifyState("disconnected")
+                if !self.manualDisconnect { self.scheduleReconnect() }
+            }
+        }
+    }
+
+    /// Called by the app delegate to hand off the background completion
+    /// handler iOS gave it when relaunching the app for the background
+    /// URLSession. Stored until `urlSessionDidFinishEvents` fires.
+    @objc public func setBackgroundCompletionHandler(_ handler: @escaping () -> Void) {
+        self.backgroundCompletionHandler = handler
+    }
+
+    // MARK: - Audio Session Observers (§2.1.8)
+
+    /// Mirrors the observer pattern in AonsokuNativeAudioPlugin. When the
+    /// audio session is active the coordination URLSession is kept eligible
+    /// for background execution; when interrupted the plugin degrades
+    /// gracefully (stops heartbeat, emits `disconnected`, resumes on the next
+    /// foreground entry). Per AGENTS.md, interruptions are surfaced via
+    /// `coordinationStateChange` and never silently ignored.
+    private func registerAudioSessionObservers() {
+        let center = NotificationCenter.default
+
+        if interruptionObserver == nil {
+            interruptionObserver = center.addObserver(
+                forName: AVAudioSession.interruptionNotification,
+                object: AVAudioSession.sharedInstance(),
+                queue: .main
+            ) { [weak self] notification in
+                self?.handleAudioSessionInterruption(notification)
+            }
+        }
+
+        if routeChangeObserver == nil {
+            routeChangeObserver = center.addObserver(
+                forName: AVAudioSession.routeChangeNotification,
+                object: AVAudioSession.sharedInstance(),
+                queue: .main
+            ) { [weak self] _ in
+                // Route changes do not require coordination action; we only
+                // observe to keep the session eligible. No-op here.
+            }
+        }
+
+        if didEnterBackgroundObserver == nil {
+            didEnterBackgroundObserver = center.addObserver(
+                forName: UIApplication.didEnterBackgroundNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                // §2.1.8: the background URLSession keeps the socket alive
+                // while the audio session is active. We do NOT close here.
+                // Graceful degradation is driven by the audio-session
+                // interruption observer and the OS background restrictions.
+            }
+        }
+
+        if willEnterForegroundObserver == nil {
+            willEnterForegroundObserver = center.addObserver(
+                forName: UIApplication.willEnterForegroundNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                // §2.1.8: on foreground re-entry, if the socket dropped in the
+                // background, emit a state change so the WebView reconnects.
+                // Do not create a second socket if still connected.
+                guard let self = self else { return }
+                if self.webSocketTask == nil || self.webSocketTask?.state != .running {
+                    if !self.manualDisconnect {
+                        self.notifyState("disconnected")
+                        self.scheduleReconnect()
+                    }
+                }
+            }
+        }
+    }
+
+    private func removeAudioSessionObservers() {
+        let center = NotificationCenter.default
+        for observer in [interruptionObserver, routeChangeObserver, didEnterBackgroundObserver, willEnterForegroundObserver] {
+            if let observer { center.removeObserver(observer) }
+        }
+        interruptionObserver = nil
+        routeChangeObserver = nil
+        didEnterBackgroundObserver = nil
+        willEnterForegroundObserver = nil
+    }
+
+    private func handleAudioSessionInterruption(_ notification: Notification) {
+        guard
+            let rawType = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+            let type = AVAudioSession.InterruptionType(rawValue: rawType)
+        else { return }
+
+        switch type {
+        case .began:
+            // §2.1.8 graceful degradation: the audio session is interrupted
+            // (another app took audio, battery saver, or background audio was
+            // disabled). Stop the heartbeat and surface the state change so
+            // other devices see us go offline cleanly. We do not close the
+            // socket here — iOS will reap the background URLSession if it
+            // cannot continue; the foreground observer re-arms a reconnect.
+            self.heartbeatTimer?.invalidate()
+            self.heartbeatTimer = nil
+            self.notifyState("interrupted")
+        case .ended:
+            // The audio session resumed. If we still have a socket, restart
+            // the heartbeat; otherwise emit a reconnect request.
+            if self.webSocketTask?.state == .running {
+                self.startHeartbeat()
+                self.notifyState("connected")
+            } else if !self.manualDisconnect {
+                self.notifyState("disconnected")
+                self.scheduleReconnect()
+            }
+        @unknown default:
+            break
+        }
     }
 
     // MARK: - Private Helpers
@@ -300,7 +512,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
                 self.heartbeatTimer?.invalidate()
                 self.heartbeatTimer = nil
                 self.notifyState("error")
-                self.scheduleReconnect()
+                if !self.manualDisconnect { self.scheduleReconnect() }
             }
         }
     }

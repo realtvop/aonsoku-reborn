@@ -24,6 +24,22 @@ import javax.net.ssl.X509TrustManager
 /// connection to the coordination server, bridging remote commands and
 /// handoff events to the native queue controller (design §8, §9, §10, §11).
 ///
+/// Background lifecycle (design §2.1.8, §5.2): A Capacitor plugin is tied to
+/// the Bridge activity lifecycle, so a plain plugin-owned WebSocket is
+/// suspended by the OS when the app is backgrounded. To keep the coordination
+/// presence alive while audio plays in the background, the active
+/// CoordinationConnection is attached to the PlaybackService foreground
+/// service (see `attachToForegroundService` / `detachFromForegroundService`).
+/// When the service is active it holds a reference to the connection so the OS
+/// treats the socket as part of the foreground service's work. The plugin
+/// retains ownership of the connect/disconnect/heartbeat/reconnect logic; the
+/// service only holds the reference and signals detach on teardown. If the
+/// foreground service is not running, the plugin falls back to its own
+/// plugin-owned socket, which degrades gracefully in the background: the
+/// heartbeat is stopped, `disconnected` is emitted via
+/// `coordinationStateChange`, and the next foreground entry triggers
+/// `coordinationReconnectNeeded`.
+///
 /// Multi-stack consistency: the plugin receives the same RemoteCommand types
 /// as the Web/Electron observer and dispatches them through the native audio
 /// plugin's queue engine. The WebView-side CoordinationManager delegates to
@@ -74,7 +90,43 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             val encoded = java.net.URLEncoder.encode(ticket, "UTF-8")
             return base + separator + "ticket=" + encoded
         }
+
+        /// Holds the currently-loaded plugin instance so the PlaybackService
+        /// (which does not have access to the Capacitor Bridge) can reach the
+        /// coordination plugin to attach/detach the socket for background
+        /// survival (design §2.1.8). Set in `load()`, cleared in
+        /// `handleOnDestroy()`.
+        @Volatile
+        internal var activeInstance: AonsokuNativeCoordinationPlugin? = null
+            private set
+
+        /// Called by PlaybackService.onStartCommand when the foreground service
+        /// is (re)started. Idempotent. No-op if the plugin is not loaded.
+        @JvmStatic
+        fun attachToActiveForegroundService(): Boolean =
+            activeInstance?.attachToForegroundService() ?: false
+
+        /// Called by PlaybackService when the service is torn down
+        /// (onTaskRemoved that stops playback, or onDestroy). No-op if the
+        /// plugin is not loaded or nothing is attached.
+        @JvmStatic
+        fun detachActiveForegroundService() {
+            activeInstance?.detachFromForegroundService()
+        }
     }
+
+    /// Holds the live coordination socket plus its heartbeat scheduling and
+    /// the owning OkHttpClient. This is what the PlaybackService keeps a
+    /// reference to so the OS treats the socket as part of the foreground
+    /// service's work (design §2.1.8). The plugin remains the single source of
+    /// truth for connect/disconnect/reconnect; the holder is a passive
+    /// reference used only for lifetime association.
+    internal class CoordinationConnection(
+        @get:JvmName("client") val client: OkHttpClient,
+        @get:JvmName("webSocket") val webSocket: WebSocket,
+        @get:JvmName("heartbeatHandler") val heartbeatHandler: Handler?,
+        @get:JvmName("heartbeatRunnable") val heartbeatRunnable: Runnable,
+    )
 
     private var webSocket: WebSocket? = null
     private var client: OkHttpClient? = null
@@ -83,11 +135,32 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     private var protocolVersion: Int = 1
     private var isConnecting: Boolean = false
     private var reconnectAttempts: Int = 0
-    private val mainHandler = Handler(Looper.getMainLooper())
+    /// True after an explicit `disconnect()` (or service teardown). Prevents
+    /// the auto-reconnect path from firing for a user-initiated close.
+    private var manualDisconnect: Boolean = false
+    /// Set to true while a foreground service is registered, so a connect()
+    /// that happens while the service is running attaches the new socket.
+    @Volatile
+    private var foregroundServiceActive: Boolean = false
+    /// Main-thread Handler used for heartbeat/reconnect scheduling. Lazily
+    /// created so the plugin can be instantiated in unit tests without an
+    /// Android Looper (design §2.1.8 lifecycle tests). When `null` (tests),
+    /// scheduling calls are no-ops.
+    private var mainHandler: Handler? = null
+        get() {
+            if (field == null) {
+                try {
+                    field = Handler(Looper.getMainLooper())
+                } catch (_: Throwable) {
+                    // Unit tests run without an Android Looper; leave null.
+                }
+            }
+            return field
+        }
     private val heartbeatRunnable = object : Runnable {
         override fun run() {
             sendEnvelope(buildHeartbeatEnvelope(protocolVersion))
-            mainHandler.postDelayed(this, HEARTBEAT_INTERVAL_SECONDS * 1000)
+            mainHandler?.postDelayed(this, HEARTBEAT_INTERVAL_SECONDS * 1000)
         }
     }
     private val reconnectRunnable = Runnable {
@@ -98,6 +171,13 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         notifyReconnectNeeded(reconnectAttempts)
     }
 
+    /// Reference held while the PlaybackService foreground service is
+    /// active. Null means the plugin owns the socket itself (no service).
+    /// This is package-visible so tests and the service can inspect it.
+    @Volatile
+    internal var foregroundServiceConnection: CoordinationConnection? = null
+        private set
+
     /// Design §6.3: coordination tokens are encrypted with a Keystore-backed
     /// AES-GCM key. Falls back to null when unavailable (e.g. unit tests).
     private val tokenStore: CoordinationTokenStore? by lazy {
@@ -107,6 +187,24 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             Log.e(TAG, "CoordinationTokenStore unavailable", e)
             null
         }
+    }
+
+    override fun load() {
+        super.load()
+        activeInstance = this
+    }
+
+    override fun handleOnDestroy() {
+        // Drop the foreground-service association before tearing down so the
+        // service does not keep a dangling reference. The socket itself is
+        // closed by disconnectInternal() when the WebView asks.
+        detachFromForegroundService()
+        manualDisconnect = true
+        disconnectInternal()
+        if (activeInstance === this) {
+            activeInstance = null
+        }
+        super.handleOnDestroy()
     }
 
     @PluginMethod
@@ -184,6 +282,19 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         this.capabilities = call.getInt("capabilities", 0) ?: 0
         this.protocolVersion = call.getInt("protocolVersion", 1) ?: 1
 
+        // Lifecycle correctness (§2.1.8): if the socket is already open, do
+        // not create a second one when the app returns to the foreground or
+        // the service re-attaches. Reuse the existing connection.
+        val current = webSocket
+        if (current != null && !isConnecting) {
+            // Already connected. Re-attach to the service if it is active so
+            // the foreground service regains its reference.
+            if (foregroundServiceActive) attachToForegroundService()
+            call.resolve()
+            return
+        }
+
+        manualDisconnect = false
         disconnectInternal()
 
         val urlWithTicket = buildTicketUrl(wsUrl, ticket)
@@ -196,6 +307,9 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
                 isConnecting = false
                 reconnectAttempts = 0
                 startHeartbeat()
+                // If the foreground service is running, attach now so the
+                // fresh socket is associated with it for background survival.
+                if (foregroundServiceActive) attachToForegroundService()
                 notifyState("connected")
             }
 
@@ -206,16 +320,18 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 isConnecting = false
                 stopHeartbeat()
+                foregroundServiceConnection = null
                 notifyState("disconnected")
-                scheduleReconnect()
+                if (!manualDisconnect) scheduleReconnect()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.e(TAG, "WS failure", t)
                 isConnecting = false
                 stopHeartbeat()
+                foregroundServiceConnection = null
                 notifyState("error")
-                scheduleReconnect()
+                if (!manualDisconnect) scheduleReconnect()
             }
         })
         this.isConnecting = true
@@ -225,6 +341,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
 
     @PluginMethod
     fun disconnect(call: PluginCall) {
+        manualDisconnect = true
         disconnectInternal()
         call.resolve()
     }
@@ -319,21 +436,107 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
 
     private fun disconnectInternal() {
         stopHeartbeat()
-        mainHandler.removeCallbacks(reconnectRunnable)
+        mainHandler?.removeCallbacks(reconnectRunnable)
         reconnectAttempts = 0
         webSocket?.close(1000, "disconnect")
         webSocket = null
         client = null
         isConnecting = false
+        // Drop the foreground-service association: there is nothing left to
+        // keep alive. The service will call detachFromForegroundService() on
+        // its own teardown, but we clear defensively in case disconnect runs
+        // first.
+        foregroundServiceConnection = null
     }
 
+    // MARK: - Foreground service coordination (design §2.1.8, §5.2)
+
+    /// Attach the active coordination connection to the PlaybackService
+    /// foreground service so the OS treats the WebSocket as part of the
+    /// foreground service's work and does not suspend it on backgrounding.
+    ///
+    /// Idempotent: a second attach while already attached is a no-op (no
+    /// duplicate socket is created). If no connection is currently active
+    /// this is a no-op and the next `connect()` will attach automatically via
+    /// `attachIfActive`. Returns true if a connection was attached (or was
+    /// already attached), false if no connection is active.
+    @Synchronized
+    fun attachToForegroundService(): Boolean {
+        foregroundServiceActive = true
+        val ws = webSocket
+        val okClient = client
+        if (ws == null || okClient == null) {
+            // No live connection yet — flag that the service is running so the
+            // next connect()/onOpen attaches automatically.
+            return false
+        }
+        if (foregroundServiceConnection != null) {
+            // Already attached — reuse, never create a second socket.
+            return true
+        }
+        foregroundServiceConnection = CoordinationConnection(
+            client = okClient,
+            webSocket = ws,
+            heartbeatHandler = mainHandler,
+            heartbeatRunnable = heartbeatRunnable,
+        )
+        logDebug("Coordination connection attached to foreground service")
+        return true
+    }
+
+    /// Detach the coordination connection from the PlaybackService. Called
+    /// by the service when it is torn down (onTaskRemoved that stops playback,
+    /// or onDestroy). Safe to call when nothing is attached (no-op).
+    ///
+    /// Per §2.1.8 graceful-degradation requirement, detaching does NOT close
+    /// the socket here: the socket may still be alive and the plugin keeps
+    /// running it in plugin-owned mode. The service only releases its
+    /// reference so its own teardown does not yank the socket. The socket is
+    /// closed by `disconnectInternal()` / WebSocket callbacks as usual.
+    @Synchronized
+    fun detachFromForegroundService() {
+        foregroundServiceActive = false
+        if (foregroundServiceConnection == null) return
+        foregroundServiceConnection = null
+        logDebug("Coordination connection detached from foreground service")
+    }
+
+    /// Whether the coordination connection is currently attached to a
+    /// foreground service. Exposed for tests and observability.
+    internal fun isAttachedToForegroundService(): Boolean =
+        foregroundServiceConnection != null
+
+    // MARK: - Test-only helpers (design §2.1.8 lifecycle tests)
+
+    /// Test-only: inject a fake client/webSocket pair so lifecycle helpers can
+    /// be exercised without a live network. Returns true if the fake state was
+    /// accepted. Not annotated `@VisibleForTesting` to avoid the extra
+    /// androidx.annotation dependency in unit tests.
+    internal fun setConnectionForTesting(client: OkHttpClient?, webSocket: WebSocket?) {
+        this.client = client
+        this.webSocket = webSocket
+    }
+
+    /// Test-only: read the plugin-owned socket for assertions.
+    internal fun connectionForTesting(): Pair<OkHttpClient?, WebSocket?> = Pair(client, webSocket)
+
+    /// Test-only: mark the foreground service as active so connect()/onOpen
+    /// attach automatically, without requiring a real PlaybackService.
+    internal fun setForegroundServiceActiveForTesting(active: Boolean) {
+        this.foregroundServiceActive = active
+    }
+
+    /// Test-only: read the manualDisconnect flag for assertions.
+    internal fun isManualDisconnectForTesting(): Boolean = manualDisconnect
+
     private fun startHeartbeat() {
-        mainHandler.removeCallbacks(heartbeatRunnable)
-        mainHandler.postDelayed(heartbeatRunnable, HEARTBEAT_INTERVAL_SECONDS * 1000)
+        val handler = mainHandler ?: return
+        handler.removeCallbacks(heartbeatRunnable)
+        handler.postDelayed(heartbeatRunnable, HEARTBEAT_INTERVAL_SECONDS * 1000)
     }
 
     private fun stopHeartbeat() {
-        mainHandler.removeCallbacks(heartbeatRunnable)
+        mainHandler?.removeCallbacks(heartbeatRunnable)
     }
 
     private fun sendEnvelope(env: JSONObject) {
@@ -352,7 +555,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         val delayMs = (BASE_RECONNECT_DELAY_MS * (1L shl (attempt - 1)))
             .coerceAtMost(MAX_RECONNECT_DELAY_MS)
         notifyState("reconnecting")
-        mainHandler.postDelayed(reconnectRunnable, delayMs)
+        mainHandler?.postDelayed(reconnectRunnable, delayMs)
     }
 
     private fun notifyReconnectNeeded(attempt: Int) {
@@ -366,5 +569,16 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         ret.put("state", state)
         ret.put("deviceId", deviceId ?: JSONObject.NULL)
         notifyListeners("coordinationStateChange", ret)
+    }
+
+    /// Wraps Log.d so unit tests (which run without android.util.Log mocked)
+    /// do not crash on the stubbed Android static. Non-logging failures here
+    /// are swallowed to keep the lifecycle path side-effect-free.
+    private fun logDebug(message: String) {
+        try {
+            Log.d(TAG, message)
+        } catch (_: Throwable) {
+            // android.util.Log not mocked in unit tests.
+        }
     }
 }
