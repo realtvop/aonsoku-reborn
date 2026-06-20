@@ -76,6 +76,7 @@ pub enum MediaKind {
 /// into full media objects: B uses its own metadata cache or its Navidrome
 /// API to recover song metadata (design §7.3).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PlaybackSnapshot {
     pub session_id: SessionId,
     pub logical_playback_session_id: LogicalPlaybackSessionId,
@@ -85,7 +86,7 @@ pub struct PlaybackSnapshot {
     pub duration_seconds: f64,
     pub is_playing: bool,
     /// Server-side sample timestamp (Unix epoch seconds, design §9.2).
-    pub sampled_at: i64,
+    pub sampled_at: f64,
 
     /// Context queue song IDs (design §7.3). At most [`Config::max_snapshot_songs`].
     pub context_queue: Vec<String>,
@@ -392,7 +393,8 @@ pub enum Payload {
     DevicesChanged { devices: Vec<DeviceSummary> },
     /// Full snapshot published by a device.
     Snapshot {
-        session_id: SessionId,
+        #[serde(default)]
+        session_id: Option<SessionId>,
         generation: SessionGeneration,
         snapshot_revision: SnapshotRevision,
         snapshot: PlaybackSnapshot,
@@ -504,7 +506,7 @@ mod tests {
             progress_seconds: 10.0,
             duration_seconds: 180.0,
             is_playing: true,
-            sampled_at: 1_700_000_000,
+            sampled_at: 1_700_000_000.0,
             context_queue: vec!["song-1".into()],
             context_index: Some(0),
             source_id: Some("album-1".into()),
@@ -566,6 +568,13 @@ mod tests {
         let back: Envelope = serde_json::from_str(&json).unwrap();
         assert_eq!(back.version, PROTOCOL_VERSION);
         assert!(matches!(back.payload, Payload::Heartbeat));
+    }
+
+    #[test]
+    fn deserialize_snapshot_packet() {
+        let json_str = r#"{"version":1,"messageId":"b646e79b-fc94-4a02-9976-dc4189f250a0","type":"snapshot","sessionId":"c06a2e29-edf3-4411-814b-85ed1fac9ce3","generation":1,"snapshotRevision":8,"snapshot":{"sessionId":"c06a2e29-edf3-4411-814b-85ed1fac9ce3","logicalPlaybackSessionId":"c06a2e29-edf3-4411-814b-85ed1fac9ce3","mediaKind":"song","songId":"qbUT6DOJj4BR59q9iDwnle","progressSeconds":21.0,"durationSeconds":259.0,"isPlaying":true,"sampledAt":1781971463.396,"contextQueue":["Vuxod8WeaqAdHhFWdeZOiu"],"contextIndex":0,"sourceId":"hfsDjk6mDMHiFM9vGvUJV7","sourceName":"Not Bad","userQueue":[],"inUserQueue":false,"restorePrevious":[],"shuffle":true,"repeat":"one","volume":0.45,"accumulatedPlaySeconds":0.0,"historyWritten":false,"nowPlayingSent":false,"scrobbleSent":false}}"#;
+        let res: Result<Envelope, _> = serde_json::from_str(json_str);
+        assert!(res.is_ok(), "Failed to deserialize: {:?}", res.err());
     }
 
     #[test]

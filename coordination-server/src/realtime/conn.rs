@@ -312,6 +312,29 @@ async fn handle_inbound(
             snapshot_revision,
             snapshot,
         } => {
+            let actual_session_id = match session_id.or(env.session_id) {
+                Some(id) => id,
+                None => {
+                    let err_env = Envelope {
+                        version: PROTOCOL_VERSION,
+                        message_id: Uuid::new_v4(),
+                        connection_id: Some(connection_id),
+                        source_device_id: None,
+                        target_device_id: Some(device_id),
+                        session_id: None,
+                        expected_generation: None,
+                        seq: None,
+                        server_time: Some(server_time),
+                        payload: Payload::Error {
+                            code: ErrorCode::BadMessage,
+                            reason: "missing session_id".into(),
+                        },
+                    };
+                    let _ = registry.send(device_id, err_env);
+                    return;
+                }
+            };
+
             // Validate and persist the snapshot (design §9.2).
             if let Err(e) = snapshot.validate(
                 state.config.max_snapshot_songs,
@@ -323,7 +346,7 @@ async fn handle_inbound(
                     connection_id: Some(connection_id),
                     source_device_id: None,
                     target_device_id: Some(device_id),
-                    session_id: Some(*session_id),
+                    session_id: Some(actual_session_id),
                     expected_generation: None,
                     seq: None,
                     server_time: Some(server_time),
@@ -339,7 +362,7 @@ async fn handle_inbound(
             // Store the snapshot in the session record.
             let snapshot_json = serde_json::to_string(snapshot).unwrap_or_default();
             let session = crate::storage::models::PlaybackSession {
-                id: *session_id,
+                id: actual_session_id,
                 device_id,
                 account_id,
                 generation: *generation,
@@ -353,11 +376,14 @@ async fn handle_inbound(
                 created_at: chrono::Utc::now(),
                 updated_at: chrono::Utc::now(),
             };
-            let _ = state
+            if let Err(err) = state
                 .repos
                 .sessions
                 .upsert_snapshot(&session, &snapshot_json)
-                .await;
+                .await
+            {
+                tracing::error!(target: "coordination::ws", "failed to upsert snapshot: {:?}", err);
+            }
 
             // Broadcast to all other online devices on the same account.
             let online = registry.online_devices_for_account(account_id);
@@ -371,13 +397,13 @@ async fn handle_inbound(
                     connection_id: None,
                     source_device_id: Some(device_id),
                     target_device_id: Some(other),
-                    session_id: Some(*session_id),
+                    session_id: Some(actual_session_id),
                     expected_generation: Some(*generation),
                     seq: None,
                     server_time: Some(server_time),
                     payload: Payload::SnapshotProjection {
                         device_id,
-                        session_id: *session_id,
+                        session_id: actual_session_id,
                         generation: *generation,
                         snapshot_revision: *snapshot_revision,
                         snapshot: snapshot.clone(),
