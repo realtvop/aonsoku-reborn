@@ -50,31 +50,31 @@ function mapLanControlToRemoteCommand(
         : null;
     case LanControlMessageType.PLAY_SONG:
       return typeof d?.songId === "string"
-        ? { type: "play_song", songId: d.songId }
+        ? { type: "play_song", song_id: d.songId }
         : null;
     case LanControlMessageType.PLAY_ALBUM:
       return typeof d?.albumId === "string"
-        ? { type: "play_album", albumId: d.albumId, index: d.songIndex }
+        ? { type: "play_album", album_id: d.albumId, index: d.songIndex }
         : null;
     case LanControlMessageType.PLAY_PLAYLIST:
       return typeof d?.playlistId === "string"
         ? {
             type: "play_playlist",
-            playlistId: d.playlistId,
+            playlist_id: d.playlistId,
             index: d.songIndex,
           }
         : null;
     case LanControlMessageType.PLAY_ALBUM_SHUFFLE:
       return typeof d?.albumId === "string"
-        ? { type: "play_album", albumId: d.albumId }
+        ? { type: "play_album", album_id: d.albumId }
         : null;
     case LanControlMessageType.PLAY_PLAYLIST_SHUFFLE:
       return typeof d?.playlistId === "string"
-        ? { type: "play_playlist", playlistId: d.playlistId }
+        ? { type: "play_playlist", playlist_id: d.playlistId }
         : null;
     case LanControlMessageType.ADD_TO_QUEUE:
       return Array.isArray(d?.songIds)
-        ? { type: "add_to_queue_last", songIds: d.songIds }
+        ? { type: "add_to_queue_last", song_ids: d.songIds }
         : null;
     case LanControlMessageType.CLEAR_QUEUE:
       return { type: "clear_queue" };
@@ -87,6 +87,12 @@ function mapLanControlToRemoteCommand(
       return typeof d?.enabled === "boolean"
         ? { type: "set_shuffle", enabled: d.enabled }
         : null;
+    case LanControlMessageType.TOGGLE_REPEAT: {
+      const ls = usePlayerStore.getState().playerState.loopState;
+      const nextMode =
+        ls === 0 ? "all" : ls === 1 ? "one" : "off";
+      return { type: "set_repeat", mode: nextMode };
+    }
     case LanControlMessageType.SET_REPEAT:
       return typeof d?.mode === "string"
         ? { type: "set_repeat", mode: d.mode }

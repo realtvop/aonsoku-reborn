@@ -28,17 +28,17 @@ function mapCommandToAction(command: RemoteCommand): string {
     case "clear_queue":
       return "clearUserQueue";
     case "play_song":
-      return `playSong(${command.songId})`;
+      return `playSong(${command.song_id})`;
     case "play_album":
-      return `playAlbum(${command.albumId})`;
+      return `playAlbum(${command.album_id})`;
     case "play_playlist":
-      return `playPlaylist(${command.playlistId})`;
+      return `playPlaylist(${command.playlist_id})`;
     case "add_to_queue_next":
-      return `addToQueueNext(${command.songIds.length})`;
+      return `addToQueueNext(${command.song_ids.length})`;
     case "add_to_queue_last":
-      return `addToQueueLast(${command.songIds.length})`;
+      return `addToQueueLast(${command.song_ids.length})`;
     case "remove_from_queue":
-      return `removeFromQueue(${command.songIds.length})`;
+      return `removeFromQueue(${command.song_ids.length})`;
     case "reorder_queue":
       return `reorderQueue(${command.from}->${command.to})`;
     case "toggle_like":
@@ -89,10 +89,10 @@ describe("remote command mapping", () => {
   it("maps queue operations", () => {
     expect(mapCommandToAction({ type: "clear_queue" })).toBe("clearUserQueue");
     expect(
-      mapCommandToAction({ type: "add_to_queue_next", songIds: ["a", "b"] }),
+      mapCommandToAction({ type: "add_to_queue_next", song_ids: ["a", "b"] }),
     ).toBe("addToQueueNext(2)");
     expect(
-      mapCommandToAction({ type: "remove_from_queue", songIds: ["x"] }),
+      mapCommandToAction({ type: "remove_from_queue", song_ids: ["x"] }),
     ).toBe("removeFromQueue(1)");
     expect(mapCommandToAction({ type: "reorder_queue", from: 0, to: 2 })).toBe(
       "reorderQueue(0->2)",
@@ -100,14 +100,14 @@ describe("remote command mapping", () => {
   });
 
   it("maps media commands", () => {
-    expect(mapCommandToAction({ type: "play_song", songId: "s1" })).toBe(
+    expect(mapCommandToAction({ type: "play_song", song_id: "s1" })).toBe(
       "playSong(s1)",
     );
-    expect(mapCommandToAction({ type: "play_album", albumId: "al1" })).toBe(
+    expect(mapCommandToAction({ type: "play_album", album_id: "al1" })).toBe(
       "playAlbum(al1)",
     );
     expect(
-      mapCommandToAction({ type: "play_playlist", playlistId: "pl1" }),
+      mapCommandToAction({ type: "play_playlist", playlist_id: "pl1" }),
     ).toBe("playPlaylist(pl1)");
   });
 

@@ -60,6 +60,9 @@ export interface PlaybackSnapshot {
 }
 
 // Remote control commands (design §10).
+// Field names use snake_case to match the Rust server protocol
+// (RemoteCommand enum uses #[serde(rename_all = "snake_case")] without
+// rename_all_fields, so all struct fields are snake_case on the wire).
 export type RemoteCommand =
   | { type: "play" }
   | { type: "pause" }
@@ -71,12 +74,12 @@ export type RemoteCommand =
   | { type: "set_shuffle"; enabled: boolean }
   | { type: "set_repeat"; mode: string }
   | { type: "toggle_like" }
-  | { type: "play_song"; songId: string }
-  | { type: "play_album"; albumId: string; index?: number }
-  | { type: "play_playlist"; playlistId: string; index?: number }
-  | { type: "add_to_queue_next"; songIds: string[] }
-  | { type: "add_to_queue_last"; songIds: string[] }
-  | { type: "remove_from_queue"; songIds: string[] }
+  | { type: "play_song"; song_id: string }
+  | { type: "play_album"; album_id: string; index?: number }
+  | { type: "play_playlist"; playlist_id: string; index?: number }
+  | { type: "add_to_queue_next"; song_ids: string[] }
+  | { type: "add_to_queue_last"; song_ids: string[] }
+  | { type: "remove_from_queue"; song_ids: string[] }
   | { type: "reorder_queue"; from: number; to: number }
   | { type: "clear_queue" };
 

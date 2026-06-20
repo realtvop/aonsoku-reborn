@@ -153,20 +153,13 @@ export function CoordinationObserver() {
           const targetLoop = mapRepeatModeToLoopState(command.mode);
           const currentLoop = usePlayerStore.getState().playerState.loopState;
           if (targetLoop === currentLoop) break;
-          if (targetLoop === LoopState.Off) {
-            if (currentLoop === LoopState.One) playerActions.toggleLoop();
-            if (currentLoop === LoopState.All) playerActions.toggleLoop();
-          } else if (targetLoop === LoopState.All) {
-            if (currentLoop === LoopState.Off) playerActions.toggleLoop();
-            if (currentLoop === LoopState.One) playerActions.toggleLoop();
-          } else if (targetLoop === LoopState.One) {
-            if (currentLoop === LoopState.Off) {
-              playerActions.toggleLoop();
-              playerActions.toggleLoop();
-            } else if (currentLoop === LoopState.All) {
-              playerActions.toggleLoop();
-            }
-          }
+          // toggleLoop cycles Off → All → One → Off.
+          // Compute the number of toggles needed to reach targetLoop.
+          const order = [LoopState.Off, LoopState.All, LoopState.One];
+          const currentPos = order.indexOf(currentLoop);
+          const targetPos = order.indexOf(targetLoop);
+          const toggles = (targetPos - currentPos + 3) % 3;
+          for (let i = 0; i < toggles; i++) playerActions.toggleLoop();
           break;
         }
         case "clear_queue":
@@ -175,7 +168,7 @@ export function CoordinationObserver() {
         case "play_song":
           import("@/service/subsonic").then(({ subsonic }) => {
             subsonic.songs
-              .getSong(command.songId)
+              .getSong(command.song_id)
               .then((song) => {
                 if (song) playerActions.playSong(song);
               })
@@ -190,7 +183,7 @@ export function CoordinationObserver() {
         case "play_album":
           import("@/service/subsonic").then(({ subsonic }) => {
             subsonic.albums
-              .getOne(command.albumId)
+              .getOne(command.album_id)
               .then((album) => {
                 if (album && album.song.length > 0) {
                   const index = Math.max(
@@ -201,7 +194,7 @@ export function CoordinationObserver() {
                     album.song,
                     index,
                     false,
-                    { albumId: command.albumId },
+                    { albumId: command.album_id },
                     album.name,
                   );
                 }
@@ -217,7 +210,7 @@ export function CoordinationObserver() {
         case "play_playlist":
           import("@/service/subsonic").then(({ subsonic }) => {
             subsonic.playlists
-              .getOne(command.playlistId)
+              .getOne(command.playlist_id)
               .then((playlist) => {
                 if (playlist && playlist.entry.length > 0) {
                   const index = Math.max(
@@ -228,7 +221,7 @@ export function CoordinationObserver() {
                     playlist.entry,
                     index,
                     false,
-                    { playlistId: command.playlistId },
+                    { playlistId: command.playlist_id },
                     playlist.name,
                   );
                 }
@@ -243,7 +236,7 @@ export function CoordinationObserver() {
           break;
         case "add_to_queue_next":
           import("@/service/subsonic").then(({ subsonic }) => {
-            Promise.all(command.songIds.map((id) => subsonic.songs.getSong(id)))
+            Promise.all(command.song_ids.map((id) => subsonic.songs.getSong(id)))
               .then((songs) => {
                 const valid = songs.filter((s): s is NonNullable<typeof s> => !!s);
                 if (valid.length > 0) playerActions.setNextOnQueue(valid);
@@ -258,7 +251,7 @@ export function CoordinationObserver() {
           break;
         case "add_to_queue_last":
           import("@/service/subsonic").then(({ subsonic }) => {
-            Promise.all(command.songIds.map((id) => subsonic.songs.getSong(id)))
+            Promise.all(command.song_ids.map((id) => subsonic.songs.getSong(id)))
               .then((songs) => {
                 const valid = songs.filter((s): s is NonNullable<typeof s> => !!s);
                 if (valid.length > 0) playerActions.setLastOnQueue(valid);
@@ -272,7 +265,7 @@ export function CoordinationObserver() {
           });
           break;
         case "remove_from_queue":
-          for (const id of command.songIds) {
+          for (const id of command.song_ids) {
             playerActions.removeSongFromQueue(id);
           }
           break;
