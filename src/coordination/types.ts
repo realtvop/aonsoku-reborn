@@ -75,8 +75,8 @@ export type RemoteCommand =
   | { type: "set_repeat"; mode: string }
   | { type: "toggle_like" }
   | { type: "play_song"; song_id: string }
-  | { type: "play_album"; album_id: string; index?: number }
-  | { type: "play_playlist"; playlist_id: string; index?: number }
+  | { type: "play_album"; album_id: string; index?: number; shuffle?: boolean }
+  | { type: "play_playlist"; playlist_id: string; index?: number; shuffle?: boolean }
   | { type: "add_to_queue_next"; song_ids: string[] }
   | { type: "add_to_queue_last"; song_ids: string[] }
   | { type: "remove_from_queue"; song_ids: string[] }

@@ -200,7 +200,7 @@ export function CoordinationObserver() {
                   playerActions.setSongList(
                     album.song,
                     index,
-                    false,
+                    Boolean(command.shuffle),
                     { albumId: command.album_id },
                     album.name,
                   );
@@ -224,7 +224,7 @@ export function CoordinationObserver() {
                   playerActions.setSongList(
                     playlist.entry,
                     index,
-                    false,
+                    Boolean(command.shuffle),
                     { playlistId: command.playlist_id },
                     playlist.name,
                   );

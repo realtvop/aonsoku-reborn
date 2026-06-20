@@ -19,6 +19,7 @@ import {
   getMaxShuffleHistory,
   getMaxShuffleStartHistory,
   pushToHistory,
+  pickRandomStartIndex,
 } from "@/utils/songListFunctions";
 import { transitionHandleSongEnded } from "./queue-transitions";
 import {
@@ -134,16 +135,31 @@ export function createQueueActions(shared: SharedDeps) {
   return {
     setSongList: (
       songlist: ISong[],
-      index: number,
+      index?: number | null,
       shuffle = false,
       sourceId?: QueueSourceId | { albumId: string } | { playlistId: string },
       sourceName?: string,
     ) => {
+      if (!songlist || songlist.length === 0) return;
+
+      let targetIndex = index;
+      if (shuffle && (targetIndex === null || targetIndex === undefined)) {
+        const startHistory = get().songlist.shuffleStartHistory ?? [];
+        targetIndex = pickRandomStartIndex(
+          songlist.length,
+          startHistory,
+          (i) => songlist[i].id,
+        );
+      } else if (targetIndex === null || targetIndex === undefined) {
+        targetIndex = 0;
+      }
+      targetIndex = Math.max(0, Math.min(targetIndex, songlist.length - 1));
+
       const nativeController = getNativeQueueController();
       if (nativeController) {
         nativeController.setSongList(
           songlist,
-          index,
+          targetIndex,
           shuffle,
           sourceId,
           sourceName,
@@ -151,14 +167,11 @@ export function createQueueActions(shared: SharedDeps) {
         return;
       }
 
-      if (!songlist || songlist.length === 0) return;
-      index = Math.max(0, Math.min(index, songlist.length - 1));
-
       if (isRemoteActive()) {
         sendSongListRemote(
           remoteSend,
           songlist,
-          index,
+          targetIndex,
           shuffle,
           sourceId,
           sourceName,
@@ -180,7 +193,7 @@ export function createQueueActions(shared: SharedDeps) {
         sourceQueue.songs.length > 0 ? sourceQueue.songs : contextQueue.songs;
       const listsAreEqual = areSongListsEqual(sourceSongs, songlist);
       const currentSong = getCurrentSong(get().songlist);
-      const sameIndex = currentSong?.id === songlist[index]?.id;
+      const sameIndex = currentSong?.id === songlist[targetIndex]?.id;
       const sameSourceId =
         JSON.stringify(contextQueue.sourceId) === JSON.stringify(normalizedId);
 
@@ -194,7 +207,7 @@ export function createQueueActions(shared: SharedDeps) {
       if (listsAreEqual && !sameIndex && !shuffle && sameSourceId) {
         const queueSongs = buildContextQueueSongs(
           songlist,
-          index,
+          targetIndex,
           get().playerState.loopState,
           false,
         );
@@ -204,7 +217,7 @@ export function createQueueActions(shared: SharedDeps) {
           state.playerState.isPlaying = true;
           state.songlist.contextQueue.songs = queueSongs;
           state.songlist.contextQueue.currentIndex = 0;
-          state.songlist.sourceQueue.currentIndex = index;
+          state.songlist.sourceQueue.currentIndex = targetIndex;
           resetUserQueue(state.songlist);
           if (sourceName !== undefined) {
             state.songlist.contextQueue.sourceName = sourceName || null;
@@ -216,10 +229,10 @@ export function createQueueActions(shared: SharedDeps) {
 
       if (shuffle) {
         const startHistory = get().songlist.shuffleStartHistory ?? [];
-        const startSong = songlist[index];
+        const startSong = songlist[targetIndex];
         const queueSongs = buildContextQueueSongs(
           songlist,
-          index,
+          targetIndex,
           get().playerState.loopState,
           true,
         );
@@ -245,7 +258,7 @@ export function createQueueActions(shared: SharedDeps) {
           state.songlist.sourceQueue = {
             ...emptyContextQueue(),
             songs: [...songlist],
-            currentIndex: index,
+            currentIndex: targetIndex,
             sourceId: normalizedId,
             sourceName: state.songlist.contextQueue.sourceName,
           };
@@ -261,7 +274,7 @@ export function createQueueActions(shared: SharedDeps) {
       } else {
         const queueSongs = buildContextQueueSongs(
           songlist,
-          index,
+          targetIndex,
           get().playerState.loopState,
           false,
         );
@@ -282,7 +295,7 @@ export function createQueueActions(shared: SharedDeps) {
           state.songlist.sourceQueue = {
             ...emptyContextQueue(),
             songs: [...songlist],
-            currentIndex: index,
+            currentIndex: targetIndex,
             sourceId: normalizedId,
             sourceName: state.songlist.contextQueue.sourceName,
           };

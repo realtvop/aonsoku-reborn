@@ -54,7 +54,12 @@ function mapLanControlToRemoteCommand(
         : null;
     case LanControlMessageType.PLAY_ALBUM:
       return typeof d?.albumId === "string"
-        ? { type: "play_album", album_id: d.albumId, index: d.songIndex }
+        ? {
+            type: "play_album",
+            album_id: d.albumId,
+            index: d.songIndex,
+            shuffle: false,
+          }
         : null;
     case LanControlMessageType.PLAY_PLAYLIST:
       return typeof d?.playlistId === "string"
@@ -62,15 +67,26 @@ function mapLanControlToRemoteCommand(
             type: "play_playlist",
             playlist_id: d.playlistId,
             index: d.songIndex,
+            shuffle: false,
           }
         : null;
     case LanControlMessageType.PLAY_ALBUM_SHUFFLE:
       return typeof d?.albumId === "string"
-        ? { type: "play_album", album_id: d.albumId }
+        ? {
+            type: "play_album",
+            album_id: d.albumId,
+            index: d.songIndex,
+            shuffle: true,
+          }
         : null;
     case LanControlMessageType.PLAY_PLAYLIST_SHUFFLE:
       return typeof d?.playlistId === "string"
-        ? { type: "play_playlist", playlist_id: d.playlistId }
+        ? {
+            type: "play_playlist",
+            playlist_id: d.playlistId,
+            index: d.songIndex,
+            shuffle: true,
+          }
         : null;
     case LanControlMessageType.ADD_TO_QUEUE:
       return Array.isArray(d?.songIds)

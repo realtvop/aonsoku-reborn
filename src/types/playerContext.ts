@@ -202,7 +202,7 @@ export interface IPlayerActions {
   playSong: (song: ISong, sourceName?: string) => void;
   setSongList: (
     songlist: ISong[],
-    index: number,
+    index?: number | null,
     shuffle?: boolean,
     sourceId?: QueueSourceId | { albumId: string } | { playlistId: string },
     sourceName?: string,

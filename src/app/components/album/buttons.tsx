@@ -89,7 +89,13 @@ export function AlbumButtons({ album, showInfoButton }: AlbumButtonsProps) {
         <Actions.Button
           tooltip={buttonsTooltips.shuffle}
           onClick={() =>
-            setSongList(album.song, 0, true, { albumId: album.id }, album.name)
+            setSongList(
+              album.song,
+              undefined,
+              true,
+              { albumId: album.id },
+              album.name,
+            )
           }
         >
           <Actions.ShuffleIcon />

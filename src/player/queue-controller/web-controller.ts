@@ -26,7 +26,7 @@ export class WebQueueController implements QueueController {
 
   setSongList(
     songs: ISong[],
-    index: number,
+    index?: number | null,
     shuffle?: boolean,
     sourceId?: QueueSourceId | { albumId: string } | { playlistId: string },
     sourceName?: string,

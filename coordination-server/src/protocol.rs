@@ -208,10 +208,12 @@ pub enum RemoteCommand {
     PlayAlbum {
         album_id: String,
         index: Option<u32>,
+        shuffle: Option<bool>,
     },
     PlayPlaylist {
         playlist_id: String,
         index: Option<u32>,
+        shuffle: Option<bool>,
     },
     AddToQueueNext {
         song_ids: Vec<String>,

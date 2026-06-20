@@ -28,6 +28,7 @@ import { getSongCoverArtId } from "@/utils/coverArt";
 import {
   getMaxShuffleStartHistory,
   pushToHistory,
+  pickRandomStartIndex,
 } from "@/utils/songListFunctions";
 import type {
   QueueController,
@@ -160,13 +161,27 @@ export class NativeQueueController implements QueueController {
 
   setSongList(
     songs: ISong[],
-    index: number,
+    index?: number | null,
     shuffle?: boolean,
     sourceId?: QueueSourceId | { albumId: string } | { playlistId: string },
     sourceName?: string,
   ): void {
     this.#queueSynced = true;
     if (!songs || songs.length === 0) return;
+
+    let targetIndex = index;
+    if (shuffle && (targetIndex === null || targetIndex === undefined)) {
+      const startHistory =
+        usePlayerStore.getState().songlist.shuffleStartHistory ?? [];
+      targetIndex = pickRandomStartIndex(
+        songs.length,
+        startHistory,
+        (i) => songs[i].id,
+      );
+    } else if (targetIndex === null || targetIndex === undefined) {
+      targetIndex = 0;
+    }
+    const clampedIndex = Math.max(0, Math.min(targetIndex, songs.length - 1));
 
     const prevPlayerState = { ...usePlayerStore.getState().playerState };
     const prevPlayerProgress = { ...usePlayerStore.getState().playerProgress };
@@ -225,7 +240,6 @@ export class NativeQueueController implements QueueController {
     if (shuffle && songs.length > 1) {
       const startHistory =
         usePlayerStore.getState().songlist.shuffleStartHistory ?? [];
-      const clampedIndex = Math.max(0, Math.min(index, songs.length - 1));
       const startSong = songs[clampedIndex];
       const queueSongs = buildContextQueueSongs(
         songs,

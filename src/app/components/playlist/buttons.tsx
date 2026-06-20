@@ -25,7 +25,7 @@ export function PlaylistButtons({ playlist }: PlaylistButtonsProps) {
         onClick={() =>
           setSongList(
             playlist.entry,
-            0,
+            undefined,
             true,
             { playlistId: playlist.id },
             playlist.name,

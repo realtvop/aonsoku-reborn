@@ -47,7 +47,7 @@ export type QueueControllerListener<T extends QueueControllerEvent> = (
 export interface QueueController {
   setSongList(
     songs: ISong[],
-    index: number,
+    index?: number | null,
     shuffle?: boolean,
     sourceId?: QueueSourceId | { albumId: string } | { playlistId: string },
     sourceName?: string,
