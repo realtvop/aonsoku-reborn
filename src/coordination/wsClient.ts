@@ -39,11 +39,45 @@ export interface ConnectionCallbacks {
   onError: (code: string, reason: string) => void;
 }
 
+/// Unified coordination client surface (design §5.2). Both the TypeScript
+/// `CoordinationWsClient` (web/Electron) and the native facade client
+/// (`NativeCoordinationClient`) implement this interface so the
+/// `CoordinationManager` is unaware of which transport is active.
+export interface CoordinationClient {
+  connect(): Promise<void>;
+  disconnect(): void;
+  getState(): ConnectionState;
+  publishSnapshot(
+    sessionId: string,
+    generation: SessionGeneration,
+    snapshotRevision: SnapshotRevision,
+    snapshot: PlaybackSnapshot,
+  ): void;
+  sendCommand(
+    targetDeviceId: DeviceId,
+    expectedGeneration: SessionGeneration,
+    command: RemoteCommand,
+  ): void;
+  requestHandoffCandidate(
+    sourceDeviceId: DeviceId,
+    expectedGeneration: SessionGeneration,
+    expectedSnapshotRevision: SnapshotRevision,
+  ): void;
+  sendTargetReady(
+    transactionId: string,
+    generation: SessionGeneration,
+    snapshotRevision: SnapshotRevision,
+    sourceDeviceId?: DeviceId | null,
+    sessionId?: SessionId | null,
+  ): void;
+  sendRelinquishAck(transactionId: string, snapshot: PlaybackSnapshot): void;
+}
+
 const HEARTBEAT_INTERVAL_MS = 15_000;
 const MAX_RECONNECT_DELAY_MS = 30_000;
 const BASE_RECONNECT_DELAY_MS = 1_000;
 
-export class CoordinationWsClient {
+export class CoordinationWsClient implements CoordinationClient {
   private ws: WebSocket | null = null;
   private state: ConnectionState = "disconnected";
   private reconnectAttempts = 0;

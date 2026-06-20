@@ -1,6 +1,8 @@
 // Coordination manager — the top-level orchestration layer (design §5.2).
-// Owns the HTTP client, WebSocket client, history outbox, and token store.
-// Provides a single entry point for React components and the player store.
+// Owns the HTTP client, the coordination client (TS WebSocket on web/Electron,
+// native plugin on iOS/Android — §5.2 multi-stack consistency), history
+// outbox, and token/config store. Provides a single entry point for React
+// components and the player store.
 
 import {
   CoordinationHttpClient,
@@ -10,19 +12,27 @@ import {
 } from "./httpClient";
 import {
   CoordinationWsClient,
+  type CoordinationClient,
   type ConnectionState,
   type ConnectionCallbacks,
 } from "./wsClient";
 import { HistoryOutbox } from "./outbox";
 import {
-  clearTokens,
-  loadConfig,
-  loadTokens,
-  saveConfig,
-  saveTokens,
+  clearTokens as tsClearTokens,
+  loadConfig as tsLoadConfig,
+  loadTokens as tsLoadTokens,
+  saveConfig as tsSaveConfig,
+  saveTokens as tsSaveTokens,
   type CoordinationConfig,
 } from "./tokenStore";
 import { COORDINATION_PROTOCOL_VERSION, CoordinationCapability } from "./types";
+import {
+  NativeCoordinationClient,
+  type CoordinationTokenStore,
+  getNativeCoordinationAvailability,
+  isNativeCoordinationAvailable,
+  NativeCoordinationTokenStore,
+} from "@/native/coordination";
 import type {
   DeviceDto,
   DeviceId,
@@ -33,6 +43,27 @@ import type {
   SessionGeneration,
   SnapshotRevision,
 } from "./types";
+
+/// TS (web/Electron) token/config store adapter — wraps the `tokenStore.ts`
+/// functions behind the `CoordinationTokenStore` interface so the manager can
+/// treat it and `NativeCoordinationTokenStore` uniformly.
+const tsTokenStore: CoordinationTokenStore = {
+  async loadTokens() {
+    return await tsLoadTokens();
+  },
+  async saveTokens(tokens) {
+    await tsSaveTokens(tokens);
+  },
+  async clearTokens() {
+    tsClearTokens();
+  },
+  async loadConfig() {
+    return await tsLoadConfig();
+  },
+  async saveConfig(config) {
+    await tsSaveConfig(config);
+  },
+};
 
 export interface CoordinationManagerCallbacks {
   onConnectionStateChange: (state: ConnectionState) => void;
@@ -67,7 +98,9 @@ export interface CoordinationManagerCallbacks {
 
 export class CoordinationManager {
   private httpClient: CoordinationHttpClient | null = null;
-  private wsClient: CoordinationWsClient | null = null;
+  /// Unified coordination client — either `CoordinationWsClient` (web/Electron)
+  /// or `NativeCoordinationClient` (iOS/Android). Design §5.2 multi-stack.
+  private coordClient: CoordinationClient | null = null;
   private outbox = new HistoryOutbox();
   private tokens: StoredDeviceTokens | null = null;
   private config: CoordinationConfig | null = null;
@@ -79,6 +112,10 @@ export class CoordinationManager {
     CoordinationCapability.HANDOFF;
   private outboxTimer: ReturnType<typeof setInterval> | null = null;
   private flushPromise: Promise<void> | null = null;
+  /// Token/config store — native (Keychain/Keystore) when the native plugin is
+  /// available, IndexedDB/localStorage otherwise. Only one is active at a time
+  /// (design §6.3).
+  private tokenStore: CoordinationTokenStore = tsTokenStore;
 
   constructor(private readonly callbacks: CoordinationManagerCallbacks) {}
 
@@ -95,15 +132,26 @@ export class CoordinationManager {
   }
 
   async loadState(): Promise<void> {
-    this.config = await loadConfig();
-    this.tokens = await loadTokens();
+    // Pick the token/config store once at load time: native (Keychain/Keystore)
+    // when the plugin is available, IndexedDB/localStorage otherwise. We do
+    // NOT store in both — one store per runtime (design §6.3).
+    if (isNativeCoordinationAvailable()) {
+      const availability = getNativeCoordinationAvailability();
+      if (availability.available) {
+        this.tokenStore = new NativeCoordinationTokenStore(availability.plugin);
+      }
+    } else {
+      this.tokenStore = tsTokenStore;
+    }
+    this.config = await this.tokenStore.loadConfig();
+    this.tokens = await this.tokenStore.loadTokens();
     if (this.config && this.tokens) {
       this.httpClient = new CoordinationHttpClient(
         this.config.serverUrl,
         fetch.bind(globalThis),
         async (tokens) => {
           this.tokens = tokens;
-          await saveTokens(tokens);
+          await this.tokenStore.saveTokens(tokens);
         },
       );
       this.httpClient.setTokens(this.tokens);
@@ -113,7 +161,7 @@ export class CoordinationManager {
 
   async reconnect(): Promise<void> {
     if (!this.config || !this.tokens) return;
-    if (this.wsClient) return; // Already connected or connecting
+    if (this.coordClient) return; // Already connected or connecting
 
     await this.openWebSocket();
     this.startOutboxProcessor();
@@ -121,7 +169,7 @@ export class CoordinationManager {
 
   async saveConfig(config: CoordinationConfig): Promise<void> {
     this.config = config;
-    await saveConfig(config);
+    await this.tokenStore.saveConfig(config);
   }
 
   async connect(
@@ -137,7 +185,7 @@ export class CoordinationManager {
       fetch.bind(globalThis),
       async (tokens) => {
         this.tokens = tokens;
-        await saveTokens(tokens);
+        await this.tokenStore.saveTokens(tokens);
       },
     );
 
@@ -173,7 +221,7 @@ export class CoordinationManager {
       accessTokenExpiresAt: Date.now() + reg.expiresIn * 1000,
       historyLimit: reg.historyLimit,
     };
-    await saveTokens(this.tokens);
+    await this.tokenStore.saveTokens(this.tokens);
 
     // 4. Open the WebSocket.
     await this.openWebSocket();
@@ -240,22 +288,63 @@ export class CoordinationManager {
       },
       onError: (code, reason) => this.callbacks.onError(code, reason),
     };
-    this.wsClient = new CoordinationWsClient(
-      () => wsUrl,
-      async () => {
-        if (!this.httpClient) return null;
+    const ticketFn = async (): Promise<string | null> => {
+      if (!this.httpClient) return null;
+      try {
+        const resp = await this.httpClient.getWsTicket();
+        return resp.ticket;
+      } catch {
+        return null;
+      }
+    };
+    if (isNativeCoordinationAvailable()) {
+      const availability = getNativeCoordinationAvailability();
+      if (availability.available) {
+        const nativeClient = new NativeCoordinationClient(
+          availability.plugin,
+          () => wsUrl,
+          ticketFn,
+          this.deviceId,
+          this.capabilities,
+          cb,
+        );
+        // Reconnect path: the native layer cannot self-reconnect (single-use
+        // ticket, §6.3), so it fires `coordinationReconnectNeeded` and we
+        // re-fetch a ticket via `openWebSocket()` (which re-ents connect()).
+        // We reuse the existing `reconnect()` flow — it re-fetches a ticket
+        // and calls `connect()` on the native plugin again.
+        nativeClient.setReconnectHandler(async () => {
+          // Drop the stale client and open a fresh connection. The old ticket
+          // is single-use and expired, so we must build a new client.
+          try {
+            await this.coordClient?.disconnect();
+          } catch {
+            // ignore
+          }
+          this.coordClient = null;
+          await this.openWebSocket();
+        });
+        this.coordClient = nativeClient;
         try {
-          const resp = await this.httpClient.getWsTicket();
-          return resp.ticket;
+          await nativeClient.connect();
+          return;
         } catch {
-          return null;
+          // Fallback to the TS client if the native plugin fails to start
+          // (requirement §7 — never leave the manager with no active client).
+          this.coordClient = null;
+          this.callbacks.onConnectionStateChange("reconnecting");
         }
-      },
+      }
+    }
+    // TS WebSocket path (web/Electron, or native fallback).
+    this.coordClient = new CoordinationWsClient(
+      () => wsUrl,
+      ticketFn,
       this.deviceId,
       this.capabilities,
       cb,
     );
-    await this.wsClient.connect();
+    await this.coordClient.connect();
   }
 
   private startOutboxProcessor() {
@@ -333,7 +422,7 @@ export class CoordinationManager {
   async deleteAccount(): Promise<void> {
     if (!this.httpClient) throw new Error("coordination: not connected");
     await this.httpClient.deleteAccount();
-    clearTokens();
+    await this.tokenStore.clearTokens();
     await this.disconnect();
   }
 
@@ -343,7 +432,7 @@ export class CoordinationManager {
     snapshotRevision: SnapshotRevision,
     snapshot: PlaybackSnapshot,
   ) {
-    this.wsClient?.publishSnapshot(
+    this.coordClient?.publishSnapshot(
       sessionId,
       generation,
       snapshotRevision,
@@ -356,7 +445,7 @@ export class CoordinationManager {
     expectedGeneration: SessionGeneration,
     command: RemoteCommand,
   ) {
-    this.wsClient?.sendCommand(targetDeviceId, expectedGeneration, command);
+    this.coordClient?.sendCommand(targetDeviceId, expectedGeneration, command);
   }
 
   requestHandoffCandidate(
@@ -364,7 +453,7 @@ export class CoordinationManager {
     expectedGeneration: SessionGeneration,
     expectedSnapshotRevision: SnapshotRevision,
   ) {
-    this.wsClient?.requestHandoffCandidate(
+    this.coordClient?.requestHandoffCandidate(
       sourceDeviceId,
       expectedGeneration,
       expectedSnapshotRevision,
@@ -378,7 +467,7 @@ export class CoordinationManager {
     sourceDeviceId?: DeviceId | null,
     sessionId?: SessionId | null,
   ) {
-    this.wsClient?.sendTargetReady(
+    this.coordClient?.sendTargetReady(
       transactionId,
       generation,
       snapshotRevision,
@@ -388,12 +477,12 @@ export class CoordinationManager {
   }
 
   sendRelinquishAck(transactionId: string, snapshot: PlaybackSnapshot) {
-    this.wsClient?.sendRelinquishAck(transactionId, snapshot);
+    this.coordClient?.sendRelinquishAck(transactionId, snapshot);
   }
 
   async disconnect(): Promise<void> {
-    this.wsClient?.disconnect();
-    this.wsClient = null;
+    this.coordClient?.disconnect();
+    this.coordClient = null;
     if (this.outboxTimer) {
       clearInterval(this.outboxTimer);
       this.outboxTimer = null;

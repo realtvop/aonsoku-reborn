@@ -11,7 +11,8 @@
     "./bridge": "./src/bridge/index.ts",
     "./data": "./src/data/index.ts",
     "./audio": "./src/audio/index.ts",
-    "./preferences": "./src/preferences/index.ts"
+    "./preferences": "./src/preferences/index.ts",
+    "./coordination": "./src/coordination/index.ts"
   },
   "files": ["ios/Sources", "src", "Package.swift"],
   "peerDependencies": {
