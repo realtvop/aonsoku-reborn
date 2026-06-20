@@ -296,6 +296,8 @@ export class CoordinationWsClient {
     transactionId: string,
     generation: SessionGeneration,
     snapshotRevision: SnapshotRevision,
+    sourceDeviceId?: DeviceId | null,
+    sessionId?: SessionId | null,
   ) {
     const env: Envelope = {
       version: COORDINATION_PROTOCOL_VERSION,
@@ -304,6 +306,8 @@ export class CoordinationWsClient {
       transactionId,
       generation,
       snapshotRevision,
+      sourceDeviceId,
+      sessionId,
     };
     this.send(env);
   }

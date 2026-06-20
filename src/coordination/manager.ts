@@ -50,6 +50,8 @@ export interface CoordinationManagerCallbacks {
     transactionId: string,
     generation: SessionGeneration,
     snapshotRevision: SnapshotRevision,
+    sourceDeviceId?: DeviceId | null,
+    sessionId?: SessionId | null,
   ) => void;
   onPrepareRelinquish: (
     transactionId: string,
@@ -213,6 +215,8 @@ export class CoordinationManager {
             env.transactionId,
             env.generation,
             env.snapshotRevision,
+            env.sourceDeviceId,
+            env.sessionId,
           );
         }
       },
@@ -371,8 +375,16 @@ export class CoordinationManager {
     transactionId: string,
     generation: SessionGeneration,
     snapshotRevision: SnapshotRevision,
+    sourceDeviceId?: DeviceId | null,
+    sessionId?: SessionId | null,
   ) {
-    this.wsClient?.sendTargetReady(transactionId, generation, snapshotRevision);
+    this.wsClient?.sendTargetReady(
+      transactionId,
+      generation,
+      snapshotRevision,
+      sourceDeviceId,
+      sessionId,
+    );
   }
 
   sendRelinquishAck(transactionId: string, snapshot: PlaybackSnapshot) {

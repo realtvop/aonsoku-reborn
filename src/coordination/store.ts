@@ -75,7 +75,13 @@ export const useCoordinationStore = create<CoordinationState>()(
           s.lastSyncAt = Date.now();
         });
       },
-      onDeviceSnapshot: (deviceId, snapshot, isOnline, generation, snapshotRevision) => {
+      onDeviceSnapshot: (
+        deviceId,
+        snapshot,
+        isOnline,
+        generation,
+        snapshotRevision,
+      ) => {
         set((s) => {
           s.deviceSnapshots[deviceId] = {
             snapshot,

@@ -31,9 +31,11 @@ export function CoordinationObserver() {
   const isConnected = useCoordinationStore((state) => state.isConnected);
   const loadState = useCoordinationStore((state) => state.loadState);
   const manager = useCoordinationStore((state) => state.manager);
-  const controlledDeviceId = useCoordinationStore((state) => state.controlledDeviceId);
+  const controlledDeviceId = useCoordinationStore(
+    (state) => state.controlledDeviceId,
+  );
   const controlledSnapshot = useCoordinationStore((state) =>
-    controlledDeviceId ? state.deviceSnapshots[controlledDeviceId] : null
+    controlledDeviceId ? state.deviceSnapshots[controlledDeviceId] : null,
   );
 
   const playerActions = usePlayerActions();
@@ -211,6 +213,8 @@ export function CoordinationObserver() {
       transactionId: string,
       generation: number,
       snapshotRevision: number,
+      sourceDeviceId?: string | null,
+      sessionId?: string | null,
     ) => {
       if (snapshot.songId) {
         import("@/service/subsonic").then(({ subsonic }) => {
@@ -221,11 +225,20 @@ export function CoordinationObserver() {
                 playerActions.playSong(song);
                 playerActions.setPlayingState(false);
                 playerActions.setProgress(snapshot.progressSeconds);
-                manager.sendTargetReady(transactionId, generation, snapshotRevision);
+                manager.sendTargetReady(
+                  transactionId,
+                  generation,
+                  snapshotRevision,
+                  sourceDeviceId,
+                  sessionId,
+                );
               }
             })
             .catch((err) => {
-              logger.error("[CoordinationObserver] Handoff candidate load failed:", err);
+              logger.error(
+                "[CoordinationObserver] Handoff candidate load failed:",
+                err,
+              );
             });
         });
       }
@@ -257,7 +270,10 @@ export function CoordinationObserver() {
   useEffect(() => {
     if (!isConnected) return;
     const original = manager.callbacks.onHandoffFailed;
-    manager.callbacks.onHandoffFailed = (_transactionId: string, code: string) => {
+    manager.callbacks.onHandoffFailed = (
+      _transactionId: string,
+      code: string,
+    ) => {
       toast.error(`Relay failed: ${code}`);
     };
     return () => {
@@ -294,7 +310,10 @@ export function CoordinationObserver() {
             }
           })
           .catch((err) => {
-            logger.error("[CoordinationObserver] Failed to fetch remote song:", err);
+            logger.error(
+              "[CoordinationObserver] Failed to fetch remote song:",
+              err,
+            );
           });
       });
     }

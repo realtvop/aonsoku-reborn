@@ -558,11 +558,11 @@ async fn handle_inbound(
                         &state.repos.sessions,
                         registry,
                         *transaction_id,
-                        device_id, // B is the target; source is looked up by session
+                        env.source_device_id.unwrap_or(device_id), // A is the source
                         session_id,
                         *generation,
                         *snapshot_revision,
-                        env.source_device_id.unwrap_or(device_id),
+                        device_id, // B is the target
                         15,
                     )
                     .await;
