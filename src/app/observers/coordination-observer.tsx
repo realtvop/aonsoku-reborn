@@ -6,6 +6,7 @@ import {
   usePlayerActions,
   usePlayerCurrentList,
   usePlayerCurrentSong,
+  usePlayerIsPlaying,
   usePlayerLoop,
   usePlayerProgress,
   usePlayerShuffle,
@@ -53,6 +54,7 @@ export function CoordinationObserver() {
   const currentSong = usePlayerCurrentSong();
   const currentList = usePlayerCurrentList();
   const playerProgress = usePlayerProgress();
+  const isPlaying = usePlayerIsPlaying();
   const { volume } = usePlayerVolume();
   const loopState = usePlayerLoop();
   const shuffleEnabled = usePlayerShuffle();
@@ -78,7 +80,7 @@ export function CoordinationObserver() {
       songId: currentSong.id,
       progressSeconds: playerProgress,
       durationSeconds: currentSong.duration ?? 0,
-      isPlaying: state.playerState.isPlaying,
+      isPlaying,
       sampledAt: Math.floor(Date.now() / 1000),
       contextQueue: currentList.map((s) => s.id),
       contextIndex: getEffectiveIndex(state.songlist) ?? null,
@@ -96,7 +98,6 @@ export function CoordinationObserver() {
       scrobbleSent: false,
     };
     snapshotRevisionRef.current++;
-    logger.info("[CoordinationObserver] Publishing snapshot:", snapshot);
     manager.publishSnapshot(
       sessionIdRef.current,
       generationRef.current,
@@ -107,6 +108,7 @@ export function CoordinationObserver() {
     isConnected,
     currentSong,
     playerProgress,
+    isPlaying,
     currentList,
     shuffleEnabled,
     loopState,
