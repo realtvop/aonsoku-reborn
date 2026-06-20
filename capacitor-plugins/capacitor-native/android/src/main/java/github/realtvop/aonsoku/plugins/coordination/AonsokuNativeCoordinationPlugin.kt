@@ -1,5 +1,7 @@
 package github.realtvop.aonsoku.plugins.coordination
 
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -13,6 +15,7 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONObject
 import java.security.KeyStore
+import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
@@ -31,6 +34,19 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     companion object {
         private const val TAG = "CoordPlugin"
         private const val PREFS_NAME = "aonsoku_coordination"
+        /// Design §9.2: client sends heartbeat every 15 seconds.
+        internal const val HEARTBEAT_INTERVAL_SECONDS = 15L
+        /// OkHttp keep-alive ping to detect dead connections faster.
+        internal const val PING_INTERVAL_SECONDS = 15L
+
+        /// Design §9.2: heartbeat envelope. messageId is assigned at send time.
+        internal fun buildHeartbeatEnvelope(protocolVersion: Int): JSONObject {
+            val env = JSONObject()
+            env.put("version", protocolVersion)
+            env.put("messageId", java.util.UUID.randomUUID().toString())
+            env.put("type", "heartbeat")
+            return env
+        }
 
         /// Keys holding coordination tokens; kept separate from config keys so
         /// clearTokens() can wipe credentials without losing server/identity URL.
@@ -46,6 +62,13 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     private var protocolVersion: Int = 1
     private var isConnecting: Boolean = false
     private var reconnectAttempts: Int = 0
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val heartbeatRunnable = object : Runnable {
+        override fun run() {
+            sendEnvelope(buildHeartbeatEnvelope(protocolVersion))
+            mainHandler.postDelayed(this, HEARTBEAT_INTERVAL_SECONDS * 1000)
+        }
+    }
 
     @PluginMethod
     fun storeTokens(call: PluginCall) {
@@ -132,12 +155,15 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         disconnectInternal()
 
         val urlWithTicket = "$wsUrl?ticket=$ticket"
-        this.client = OkHttpClient.Builder().build()
+        this.client = OkHttpClient.Builder()
+            .pingInterval(PING_INTERVAL_SECONDS, TimeUnit.SECONDS)
+            .build()
         val request = Request.Builder().url(urlWithTicket).build()
         this.webSocket = this.client?.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 isConnecting = false
                 reconnectAttempts = 0
+                startHeartbeat()
                 notifyState("connected")
             }
 
@@ -146,12 +172,16 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                isConnecting = false
+                stopHeartbeat()
                 notifyState("disconnected")
                 scheduleReconnect()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.e(TAG, "WS failure", t)
+                isConnecting = false
+                stopHeartbeat()
                 notifyState("error")
                 scheduleReconnect()
             }
@@ -253,10 +283,20 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     }
 
     private fun disconnectInternal() {
+        stopHeartbeat()
         webSocket?.close(1000, "disconnect")
         webSocket = null
         client = null
         isConnecting = false
+    }
+
+    private fun startHeartbeat() {
+        mainHandler.removeCallbacks(heartbeatRunnable)
+        mainHandler.postDelayed(heartbeatRunnable, HEARTBEAT_INTERVAL_SECONDS * 1000)
+    }
+
+    private fun stopHeartbeat() {
+        mainHandler.removeCallbacks(heartbeatRunnable)
     }
 
     private fun sendEnvelope(env: JSONObject) {
