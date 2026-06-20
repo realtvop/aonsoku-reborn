@@ -85,6 +85,7 @@ export function CoordinationObserver() {
       scrobbleSent: false,
     };
     snapshotRevisionRef.current++;
+    logger.info("[CoordinationObserver] Publishing snapshot:", snapshot);
     manager.publishSnapshot(
       sessionIdRef.current,
       generationRef.current,
