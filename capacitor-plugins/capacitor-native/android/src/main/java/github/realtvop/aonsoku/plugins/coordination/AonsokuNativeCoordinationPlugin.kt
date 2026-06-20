@@ -48,6 +48,16 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             return env
         }
 
+        /// Parse a JSON object string, returning null on failure so callers
+        /// can reject the plugin call with a structured error instead of
+        /// crashing the bridge with an uncaught JSONException.
+        internal fun parseJsonObject(json: String): JSONObject? =
+            try {
+                JSONObject(json)
+            } catch (e: org.json.JSONException) {
+                null
+            }
+
         /// Keys holding coordination tokens; kept separate from config keys so
         /// clearTokens() can wipe credentials without losing server/identity URL.
         internal val TOKEN_KEYS = listOf(
@@ -213,14 +223,15 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     @PluginMethod
     fun publishSnapshot(call: PluginCall) {
         val snapshotJson = call.getString("snapshotJson") ?: return call.reject("missing snapshotJson")
+        val parsed = parseJsonObject(snapshotJson) ?: return call.reject("invalid snapshotJson")
         val env = JSONObject()
         env.put("version", protocolVersion)
         env.put("messageId", java.util.UUID.randomUUID().toString())
         env.put("type", "snapshot")
         env.put("sessionId", call.getString("sessionId", ""))
-        env.put("generation", call.getInt("generation", 0))
-        env.put("snapshotRevision", call.getInt("snapshotRevision", 0))
-        env.put("snapshot", JSONObject(snapshotJson))
+        env.put("generation", call.getInt("generation", 0) ?: 0)
+        env.put("snapshotRevision", call.getInt("snapshotRevision", 0) ?: 0)
+        env.put("snapshot", parsed)
         sendEnvelope(env)
         call.resolve()
     }
@@ -229,13 +240,14 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     fun sendCommand(call: PluginCall) {
         val commandJson = call.getString("commandJson") ?: return call.reject("missing commandJson")
         val targetDeviceId = call.getString("targetDeviceId") ?: return call.reject("missing targetDeviceId")
+        val parsed = parseJsonObject(commandJson) ?: return call.reject("invalid commandJson")
         val env = JSONObject()
         env.put("version", protocolVersion)
         env.put("messageId", java.util.UUID.randomUUID().toString())
         env.put("type", "command")
         env.put("targetDeviceId", targetDeviceId)
-        env.put("expectedGeneration", call.getInt("expectedGeneration", 0))
-        env.put("command", JSONObject(commandJson))
+        env.put("expectedGeneration", call.getInt("expectedGeneration", 0) ?: 0)
+        env.put("command", parsed)
         sendEnvelope(env)
         call.resolve()
     }
@@ -248,8 +260,8 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         env.put("messageId", java.util.UUID.randomUUID().toString())
         env.put("type", "handoff_candidate_request")
         env.put("sourceDeviceId", sourceDeviceId)
-        env.put("expectedGeneration", call.getInt("expectedGeneration", 0))
-        env.put("expectedSnapshotRevision", call.getInt("expectedSnapshotRevision", 0))
+        env.put("expectedGeneration", call.getInt("expectedGeneration", 0) ?: 0)
+        env.put("expectedSnapshotRevision", call.getInt("expectedSnapshotRevision", 0) ?: 0)
         sendEnvelope(env)
         call.resolve()
     }
@@ -262,8 +274,8 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         env.put("messageId", java.util.UUID.randomUUID().toString())
         env.put("type", "target_ready")
         env.put("transactionId", transactionId)
-        env.put("generation", call.getInt("generation", 0))
-        env.put("snapshotRevision", call.getInt("snapshotRevision", 0))
+        env.put("generation", call.getInt("generation", 0) ?: 0)
+        env.put("snapshotRevision", call.getInt("snapshotRevision", 0) ?: 0)
         sendEnvelope(env)
         call.resolve()
     }
@@ -272,12 +284,13 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     fun sendRelinquishAck(call: PluginCall) {
         val transactionId = call.getString("transactionId") ?: return call.reject("missing transactionId")
         val snapshotJson = call.getString("snapshotJson") ?: return call.reject("missing snapshotJson")
+        val parsed = parseJsonObject(snapshotJson) ?: return call.reject("invalid snapshotJson")
         val env = JSONObject()
         env.put("version", protocolVersion)
         env.put("messageId", java.util.UUID.randomUUID().toString())
         env.put("type", "relinquish_ack")
         env.put("transactionId", transactionId)
-        env.put("snapshot", JSONObject(snapshotJson))
+        env.put("snapshot", parsed)
         sendEnvelope(env)
         call.resolve()
     }
