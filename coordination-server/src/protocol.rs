@@ -317,12 +317,26 @@ pub struct HandoffState {
 pub struct Envelope {
     pub version: u32,
     pub message_id: MessageId,
+    // These fields duplicate routing metadata that also exists inside the
+    // flattened Payload variants (e.g. Payload::Command has target_device_id).
+    // With #[serde(flatten)], serde cannot disambiguate which struct a
+    // camelCase JSON key like "targetDeviceId" belongs to, causing a parse
+    // failure ("missing field targetDeviceId"). skip_deserializing lets the
+    // flatten payload consume these keys on incoming messages; the Envelope
+    // fields remain available for constructing outgoing messages.
+    #[serde(skip_deserializing, default = "Option::default")]
     pub connection_id: Option<ConnectionId>,
+    #[serde(skip_deserializing, default = "Option::default")]
     pub source_device_id: Option<DeviceId>,
+    #[serde(skip_deserializing, default = "Option::default")]
     pub target_device_id: Option<DeviceId>,
+    #[serde(skip_deserializing, default = "Option::default")]
     pub session_id: Option<SessionId>,
+    #[serde(skip_deserializing, default = "Option::default")]
     pub expected_generation: Option<SessionGeneration>,
+    #[serde(default)]
     pub seq: Option<ConnectionSeq>,
+    #[serde(skip_deserializing, default = "Option::default")]
     pub server_time: Option<i64>,
     #[serde(flatten)]
     pub payload: Payload,

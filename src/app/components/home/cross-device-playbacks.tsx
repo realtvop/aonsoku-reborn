@@ -213,16 +213,9 @@ function DevicePlaybackCard({
             if (command) {
               const state = useCoordinationStore.getState();
               const snap = state.deviceSnapshots[device.id];
-              console.info(
-                `[RemoteControl.sendCommand] type=${type} → command=${JSON.stringify(command)} | target=${device.id} | gen=${snap?.generation} | snapExists=${!!snap}`,
-              );
               if (snap) {
                 state.manager.sendCommand(device.id, snap.generation, command);
               }
-            } else {
-              console.warn(
-                `[RemoteControl.sendCommand] type=${type} → mapped to null (no command sent)`,
-              );
             }
           },
         },

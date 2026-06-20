@@ -122,9 +122,6 @@ export function CoordinationObserver() {
       command: RemoteCommand,
       _sourceDeviceId: string,
     ) => {
-      console.info(
-        `[CoordinationObserver.onRemoteCommand] received: ${JSON.stringify(command)}`,
-      );
       switch (command.type) {
         case "play":
           playerActions.setPlayingState(true);

@@ -193,15 +193,14 @@ export class CoordinationWsClient {
         this.callbacks.onSnapshotProjection(env);
         break;
       case "command":
-        console.info(
-          `[wsClient] received command envelope: ${JSON.stringify(env).slice(0, 200)}`,
-        );
         this.callbacks.onCommand(env);
         break;
       case "command_ack":
-        console.info(
-          `[wsClient] command_ack: ${JSON.stringify(env)}`,
-        );
+        if (env.result.status === "error") {
+          console.warn(
+            `[wsClient] command_ack error: ${env.result.code} — ${env.result.reason}`,
+          );
+        }
         break;
       case "handoff_candidate":
         this.callbacks.onHandoffCandidate(env);
