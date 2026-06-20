@@ -205,14 +205,12 @@ export function UserDropdown() {
 
   const alignPosition = isMacOS ? "end" : "center";
 
-
   return (
     <>
       <LogoutObserver />
 
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
-
 
       {isMobile ? (
         <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
@@ -255,7 +253,6 @@ export function UserDropdown() {
             <div className="border-t" />
 
             <div className="flex flex-col gap-1.5 px-4 pb-2">
-
               <DrawerClose asChild>
                 <button
                   onClick={handleSettingsClick}

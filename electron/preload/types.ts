@@ -1,7 +1,6 @@
 import { RpcPayload } from "../main/core/discordRpc";
 import { ISettingPayload } from "../main/core/settings";
 
-
 export enum IpcChannels {
   FullscreenStatus = "fullscreen-status",
   ToggleFullscreen = "toggle-fullscreen",
@@ -26,7 +25,6 @@ export enum IpcChannels {
   SetAlwaysOnTop = "set-always-on-top",
   IsAlwaysOnTop = "is-always-on-top",
   FocusMainWindow = "focus-main-window",
-
 }
 
 export type OverlayColors = {

@@ -12,7 +12,6 @@ export function hasElectronBridge(): boolean {
   );
 }
 
-
 /**
  * Detect operating system for both Electron and browser/PWA environments
  */

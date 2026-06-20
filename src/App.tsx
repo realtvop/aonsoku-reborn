@@ -28,8 +28,6 @@ import { useCacheIndexActions } from "@/store/cache-index.store";
 import { isDesktop, isLinux } from "@/utils/desktop";
 
 function App() {
-
-
   const { loadFromIDB } = useCacheIndexActions();
 
   useEffect(() => {
@@ -41,10 +39,6 @@ function App() {
   }, [loadFromIDB]);
 
   useNetworkStatusObserver();
-
-
-
-
 
   // if (!isDesktop && window.innerHeight > window.innerWidth) return <Mobile />; // Support tablets but not phones
 

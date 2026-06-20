@@ -208,13 +208,7 @@ export function MediaSessionObserver() {
         songId,
       };
     }
-  }, [
-    progress,
-    isPlaying,
-    hasNothingPlaying,
-    song,
-    currentDuration,
-  ]);
+  }, [progress, isPlaying, hasNothingPlaying, song, currentDuration]);
 
   return null;
 }

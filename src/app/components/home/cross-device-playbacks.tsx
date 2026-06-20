@@ -1,6 +1,14 @@
 import { useState, useEffect } from "react";
 import { toast } from "react-toastify";
-import { Smartphone, Laptop, Tv, Cast, ArrowRightLeft, Loader2, Radio } from "lucide-react";
+import {
+  Smartphone,
+  Laptop,
+  Tv,
+  Cast,
+  ArrowRightLeft,
+  Loader2,
+  Radio,
+} from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useCoordinationStore } from "@/coordination/store";
 import { usePlayerActions, usePlayerStore } from "@/store/player.store";
@@ -46,7 +54,11 @@ function mapLanControlToRemoteCommand(
         : null;
     case LanControlMessageType.PLAY_PLAYLIST:
       return typeof d?.playlistId === "string"
-        ? { type: "play_playlist", playlistId: d.playlistId, index: d.songIndex }
+        ? {
+            type: "play_playlist",
+            playlistId: d.playlistId,
+            index: d.songIndex,
+          }
         : null;
     case LanControlMessageType.PLAY_ALBUM_SHUFFLE:
       return typeof d?.albumId === "string"
@@ -63,7 +75,10 @@ function mapLanControlToRemoteCommand(
     case LanControlMessageType.CLEAR_QUEUE:
       return { type: "clear_queue" };
     case LanControlMessageType.TOGGLE_SHUFFLE:
-      return { type: "set_shuffle", enabled: !usePlayerStore.getState().songlist.isShuffleActive };
+      return {
+        type: "set_shuffle",
+        enabled: !usePlayerStore.getState().songlist.isShuffleActive,
+      };
     case LanControlMessageType.SET_SHUFFLE:
       return typeof d?.enabled === "boolean"
         ? { type: "set_shuffle", enabled: d.enabled }
@@ -91,10 +106,21 @@ function useSongInfo(songId: string | undefined) {
 
 function getDeviceIcon(platform: string) {
   const p = platform.toLowerCase();
-  if (p.includes("ios") || p.includes("android") || p.includes("phone") || p.includes("mobile")) {
+  if (
+    p.includes("ios") ||
+    p.includes("android") ||
+    p.includes("phone") ||
+    p.includes("mobile")
+  ) {
     return <Smartphone className="w-3.5 h-3.5" />;
   }
-  if (p.includes("electron") || p.includes("desktop") || p.includes("mac") || p.includes("windows") || p.includes("linux")) {
+  if (
+    p.includes("electron") ||
+    p.includes("desktop") ||
+    p.includes("mac") ||
+    p.includes("windows") ||
+    p.includes("linux")
+  ) {
     return <Laptop className="w-3.5 h-3.5" />;
   }
   if (p.includes("tv")) {
@@ -117,7 +143,9 @@ function DevicePlaybackCard({
 }) {
   const coordStore = useCoordinationStore();
   const playerActions = usePlayerActions();
-  const controlledDeviceId = useCoordinationStore((state) => state.controlledDeviceId);
+  const controlledDeviceId = useCoordinationStore(
+    (state) => state.controlledDeviceId,
+  );
   const isControlling = controlledDeviceId === device.id;
   const [isRelaying, setIsRelaying] = useState(false);
 
@@ -129,7 +157,10 @@ function DevicePlaybackCard({
     const originalCommitted = coordStore.manager.callbacks.onHandoffCommitted;
     const originalFailed = coordStore.manager.callbacks.onHandoffFailed;
 
-    coordStore.manager.callbacks.onHandoffCommitted = (snapshot, newGeneration) => {
+    coordStore.manager.callbacks.onHandoffCommitted = (
+      snapshot,
+      newGeneration,
+    ) => {
       originalCommitted(snapshot, newGeneration);
       setIsRelaying(false);
       toast.success("接力成功！");
@@ -202,7 +233,9 @@ function DevicePlaybackCard({
     <div
       className={cn(
         "bg-card/40 backdrop-blur border rounded-xl p-3 flex items-center justify-between shadow-md gap-4 transition-all duration-300",
-        isControlling ? "border-primary/50 bg-primary/5" : "border-border/50 hover:bg-card/60"
+        isControlling
+          ? "border-primary/50 bg-primary/5"
+          : "border-border/50 hover:bg-card/60",
       )}
     >
       {/* Track Info (Left) */}
@@ -243,7 +276,7 @@ function DevicePlaybackCard({
               <span
                 className={cn(
                   "w-1.5 h-1.5 rounded-full",
-                  snapshotData.isOnline ? "bg-green-500" : "bg-neutral-400"
+                  snapshotData.isOnline ? "bg-green-500" : "bg-neutral-400",
                 )}
               />
               {snapshotData.isOnline ? "在线" : "离线"}
@@ -260,7 +293,7 @@ function DevicePlaybackCard({
           onClick={handleRemoteControl}
           className={cn(
             "h-8 px-3 text-xs font-medium",
-            isControlling && "bg-green-600 hover:bg-green-700 text-white"
+            isControlling && "bg-green-600 hover:bg-green-700 text-white",
           )}
         >
           {isControlling ? "退出控制" : "远程控制"}
@@ -302,7 +335,8 @@ export function CrossDevicePlaybacks() {
 
       // Ensure online or recent (within 8 hours)
       const isRecent =
-        snapshotData.isOnline || Date.now() - snapshotData.lastUpdatedAt < 8 * 60 * 60 * 1000;
+        snapshotData.isOnline ||
+        Date.now() - snapshotData.lastUpdatedAt < 8 * 60 * 60 * 1000;
       return isRecent;
     })
     .map((device) => {
@@ -318,5 +352,7 @@ export function CrossDevicePlaybacks() {
 
   if (activeDeviceCards.length === 0) return null;
 
-  return <div className="flex flex-col gap-2.5 mb-4 w-full">{activeDeviceCards}</div>;
+  return (
+    <div className="flex flex-col gap-2.5 mb-4 w-full">{activeDeviceCards}</div>
+  );
 }

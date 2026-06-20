@@ -7,7 +7,6 @@ export function Desktop() {
     <div className="space-y-4">
       <DesktopSettings />
       <UpdateSettings />
-
     </div>
   );
 }

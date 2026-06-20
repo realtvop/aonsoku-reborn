@@ -6,7 +6,6 @@ import { createAppMenu } from "./core/menu";
 import { destroyMiniPlayerWindow } from "./mini-player";
 import { createWindow, mainWindow } from "./window";
 
-
 let isQuitting = false;
 
 export function getIsQuitting(): boolean {
@@ -32,14 +31,11 @@ if (!instanceLock) {
     electronApp.setAppUserModelId("com.realtvop.aonsoku");
 
     createWindow();
-
-
   });
 
   app.on("activate", function () {
     if (!mainWindow || mainWindow.isDestroyed()) {
       createWindow();
-
 
       return;
     }
@@ -65,8 +61,6 @@ if (!instanceLock) {
       return;
     }
 
-
-
     app.quit();
   });
 
@@ -74,8 +68,6 @@ if (!instanceLock) {
     isQuitting = true;
 
     destroyMiniPlayerWindow();
-
-
   });
 }
 

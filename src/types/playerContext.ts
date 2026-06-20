@@ -1,7 +1,4 @@
-import {
-  LanControlMessageType,
-  RemoteDeviceInfo,
-} from "./lanControl";
+import { LanControlMessageType, RemoteDeviceInfo } from "./lanControl";
 import { Radio } from "./responses/radios";
 import { ISong } from "./responses/song";
 
@@ -273,7 +270,6 @@ export interface IPlayerActions {
   setCurrentSongIntensity: (value: number) => void;
   openPipWindow: () => void;
   closePipWindow: () => void;
-
 }
 
 export interface IPlayerContext {
