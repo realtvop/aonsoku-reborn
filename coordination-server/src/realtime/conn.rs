@@ -623,20 +623,122 @@ async fn handle_inbound(
                     return;
                 }
             };
-            let _ = state
-                .handoff
-                .start_transaction(
-                    &state.repos.sessions,
-                    registry,
-                    *transaction_id,
-                    source_device,
-                    session,
-                    *generation,
-                    *snapshot_revision,
-                    device_id, // B is the target
-                    15,
-                )
-                .await;
+
+            if registry.is_online(source_device) {
+                // A is online: run the two-phase online handoff (design §11.1).
+                // start_transaction validates A, sends prepare_relinquish, and
+                // drives the rest of the flow via RelinquishAck/commit_relinquish.
+                let _ = state
+                    .handoff
+                    .start_transaction(
+                        &state.repos.sessions,
+                        registry,
+                        *transaction_id,
+                        source_device,
+                        session,
+                        *generation,
+                        *snapshot_revision,
+                        device_id, // B is the target
+                        15,
+                    )
+                    .await;
+            } else {
+                // A is offline: take over A's frozen snapshot directly (design §11.3).
+                match state
+                    .handoff
+                    .offline_handoff(
+                        &state.repos.sessions,
+                        registry,
+                        source_device,
+                        session,
+                        device_id,
+                        state.config.offline_snapshot_ttl,
+                    )
+                    .await
+                {
+                    Ok(new_generation) => {
+                        // Reload the session and replay A's latest snapshot to B.
+                        let snapshot = state
+                            .repos
+                            .sessions
+                            .find_by_id(session)
+                            .await
+                            .ok()
+                            .flatten()
+                            .and_then(|s| s.last_snapshot)
+                            .and_then(|json| {
+                                serde_json::from_str::<crate::protocol::PlaybackSnapshot>(
+                                    &json,
+                                )
+                                .ok()
+                            });
+
+                        match snapshot {
+                            Some(snapshot) => {
+                                let committed = Envelope {
+                                    version: PROTOCOL_VERSION,
+                                    message_id: Uuid::new_v4(),
+                                    connection_id: None,
+                                    source_device_id: Some(source_device),
+                                    target_device_id: Some(device_id),
+                                    session_id: Some(session),
+                                    expected_generation: Some(new_generation),
+                                    seq: None,
+                                    server_time: Some(server_time),
+                                    payload: Payload::HandoffCommitted {
+                                        transaction_id: *transaction_id,
+                                        new_generation,
+                                        snapshot,
+                                    },
+                                };
+                                let _ = registry.send(device_id, committed);
+                            }
+                            None => {
+                                // Generation was promoted but no snapshot could
+                                // be materialized; surface the failure to B.
+                                let _ = registry.send(
+                                    device_id,
+                                    Envelope {
+                                        version: PROTOCOL_VERSION,
+                                        message_id: Uuid::new_v4(),
+                                        connection_id: None,
+                                        source_device_id: Some(source_device),
+                                        target_device_id: Some(device_id),
+                                        session_id: Some(session),
+                                        expected_generation: Some(new_generation),
+                                        seq: None,
+                                        server_time: Some(server_time),
+                                        payload: Payload::HandoffFailed {
+                                            transaction_id: *transaction_id,
+                                            code: ErrorCode::NotFound,
+                                        },
+                                    },
+                                );
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let _ = registry.send(
+                            device_id,
+                            Envelope {
+                                version: PROTOCOL_VERSION,
+                                message_id: Uuid::new_v4(),
+                                connection_id: None,
+                                source_device_id: Some(source_device),
+                                target_device_id: Some(device_id),
+                                session_id: Some(session),
+                                expected_generation: None,
+                                seq: None,
+                                server_time: Some(server_time),
+                                payload: Payload::HandoffFailed {
+                                    transaction_id: *transaction_id,
+                                    code: e.code,
+                                },
+                            },
+                        );
+                    }
+                }
+            }
         }
         Payload::RelinquishAck {
             transaction_id,
