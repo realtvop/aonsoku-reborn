@@ -41,7 +41,8 @@
         "poster": "Poster"
       }
     },
-    "beta": "Beta"
+    "beta": "Beta",
+    "cancel": "Cancel"
   },
   "theme": {
     "label": "Theme",
@@ -609,6 +610,66 @@
       "privacy": "Privacy & Security",
       "storage": "Offline Experience",
       "cross-device": "Cross-Device"
+    },
+    "crossDevice": {
+      "title": "Cross-Device",
+      "description": "Sync history and continue playback across your devices.",
+      "serverUrl": {
+        "label": "Coordination server URL",
+        "info": "URL of your coordination server."
+      },
+      "identityUrl": {
+        "label": "Identity URL",
+        "info": "Your Navidrome/Subsonic server URL."
+      },
+      "deviceName": {
+        "label": "Device name",
+        "info": "A friendly name for this device.",
+        "placeholder": "My device"
+      },
+      "connect": "Connect",
+      "status": "Connection status",
+      "connectionState": {
+        "label": "State",
+        "disconnected": "Disconnected",
+        "connecting": "Connecting",
+        "authenticating": "Authenticating",
+        "connected": "Connected",
+        "error": "Error"
+      },
+      "lastSync": {
+        "label": "Last sync"
+      },
+      "never": "Never",
+      "error": {
+        "label": "Error",
+        "missingFields": "Fill in all fields",
+        "connectFailed": "Connection failed"
+      },
+      "disconnect": "Disconnect this device",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "devices": "Bound devices",
+      "device": {
+        "current": "Current",
+        "lastOnline": "Last online {{time}}",
+        "save": "Save",
+        "cancel": "Cancel",
+        "rename": "Rename",
+        "revoke": "Revoke",
+        "renamed": "Device renamed",
+        "revoked": "Device revoked"
+      },
+      "deleteData": {
+        "label": "Delete all coordination data",
+        "info": "Remove your account and all synced data from the coordination server."
+      },
+      "delete": "Delete",
+      "deleteConfirm": {
+        "title": "Delete all coordination data?",
+        "description": "This action cannot be undone."
+      },
+      "deleted": "Coordination data deleted"
     },
     "server": {
       "group": "Server",

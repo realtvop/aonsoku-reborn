@@ -173,7 +173,8 @@
         "list": "列表",
         "poster": "海报"
       }
-    }
+    },
+    "cancel": "取消"
   },
   "home": {
     "pinned": "已固定",
@@ -715,7 +716,68 @@
       "language": "语言和地区",
       "privacy": "隐私和安全",
       "server": "服务器",
-      "storage": "离线体验"
+      "storage": "离线体验",
+      "cross-device": "跨设备"
+    },
+    "crossDevice": {
+      "title": "跨设备",
+      "description": "在不同设备间同步播放历史并继续播放。",
+      "serverUrl": {
+        "label": "协调服务器地址",
+        "info": "你的协调服务器 URL。"
+      },
+      "identityUrl": {
+        "label": "身份 URL",
+        "info": "你的 Navidrome/Subsonic 服务器 URL。"
+      },
+      "deviceName": {
+        "label": "设备名称",
+        "info": "用于识别的设备名称。",
+        "placeholder": "我的设备"
+      },
+      "connect": "连接",
+      "status": "连接状态",
+      "connectionState": {
+        "label": "状态",
+        "disconnected": "未连接",
+        "connecting": "连接中",
+        "authenticating": "认证中",
+        "connected": "已连接",
+        "error": "错误"
+      },
+      "lastSync": {
+        "label": "上次同步"
+      },
+      "never": "从未",
+      "error": {
+        "label": "错误",
+        "missingFields": "请填写所有字段",
+        "connectFailed": "连接失败"
+      },
+      "disconnect": "断开此设备",
+      "connected": "已连接",
+      "disconnected": "已断开",
+      "devices": "已绑定设备",
+      "device": {
+        "current": "当前设备",
+        "lastOnline": "上次在线 {{time}}",
+        "save": "保存",
+        "cancel": "取消",
+        "rename": "重命名",
+        "revoke": "撤销",
+        "renamed": "设备已重命名",
+        "revoked": "设备已撤销"
+      },
+      "deleteData": {
+        "label": "删除所有跨设备数据",
+        "info": "从协调服务器移除你的账户以及所有同步数据。"
+      },
+      "delete": "删除",
+      "deleteConfirm": {
+        "title": "删除所有跨设备数据？",
+        "description": "此操作不可撤销。"
+      },
+      "deleted": "跨设备数据已删除"
     },
     "privacy": {
       "services": {
