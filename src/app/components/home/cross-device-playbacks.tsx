@@ -21,6 +21,7 @@ import type {
 import { subsonic } from "@/service/subsonic";
 import { usePlayerActions, usePlayerStore } from "@/store/player.store";
 import { LanControlMessageType } from "@/types/lanControl";
+import { cn } from "@/lib/utils";
 
 function mapLanControlToRemoteCommand(
   type: LanControlMessageType,
