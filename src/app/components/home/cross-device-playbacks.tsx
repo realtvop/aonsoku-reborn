@@ -1,23 +1,26 @@
-import { useState, useEffect } from "react";
-import { toast } from "react-toastify";
+import { useQuery } from "@tanstack/react-query";
 import {
-  Smartphone,
-  Laptop,
-  Tv,
-  Cast,
   ArrowRightLeft,
+  Cast,
+  Laptop,
   Loader2,
   Radio,
+  Smartphone,
+  Tv,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { useCoordinationStore } from "@/coordination/store";
-import { usePlayerActions, usePlayerStore } from "@/store/player.store";
+import { useDeferredValue, useEffect, useState } from "react";
+import { toast } from "react-toastify";
 import { CachedImage } from "@/app/components/cover-image/cached-image";
-import { subsonic } from "@/service/subsonic";
-import type { DeviceDto, PlaybackSnapshot } from "@/coordination/types";
-import { LanControlMessageType } from "@/types/lanControl";
-import type { RemoteCommand } from "@/coordination/types";
 import { Button } from "@/app/components/ui/button";
+import { useCoordinationStore } from "@/coordination/store";
+import type {
+  DeviceDto,
+  PlaybackSnapshot,
+  RemoteCommand,
+} from "@/coordination/types";
+import { subsonic } from "@/service/subsonic";
+import { usePlayerActions, usePlayerStore } from "@/store/player.store";
+import { LanControlMessageType } from "@/types/lanControl";
 
 function mapLanControlToRemoteCommand(
   type: LanControlMessageType,
@@ -141,7 +144,10 @@ function DevicePlaybackCard({
     snapshotRevision: number;
   };
 }) {
-  const coordStore = useCoordinationStore();
+  const manager = useCoordinationStore((state) => state.manager);
+  const setControlledDevice = useCoordinationStore(
+    (state) => state.setControlledDevice,
+  );
   const playerActions = usePlayerActions();
   const controlledDeviceId = useCoordinationStore(
     (state) => state.controlledDeviceId,
@@ -154,28 +160,25 @@ function DevicePlaybackCard({
   // Monitor relay/handoff status
   useEffect(() => {
     if (!isRelaying) return;
-    const originalCommitted = coordStore.manager.callbacks.onHandoffCommitted;
-    const originalFailed = coordStore.manager.callbacks.onHandoffFailed;
+    const originalCommitted = manager.callbacks.onHandoffCommitted;
+    const originalFailed = manager.callbacks.onHandoffFailed;
 
-    coordStore.manager.callbacks.onHandoffCommitted = (
-      snapshot,
-      newGeneration,
-    ) => {
+    manager.callbacks.onHandoffCommitted = (snapshot, newGeneration) => {
       originalCommitted(snapshot, newGeneration);
       setIsRelaying(false);
       toast.success("接力成功！");
     };
 
-    coordStore.manager.callbacks.onHandoffFailed = (transactionId, code) => {
+    manager.callbacks.onHandoffFailed = (transactionId, code) => {
       originalFailed(transactionId, code);
       setIsRelaying(false);
     };
 
     return () => {
-      coordStore.manager.callbacks.onHandoffCommitted = originalCommitted;
-      coordStore.manager.callbacks.onHandoffFailed = originalFailed;
+      manager.callbacks.onHandoffCommitted = originalCommitted;
+      manager.callbacks.onHandoffFailed = originalFailed;
     };
-  }, [isRelaying, coordStore.manager]);
+  }, [isRelaying, manager]);
 
   const handleRemoteControl = () => {
     if (isControlling) {
@@ -187,7 +190,7 @@ function DevicePlaybackCard({
           sendCommand: null,
         },
       });
-      coordStore.setControlledDevice(null);
+      setControlledDevice(null);
       toast.info("已退出远程控制");
     } else {
       // Pause local playback
@@ -210,14 +213,14 @@ function DevicePlaybackCard({
           },
         },
       });
-      coordStore.setControlledDevice(device.id);
+      setControlledDevice(device.id);
       toast.success(`正在远程控制: ${device.name}`);
     }
   };
 
   const handleRelay = () => {
     setIsRelaying(true);
-    coordStore.manager.requestHandoffCandidate(
+    manager.requestHandoffCandidate(
       device.id,
       snapshotData.generation,
       snapshotData.snapshotRevision,
@@ -318,19 +321,27 @@ function DevicePlaybackCard({
 }
 
 export function CrossDevicePlaybacks() {
-  const coordStore = useCoordinationStore();
-  const isConnected = coordStore.isConnected;
-  const currentDeviceId = coordStore.deviceId;
+  const isConnected = useCoordinationStore((state) => state.isConnected);
+  const currentDeviceId = useCoordinationStore((state) => state.deviceId);
+  const devices = useCoordinationStore((state) => state.devices);
+  const deviceSnapshots = useCoordinationStore(
+    (state) => state.deviceSnapshots,
+  );
+
+  // WebSocket projections update the external Zustand store synchronously.
+  // Defer the snapshot used to mount cards so the card's asynchronous song
+  // metadata lookup cannot suspend the current UI during that sync update.
+  const deferredDeviceSnapshots = useDeferredValue(deviceSnapshots);
 
   if (!isConnected) return null;
 
   // Filter other devices that have recent playing snapshots
-  const activeDeviceCards = coordStore.devices
+  const activeDeviceCards = devices
     .filter((device) => {
       // Exclude self
       if (device.id === currentDeviceId) return false;
 
-      const snapshotData = coordStore.deviceSnapshots[device.id];
+      const snapshotData = deferredDeviceSnapshots[device.id];
       if (!snapshotData || !snapshotData.snapshot?.songId) return false;
 
       // Ensure online or recent (within 8 hours)
@@ -340,7 +351,7 @@ export function CrossDevicePlaybacks() {
       return isRecent;
     })
     .map((device) => {
-      const snapshotData = coordStore.deviceSnapshots[device.id]!;
+      const snapshotData = deferredDeviceSnapshots[device.id]!;
       return (
         <DevicePlaybackCard
           key={device.id}
