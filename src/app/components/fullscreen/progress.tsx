@@ -4,6 +4,7 @@ import { ProgressSlider } from "@/app/components/ui/slider";
 import { useAudioSeeking } from "@/app/hooks/use-audio-seeking";
 import { useFullscreenContrast } from "@/app/hooks/use-fullscreen-contrast";
 import {
+  useIsRemoteControlActive,
   usePlayerBufferedProgress,
   usePlayerDuration,
   usePlayerIsBuffering,
@@ -24,6 +25,7 @@ export function FullscreenProgress({
   const audioPlayerRef = usePlayerRef();
   const currentDuration = usePlayerDuration();
   const isBuffering = usePlayerIsBuffering();
+  const isRemoteActive = useIsRemoteControlActive();
   const { t } = useTranslation();
   const contrast = useFullscreenContrast();
 
@@ -54,7 +56,7 @@ export function FullscreenProgress({
     max: currentDuration ?? 0,
     step: 1,
     isBuffering,
-    bufferedProgress,
+    bufferedProgress: isRemoteActive ? 0 : bufferedProgress,
     className: "w-full h-2 md:h-3",
     onValueChange: ([value]: [number]) => handleSeeking(value),
     onValueCommit: ([value]: [number]) => handleSeeked(value),

@@ -4,6 +4,7 @@ import { ProgressSlider } from "@/app/components/ui/slider";
 import { useAudioSeeking } from "@/app/hooks/use-audio-seeking";
 import {
   useHasQueueSongs,
+  useIsRemoteControlActive,
   usePlayerBufferedProgress,
   usePlayerDuration,
   usePlayerIsBuffering,
@@ -23,6 +24,7 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
   const isBuffering = usePlayerIsBuffering();
   const hasQueueSongs = useHasQueueSongs();
   const { isSong } = usePlayerMediaType();
+  const isRemoteActive = useIsRemoteControlActive();
 
   const isEmpty = isSong && !hasQueueSongs;
 
@@ -70,7 +72,7 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
           step={1}
           className="cursor-pointer w-[32rem]"
           isBuffering={isBuffering}
-          bufferedProgress={bufferedProgress}
+          bufferedProgress={isRemoteActive ? 0 : bufferedProgress}
           onValueChange={([value]) => handleSeeking(value)}
           onValueCommit={([value]) => handleSeeked(value)}
           data-testid="player-progress-slider"
