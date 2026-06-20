@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use crate::api::extract::Authenticated;
 use crate::errors::{ApiError, CoordinationError};
+use crate::protocol::{Envelope, Payload, PROTOCOL_VERSION};
 use crate::server::AppState;
 use crate::storage::repository::DeviceRepository;
 
@@ -44,6 +45,7 @@ pub async fn patch_device(
         .rename(id, &body.name)
         .await
         .map_err(map_err)?;
+    broadcast_device_list(&state, claims.account_id).await;
     Ok(Json(DeviceDto::from(updated)))
 }
 
@@ -57,9 +59,38 @@ pub async fn delete_device(
     match device {
         Some(d) if d.account_id == claims.account_id => {
             state.repos.devices.revoke(id).await.map_err(map_err)?;
+            state.realtime.unregister(id);
+            broadcast_device_list(&state, claims.account_id).await;
             Ok(StatusCode::NO_CONTENT)
         }
         _ => Err(map_err(CoordinationError::not_found("device not found"))),
+    }
+}
+
+pub async fn broadcast_device_list(state: &AppState, account_id: Uuid) {
+    let Ok(devices) = state.repos.devices.list_for_account(account_id).await else {
+        return;
+    };
+    let devices = devices
+        .into_iter()
+        .map(crate::protocol::DeviceSummary::from)
+        .collect::<Vec<_>>();
+    for target in state.realtime.online_devices_for_account(account_id) {
+        let envelope = Envelope {
+            version: PROTOCOL_VERSION,
+            message_id: Uuid::new_v4(),
+            connection_id: None,
+            source_device_id: None,
+            target_device_id: Some(target),
+            session_id: None,
+            expected_generation: None,
+            seq: None,
+            server_time: Some(chrono::Utc::now().timestamp()),
+            payload: Payload::DevicesChanged {
+                devices: devices.clone(),
+            },
+        };
+        let _ = state.realtime.send(target, envelope);
     }
 }
 

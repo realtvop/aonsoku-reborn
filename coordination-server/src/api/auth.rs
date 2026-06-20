@@ -125,6 +125,8 @@ pub async fn post_register(
         .await
         .map_err(map_err)?;
 
+    crate::api::devices::broadcast_device_list(&state, account.id).await;
+
     let access_token = sign_access_token(
         &state.config.stable_key,
         device.id,

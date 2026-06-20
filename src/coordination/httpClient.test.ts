@@ -72,7 +72,7 @@ describe("CoordinationHttpClient", () => {
       status: 200,
       json: async () => [],
     });
-    await client.listDevices();
+    await client.pullHistory(0);
     const call = mockFetch.mock.calls[0];
     const headers = call[1].headers as Record<string, string>;
     expect(headers.Authorization).toBe("Bearer access-token");
@@ -97,7 +97,7 @@ describe("CoordinationHttpClient", () => {
       statusText: "Too Many Requests",
       json: async () => ({ code: "rate_limited", reason: "slow down" }),
     });
-    await expect(client.listDevices()).rejects.toThrow(CoordinationApiError);
+    await expect(client.pullHistory(0)).rejects.toThrow(CoordinationApiError);
     try {
       mockFetch.mockResolvedValueOnce({
         ok: false,
@@ -105,7 +105,7 @@ describe("CoordinationHttpClient", () => {
         statusText: "Too Many Requests",
         json: async () => ({ code: "rate_limited", reason: "slow down" }),
       });
-      await client.listDevices();
+      await client.pullHistory(0);
     } catch (e) {
       expect(e).toBeInstanceOf(CoordinationApiError);
       expect((e as CoordinationApiError).code).toBe("rate_limited");

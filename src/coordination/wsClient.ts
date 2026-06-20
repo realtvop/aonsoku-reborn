@@ -29,6 +29,7 @@ export interface ConnectionCallbacks {
     connectionId: ConnectionId,
     negotiated: CoordinationCapabilities,
   ) => void;
+  onDevicesChanged: (devices: import("./types").DeviceDto[]) => void;
   onSnapshotProjection: (env: Envelope) => void;
   onCommand: (env: Envelope) => void;
   onHandoffCandidate: (env: Envelope) => void;
@@ -71,6 +72,7 @@ export class CoordinationWsClient {
 
   async connect(): Promise<void> {
     if (this.disposed) return;
+    if (this.state === "connecting" || this.state === "connected") return;
     this.setState("connecting");
     const ticket = await this.ticketFn();
     if (!ticket) {
@@ -184,6 +186,9 @@ export class CoordinationWsClient {
       case "heartbeat_ack":
         // Update last-seen; no action needed.
         break;
+      case "devices_changed":
+        this.callbacks.onDevicesChanged(env.devices);
+        break;
       case "snapshot_projection":
         this.callbacks.onSnapshotProjection(env);
         break;
@@ -218,6 +223,7 @@ export class CoordinationWsClient {
 
   private scheduleReconnect() {
     if (this.disposed) return;
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.setState("reconnecting");
     const delay = Math.min(
       BASE_RECONNECT_DELAY_MS * 2 ** this.reconnectAttempts,

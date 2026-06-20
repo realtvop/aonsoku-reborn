@@ -326,6 +326,39 @@ pub struct Envelope {
     pub payload: Payload,
 }
 
+/// Device metadata pushed to every live connection for an account.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceSummary {
+    pub id: DeviceId,
+    pub name: String,
+    pub platform: String,
+    pub client_version: Option<String>,
+    pub capabilities: u32,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub last_online_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub revoked_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub history_sync_cursor: i64,
+    pub legacy_history_imported: bool,
+}
+
+impl From<crate::storage::models::Device> for DeviceSummary {
+    fn from(device: crate::storage::models::Device) -> Self {
+        Self {
+            id: device.id,
+            name: device.name,
+            platform: device.platform,
+            client_version: device.client_version,
+            capabilities: device.capabilities,
+            created_at: device.created_at,
+            last_online_at: device.last_online_at,
+            revoked_at: device.revoked_at,
+            history_sync_cursor: device.history_sync_cursor,
+            legacy_history_imported: device.legacy_history_imported,
+        }
+    }
+}
+
 /// Realtime payload (design §9.1, §9.2, §10, §11).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -350,6 +383,8 @@ pub enum Payload {
     Heartbeat,
     /// Server → client heartbeat ack.
     HeartbeatAck { server_time: i64 },
+    /// Complete device projection, pushed after membership or presence changes.
+    DevicesChanged { devices: Vec<DeviceSummary> },
     /// Full snapshot published by a device.
     Snapshot {
         session_id: SessionId,

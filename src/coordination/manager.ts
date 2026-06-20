@@ -36,6 +36,7 @@ import type {
 
 export interface CoordinationManagerCallbacks {
   onConnectionStateChange: (state: ConnectionState) => void;
+  onDevicesChanged: (devices: DeviceDto[]) => void;
   onDeviceSnapshot: (
     deviceId: DeviceId,
     snapshot: PlaybackSnapshot,
@@ -71,6 +72,7 @@ export class CoordinationManager {
     CoordinationCapability.CONTROL |
     CoordinationCapability.HANDOFF;
   private outboxTimer: ReturnType<typeof setInterval> | null = null;
+  private flushPromise: Promise<void> | null = null;
 
   constructor(private readonly callbacks: CoordinationManagerCallbacks) {}
 
@@ -181,6 +183,9 @@ export class CoordinationManager {
       onWelcome: (deviceId) => {
         this.deviceId = deviceId;
       },
+      onDevicesChanged: (devices) => {
+        this.callbacks.onDevicesChanged(devices);
+      },
       onSnapshotProjection: (env) => {
         if (env.type === "snapshot_projection") {
           this.callbacks.onDeviceSnapshot(
@@ -252,6 +257,16 @@ export class CoordinationManager {
   }
 
   private async flushOutbox(): Promise<void> {
+    if (this.flushPromise) return this.flushPromise;
+    this.flushPromise = this.doFlushOutbox();
+    try {
+      await this.flushPromise;
+    } finally {
+      this.flushPromise = null;
+    }
+  }
+
+  private async doFlushOutbox(): Promise<void> {
     if (!this.httpClient) return;
     const pending = await this.outbox.getPending();
     if (pending.length === 0) return;
@@ -288,11 +303,6 @@ export class CoordinationManager {
   ): Promise<{ mergedSongIds: string[]; isFirstDevice: boolean }> {
     if (!this.httpClient) throw new Error("coordination: not connected");
     return this.httpClient.legacyImport({ entries });
-  }
-
-  async listDevices(): Promise<DeviceDto[]> {
-    if (!this.httpClient) throw new Error("coordination: not connected");
-    return this.httpClient.listDevices();
   }
 
   async renameDevice(id: DeviceId, name: string): Promise<void> {

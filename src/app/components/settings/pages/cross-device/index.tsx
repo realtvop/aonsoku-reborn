@@ -29,10 +29,6 @@ export function CrossDeviceSettings() {
   const [isConnecting, setIsConnecting] = useState(false);
 
   useEffect(() => {
-    coordStore.loadState();
-  }, [coordStore]);
-
-  useEffect(() => {
     if (!identityUrl && url) {
       setIdentityUrl(url);
     }

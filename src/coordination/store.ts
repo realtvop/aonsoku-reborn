@@ -32,12 +32,12 @@ interface CoordinationState {
   deleteAccount: () => Promise<void>;
   renameDevice: (id: DeviceId, name: string) => Promise<void>;
   revokeDevice: (id: DeviceId) => Promise<void>;
-  refreshDevices: () => Promise<void>;
   setError: (error: string | null) => void;
 }
 
 const callbacks = {
   onConnectionStateChange: () => {},
+  onDevicesChanged: () => {},
   onDeviceSnapshot: () => {},
   onRemoteCommand: () => {},
   onHandoffCandidate: () => {},
@@ -48,13 +48,20 @@ const callbacks = {
 };
 
 export const useCoordinationStore = create<CoordinationState>()(
-  immer((set, get) => {
+  immer((set) => {
+    let loadStatePromise: Promise<void> | null = null;
     const manager = new CoordinationManager({
       ...callbacks,
       onConnectionStateChange: (state) => {
         set((s) => {
           s.connectionState = state;
           s.isConnected = state === "connected";
+        });
+      },
+      onDevicesChanged: (devices) => {
+        set((s) => {
+          s.devices = devices;
+          s.lastSyncAt = Date.now();
         });
       },
       onError: (code, reason) => {
@@ -73,21 +80,29 @@ export const useCoordinationStore = create<CoordinationState>()(
       lastSyncAt: null,
       error: null,
 
-      loadState: async () => {
-        await manager.loadState();
-        set((s) => {
-          s.deviceId = manager.getDeviceId();
-        });
-        if (manager.isConfigured() && manager.getDeviceId()) {
-          try {
-            await manager.reconnect();
-            await get().refreshDevices();
-          } catch (err) {
-            set((s) => {
-              s.error = `Auto-reconnect failed: ${String(err)}`;
-            });
-          }
+      loadState: () => {
+        if (!loadStatePromise) {
+          loadStatePromise = (async () => {
+            try {
+              await manager.loadState();
+              set((s) => {
+                s.deviceId = manager.getDeviceId();
+              });
+              if (manager.isConfigured() && manager.getDeviceId()) {
+                try {
+                  await manager.reconnect();
+                } catch (err) {
+                  set((s) => {
+                    s.error = `Auto-reconnect failed: ${String(err)}`;
+                  });
+                }
+              }
+            } finally {
+              loadStatePromise = null;
+            }
+          })();
         }
+        return loadStatePromise;
       },
 
       saveConfig: async (config) => {
@@ -103,7 +118,6 @@ export const useCoordinationStore = create<CoordinationState>()(
           s.deviceId = manager.getDeviceId();
           s.isConnected = true;
         });
-        await get().refreshDevices();
       },
 
       disconnectCurrentDevice: async () => {
@@ -129,26 +143,10 @@ export const useCoordinationStore = create<CoordinationState>()(
 
       renameDevice: async (id, name) => {
         await manager.renameDevice(id, name);
-        await get().refreshDevices();
       },
 
       revokeDevice: async (id) => {
         await manager.revokeDevice(id);
-        await get().refreshDevices();
-      },
-
-      refreshDevices: async () => {
-        try {
-          const devices = await manager.listDevices();
-          set((s) => {
-            s.devices = devices;
-            s.lastSyncAt = Date.now();
-          });
-        } catch (err) {
-          set((s) => {
-            s.error = String(err);
-          });
-        }
       },
 
       setError: (error) => {

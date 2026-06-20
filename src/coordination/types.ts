@@ -155,6 +155,7 @@ export type Payload =
     }
   | { type: "heartbeat" }
   | { type: "heartbeat_ack"; serverTime: number }
+  | { type: "devices_changed"; devices: DeviceDto[] }
   | {
       type: "snapshot";
       sessionId: SessionId;

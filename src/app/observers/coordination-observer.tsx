@@ -39,7 +39,9 @@ function mapLoopState(loop: LoopState): "off" | "one" | "all" {
 }
 
 export function CoordinationObserver() {
-  const coordStore = useCoordinationStore();
+  const isConnected = useCoordinationStore((state) => state.isConnected);
+  const loadState = useCoordinationStore((state) => state.loadState);
+  const manager = useCoordinationStore((state) => state.manager);
   const playerActions = usePlayerActions();
   const currentSong = usePlayerCurrentSong();
   const currentList = usePlayerCurrentList();
@@ -53,12 +55,12 @@ export function CoordinationObserver() {
 
   // Load coordination state and auto-connect on mount
   useEffect(() => {
-    coordStore.loadState();
-  }, [coordStore]);
+    loadState().catch(() => {});
+  }, [loadState]);
 
   // Publish snapshot when playback state changes (design §9.2).
   useEffect(() => {
-    if (!coordStore.isConnected || !currentSong) return;
+    if (!isConnected || !currentSong) return;
     const state = usePlayerStore.getState();
     const snapshot: PlaybackSnapshot = {
       sessionId: sessionIdRef.current,
@@ -85,28 +87,28 @@ export function CoordinationObserver() {
       scrobbleSent: false,
     };
     snapshotRevisionRef.current++;
-    coordStore.manager.publishSnapshot(
+    manager.publishSnapshot(
       sessionIdRef.current,
       generationRef.current,
       snapshotRevisionRef.current,
       snapshot,
     );
   }, [
-    coordStore.isConnected,
+    isConnected,
     currentSong,
     playerProgress,
     currentList,
     shuffleEnabled,
     loopState,
     volume,
-    coordStore.manager,
+    manager,
   ]);
 
   // Handle remote commands from other devices (design §10).
   useEffect(() => {
-    if (!coordStore.isConnected) return;
-    const original = coordStore.manager.callbacks.onRemoteCommand;
-    coordStore.manager.callbacks.onRemoteCommand = (
+    if (!isConnected) return;
+    const original = manager.callbacks.onRemoteCommand;
+    manager.callbacks.onRemoteCommand = (
       command: RemoteCommand,
       _sourceDeviceId: string,
     ) => {
@@ -151,20 +153,15 @@ export function CoordinationObserver() {
       }
     };
     return () => {
-      coordStore.manager.callbacks.onRemoteCommand = original;
+      manager.callbacks.onRemoteCommand = original;
     };
-  }, [
-    coordStore.isConnected,
-    coordStore.manager,
-    playerActions,
-    shuffleEnabled,
-  ]);
+  }, [isConnected, manager, playerActions, shuffleEnabled]);
 
   // Handle prepare_relinquish: pause the local player (design §11.1 step 4-5).
   useEffect(() => {
-    if (!coordStore.isConnected) return;
-    const original = coordStore.manager.callbacks.onPrepareRelinquish;
-    coordStore.manager.callbacks.onPrepareRelinquish = (
+    if (!isConnected) return;
+    const original = manager.callbacks.onPrepareRelinquish;
+    manager.callbacks.onPrepareRelinquish = (
       transactionId: string,
       _expectedRevision: number,
     ) => {
@@ -198,15 +195,15 @@ export function CoordinationObserver() {
           nowPlayingSent: false,
           scrobbleSent: false,
         };
-        coordStore.manager.sendRelinquishAck(transactionId, finalSnapshot);
+        manager.sendRelinquishAck(transactionId, finalSnapshot);
       }
     };
     return () => {
-      coordStore.manager.callbacks.onPrepareRelinquish = original;
+      manager.callbacks.onPrepareRelinquish = original;
     };
   }, [
-    coordStore.isConnected,
-    coordStore.manager,
+    isConnected,
+    manager,
     playerActions,
     currentSong,
     currentList,
@@ -218,9 +215,9 @@ export function CoordinationObserver() {
   // Handle handoff_committed: apply the final snapshot and start playback
   // on B (design §11.1 step 7).
   useEffect(() => {
-    if (!coordStore.isConnected) return;
-    const original = coordStore.manager.callbacks.onHandoffCommitted;
-    coordStore.manager.callbacks.onHandoffCommitted = (
+    if (!isConnected) return;
+    const original = manager.callbacks.onHandoffCommitted;
+    manager.callbacks.onHandoffCommitted = (
       snapshot: PlaybackSnapshot,
       _newGeneration: number,
     ) => {
@@ -231,9 +228,9 @@ export function CoordinationObserver() {
       }
     };
     return () => {
-      coordStore.manager.callbacks.onHandoffCommitted = original;
+      manager.callbacks.onHandoffCommitted = original;
     };
-  }, [coordStore.isConnected, coordStore.manager, playerActions]);
+  }, [isConnected, manager, playerActions]);
 
   return null;
 }

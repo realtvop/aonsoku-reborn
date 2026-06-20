@@ -207,6 +207,7 @@ async fn run_ws(socket: WebSocket, state: AppState, ticket: String) {
             last_seq: 0,
         })
         .await;
+    crate::api::devices::broadcast_device_list(&state, account_id).await;
     tracing::info!(target: "coordination::ws", device = %device_id, "websocket disconnected");
 }
 
@@ -255,6 +256,7 @@ async fn handle_inbound(
                 },
             };
             let _ = registry.send(confirmed_device, response);
+            crate::api::devices::broadcast_device_list(state, account_id).await;
 
             // If protocol version is incompatible, send an error.
             if *protocol_version != PROTOCOL_VERSION {

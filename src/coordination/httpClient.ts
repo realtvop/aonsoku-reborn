@@ -85,8 +85,8 @@ export class CoordinationHttpClient {
     }
     if (!resp.ok) {
       const body = await resp
-          .json()
-          .catch(() => ({ code: "internal", reason: resp.statusText }));
+        .json()
+        .catch(() => ({ code: "internal", reason: resp.statusText }));
       const error = new CoordinationApiError(
         body.code ?? "internal",
         body.reason ?? "unknown error",
@@ -182,11 +182,6 @@ export class CoordinationHttpClient {
       method: "POST",
       body: JSON.stringify({}),
     });
-  }
-
-  async listDevices(): Promise<DeviceDto[]> {
-    await this.ensureValidAccessToken();
-    return this.request<DeviceDto[]>("/v1/devices");
   }
 
   async renameDevice(id: DeviceId, name: string): Promise<DeviceDto> {
