@@ -9,6 +9,7 @@ import {
   LaptopIcon,
   Paintbrush,
   Server,
+  Share2,
 } from "lucide-react";
 import { ComponentType } from "react";
 import { useTranslation } from "react-i18next";
@@ -19,6 +20,7 @@ import { Accounts } from "@/app/components/settings/pages/accounts";
 import { Appearance } from "@/app/components/settings/pages/appearance";
 import { Audio } from "@/app/components/settings/pages/audio";
 import { Content } from "@/app/components/settings/pages/content";
+import { CrossDeviceSettings } from "@/app/components/settings/pages/cross-device";
 import { Desktop } from "@/app/components/settings/pages/desktop";
 import { Language } from "@/app/components/settings/pages/language";
 import { Privacy } from "@/app/components/settings/pages/privacy";
@@ -42,6 +44,7 @@ const categories: CategoryItem[] = [
   { id: "content", icon: FileText },
   { id: "storage", icon: HardDrive },
   ...(isDesktop() ? [accountsOption, desktopOption] : []),
+  { id: "cross-device", icon: Share2 },
   { id: "privacy", icon: EarthLock },
 ];
 
@@ -54,6 +57,7 @@ const pages: Record<SettingsOptions, () => JSX.Element> = {
   storage: () => <Storage />,
   accounts: () => <Accounts />,
   desktop: () => <Desktop />,
+  "cross-device": () => <CrossDeviceSettings />,
   privacy: () => <Privacy />,
 };
 
