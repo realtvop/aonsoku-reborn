@@ -198,6 +198,11 @@ export class CoordinationWsClient {
         );
         this.callbacks.onCommand(env);
         break;
+      case "command_ack":
+        console.info(
+          `[wsClient] command_ack: ${JSON.stringify(env)}`,
+        );
+        break;
       case "handoff_candidate":
         this.callbacks.onHandoffCandidate(env);
         break;

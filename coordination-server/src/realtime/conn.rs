@@ -420,7 +420,20 @@ async fn handle_inbound(
             command,
         } => {
             // Route command to target device (design §10).
+            tracing::info!(
+                target: "coordination::ws",
+                from = %device_id,
+                target = %target_device_id,
+                expected_gen = expected_generation,
+                command = ?command,
+                "command received for routing"
+            );
             if let Err(e) = command.validate(state.config.max_snapshot_songs) {
+                tracing::warn!(
+                    target: "coordination::ws",
+                    code = ?e.code,
+                    "command validation failed"
+                );
                 let ack = Envelope {
                     version: PROTOCOL_VERSION,
                     message_id: env.message_id,
@@ -443,6 +456,11 @@ async fn handle_inbound(
                 return;
             }
             if !registry.is_online(*target_device_id) {
+                tracing::warn!(
+                    target: "coordination::ws",
+                    target = %target_device_id,
+                    "target device is offline, cannot forward command"
+                );
                 let ack = Envelope {
                     version: PROTOCOL_VERSION,
                     message_id: env.message_id,
@@ -481,7 +499,23 @@ async fn handle_inbound(
                     command: command.clone(),
                 },
             };
-            let _ = registry.send(*target_device_id, forwarded);
+            match registry.send(*target_device_id, forwarded) {
+                Ok(()) => {
+                    tracing::info!(
+                        target: "coordination::ws",
+                        target = %target_device_id,
+                        "command forwarded successfully"
+                    );
+                }
+                Err(e) => {
+                    tracing::error!(
+                        target: "coordination::ws",
+                        target = %target_device_id,
+                        error = ?e,
+                        "failed to send forwarded command"
+                    );
+                }
+            }
         }
         Payload::HandoffCandidateRequest {
             source_device_id,
