@@ -48,14 +48,14 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             val refreshToken = call.getString("refreshToken") ?: return call.reject("missing refreshToken")
             val deviceId = call.getString("deviceId") ?: return call.reject("missing deviceId")
             val accountId = call.getString("accountId") ?: return call.reject("missing accountId")
-            val historyLimit = call.getInt("historyLimit", 100)
+        val historyLimit = call.getInt("historyLimit", 100) ?: 100
 
-            val prefs = context.getSharedPreferences(PREFS_NAME, 0).edit()
-            prefs.putString("access_token", accessToken)
-            prefs.putString("refresh_token", refreshToken)
-            prefs.putString("device_id", deviceId)
-            prefs.putString("account_id", accountId)
-            prefs.putInt("history_limit", historyLimit)
+        val prefs = context.getSharedPreferences(PREFS_NAME, 0).edit()
+        prefs.putString("access_token", accessToken)
+        prefs.putString("refresh_token", refreshToken)
+        prefs.putString("device_id", deviceId)
+        prefs.putString("account_id", accountId)
+        prefs.putInt("history_limit", historyLimit)
             prefs.apply()
             call.resolve()
         } catch (e: Exception) {
@@ -118,8 +118,8 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         val ticket = call.getString("ticket") ?: return call.reject("missing ticket")
         val devId = call.getString("deviceId") ?: return call.reject("missing deviceId")
         this.deviceId = devId
-        this.capabilities = call.getInt("capabilities", 0)
-        this.protocolVersion = call.getInt("protocolVersion", 1)
+        this.capabilities = call.getInt("capabilities", 0) ?: 0
+        this.protocolVersion = call.getInt("protocolVersion", 1) ?: 1
 
         disconnectInternal()
 
