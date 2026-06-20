@@ -24,6 +24,7 @@ import type { StoredDeviceTokens } from "@/coordination/httpClient";
 import type {
   DeviceId,
   Envelope,
+  MessageId,
   PlaybackSnapshot,
   RemoteCommand,
   SessionGeneration,
@@ -34,6 +35,14 @@ import {
   COORDINATION_PROTOCOL_VERSION,
   CoordinationCapability,
 } from "@/coordination/types";
+import type {
+  CommandResult,
+  ConnectionSeq,
+} from "@/coordination/types";
+import type {
+  SendCommandOptions,
+  RefreshGenerationFn,
+} from "@/coordination/wsClient";
 
 export type NativeCoordinationAvailability =
   | { available: true; plugin: AonsokuNativeCoordinationPlugin }
@@ -144,12 +153,68 @@ export interface CoordinationTokenStore {
   saveConfig(config: CoordinationConfig | null): Promise<void>;
 }
 
+/// §9.1 dedup cache for incoming envelopes. Mirrors the TS client's cache:
+/// the server replays the original result for a replayed messageId, so a
+/// duplicate here is expected and is skipped silently.
+class DedupCache {
+  private readonly seen = new Map<MessageId, number>();
+  private readonly max: number;
+  constructor(max = 200) {
+    this.max = max;
+  }
+  has(id: MessageId): boolean {
+    return this.seen.has(id);
+  }
+  mark(id: MessageId): void {
+    if (this.seen.has(id)) return;
+    if (this.seen.size >= this.max) {
+      const oldest = this.seen.keys().next().value;
+      if (oldest !== undefined) this.seen.delete(oldest);
+    }
+    this.seen.set(id, Date.now());
+  }
+  clear(): void {
+    this.seen.clear();
+  }
+  size(): number {
+    return this.seen.size;
+  }
+}
+
+/// §9.1 pending-ack entry. Holds the caller's resolve/reject and a timeout
+/// timer so the facade can resolve the `sendCommandAck()` promise when the
+/// native plugin emits `coordinationAck`.
+interface PendingAck {
+  messageId: MessageId;
+  createdAt: number;
+  resolve: (result: CommandResult) => void;
+  reject: (err: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+  retry: {
+    targetDeviceId: DeviceId;
+    expectedGeneration: SessionGeneration;
+    command: RemoteCommand;
+    options: SendCommandOptions;
+    attempted: boolean;
+  };
+}
+
+const DEFAULT_ACK_TIMEOUT_MS = 10_000;
+
 /// Native coordination client — adapts the native plugin to the
 /// `CoordinationClient` surface (design §5.2). Envelope JSON produced by the
 /// native plugin mirrors `src/coordination/types.ts` `Envelope`, so
 /// `coordinationEvent` payloads are parsed back into `Envelope` and forwarded
 /// through `ConnectionCallbacks` — the rest of the manager and store are
 /// unaware of which transport is active.
+///
+/// §9.1 ack/seq/dedup: the facade tracks `lastSeq` on every incoming envelope
+/// and submits it in the next `connect()` call's `lastSeq` option. It
+/// maintains a dedup cache for incoming `command`/`snapshot_projection`
+/// envelopes and a pending-ack map so `sendCommandAck()` can return a
+/// `Promise<CommandResult>`. The native plugin emits `coordinationAck` when
+/// a `command_ack` envelope arrives; the facade resolves the matching
+/// pending entry.
 ///
 /// Reconnect: the native plugin fires `coordinationReconnectNeeded` after an
 /// unexpected disconnect (the WebSocket ticket is one-time/expiring so the
@@ -163,6 +228,15 @@ export class NativeCoordinationClient implements CoordinationClient {
   private reconnectHandler: (() => Promise<void>) | null = null;
   private listeners: PluginListenerHandle[] = [];
   private disposed = false;
+  /// §9.2: highest server seq the client has processed. Submitted in the
+  /// next `connect()` call's `lastSeq` option.
+  private lastSeq: ConnectionSeq = 0;
+  /// §9.1 dedup cache for incoming envelopes.
+  private dedup = new DedupCache();
+  /// §9.1 pending-ack map keyed by messageId.
+  private pendingAcks = new Map<MessageId, PendingAck>();
+  /// §13 stale-epoch retry hook. Wired by the manager.
+  private refreshGenerationFn: RefreshGenerationFn | null = null;
 
   constructor(
     private readonly plugin: AonsokuNativeCoordinationPlugin,
@@ -181,6 +255,27 @@ export class NativeCoordinationClient implements CoordinationClient {
   /// and calls `connect()` again.
   setReconnectHandler(handler: () => Promise<void>): void {
     this.reconnectHandler = handler;
+  }
+
+  /// §13: wire the stale-epoch retry hook. The manager passes a function
+  /// that resolves to the latest generation for a target device.
+  setRefreshGenerationFn(fn: RefreshGenerationFn): void {
+    this.refreshGenerationFn = fn;
+  }
+
+  /// Test-only: inspect the dedup cache size.
+  internalDedupSize(): number {
+    return this.dedup.size();
+  }
+
+  /// Test-only: inspect the pending-ack map size.
+  internalPendingAckSize(): number {
+    return this.pendingAcks.size;
+  }
+
+  /// Test-only: current tracked lastSeq.
+  internalLastSeq(): ConnectionSeq {
+    return this.lastSeq;
   }
 
   getState(): ConnectionState {
@@ -208,6 +303,7 @@ export class NativeCoordinationClient implements CoordinationClient {
         deviceId: this.deviceId ?? "",
         capabilities: this.capabilities,
         protocolVersion: COORDINATION_PROTOCOL_VERSION,
+        lastSeq: this.lastSeq,
       });
     } catch (err) {
       this.setState("error");
@@ -224,6 +320,15 @@ export class NativeCoordinationClient implements CoordinationClient {
       handle.remove().catch(() => {});
     }
     this.listeners = [];
+    // Reject in-flight acks so callers don't hang on teardown.
+    for (const pending of this.pendingAcks.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error("coordination: disconnected before ack"));
+    }
+    this.pendingAcks.clear();
+    // The dedup cache is per-connection; clear it so a reconnect does not
+    // falsely skip messages from the new connection.
+    this.dedup.clear();
     this.plugin.disconnect().catch(() => {});
     this.setState("disconnected");
   }
@@ -254,6 +359,94 @@ export class NativeCoordinationClient implements CoordinationClient {
         targetDeviceId,
         expectedGeneration,
         commandJson: JSON.stringify(command),
+      })
+      .catch(() => {});
+  }
+
+  /// §9.1 ack overload: sends the command and resolves with the
+  /// `CommandResult` when the native plugin emits `coordinationAck` for
+  /// the matching messageId. Rejects after the timeout. Supports a single
+  /// stale-epoch retry when `options.retryOnStaleEpoch` is true.
+  sendCommandAck(
+    targetDeviceId: DeviceId,
+    expectedGeneration: SessionGeneration,
+    command: RemoteCommand,
+    options: SendCommandOptions,
+  ): Promise<CommandResult> {
+    const messageId = crypto.randomUUID();
+    const retry: PendingAck["retry"] = {
+      targetDeviceId,
+      expectedGeneration,
+      command,
+      options,
+      attempted: false,
+    };
+    const promise = this.trackPendingAck(messageId, retry, options);
+    this.plugin
+      .sendCommand({
+        targetDeviceId,
+        expectedGeneration,
+        commandJson: JSON.stringify(command),
+        messageId,
+      })
+      .catch((err) => {
+        const pending = this.pendingAcks.get(messageId);
+        if (pending) {
+          clearTimeout(pending.timer);
+          this.pendingAcks.delete(messageId);
+          pending.reject(
+            err instanceof Error ? err : new Error("native sendCommand failed"),
+          );
+        }
+      });
+    return promise;
+  }
+
+  /// Register a pending-ack entry with a timeout timer.
+  private trackPendingAck(
+    messageId: MessageId,
+    retry: PendingAck["retry"],
+    options: SendCommandOptions,
+  ): Promise<CommandResult> {
+    return new Promise<CommandResult>((resolve, reject) => {
+      const timeoutMs = options.timeoutMs ?? DEFAULT_ACK_TIMEOUT_MS;
+      const timer = setTimeout(() => {
+        this.pendingAcks.delete(messageId);
+        reject(new Error(`command_ack timeout after ${timeoutMs}ms`));
+      }, timeoutMs);
+      this.pendingAcks.set(messageId, {
+        messageId,
+        createdAt: Date.now(),
+        resolve,
+        reject,
+        timer,
+        retry,
+      });
+    });
+  }
+
+  /// Resend a command with an updated expectedGeneration (stale-epoch
+  /// retry, §13). Reuses the original `PendingAck`'s resolve/reject so the
+  /// caller's promise resolves/rejects with the retry result. A new
+  /// messageId is generated and a fresh timeout timer is armed.
+  private resendCommand(
+    pending: PendingAck,
+    newGeneration: SessionGeneration,
+  ): void {
+    const messageId = crypto.randomUUID();
+    const timeoutMs =
+      pending.retry.options.timeoutMs ?? DEFAULT_ACK_TIMEOUT_MS;
+    pending.timer = setTimeout(() => {
+      this.pendingAcks.delete(messageId);
+      pending.reject(new Error(`command_ack timeout after ${timeoutMs}ms`));
+    }, timeoutMs);
+    this.pendingAcks.set(messageId, pending);
+    this.plugin
+      .sendCommand({
+        targetDeviceId: pending.retry.targetDeviceId,
+        expectedGeneration: newGeneration,
+        commandJson: JSON.stringify(pending.retry.command),
+        messageId,
       })
       .catch(() => {});
   }
@@ -309,6 +502,71 @@ export class NativeCoordinationClient implements CoordinationClient {
     );
     this.listeners.push(eventHandle);
 
+    // §9.1 `coordinationAck` — emitted by the native plugin when a
+    // `command_ack` envelope arrives, so the facade can resolve the
+    // pending `sendCommandAck()` promise. The native plugin also tracks
+    // lastSeq/dedup on its side; this event is the bridge back to the
+    // WebView-side promise.
+    const ackHandle = await this.plugin.addListener(
+      "coordinationAck",
+      (data: { messageId: string; resultJson: string }) => {
+        const pending = this.pendingAcks.get(data.messageId);
+        if (!pending) return;
+        let result: CommandResult;
+        try {
+          result = JSON.parse(data.resultJson) as CommandResult;
+        } catch {
+          // Malformed ack payload — reject the pending promise so the
+          // caller does not hang.
+          clearTimeout(pending.timer);
+          this.pendingAcks.delete(data.messageId);
+          pending.reject(new Error("coordination: malformed ack result"));
+          return;
+        }
+        // §13 stale-epoch retry path.
+        if (
+          result.status === "error" &&
+          result.code === "stale_epoch" &&
+          pending.retry.options.retryOnStaleEpoch &&
+          !pending.retry.attempted &&
+          this.refreshGenerationFn
+        ) {
+          clearTimeout(pending.timer);
+          this.pendingAcks.delete(data.messageId);
+          pending.retry.attempted = true;
+          this.refreshGenerationFn(pending.retry.targetDeviceId)
+            .then((gen) => {
+              if (gen === null) {
+                pending.reject(
+                  new Error("stale_epoch retry: could not refresh generation"),
+                );
+                return;
+              }
+              this.resendCommand(pending, gen);
+            })
+            .catch((err) => pending.reject(err));
+          return;
+        }
+        // §13: a second stale_epoch after a retry was attempted rejects.
+        if (
+          result.status === "error" &&
+          result.code === "stale_epoch" &&
+          pending.retry.attempted
+        ) {
+          clearTimeout(pending.timer);
+          this.pendingAcks.delete(data.messageId);
+          pending.reject(
+            new Error("stale_epoch: generation still stale after retry"),
+          );
+          return;
+        }
+        clearTimeout(pending.timer);
+        this.pendingAcks.delete(data.messageId);
+        pending.resolve(result);
+      },
+    );
+    this.listeners.push(ackHandle);
+
     // `coordinationStateChange` — connection state updates from the native
     // layer. Forwarded through the same `ConnectionCallbacks`.
     const stateHandle = await this.plugin.addListener(
@@ -336,9 +594,29 @@ export class NativeCoordinationClient implements CoordinationClient {
   }
 
   private handleEnvelope(env: Envelope): void {
+    // §9.2: track the incoming seq on every envelope so the next `connect()`
+    // can submit `lastSeq` and the server can skip already-delivered messages.
+    if (typeof env.seq === "number" && env.seq > this.lastSeq) {
+      this.lastSeq = env.seq;
+    }
+
+    // §9.1: dedup incoming command/snapshot envelopes by messageId.
+    if (
+      (env.type === "command" || env.type === "snapshot_projection") &&
+      env.messageId
+    ) {
+      if (this.dedup.has(env.messageId)) {
+        return;
+      }
+      this.dedup.mark(env.messageId);
+    }
+
     switch (env.type) {
       case "welcome":
         if (env.deviceId) this.deviceId = env.deviceId;
+        if (typeof env.seq === "number" && env.seq > this.lastSeq) {
+          this.lastSeq = env.seq;
+        }
         this.callbacks.onWelcome(
           env.deviceId,
           env.connectionId ?? "",
@@ -356,6 +634,10 @@ export class NativeCoordinationClient implements CoordinationClient {
         break;
       case "command":
         this.callbacks.onCommand(env);
+        break;
+      case "command_ack":
+        // The native plugin emits `coordinationAck` separately; the envelope
+        // is handled by the ack listener, not here.
         break;
       case "handoff_candidate":
         this.callbacks.onHandoffCandidate(env);
@@ -379,7 +661,7 @@ export class NativeCoordinationClient implements CoordinationClient {
         );
         break;
       default:
-        // command_ack / heartbeat / snapshot / hello / relinquish_ack /
+        // heartbeat / snapshot / hello / relinquish_ack /
         // handoff_candidate_request / target_ready — outbound or ignored.
         break;
     }
@@ -405,4 +687,5 @@ export type {
   CoordinationHandoffOptions,
   CoordinationTokenOptions,
   CoordinationConfigOptions,
+  CoordinationAckEvent,
 } from "@aonsoku/capacitor-native/coordination";

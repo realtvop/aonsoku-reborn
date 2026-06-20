@@ -48,6 +48,10 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     private var heartbeatTimer: Timer?
     private var reconnectWorkItem: DispatchWorkItem?
     private var keychainService = "aonsoku-coordination"
+    /// §9.1 dedup cache for incoming envelopes.
+    private var dedupCache = CoordinationDedup(max: 200)
+    /// §9.2 sequence tracker — highest server seq processed.
+    private var seqTracker = CoordinationSeqTracker()
 
     /// Saved by the app delegate when iOS relaunches the app for a background
     /// URLSession completion. Invoked from
@@ -155,6 +159,12 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         self.deviceId = deviceId
         self.capabilities = call.getInt("capabilities") ?? 0
         self.protocolVersion = call.getInt("protocolVersion") ?? 1
+        // §9.2: the client submits the highest seq it has processed so the
+        // server can skip already-delivered messages. When the caller omits
+        // lastSeq (first-ever connect), default to 0.
+        let lastSeqValue = call.getInt("lastSeq") ?? 0
+        self.seqTracker = CoordinationSeqTracker()
+        self.seqTracker.observe(Int64(lastSeqValue))
 
         // Lifecycle correctness (§2.1.8): if the socket is already open, do
         // not create a second one when the app returns to the foreground or
@@ -173,6 +183,9 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
 
         self.manualDisconnect = false
         self.disconnectInternal()
+        // The dedup cache is per-connection; clear it so a reconnect does
+        // not falsely skip messages from the new connection.
+        self.dedupCache.clear()
 
         // §2.1.8: use a background URLSession so iOS keeps the WebSocket
         // eligible for execution while the app is backgrounded, as long as
@@ -241,9 +254,12 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
             call.reject("missing command fields")
             return
         }
+        // §9.1: the caller may supply a messageId to match the command to a
+        // pending-ack promise. Fall back to a generated UUID.
+        let messageId = call.getString("messageId") ?? UUID().uuidString
         let env: [String: Any] = [
             "version": self.protocolVersion,
-            "messageId": UUID().uuidString,
+            "messageId": messageId,
             "type": "command",
             "targetDeviceId": targetDeviceId,
             "expectedGeneration": call.getInt("expectedGeneration") ?? 0,
@@ -477,6 +493,11 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         self.session?.invalidateAndCancel()
         self.session = nil
         self.isConnecting = false
+        // §9.1/§9.2: clear the dedup cache and reset the seq tracker so a
+        // reconnect starts clean. The next `connect()` call supplies the
+        // lastSeq option again.
+        self.dedupCache.clear()
+        self.seqTracker.reset()
     }
 
     private func startHeartbeat() {
@@ -518,6 +539,53 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     }
 
     private func dispatchEnvelope(_ json: String) {
+        // Parse once to extract routing metadata, then forward the raw JSON
+        // to the WebView so it can re-parse into the full Envelope type.
+        if let dict = JSONUtilities.parse(json) {
+            // §9.2: track the incoming seq on every envelope.
+            if let seq = dict["seq"] as? Int64 {
+                self.seqTracker.observe(seq)
+            } else if let seq = dict["seq"] as? Int {
+                self.seqTracker.observe(Int64(seq))
+            } else if let seq = dict["seq"] as? Double {
+                self.seqTracker.observe(Int64(seq))
+            }
+            // §9.1: dedup command/snapshot_projection envelopes by messageId.
+            if let type = dict["type"] as? String,
+               type == "command" || type == "snapshot_projection",
+               let id = dict["messageId"] as? String {
+                if self.dedupCache.has(id) {
+                    // Duplicate — skip re-dispatching (debug-level only).
+                    return
+                }
+                self.dedupCache.mark(id)
+            }
+            // §9.1: emit `coordinationAck` when a command_ack arrives so the
+            // WebView facade can resolve the pending sendCommand() promise.
+            if let type = dict["type"] as? String, type == "command_ack" {
+                let messageId = dict["messageId"] as? String ?? ""
+                let result: String
+                if let r = dict["result"] {
+                    if let data = try? JSONSerialization.data(withJSONObject: r),
+                       let str = String(data: data, encoding: .utf8) {
+                        result = str
+                    } else {
+                        result = "{}"
+                    }
+                } else {
+                    result = "{}"
+                }
+                DispatchQueue.main.async {
+                    self.notifyListeners(
+                        "coordinationAck",
+                        data: [
+                            "messageId": messageId,
+                            "resultJson": result,
+                        ]
+                    )
+                }
+            }
+        }
         DispatchQueue.main.async {
             self.notifyListeners("coordinationEvent", data: ["envelopeJson": json])
         }

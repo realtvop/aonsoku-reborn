@@ -15,6 +15,7 @@ import {
   type CoordinationClient,
   type ConnectionState,
   type ConnectionCallbacks,
+  type SendCommandOptions,
 } from "./wsClient";
 import { HistoryOutbox } from "./outbox";
 import {
@@ -34,6 +35,7 @@ import {
   NativeCoordinationTokenStore,
 } from "@/native/coordination";
 import type {
+  CommandResult,
   DeviceDto,
   DeviceId,
   HistoryOperationInput,
@@ -112,6 +114,10 @@ export class CoordinationManager {
     CoordinationCapability.HANDOFF;
   private outboxTimer: ReturnType<typeof setInterval> | null = null;
   private flushPromise: Promise<void> | null = null;
+  /// Per-device latest generation cache, fed by `onDeviceSnapshot`. Used
+  /// by the stale-epoch retry path to refresh `expectedGeneration` without
+  /// a round-trip to the server when a recent snapshot is available.
+  private deviceGenerations = new Map<DeviceId, SessionGeneration>();
   /// Token/config store — native (Keychain/Keystore) when the native plugin is
   /// available, IndexedDB/localStorage otherwise. Only one is active at a time
   /// (design §6.3).
@@ -242,6 +248,9 @@ export class CoordinationManager {
       },
       onSnapshotProjection: (env) => {
         if (env.type === "snapshot_projection") {
+          // Feed the generation cache so the stale-epoch retry path can
+          // refresh without a server round-trip.
+          this.deviceGenerations.set(env.deviceId, env.generation);
           this.callbacks.onDeviceSnapshot(
             env.deviceId,
             env.snapshot,
@@ -325,6 +334,7 @@ export class CoordinationManager {
           await this.openWebSocket();
         });
         this.coordClient = nativeClient;
+        this.wireRefreshGeneration(nativeClient);
         try {
           await nativeClient.connect();
           return;
@@ -337,14 +347,45 @@ export class CoordinationManager {
       }
     }
     // TS WebSocket path (web/Electron, or native fallback).
-    this.coordClient = new CoordinationWsClient(
+    const tsClient = new CoordinationWsClient(
       () => wsUrl,
       ticketFn,
       this.deviceId,
       this.capabilities,
       cb,
     );
+    this.coordClient = tsClient;
+    this.wireRefreshGeneration(tsClient);
     await this.coordClient.connect();
+  }
+
+  /// Wire the stale-epoch retry hook (design §13). The refresh function
+  /// returns the latest known generation for a target device from the
+  /// `onDeviceSnapshot` cache, or null if unknown so the caller's promise
+  /// rejects with a clear reason.
+  private wireRefreshGeneration(
+    client: CoordinationClient & {
+      setRefreshGenerationFn?: (fn: (deviceId: DeviceId) => Promise<SessionGeneration | null>) => void;
+    },
+  ): void {
+    if (typeof client.setRefreshGenerationFn === "function") {
+      client.setRefreshGenerationFn(async (targetDeviceId) => {
+        const cached = this.deviceGenerations.get(targetDeviceId);
+        if (cached !== undefined) return cached;
+        // Fall back to a fresh device list when we have no cached snapshot.
+        // DeviceDto does not carry a generation, so the HTTP fallback
+        // cannot refresh the generation — signal failure so the caller's
+        // promise rejects with a clear reason instead of silently
+        // retrying with a stale value.
+        if (!this.httpClient) return null;
+        try {
+          await this.httpClient.listDevices();
+          return null;
+        } catch {
+          return null;
+        }
+      });
+    }
   }
 
   private startOutboxProcessor() {
@@ -444,8 +485,33 @@ export class CoordinationManager {
     targetDeviceId: DeviceId,
     expectedGeneration: SessionGeneration,
     command: RemoteCommand,
-  ) {
+  ): void;
+  /// §9.1 ack overload: resolves with the `CommandResult` returned by the
+  /// server, or rejects after the timeout. Pass `retryOnStaleEpoch: true`
+  /// to opt into a single stale-epoch retry that refreshes the generation
+  /// from the device-snapshot cache and resends.
+  sendCommand(
+    targetDeviceId: DeviceId,
+    expectedGeneration: SessionGeneration,
+    command: RemoteCommand,
+    options: SendCommandOptions,
+  ): Promise<CommandResult>;
+  sendCommand(
+    targetDeviceId: DeviceId,
+    expectedGeneration: SessionGeneration,
+    command: RemoteCommand,
+    options?: SendCommandOptions,
+  ): void | Promise<CommandResult> {
+    if (options?.awaitAck && this.coordClient?.sendCommandAck) {
+      return this.coordClient.sendCommandAck(
+        targetDeviceId,
+        expectedGeneration,
+        command,
+        options,
+      );
+    }
     this.coordClient?.sendCommand(targetDeviceId, expectedGeneration, command);
+    return;
   }
 
   requestHandoffCandidate(
@@ -487,6 +553,7 @@ export class CoordinationManager {
       clearInterval(this.outboxTimer);
       this.outboxTimer = null;
     }
+    this.deviceGenerations.clear();
     this.tokens = null;
     this.httpClient = null;
   }

@@ -15,6 +15,23 @@ export interface CoordinationConnectOptions {
   capabilities: number;
   /** Protocol version (currently 1). */
   protocolVersion: number;
+  /**
+   * §9.2: the highest server seq the client has processed. Submitted in the
+   * next `hello` so the server can skip already-delivered messages after a
+   * reconnect. Defaults to 0 on the first connection.
+   */
+  lastSeq?: number;
+}
+
+/// §9.1: payload of the `coordinationAck` event. The native plugin emits
+/// this when a `command_ack` envelope arrives so the WebView facade can
+/// resolve the pending `sendCommand()` promise.
+export interface CoordinationAckEvent {
+  /** The messageId of the original `command` envelope. */
+  messageId: string;
+  /** JSON-serialized `CommandResult` (`{"status":"ok"}` or
+   *  `{"status":"error","code":"...","reason":"..."}`). */
+  resultJson: string;
 }
 
 export interface CoordinationStateResult {
@@ -35,6 +52,12 @@ export interface CoordinationCommandOptions {
   expectedGeneration: number;
   /** JSON-serialized RemoteCommand. */
   commandJson: string;
+  /**
+   * §9.1: caller-supplied messageId for the command envelope. When omitted,
+   * the native plugin generates one. The facade supplies one when it needs
+   * to match the command to a pending-ack promise.
+   */
+  messageId?: string;
 }
 
 export interface CoordinationHandoffOptions {
@@ -119,6 +142,15 @@ export interface AonsokuNativeCoordinationPlugin extends Plugin {
   addListener(
     eventName: "coordinationEvent",
     listenerFunc: (data: { envelopeJson: string }) => void,
+  ): Promise<PluginListenerHandle>;
+
+  /// §9.1: add a listener for command acknowledgements. Emitted when a
+  /// `command_ack` envelope arrives so the WebView facade can resolve the
+  /// pending `sendCommand()` promise. The payload carries the messageId of
+  /// the original command and the JSON-serialized `CommandResult`.
+  addListener(
+    eventName: "coordinationAck",
+    listenerFunc: (data: CoordinationAckEvent) => void,
   ): Promise<PluginListenerHandle>;
 
   /// Add a listener for connection state changes.

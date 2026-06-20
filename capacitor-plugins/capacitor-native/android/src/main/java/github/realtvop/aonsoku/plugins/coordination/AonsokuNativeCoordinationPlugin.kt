@@ -60,6 +60,8 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         internal const val BASE_RECONNECT_DELAY_MS = 1000L
         internal const val MAX_RECONNECT_DELAY_MS = 30_000L
         internal const val MAX_RECONNECT_ATTEMPTS = 10
+        /// §9.1 dedup cache cap.
+        internal const val DEDUP_CACHE_MAX = 200
 
         /// Design §9.2: heartbeat envelope. messageId is assigned at send time.
         internal fun buildHeartbeatEnvelope(protocolVersion: Int): JSONObject {
@@ -89,6 +91,31 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             val separator = if (base.contains("?")) "&" else "?"
             val encoded = java.net.URLEncoder.encode(ticket, "UTF-8")
             return base + separator + "ticket=" + encoded
+        }
+
+        /// §9.1: extract the `seq` field from an envelope JSON object.
+        /// Returns null when absent or not a number.
+        internal fun extractSeq(env: JSONObject): Long? {
+            val seq = env.opt("seq") ?: return null
+            return when (seq) {
+                is Number -> seq.toLong()
+                is String -> seq.toLongOrNull()
+                else -> null
+            }
+        }
+
+        /// §9.1: extract the `messageId` field from an envelope JSON object.
+        /// Returns null when absent.
+        internal fun extractMessageId(env: JSONObject): String? {
+            val id = env.opt("messageId") ?: return null
+            return if (id is String) id else null
+        }
+
+        /// §9.1: extract the `type` field from an envelope JSON object.
+        /// Returns null when absent.
+        internal fun extractType(env: JSONObject): String? {
+            val t = env.opt("type") ?: return null
+            return if (t is String) t else null
         }
 
         /// Holds the currently-loaded plugin instance so the PlaybackService
@@ -135,6 +162,12 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     private var protocolVersion: Int = 1
     private var isConnecting: Boolean = false
     private var reconnectAttempts: Int = 0
+    /// §9.1 dedup cache for incoming envelopes.
+    internal var dedupCache: CoordinationDedup = CoordinationDedup(DEDUP_CACHE_MAX)
+        private set
+    /// §9.2 sequence tracker — highest server seq processed.
+    internal var seqTracker: CoordinationSeqTracker = CoordinationSeqTracker()
+        private set
     /// True after an explicit `disconnect()` (or service teardown). Prevents
     /// the auto-reconnect path from firing for a user-initiated close.
     private var manualDisconnect: Boolean = false
@@ -281,6 +314,11 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         this.deviceId = devId
         this.capabilities = call.getInt("capabilities", 0) ?: 0
         this.protocolVersion = call.getInt("protocolVersion", 1) ?: 1
+        // §9.2: the client submits the highest seq it has processed so the
+        // server can skip already-delivered messages. When the caller omits
+        // lastSeq (first-ever connect), default to 0.
+        val lastSeqValue = call.getDouble("lastSeq", 0.0)?.toLong() ?: 0L
+        this.seqTracker = CoordinationSeqTracker().apply { observe(lastSeqValue) }
 
         // Lifecycle correctness (§2.1.8): if the socket is already open, do
         // not create a second one when the app returns to the foreground or
@@ -296,6 +334,9 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
 
         manualDisconnect = false
         disconnectInternal()
+        // The dedup cache is per-connection; clear it so a reconnect does
+        // not falsely skip messages from the new connection.
+        dedupCache.clear()
 
         val urlWithTicket = buildTicketUrl(wsUrl, ticket)
         this.client = OkHttpClient.Builder()
@@ -380,9 +421,12 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         val commandJson = call.getString("commandJson") ?: return call.reject("missing commandJson")
         val targetDeviceId = call.getString("targetDeviceId") ?: return call.reject("missing targetDeviceId")
         val parsed = parseJsonObject(commandJson) ?: return call.reject("invalid commandJson")
+        // §9.1: the caller may supply a messageId to match the command to a
+        // pending-ack promise. Fall back to a generated UUID.
+        val messageId = call.getString("messageId") ?: java.util.UUID.randomUUID().toString()
         val env = JSONObject()
         env.put("version", protocolVersion)
-        env.put("messageId", java.util.UUID.randomUUID().toString())
+        env.put("messageId", messageId)
         env.put("type", "command")
         env.put("targetDeviceId", targetDeviceId)
         env.put("expectedGeneration", call.getInt("expectedGeneration", 0) ?: 0)
@@ -447,6 +491,11 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         // its own teardown, but we clear defensively in case disconnect runs
         // first.
         foregroundServiceConnection = null
+        // §9.1/§9.2: clear the dedup cache and reset the seq tracker so a
+        // reconnect starts clean. The next `connect()` call supplies the
+        // lastSeq option again.
+        dedupCache.clear()
+        seqTracker.reset()
     }
 
     // MARK: - Foreground service coordination (design §2.1.8, §5.2)
@@ -544,6 +593,36 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     }
 
     private fun dispatchEnvelope(json: String) {
+        // Parse once to extract routing metadata, then forward the raw JSON
+        // to the WebView so it can re-parse into the full Envelope type.
+        val parsed = parseJsonObject(json)
+        if (parsed != null) {
+            // §9.2: track the incoming seq on every envelope.
+            seqTracker.observe(extractSeq(parsed))
+            // §9.1: dedup command/snapshot_projection envelopes by messageId.
+            val type = extractType(parsed)
+            if (type == "command" || type == "snapshot_projection") {
+                val id = extractMessageId(parsed)
+                if (id != null) {
+                    if (dedupCache.has(id)) {
+                        // Duplicate — skip re-dispatching (debug-level only).
+                        logDebug("coordination: dedup skipped envelope $id")
+                        return
+                    }
+                    dedupCache.mark(id)
+                }
+            }
+            // §9.1: emit `coordinationAck` when a command_ack arrives so the
+            // WebView facade can resolve the pending sendCommand() promise.
+            if (type == "command_ack") {
+                val messageId = extractMessageId(parsed) ?: ""
+                val result = parsed.opt("result")?.toString() ?: "{}"
+                val ret = JSObject()
+                ret.put("messageId", messageId)
+                ret.put("resultJson", result)
+                notifyListeners("coordinationAck", ret)
+            }
+        }
         notifyListeners("coordinationEvent", JSObject().put("envelopeJson", json))
     }
 

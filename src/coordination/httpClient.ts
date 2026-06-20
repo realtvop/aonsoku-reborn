@@ -192,6 +192,14 @@ export class CoordinationHttpClient {
     });
   }
 
+  /// List devices for the current account (design §6.3, §12.1). Used by the
+  /// stale-epoch retry path to refresh the expected generation when no
+  /// cached snapshot is available.
+  async listDevices(): Promise<DeviceDto[]> {
+    await this.ensureValidAccessToken();
+    return this.request<DeviceDto[]>("/v1/devices");
+  }
+
   async revokeDevice(id: DeviceId): Promise<void> {
     await this.ensureValidAccessToken();
     await this.request<void>(`/v1/devices/${id}`, { method: "DELETE" });

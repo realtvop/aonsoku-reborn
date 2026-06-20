@@ -456,6 +456,7 @@ describe("NativeCoordinationClient", () => {
       deviceId: "dev-1",
       capabilities: 15,
       protocolVersion: 1,
+      lastSeq: 0,
     });
   });
 

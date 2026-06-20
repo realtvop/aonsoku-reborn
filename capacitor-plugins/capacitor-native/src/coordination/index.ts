@@ -21,4 +21,5 @@ export type {
   CoordinationHandoffOptions,
   CoordinationTokenOptions,
   CoordinationConfigOptions,
+  CoordinationAckEvent,
 };
