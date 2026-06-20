@@ -196,6 +196,7 @@ function DevicePlaybackCard({
           sendCommand: null,
         },
       });
+      usePlayerStore.getState().actions.setPlayingState(false);
       setControlledDevice(null);
       toast.info("已退出远程控制");
     } else {

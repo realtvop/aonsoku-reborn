@@ -21,6 +21,7 @@ import { useCoordinationStore } from "@/coordination/store";
 import type { ConnectionState } from "@/coordination/wsClient";
 import type { DeviceDto, DeviceId } from "@/coordination/types";
 import { useAppData } from "@/store/app.store";
+import { usePlayerStore } from "@/store/player.store";
 import { detectRuntime } from "@/utils/capabilities";
 import dateTime from "@/utils/dateTime";
 
@@ -132,6 +133,14 @@ export function CrossDeviceSettings() {
   const handleDisconnect = async () => {
     try {
       await coordStore.disconnectCurrentDevice();
+      usePlayerStore.setState({
+        remoteControl: {
+          active: false,
+          device: null,
+          sendCommand: null,
+        },
+      });
+      usePlayerStore.getState().actions.setPlayingState(false);
       toast.success(
         t("settings.crossDevice.disconnected", {
           defaultValue: "Disconnected",
