@@ -193,6 +193,9 @@ export class CoordinationWsClient {
         this.callbacks.onSnapshotProjection(env);
         break;
       case "command":
+        console.info(
+          `[wsClient] received command envelope: ${JSON.stringify(env).slice(0, 200)}`,
+        );
         this.callbacks.onCommand(env);
         break;
       case "handoff_candidate":

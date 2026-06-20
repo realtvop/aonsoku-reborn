@@ -205,6 +205,9 @@ export class CoordinationManager {
       },
       onCommand: (env) => {
         if (env.type === "command") {
+          console.info(
+            `[CoordinationManager.onCommand] dispatching: ${JSON.stringify(env.command)} | sourceDeviceId=${env.sourceDeviceId}`,
+          );
           this.callbacks.onRemoteCommand(env.command, env.sourceDeviceId ?? "");
         }
       },

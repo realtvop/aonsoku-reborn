@@ -95,7 +95,7 @@ export function createPlaybackActions(shared: SharedDeps) {
       }
 
       remoteSend(LanControlMessageType.SEEK, {
-        time: progress,
+        seconds: progress,
       });
       set((state) => {
         state.playerProgress.progress = progress;

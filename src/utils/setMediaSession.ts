@@ -386,7 +386,7 @@ function setHandlers() {
         const state = usePlayerStore.getState();
         if (state.remoteControl.active && state.remoteControl.sendCommand) {
           state.remoteControl.sendCommand(LanControlMessageType.SEEK, {
-            time: details.seekTime,
+            seconds: details.seekTime,
           });
           return;
         }
