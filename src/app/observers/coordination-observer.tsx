@@ -27,6 +27,17 @@ function mapLoopState(loop: LoopState): "off" | "one" | "all" {
   }
 }
 
+function mapRepeatModeToLoopState(mode: string): LoopState {
+  switch (mode) {
+    case "one":
+      return LoopState.One;
+    case "all":
+      return LoopState.All;
+    default:
+      return LoopState.Off;
+  }
+}
+
 export function CoordinationObserver() {
   const isConnected = useCoordinationStore((state) => state.isConnected);
   const loadState = useCoordinationStore((state) => state.loadState);
@@ -122,10 +133,10 @@ export function CoordinationObserver() {
           playerActions.togglePlayPause();
           break;
         case "previous":
-          playerActions.playPrev();
+          playerActions.playPrevSong();
           break;
         case "next":
-          playerActions.playNext();
+          playerActions.playNextSong();
           break;
         case "seek":
           playerActions.setProgress(command.seconds);
@@ -138,11 +149,140 @@ export function CoordinationObserver() {
             playerActions.toggleShuffle();
           }
           break;
-        case "set_repeat":
-          playerActions.toggleLoop();
+        case "set_repeat": {
+          const targetLoop = mapRepeatModeToLoopState(command.mode);
+          const currentLoop = usePlayerStore.getState().playerState.loopState;
+          if (targetLoop === currentLoop) break;
+          if (targetLoop === LoopState.Off) {
+            if (currentLoop === LoopState.One) playerActions.toggleLoop();
+            if (currentLoop === LoopState.All) playerActions.toggleLoop();
+          } else if (targetLoop === LoopState.All) {
+            if (currentLoop === LoopState.Off) playerActions.toggleLoop();
+            if (currentLoop === LoopState.One) playerActions.toggleLoop();
+          } else if (targetLoop === LoopState.One) {
+            if (currentLoop === LoopState.Off) {
+              playerActions.toggleLoop();
+              playerActions.toggleLoop();
+            } else if (currentLoop === LoopState.All) {
+              playerActions.toggleLoop();
+            }
+          }
           break;
+        }
         case "clear_queue":
           playerActions.clearUserQueue();
+          break;
+        case "play_song":
+          import("@/service/subsonic").then(({ subsonic }) => {
+            subsonic.songs
+              .getSong(command.songId)
+              .then((song) => {
+                if (song) playerActions.playSong(song);
+              })
+              .catch((err) =>
+                logger.error(
+                  "[CoordinationObserver] play_song failed:",
+                  err,
+                ),
+              );
+          });
+          break;
+        case "play_album":
+          import("@/service/subsonic").then(({ subsonic }) => {
+            subsonic.albums
+              .getOne(command.albumId)
+              .then((album) => {
+                if (album && album.song.length > 0) {
+                  const index = Math.max(
+                    0,
+                    Math.min(command.index ?? 0, album.song.length - 1),
+                  );
+                  playerActions.setSongList(
+                    album.song,
+                    index,
+                    false,
+                    { albumId: command.albumId },
+                    album.name,
+                  );
+                }
+              })
+              .catch((err) =>
+                logger.error(
+                  "[CoordinationObserver] play_album failed:",
+                  err,
+                ),
+              );
+          });
+          break;
+        case "play_playlist":
+          import("@/service/subsonic").then(({ subsonic }) => {
+            subsonic.playlists
+              .getOne(command.playlistId)
+              .then((playlist) => {
+                if (playlist && playlist.entry.length > 0) {
+                  const index = Math.max(
+                    0,
+                    Math.min(command.index ?? 0, playlist.entry.length - 1),
+                  );
+                  playerActions.setSongList(
+                    playlist.entry,
+                    index,
+                    false,
+                    { playlistId: command.playlistId },
+                    playlist.name,
+                  );
+                }
+              })
+              .catch((err) =>
+                logger.error(
+                  "[CoordinationObserver] play_playlist failed:",
+                  err,
+                ),
+              );
+          });
+          break;
+        case "add_to_queue_next":
+          import("@/service/subsonic").then(({ subsonic }) => {
+            Promise.all(command.songIds.map((id) => subsonic.songs.getSong(id)))
+              .then((songs) => {
+                const valid = songs.filter((s): s is NonNullable<typeof s> => !!s);
+                if (valid.length > 0) playerActions.setNextOnQueue(valid);
+              })
+              .catch((err) =>
+                logger.error(
+                  "[CoordinationObserver] add_to_queue_next failed:",
+                  err,
+                ),
+              );
+          });
+          break;
+        case "add_to_queue_last":
+          import("@/service/subsonic").then(({ subsonic }) => {
+            Promise.all(command.songIds.map((id) => subsonic.songs.getSong(id)))
+              .then((songs) => {
+                const valid = songs.filter((s): s is NonNullable<typeof s> => !!s);
+                if (valid.length > 0) playerActions.setLastOnQueue(valid);
+              })
+              .catch((err) =>
+                logger.error(
+                  "[CoordinationObserver] add_to_queue_last failed:",
+                  err,
+                ),
+              );
+          });
+          break;
+        case "remove_from_queue":
+          for (const id of command.songIds) {
+            playerActions.removeSongFromQueue(id);
+          }
+          break;
+        case "reorder_queue":
+          playerActions.reorderQueue(command.from, command.to);
+          break;
+        case "toggle_like":
+          playerActions.starCurrentSong().catch((err) =>
+            logger.error("[CoordinationObserver] toggle_like failed:", err),
+          );
           break;
         default:
           break;
@@ -293,29 +433,128 @@ export function CoordinationObserver() {
       if (!state.playerProgress.isScrubbing) {
         state.playerProgress.progress = snapshot.progressSeconds;
       }
+      state.songlist.isShuffleActive = snapshot.shuffle;
+      state.playerState.loopState = mapRepeatModeToLoopState(snapshot.repeat);
+      if (snapshot.volume !== null) {
+        state.playerState.volume = Math.round(snapshot.volume * 100);
+      }
     });
 
     const currentLocalSong = usePlayerStore.getState().songlist.currentSong;
+    const localQueueIds = usePlayerStore
+      .getState()
+      .songlist.contextQueue.songs.map((s) => s.id);
+    const remoteQueueIds = snapshot.contextQueue;
+    const remoteUserQueueIds = snapshot.userQueue;
+    const queueChanged =
+      remoteQueueIds.length !== localQueueIds.length ||
+      remoteQueueIds.some((id, i) => id !== localQueueIds[i]) ||
+      remoteUserQueueIds.length !==
+        usePlayerStore.getState().songlist.userQueue.songs.length;
+
     if (snapshot.songId && currentLocalSong?.id !== snapshot.songId) {
       import("@/service/subsonic").then(({ subsonic }) => {
-        subsonic.songs
-          .getSong(snapshot.songId)
-          .then((song) => {
-            if (song) {
-              usePlayerStore.setState((state) => {
-                state.songlist.currentSong = song;
-                state.songlist.contextQueue.songs = [song];
-                state.songlist.contextQueue.currentIndex = 0;
-                state.playerState.mediaType = "song";
-              });
+        const idsToFetch = Array.from(
+          new Set([
+            snapshot.songId,
+            ...remoteQueueIds,
+            ...remoteUserQueueIds,
+          ]),
+        );
+        Promise.all(idsToFetch.map((id) => subsonic.songs.getSong(id)))
+          .then((fetched) => {
+            const songMap = new Map<string, NonNullable<(typeof fetched)[number]>>();
+            for (const s of fetched) {
+              if (s) songMap.set(s.id, s);
             }
+            const current = songMap.get(snapshot.songId);
+            if (!current) return;
+            usePlayerStore.setState((state) => {
+              const contextSongs = remoteQueueIds
+                .map((id) => songMap.get(id))
+                .filter((s): s is NonNullable<typeof s> => !!s);
+              const userSongs = remoteUserQueueIds
+                .map((id) => songMap.get(id))
+                .filter((s): s is NonNullable<typeof s> => !!s);
+              state.songlist.currentSong = current;
+              state.songlist.contextQueue = {
+                songs:
+                  contextSongs.length > 0 ? contextSongs : [current],
+                currentIndex: Math.max(
+                  0,
+                  Math.min(
+                    snapshot.contextIndex ?? 0,
+                    Math.max(0, contextSongs.length - 1),
+                  ),
+                ),
+                sourceId: null,
+                sourceName: snapshot.sourceName ?? null,
+              };
+              state.songlist.userQueue = { songs: userSongs };
+              state.songlist.isInUserQueue = snapshot.inUserQueue;
+              state.playerState.mediaType = "song";
+            });
           })
           .catch((err) => {
             logger.error(
-              "[CoordinationObserver] Failed to fetch remote song:",
+              "[CoordinationObserver] Failed to fetch remote queue:",
               err,
             );
+            usePlayerStore.setState((state) => {
+              state.songlist.currentSong = current;
+              state.songlist.contextQueue = {
+                songs: [current],
+                currentIndex: 0,
+                sourceId: null,
+                sourceName: snapshot.sourceName ?? null,
+              };
+              state.songlist.userQueue = { songs: [] };
+              state.playerState.mediaType = "song";
+            });
           });
+      });
+    } else if (snapshot.songId && queueChanged) {
+      import("@/service/subsonic").then(({ subsonic }) => {
+        const idsToFetch = Array.from(
+          new Set([...remoteQueueIds, ...remoteUserQueueIds]),
+        );
+        Promise.all(idsToFetch.map((id) => subsonic.songs.getSong(id)))
+          .then((fetched) => {
+            const songMap = new Map<string, NonNullable<(typeof fetched)[number]>>();
+            for (const s of fetched) {
+              if (s) songMap.set(s.id, s);
+            }
+            usePlayerStore.setState((state) => {
+              const contextSongs = remoteQueueIds
+                .map((id) => songMap.get(id))
+                .filter((s): s is NonNullable<typeof s> => !!s);
+              const userSongs = remoteUserQueueIds
+                .map((id) => songMap.get(id))
+                .filter((s): s is NonNullable<typeof s> => !!s);
+              if (contextSongs.length > 0) {
+                state.songlist.contextQueue = {
+                  songs: contextSongs,
+                  currentIndex: Math.max(
+                    0,
+                    Math.min(
+                      snapshot.contextIndex ?? 0,
+                      contextSongs.length - 1,
+                    ),
+                  ),
+                  sourceId: null,
+                  sourceName: snapshot.sourceName ?? null,
+                };
+              }
+              state.songlist.userQueue = { songs: userSongs };
+              state.songlist.isInUserQueue = snapshot.inUserQueue;
+            });
+          })
+          .catch((err) =>
+            logger.error(
+              "[CoordinationObserver] Failed to sync remote queue:",
+              err,
+            ),
+          );
       });
     }
   }, [controlledDeviceId, controlledSnapshot]);
