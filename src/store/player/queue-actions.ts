@@ -326,7 +326,10 @@ export function createQueueActions(shared: SharedDeps) {
       if (isRemoteActive()) {
         const song = contextSongs[contextIndex];
         if (song) {
-          remoteSend(LanControlMessageType.PLAY_SONG, { songId: song.id });
+          remoteSend(LanControlMessageType.PLAY_AT_INDEX, {
+            songIds: contextSongs.map((s) => s.id),
+            index: contextIndex,
+          });
         }
         return;
       }
@@ -386,10 +389,18 @@ export function createQueueActions(shared: SharedDeps) {
       }
 
       if (isRemoteActive()) {
-        const { userQueue } = get().songlist;
+        const { userQueue, contextQueue } = get().songlist;
         const song = userQueue.songs[userQueueIndex];
         if (song) {
-          remoteSend(LanControlMessageType.PLAY_SONG, { songId: song.id });
+          const allIds = [
+            ...contextQueue.songs.map((s) => s.id),
+            ...userQueue.songs.map((s) => s.id),
+          ];
+          const targetIndex = contextQueue.songs.length + userQueueIndex;
+          remoteSend(LanControlMessageType.PLAY_AT_INDEX, {
+            songIds: allIds,
+            index: targetIndex,
+          });
         }
         return;
       }

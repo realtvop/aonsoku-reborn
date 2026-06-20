@@ -94,6 +94,10 @@ function mapLanControlToRemoteCommand(
         : null;
     case LanControlMessageType.CLEAR_QUEUE:
       return { type: "clear_queue" };
+    case LanControlMessageType.PLAY_AT_INDEX:
+      return Array.isArray(d?.songIds) && typeof d?.index === "number"
+        ? { type: "play_at_index", song_ids: d.songIds, index: d.index }
+        : null;
     case LanControlMessageType.TOGGLE_SHUFFLE:
       return {
         type: "set_shuffle",

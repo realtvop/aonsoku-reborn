@@ -229,6 +229,15 @@ pub enum RemoteCommand {
         to: u32,
     },
     ClearQueue,
+    /// Jump to a song at a specific index within the current queue. The
+    /// controller sends the full queue (as song IDs) and the target index;
+    /// the controlled device fetches metadata and replays via setSongList,
+    /// preserving the full queue context instead of replacing it with a
+    /// single song (design §10).
+    PlayAtIndex {
+        song_ids: Vec<String>,
+        index: u32,
+    },
 }
 
 impl RemoteCommand {
@@ -263,9 +272,18 @@ impl RemoteCommand {
             RemoteCommand::AddToQueueNext { song_ids }
             | RemoteCommand::AddToQueueLast { song_ids }
             | RemoteCommand::RemoveFromQueue { song_ids }
+            | RemoteCommand::PlayAtIndex { song_ids, .. }
                 if count_of(song_ids) > max_songs =>
             {
                 return Err(CoordinationError::payload_too_large());
+            }
+            RemoteCommand::PlayAtIndex { song_ids, index }
+                if (*index as usize) >= song_ids.len() =>
+            {
+                return Err(CoordinationError::new(
+                    ErrorCode::BadMessage,
+                    "play_at_index index out of bounds",
+                ));
             }
             RemoteCommand::ReorderQueue { from, to } if from == to => {}
             _ => {}

@@ -187,6 +187,29 @@ export function CoordinationObserver() {
               );
           });
           break;
+        case "play_at_index":
+          import("@/service/subsonic").then(({ subsonic }) => {
+            Promise.all(command.song_ids.map((id) => subsonic.songs.getSong(id)))
+              .then((songs) => {
+                const valid = songs.filter(
+                  (s): s is NonNullable<typeof s> => !!s,
+                );
+                if (valid.length > 0) {
+                  const index = Math.max(
+                    0,
+                    Math.min(command.index, valid.length - 1),
+                  );
+                  playerActions.setSongList(valid, index, false);
+                }
+              })
+              .catch((err) =>
+                logger.error(
+                  "[CoordinationObserver] play_at_index failed:",
+                  err,
+                ),
+              );
+          });
+          break;
         case "play_album":
           import("@/service/subsonic").then(({ subsonic }) => {
             subsonic.albums

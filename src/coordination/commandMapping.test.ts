@@ -41,6 +41,8 @@ function mapCommandToAction(command: RemoteCommand): string {
       return `removeFromQueue(${command.song_ids.length})`;
     case "reorder_queue":
       return `reorderQueue(${command.from}->${command.to})`;
+    case "play_at_index":
+      return `playAtIndex(${command.song_ids.length}, ${command.index})`;
     case "toggle_like":
       return "toggleLike";
     default:
@@ -113,5 +115,15 @@ describe("remote command mapping", () => {
 
   it("maps toggle_like", () => {
     expect(mapCommandToAction({ type: "toggle_like" })).toBe("toggleLike");
+  });
+
+  it("maps play_at_index", () => {
+    expect(
+      mapCommandToAction({
+        type: "play_at_index",
+        song_ids: ["a", "b", "c"],
+        index: 2,
+      }),
+    ).toBe("playAtIndex(3, 2)");
   });
 });

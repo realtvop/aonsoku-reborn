@@ -21,6 +21,7 @@ export enum LanControlMessageType {
   ADD_ALBUM_TO_QUEUE = "add_album_to_queue",
   ADD_PLAYLIST_TO_QUEUE = "add_playlist_to_queue",
   CLEAR_QUEUE = "clear_queue",
+  PLAY_AT_INDEX = "play_at_index",
   TOGGLE_SHUFFLE = "toggle_shuffle",
   TOGGLE_REPEAT = "toggle_repeat",
   SET_SHUFFLE = "set_shuffle",

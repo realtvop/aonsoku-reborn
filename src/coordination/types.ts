@@ -81,7 +81,8 @@ export type RemoteCommand =
   | { type: "add_to_queue_last"; song_ids: string[] }
   | { type: "remove_from_queue"; song_ids: string[] }
   | { type: "reorder_queue"; from: number; to: number }
-  | { type: "clear_queue" };
+  | { type: "clear_queue" }
+  | { type: "play_at_index"; song_ids: string[]; index: number };
 
 // Handoff phases (design §11.1, §12.2).
 export type HandoffPhase =
