@@ -1,5 +1,6 @@
 package github.realtvop.aonsoku.plugins.coordination
 
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -63,6 +64,14 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             } catch (e: org.json.JSONException) {
                 null
             }
+
+        /// Append the one-time WebSocket ticket as a URL-encoded query
+        /// parameter so tickets containing &/=/?/# do not break the URL.
+        internal fun buildTicketUrl(wsUrl: String, ticket: String): String {
+            val base = wsUrl
+            val separator = if (base.contains("?")) "&" else "?"
+            return base + separator + "ticket=" + Uri.encode(ticket)
+        }
     }
 
     private var webSocket: WebSocket? = null
@@ -175,7 +184,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
 
         disconnectInternal()
 
-        val urlWithTicket = "$wsUrl?ticket=$ticket"
+        val urlWithTicket = buildTicketUrl(wsUrl, ticket)
         this.client = OkHttpClient.Builder()
             .pingInterval(PING_INTERVAL_SECONDS, TimeUnit.SECONDS)
             .build()

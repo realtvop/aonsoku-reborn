@@ -108,7 +108,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         self.capabilities = call.getInt("capabilities") ?? 0
         self.protocolVersion = call.getInt("protocolVersion") ?? 1
 
-        let urlWithTicket = "\(wsUrl)?ticket=\(ticket)"
+        let urlWithTicket = buildTicketUrl(wsUrl, ticket: ticket)
         guard let url = URL(string: urlWithTicket) else {
             call.reject("invalid URL")
             return
@@ -354,5 +354,17 @@ enum JSONUtilities {
     static func parse(_ json: String) -> [String: Any]? {
         guard let data = json.data(using: .utf8) else { return nil }
         return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    }
+}
+
+/// Append the one-time WebSocket ticket as a URL-encoded query parameter so
+/// tickets containing &/=/?/# do not break the URL.
+enum CoordinationURL {
+    static func buildTicketUrl(_ wsUrl: String, ticket: String) -> String {
+        let separator = wsUrl.contains("?") ? "&" : "?"
+        let encoded = ticket.addingPercentEncoding(
+            withAllowedCharacters: .urlQueryAllowed,
+        ) ?? ticket
+        return wsUrl + separator + "ticket=" + encoded
     }
 }
