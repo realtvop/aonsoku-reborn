@@ -31,6 +31,12 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     companion object {
         private const val TAG = "CoordPlugin"
         private const val PREFS_NAME = "aonsoku_coordination"
+
+        /// Keys holding coordination tokens; kept separate from config keys so
+        /// clearTokens() can wipe credentials without losing server/identity URL.
+        internal val TOKEN_KEYS = listOf(
+            "access_token", "refresh_token", "device_id", "account_id", "history_limit",
+        )
     }
 
     private var webSocket: WebSocket? = null
@@ -48,14 +54,14 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             val refreshToken = call.getString("refreshToken") ?: return call.reject("missing refreshToken")
             val deviceId = call.getString("deviceId") ?: return call.reject("missing deviceId")
             val accountId = call.getString("accountId") ?: return call.reject("missing accountId")
-        val historyLimit = call.getInt("historyLimit", 100) ?: 100
+            val historyLimit = call.getInt("historyLimit", 100) ?: 100
 
-        val prefs = context.getSharedPreferences(PREFS_NAME, 0).edit()
-        prefs.putString("access_token", accessToken)
-        prefs.putString("refresh_token", refreshToken)
-        prefs.putString("device_id", deviceId)
-        prefs.putString("account_id", accountId)
-        prefs.putInt("history_limit", historyLimit)
+            val prefs = context.getSharedPreferences(PREFS_NAME, 0).edit()
+            prefs.putString("access_token", accessToken)
+            prefs.putString("refresh_token", refreshToken)
+            prefs.putString("device_id", deviceId)
+            prefs.putString("account_id", accountId)
+            prefs.putInt("history_limit", historyLimit)
             prefs.apply()
             call.resolve()
         } catch (e: Exception) {
@@ -85,7 +91,9 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
 
     @PluginMethod
     fun clearTokens(call: PluginCall) {
-        context.getSharedPreferences(PREFS_NAME, 0).edit().clear().apply()
+        val editor = context.getSharedPreferences(PREFS_NAME, 0).edit()
+        for (key in TOKEN_KEYS) editor.remove(key)
+        editor.apply()
         call.resolve()
     }
 
