@@ -1,14 +1,14 @@
 import {
-	CircleUserRound,
-	EarthLock,
-	FileText,
-	Globe,
-	HardDrive,
-	Headphones,
-	LaptopIcon,
-	Paintbrush,
-	Server,
-	Share2,
+  CircleUserRound,
+  EarthLock,
+  FileText,
+  Globe,
+  HardDrive,
+  Headphones,
+  LaptopIcon,
+  Paintbrush,
+  Server,
+  Share2,
 } from "lucide-react";
 import { ComponentType } from "react";
 import { useTranslation } from "react-i18next";

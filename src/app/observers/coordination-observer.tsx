@@ -15,206 +15,220 @@ import { useEffect, useRef } from "react";
 import { useCoordinationStore } from "@/coordination/store";
 import type { PlaybackSnapshot, RemoteCommand } from "@/coordination/types";
 import {
-	usePlayerActions,
-	usePlayerCurrentList,
-	usePlayerCurrentSong,
-	usePlayerLoop,
-	usePlayerProgress,
-	usePlayerShuffle,
-	usePlayerStore,
-	usePlayerVolume,
+  usePlayerActions,
+  usePlayerCurrentList,
+  usePlayerCurrentSong,
+  usePlayerLoop,
+  usePlayerProgress,
+  usePlayerShuffle,
+  usePlayerStore,
+  usePlayerVolume,
 } from "@/store/player.store";
+import { getEffectiveIndex } from "@/store/player/queue-utils";
 import { LoopState } from "@/types/playerContext";
 
 function mapLoopState(loop: LoopState): "off" | "one" | "all" {
-	switch (loop) {
-		case LoopState.One:
-			return "one";
-		case LoopState.All:
-			return "all";
-		default:
-			return "off";
-	}
+  switch (loop) {
+    case LoopState.One:
+      return "one";
+    case LoopState.All:
+      return "all";
+    default:
+      return "off";
+  }
 }
 
 export function CoordinationObserver() {
-	const coordStore = useCoordinationStore();
-	const playerActions = usePlayerActions();
-	const currentSong = usePlayerCurrentSong();
-	const currentList = usePlayerCurrentList();
-	const playerProgress = usePlayerProgress();
-	const { volume } = usePlayerVolume();
-	const loopState = usePlayerLoop();
-	const shuffleEnabled = usePlayerShuffle();
-	const playerStore = usePlayerStore();
-	const sessionIdRef = useRef<string>(crypto.randomUUID());
-	const generationRef = useRef<number>(1);
-	const snapshotRevisionRef = useRef<number>(0);
+  const coordStore = useCoordinationStore();
+  const playerActions = usePlayerActions();
+  const currentSong = usePlayerCurrentSong();
+  const currentList = usePlayerCurrentList();
+  const playerProgress = usePlayerProgress();
+  const { volume } = usePlayerVolume();
+  const loopState = usePlayerLoop();
+  const shuffleEnabled = usePlayerShuffle();
+  const sessionIdRef = useRef<string>(crypto.randomUUID());
+  const generationRef = useRef<number>(1);
+  const snapshotRevisionRef = useRef<number>(0);
 
-	// Publish snapshot when playback state changes (design §9.2).
-	useEffect(() => {
-		if (!coordStore.isConnected || !currentSong) return;
-		const snapshot: PlaybackSnapshot = {
-			sessionId: sessionIdRef.current,
-			logicalPlaybackSessionId: sessionIdRef.current,
-			mediaKind: "song",
-			songId: currentSong.id,
-			progressSeconds: playerProgress,
-			durationSeconds: currentSong.duration ?? 0,
-			isPlaying: playerStore.getState().isPlaying,
-			sampledAt: Date.now() / 1000,
-			contextQueue: currentList.map((s) => s.id),
-			contextIndex: playerStore.getState().currentSongIndex ?? null,
-			sourceId: playerStore.getState().playSource?.id ?? null,
-			sourceName: playerStore.getState().playSource?.name ?? null,
-			userQueue: playerStore.getState().userQueue.map((s) => s.id),
-			inUserQueue: playerStore.getState().isInUserQueue,
-			restorePrevious: [],
-			shuffle: shuffleEnabled,
-			repeat: mapLoopState(loopState),
-			volume: volume / 100,
-			accumulatedPlaySeconds: 0,
-			historyWritten: false,
-			nowPlayingSent: false,
-			scrobbleSent: false,
-		};
-		snapshotRevisionRef.current++;
-		coordStore.manager.publishSnapshot(
-			sessionIdRef.current,
-			generationRef.current,
-			snapshotRevisionRef.current,
-			snapshot,
-		);
-	}, [
-		coordStore.isConnected,
-		currentSong,
-		playerProgress,
-		currentList,
-		shuffleEnabled,
-		loopState,
-		volume,
-		playerStore,
-		coordStore.manager,
-	]);
+  // Publish snapshot when playback state changes (design §9.2).
+  useEffect(() => {
+    if (!coordStore.isConnected || !currentSong) return;
+    const state = usePlayerStore.getState();
+    const snapshot: PlaybackSnapshot = {
+      sessionId: sessionIdRef.current,
+      logicalPlaybackSessionId: sessionIdRef.current,
+      mediaKind: "song",
+      songId: currentSong.id,
+      progressSeconds: playerProgress,
+      durationSeconds: currentSong.duration ?? 0,
+      isPlaying: state.playerState.isPlaying,
+      sampledAt: Date.now() / 1000,
+      contextQueue: currentList.map((s) => s.id),
+      contextIndex: getEffectiveIndex(state.songlist) ?? null,
+      sourceId: state.songlist.contextQueue.sourceId?.id ?? null,
+      sourceName: state.songlist.contextQueue.sourceName ?? null,
+      userQueue: state.songlist.userQueue.songs.map((s) => s.id),
+      inUserQueue: state.songlist.isInUserQueue,
+      restorePrevious: [],
+      shuffle: shuffleEnabled,
+      repeat: mapLoopState(loopState),
+      volume: volume / 100,
+      accumulatedPlaySeconds: 0,
+      historyWritten: false,
+      nowPlayingSent: false,
+      scrobbleSent: false,
+    };
+    snapshotRevisionRef.current++;
+    coordStore.manager.publishSnapshot(
+      sessionIdRef.current,
+      generationRef.current,
+      snapshotRevisionRef.current,
+      snapshot,
+    );
+  }, [
+    coordStore.isConnected,
+    currentSong,
+    playerProgress,
+    currentList,
+    shuffleEnabled,
+    loopState,
+    volume,
+    coordStore.manager,
+  ]);
 
-	// Handle remote commands from other devices (design §10).
-	useEffect(() => {
-		if (!coordStore.isConnected) return;
-		const original = coordStore.manager.callbacks.onRemoteCommand;
-		coordStore.manager.callbacks.onRemoteCommand = (command: RemoteCommand, _sourceDeviceId: string) => {
-			switch (command.type) {
-				case "play":
-					playerActions.setPlayingState(true);
-					break;
-				case "pause":
-					playerActions.setPlayingState(false);
-					break;
-				case "toggle_play_pause":
-					playerActions.togglePlayPause();
-					break;
-				case "previous":
-					playerActions.playPrev();
-					break;
-				case "next":
-					playerActions.playNext();
-					break;
-				case "seek":
-					playerActions.setProgress(command.seconds);
-					break;
-				case "set_volume":
-					playerActions.setVolume(command.volume * 100);
-					break;
-				case "set_shuffle":
-					if (command.enabled !== shuffleEnabled) {
-						playerActions.toggleShuffle();
-					}
-					break;
-				case "set_repeat":
-					playerActions.toggleLoop();
-					break;
-				case "clear_queue":
-					playerActions.clearUserQueue();
-					break;
-				default:
-					// Media commands (play_song, play_album, etc.) require fetching
-					// metadata from Navidrome — handled in a future iteration
-					// with the same subsonic service used by LanControlObserver.
-					break;
-			}
-		};
-		return () => {
-			coordStore.manager.callbacks.onRemoteCommand = original;
-		};
-	}, [coordStore.isConnected, coordStore.manager, playerActions, shuffleEnabled]);
+  // Handle remote commands from other devices (design §10).
+  useEffect(() => {
+    if (!coordStore.isConnected) return;
+    const original = coordStore.manager.callbacks.onRemoteCommand;
+    coordStore.manager.callbacks.onRemoteCommand = (
+      command: RemoteCommand,
+      _sourceDeviceId: string,
+    ) => {
+      switch (command.type) {
+        case "play":
+          playerActions.setPlayingState(true);
+          break;
+        case "pause":
+          playerActions.setPlayingState(false);
+          break;
+        case "toggle_play_pause":
+          playerActions.togglePlayPause();
+          break;
+        case "previous":
+          playerActions.playPrev();
+          break;
+        case "next":
+          playerActions.playNext();
+          break;
+        case "seek":
+          playerActions.setProgress(command.seconds);
+          break;
+        case "set_volume":
+          playerActions.setVolume(command.volume * 100);
+          break;
+        case "set_shuffle":
+          if (command.enabled !== shuffleEnabled) {
+            playerActions.toggleShuffle();
+          }
+          break;
+        case "set_repeat":
+          playerActions.toggleLoop();
+          break;
+        case "clear_queue":
+          playerActions.clearUserQueue();
+          break;
+        default:
+          // Media commands (play_song, play_album, etc.) require fetching
+          // metadata from Navidrome — handled in a future iteration
+          // with the same subsonic service used by LanControlObserver.
+          break;
+      }
+    };
+    return () => {
+      coordStore.manager.callbacks.onRemoteCommand = original;
+    };
+  }, [
+    coordStore.isConnected,
+    coordStore.manager,
+    playerActions,
+    shuffleEnabled,
+  ]);
 
-	// Handle prepare_relinquish: pause the local player (design §11.1 step 4-5).
-	useEffect(() => {
-		if (!coordStore.isConnected) return;
-		const original = coordStore.manager.callbacks.onPrepareRelinquish;
-		coordStore.manager.callbacks.onPrepareRelinquish = (transactionId: string, _expectedRevision: number) => {
-			// Pause the local playback backend (Web or native, via playerActions
-			// which branches to the native controller when available).
-			playerActions.setPlayingState(false);
-			// Build the final precise snapshot and send relinquish_ack.
-			if (currentSong) {
-				const finalSnapshot: PlaybackSnapshot = {
-					sessionId: sessionIdRef.current,
-					logicalPlaybackSessionId: sessionIdRef.current,
-					mediaKind: "song",
-					songId: currentSong.id,
-					progressSeconds: playerStore.getState().progress,
-					durationSeconds: currentSong.duration ?? 0,
-					isPlaying: false,
-					sampledAt: Date.now() / 1000,
-					contextQueue: currentList.map((s) => s.id),
-					contextIndex: playerStore.getState().currentSongIndex ?? null,
-					sourceId: playerStore.getState().playSource?.id ?? null,
-					sourceName: playerStore.getState().playSource?.name ?? null,
-					userQueue: playerStore.getState().userQueue.map((s) => s.id),
-					inUserQueue: playerStore.getState().isInUserQueue,
-					restorePrevious: [],
-					shuffle: shuffleEnabled,
-					repeat: mapLoopState(loopState),
-					volume: volume / 100,
-					accumulatedPlaySeconds: 0,
-					historyWritten: false,
-					nowPlayingSent: false,
-					scrobbleSent: false,
-				};
-				coordStore.manager.sendRelinquishAck(transactionId, finalSnapshot);
-			}
-		};
-		return () => {
-			coordStore.manager.callbacks.onPrepareRelinquish = original;
-		};
-	}, [
-		coordStore.isConnected,
-		coordStore.manager,
-		playerActions,
-		currentSong,
-		currentList,
-		shuffleEnabled,
-		loopState,
-		volume,
-		playerStore,
-	]);
+  // Handle prepare_relinquish: pause the local player (design §11.1 step 4-5).
+  useEffect(() => {
+    if (!coordStore.isConnected) return;
+    const original = coordStore.manager.callbacks.onPrepareRelinquish;
+    coordStore.manager.callbacks.onPrepareRelinquish = (
+      transactionId: string,
+      _expectedRevision: number,
+    ) => {
+      // Pause the local playback backend (Web or native, via playerActions
+      // which branches to the native controller when available).
+      playerActions.setPlayingState(false);
+      // Build the final precise snapshot and send relinquish_ack.
+      if (currentSong) {
+        const state = usePlayerStore.getState();
+        const finalSnapshot: PlaybackSnapshot = {
+          sessionId: sessionIdRef.current,
+          logicalPlaybackSessionId: sessionIdRef.current,
+          mediaKind: "song",
+          songId: currentSong.id,
+          progressSeconds: state.playerProgress.progress,
+          durationSeconds: currentSong.duration ?? 0,
+          isPlaying: false,
+          sampledAt: Date.now() / 1000,
+          contextQueue: currentList.map((s) => s.id),
+          contextIndex: getEffectiveIndex(state.songlist) ?? null,
+          sourceId: state.songlist.contextQueue.sourceId?.id ?? null,
+          sourceName: state.songlist.contextQueue.sourceName ?? null,
+          userQueue: state.songlist.userQueue.songs.map((s) => s.id),
+          inUserQueue: state.songlist.isInUserQueue,
+          restorePrevious: [],
+          shuffle: shuffleEnabled,
+          repeat: mapLoopState(loopState),
+          volume: volume / 100,
+          accumulatedPlaySeconds: 0,
+          historyWritten: false,
+          nowPlayingSent: false,
+          scrobbleSent: false,
+        };
+        coordStore.manager.sendRelinquishAck(transactionId, finalSnapshot);
+      }
+    };
+    return () => {
+      coordStore.manager.callbacks.onPrepareRelinquish = original;
+    };
+  }, [
+    coordStore.isConnected,
+    coordStore.manager,
+    playerActions,
+    currentSong,
+    currentList,
+    shuffleEnabled,
+    loopState,
+    volume,
+  ]);
 
-	// Handle handoff_committed: apply the final snapshot and start playback
-	// on B (design §11.1 step 7).
-	useEffect(() => {
-		if (!coordStore.isConnected) return;
-		const original = coordStore.manager.callbacks.onHandoffCommitted;
-		coordStore.manager.callbacks.onHandoffCommitted = (snapshot: PlaybackSnapshot, _newGeneration: number) => {
-			// Seek to the handoff progress and start playing.
-			if (snapshot.songId) {
-				playerActions.setProgress(snapshot.progressSeconds);
-				playerActions.setPlayingState(true);
-			}
-		};
-		return () => {
-			coordStore.manager.callbacks.onHandoffCommitted = original;
-		};
-	}, [coordStore.isConnected, coordStore.manager, playerActions]);
+  // Handle handoff_committed: apply the final snapshot and start playback
+  // on B (design §11.1 step 7).
+  useEffect(() => {
+    if (!coordStore.isConnected) return;
+    const original = coordStore.manager.callbacks.onHandoffCommitted;
+    coordStore.manager.callbacks.onHandoffCommitted = (
+      snapshot: PlaybackSnapshot,
+      _newGeneration: number,
+    ) => {
+      // Seek to the handoff progress and start playing.
+      if (snapshot.songId) {
+        playerActions.setProgress(snapshot.progressSeconds);
+        playerActions.setPlayingState(true);
+      }
+    };
+    return () => {
+      coordStore.manager.callbacks.onHandoffCommitted = original;
+    };
+  }, [coordStore.isConnected, coordStore.manager, playerActions]);
 
-	return null;
+  return null;
 }
