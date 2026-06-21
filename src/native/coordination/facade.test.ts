@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => {
     requestHandoffCandidate: vi.fn(),
     sendTargetReady: vi.fn(),
     sendRelinquishAck: vi.fn(),
+    requestSnapshots: vi.fn(),
     addListener: vi.fn(),
     removeAllListeners: vi.fn(),
   };
@@ -275,6 +276,7 @@ describe("NativeCoordinationClient", () => {
     vi.mocked(mockPlugin.requestHandoffCandidate).mockResolvedValue(undefined);
     vi.mocked(mockPlugin.sendTargetReady).mockResolvedValue(undefined);
     vi.mocked(mockPlugin.sendRelinquishAck).mockResolvedValue(undefined);
+    vi.mocked(mockPlugin.requestSnapshots).mockResolvedValue(undefined);
     vi.mocked(mockPlugin.storeTokens).mockResolvedValue(undefined);
     vi.mocked(mockPlugin.clearTokens).mockResolvedValue(undefined);
     vi.mocked(mockPlugin.storeConfig).mockResolvedValue(undefined);
@@ -350,6 +352,20 @@ describe("NativeCoordinationClient", () => {
       transactionId: "tx-1",
       snapshotJson: expect.any(String),
     });
+  });
+
+  it("routes requestSnapshots to the native plugin", async () => {
+    const client = new NativeCoordinationClient(
+      mockPlugin,
+      () => "wss://coord.example/v1/realtime",
+      async () => "ticket-1",
+      "dev-1",
+      15,
+      makeCallbacks(),
+    );
+    await client.connect();
+    client.requestSnapshots();
+    expect(mockPlugin.requestSnapshots).toHaveBeenCalled();
   });
 
   it("parses coordinationEvent envelopes and forwards through callbacks", async () => {

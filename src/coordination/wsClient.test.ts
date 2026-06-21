@@ -321,4 +321,15 @@ describe("CoordinationWsClient ack + dedup + seq", () => {
     expect(client.internalPendingAckSize()).toBe(0);
     expect(client.internalDedupSize()).toBe(0);
   });
+
+  it("requestSnapshots sends a request_snapshots envelope", async () => {
+    await client.connect();
+    ws.onopen?.();
+    client.requestSnapshots();
+    expect(ws.sent.length).toBeGreaterThan(0);
+    const env = JSON.parse(ws.sent[ws.sent.length - 1]) as Envelope;
+    expect(env.type).toBe("request_snapshots");
+    expect(env.version).toBe(COORDINATION_PROTOCOL_VERSION);
+    expect(typeof env.messageId).toBe("string");
+  });
 });
