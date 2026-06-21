@@ -189,6 +189,11 @@ function DevicePlaybackCard({
   /// and resends `handoff_candidate_request`, up to this limit.
   const SOURCE_CHANGED_MAX_RETRIES = 2;
   const sourceChangedRetriesRef = useRef(0);
+  /// Tracks the generation/snapshotRevision actually sent in the last
+  /// `handoff_candidate_request`, so the source_changed retry path can tell
+  /// whether the manager cache has something newer than what we just sent.
+  const lastSentGenerationRef = useRef<number | null>(null);
+  const lastSentRevisionRef = useRef<number | null>(null);
 
   const { data: song, isLoading } = useSongInfo(snapshotData.snapshot.songId);
 
@@ -228,18 +233,56 @@ function DevicePlaybackCard({
     // advanced during the handoff window. Instead of immediately failing,
     // refresh the latest snapshot projection from the manager and resend the
     // `handoff_candidate_request`, up to SOURCE_CHANGED_MAX_RETRIES times.
+    //
+    // Online sources keep publishing, so we wait for the next projection.
+    // Offline sources never publish again — waiting would just spin for the
+    // full timeout, so we retry immediately with the manager's cached
+    // revision (which may be fresher than the component's deferred prop) and
+    // give up right away if there is nothing newer.
     manager.callbacks.onError = (code, reason) => {
       if (
         code === "source_changed" &&
         sourceChangedRetriesRef.current < SOURCE_CHANGED_MAX_RETRIES
       ) {
         sourceChangedRetriesRef.current += 1;
-        // Wait for the source device's newest snapshot_projection (the source
-        // keeps publishing on every change), then resend with the fresh
-        // generation/snapshotRevision. Keep the loading spinner active.
+        const cached = manager.getLatestDeviceSnapshot(device.id);
+        // Fast path: the manager already has a newer revision than the one
+        // we just sent (the component prop may lag behind the cache because
+        // of useDeferredValue). Resend immediately without waiting.
+        if (
+          cached &&
+          (cached.generation !== lastSentGenerationRef.current ||
+            cached.snapshotRevision !== lastSentRevisionRef.current)
+        ) {
+          lastSentGenerationRef.current = cached.generation;
+          lastSentRevisionRef.current = cached.snapshotRevision;
+          manager.requestHandoffCandidate(
+            device.id,
+            cached.generation,
+            cached.snapshotRevision,
+          );
+          return;
+        }
+        // Nothing newer in the cache. For offline sources there will never
+        // be a newer projection, so fail fast instead of spinning for the
+        // full wait timeout.
+        if (!snapshotData.isOnline) {
+          originalError(code, reason);
+          setIsRelaying(false);
+          toast.error(
+            t("settings.crossDevice.toast.relayFailed", {
+              defaultValue: "Handoff failed: {{code}}",
+              code,
+            }),
+          );
+          return;
+        }
+        // Online source: wait for the next snapshot_projection, then resend.
         manager
           .waitForDeviceSnapshotUpdate(device.id)
           .then(({ generation, snapshotRevision }) => {
+            lastSentGenerationRef.current = generation;
+            lastSentRevisionRef.current = snapshotRevision;
             manager.requestHandoffCandidate(device.id, generation, snapshotRevision);
           })
           .catch(() => {
@@ -270,7 +313,7 @@ function DevicePlaybackCard({
       manager.callbacks.onHandoffFailed = originalFailed;
       manager.callbacks.onError = originalError;
     };
-  }, [isRelaying, manager, t, device.id]);
+  }, [isRelaying, manager, t, device.id, snapshotData.isOnline]);
 
   const handleRemoteControl = () => {
     if (isControlling) {
@@ -348,6 +391,8 @@ function DevicePlaybackCard({
 
     setIsRelaying(true);
     sourceChangedRetriesRef.current = 0;
+    lastSentGenerationRef.current = snapshotData.generation;
+    lastSentRevisionRef.current = snapshotData.snapshotRevision;
     manager.requestHandoffCandidate(
       device.id,
       snapshotData.generation,
