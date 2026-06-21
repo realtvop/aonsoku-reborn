@@ -85,7 +85,14 @@ async function fetchOriginalSourceSongs(
 // by song id. Used when restoring a full queue from a remote snapshot.
 async function fetchSongMap(
   snapshot: PlaybackSnapshot,
-): Promise<Map<string, NonNullable<Awaited<ReturnType<typeof import("@/service/subsonic")>["songs"]["getSong"]>["0"]>> | null> {
+): Promise<Map<
+  string,
+  NonNullable<
+    Awaited<
+      ReturnType<typeof import("@/service/subsonic")>["songs"]["getSong"]
+    >["0"]
+  >
+> | null> {
   const { subsonic } = await import("@/service/subsonic");
   const ids = Array.from(
     new Set([
@@ -96,7 +103,9 @@ async function fetchSongMap(
     ]),
   ).filter(Boolean);
   if (ids.length === 0) return null;
-  const fetched = await Promise.all(ids.map((id) => subsonic.songs.getSong(id)));
+  const fetched = await Promise.all(
+    ids.map((id) => subsonic.songs.getSong(id)),
+  );
   const map = new Map<string, NonNullable<(typeof fetched)[number]>>();
   for (const s of fetched) {
     if (s) map.set(s.id, s);
@@ -134,12 +143,14 @@ async function applySnapshotToPlayerStore(
   // order exactly like on the source device. Falls back to the context queue
   // (already-ordered) when the source cannot be re-fetched.
   const originalSourceSongs = sourceId
-    ? (await fetchOriginalSourceSongs(sourceId)) ?? null
+    ? ((await fetchOriginalSourceSongs(sourceId)) ?? null)
     : null;
   const sourceSongsForRestore: ISong[] =
     originalSourceSongs && originalSourceSongs.length > 0
       ? originalSourceSongs
-      : (contextSongs.length > 0 ? contextSongs : [current]);
+      : contextSongs.length > 0
+        ? contextSongs
+        : [current];
 
   // Find the current song's position in the original source list so that
   // sourceQueue.currentIndex reflects the unshuffled position.
@@ -149,8 +160,7 @@ async function applySnapshotToPlayerStore(
   const sourceCurrentIndex = sourceIndex >= 0 ? sourceIndex : 0;
 
   usePlayerStore.setState((state) => {
-    const effectiveContext =
-      contextSongs.length > 0 ? contextSongs : [current];
+    const effectiveContext = contextSongs.length > 0 ? contextSongs : [current];
     const ctxIdx = Math.max(
       0,
       Math.min(
@@ -366,7 +376,9 @@ export function CoordinationObserver() {
           break;
         case "play_at_index":
           import("@/service/subsonic").then(({ subsonic }) => {
-            Promise.all(command.song_ids.map((id) => subsonic.songs.getSong(id)))
+            Promise.all(
+              command.song_ids.map((id) => subsonic.songs.getSong(id)),
+            )
               .then((songs) => {
                 const valid = songs.filter(
                   (s): s is NonNullable<typeof s> => !!s,

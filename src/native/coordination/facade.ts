@@ -35,10 +35,7 @@ import {
   COORDINATION_PROTOCOL_VERSION,
   CoordinationCapability,
 } from "@/coordination/types";
-import type {
-  CommandResult,
-  ConnectionSeq,
-} from "@/coordination/types";
+import type { CommandResult, ConnectionSeq } from "@/coordination/types";
 import type {
   SendCommandOptions,
   RefreshGenerationFn,
@@ -434,8 +431,7 @@ export class NativeCoordinationClient implements CoordinationClient {
     newGeneration: SessionGeneration,
   ): void {
     const messageId = crypto.randomUUID();
-    const timeoutMs =
-      pending.retry.options.timeoutMs ?? DEFAULT_ACK_TIMEOUT_MS;
+    const timeoutMs = pending.retry.options.timeoutMs ?? DEFAULT_ACK_TIMEOUT_MS;
     pending.timer = setTimeout(() => {
       this.pendingAcks.delete(messageId);
       pending.reject(new Error(`command_ack timeout after ${timeoutMs}ms`));

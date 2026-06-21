@@ -382,7 +382,9 @@ export class CoordinationManager {
   /// rejects with a clear reason.
   private wireRefreshGeneration(
     client: CoordinationClient & {
-      setRefreshGenerationFn?: (fn: (deviceId: DeviceId) => Promise<SessionGeneration | null>) => void;
+      setRefreshGenerationFn?: (
+        fn: (deviceId: DeviceId) => Promise<SessionGeneration | null>,
+      ) => void;
     },
   ): void {
     if (typeof client.setRefreshGenerationFn === "function") {

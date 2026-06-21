@@ -465,9 +465,7 @@ export class CoordinationWsClient implements CoordinationClient {
             pending.retry.attempted
           ) {
             pending.reject(
-              new Error(
-                `stale_epoch: generation still stale after retry`,
-              ),
+              new Error(`stale_epoch: generation still stale after retry`),
             );
             return;
           }
@@ -513,7 +511,10 @@ export class CoordinationWsClient implements CoordinationClient {
   /// retry, §13). Reuses the original `PendingAck`'s resolve/reject so the
   /// caller's promise resolves/rejects with the retry result. A new
   /// messageId is generated and a fresh timeout timer is armed.
-  private resendCommand(pending: PendingAck, newGeneration: SessionGeneration): void {
+  private resendCommand(
+    pending: PendingAck,
+    newGeneration: SessionGeneration,
+  ): void {
     const env: Envelope = {
       version: COORDINATION_PROTOCOL_VERSION,
       messageId: crypto.randomUUID(),

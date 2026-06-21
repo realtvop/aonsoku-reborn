@@ -239,12 +239,19 @@ export function useCurrentLyricLine() {
 
   // Set initial line position when paused with synced lyrics available
   useEffect(() => {
-    if (isPlaying || (!playerRef && !isRemoteControlActive) || syncedLines.length === 0) return;
+    if (
+      isPlaying ||
+      (!playerRef && !isRemoteControlActive) ||
+      syncedLines.length === 0
+    )
+      return;
 
     const updatePausedLine = () => {
       let timeMs = 0;
       if (isRemoteControlActive) {
-        timeMs = Math.floor(usePlayerStore.getState().playerProgress.progress * 1000);
+        timeMs = Math.floor(
+          usePlayerStore.getState().playerProgress.progress * 1000,
+        );
       } else {
         timeMs = Math.floor((playerRef?.currentTime || 0) * 1000);
       }
@@ -264,7 +271,7 @@ export function useCurrentLyricLine() {
           if (!usePlayerStore.getState().playerState.isPlaying) {
             updatePausedLine();
           }
-        }
+        },
       );
     }
   }, [isPlaying, playerRef, syncedLines, isRemoteControlActive]);

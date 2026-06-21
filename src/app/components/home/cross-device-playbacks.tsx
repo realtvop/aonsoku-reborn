@@ -4,6 +4,7 @@ import {
   Cast,
   Laptop,
   Loader2,
+  MousePointerClick,
   Radio,
   Smartphone,
   Tv,
@@ -12,6 +13,7 @@ import { useDeferredValue, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { CachedImage } from "@/app/components/cover-image/cached-image";
 import { Button } from "@/app/components/ui/button";
+import { SimpleTooltip } from "@/app/components/ui/simple-tooltip";
 import { useCoordinationStore } from "@/coordination/store";
 import type {
   DeviceDto,
@@ -292,11 +294,10 @@ function DevicePlaybackCard({
     }, 15000);
   };
 
-
   return (
     <div
       className={cn(
-        "bg-card/40 backdrop-blur border rounded-xl p-3 flex items-center justify-between shadow-md gap-4 transition-all duration-300",
+        "bg-card/40 backdrop-blur border rounded-lg p-3 flex items-center justify-between gap-4 transition-all duration-300",
         isControlling
           ? "border-primary/50 bg-primary/5"
           : "border-border/50 hover:bg-card/60",
@@ -335,47 +336,35 @@ function DevicePlaybackCard({
               {getDeviceIcon(device.platform)}
               {device.name}
             </span>
-            <span>·</span>
-            <span className="flex items-center gap-1">
-              <span
-                className={cn(
-                  "w-1.5 h-1.5 rounded-full",
-                  snapshotData.isOnline ? "bg-green-500" : "bg-neutral-400",
-                )}
-              />
-              {snapshotData.isOnline ? "在线" : "离线"}
-            </span>
           </div>
         </div>
       </div>
 
       {/* Buttons (Right) */}
       <div className="flex items-center gap-2 flex-shrink-0">
-        <Button
-          variant={isControlling ? "default" : "outline"}
-          size="sm"
-          onClick={handleRemoteControl}
-          className={cn(
-            "h-8 px-3 text-xs font-medium",
-            isControlling && "bg-green-600 hover:bg-green-700 text-white",
-          )}
-        >
-          {isControlling ? "退出控制" : "远程控制"}
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleRelay}
-          disabled={isRelaying}
-          className="h-8 px-3 text-xs font-medium gap-1"
-        >
-          {isRelaying ? (
-            <Loader2 className="w-3 h-3 animate-spin" />
-          ) : (
-            <ArrowRightLeft className="w-3 h-3" />
-          )}
-          接力
-        </Button>
+        <SimpleTooltip text={isControlling ? "退出控制" : "远程控制"}>
+          <Button
+            variant={isControlling ? "default" : "ghost"}
+            onClick={handleRemoteControl}
+            className="size-11 p-0 rounded-lg transition-all duration-200"
+          >
+            <MousePointerClick className="w-5 h-5" />
+          </Button>
+        </SimpleTooltip>
+        <SimpleTooltip text={isRelaying ? "正在准备接力..." : "接力"}>
+          <Button
+            variant="ghost"
+            onClick={handleRelay}
+            disabled={isRelaying}
+            className="size-11 p-0 rounded-lg transition-all duration-200"
+          >
+            {isRelaying ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <ArrowRightLeft className="w-5 h-5" />
+            )}
+          </Button>
+        </SimpleTooltip>
       </div>
     </div>
   );

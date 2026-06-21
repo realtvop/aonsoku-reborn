@@ -22,7 +22,9 @@ export function FavoritesButtons({ songs, sourceName }: FavoritesButtonsProps) {
     <Actions.Container>
       <Actions.Button
         tooltip={buttonsTooltips.shuffle}
-        onClick={() => setSongList(songs, undefined, true, undefined, sourceName)}
+        onClick={() =>
+          setSongList(songs, undefined, true, undefined, sourceName)
+        }
         disabled={!songs.length}
       >
         <Actions.ShuffleIcon />

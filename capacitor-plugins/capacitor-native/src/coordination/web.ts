@@ -58,7 +58,9 @@ export class AonsokuNativeCoordinationWeb
   ): Promise<import("@capacitor/core").PluginListenerHandle> {
     // The web runtime uses CoordinationWsClient directly; no native events.
     return await Promise.reject(
-      new Error(`coordination: native plugin not available on web (${eventName})`),
+      new Error(
+        `coordination: native plugin not available on web (${eventName})`,
+      ),
     );
   }
   async removeAllListeners(): Promise<void> {
