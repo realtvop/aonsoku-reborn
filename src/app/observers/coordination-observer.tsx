@@ -18,6 +18,100 @@ import { seekPlaybackTarget } from "@/player/playback/backend-registry";
 import { LoopState } from "@/types/playerContext";
 import { logger } from "@/utils/logger";
 
+// Fetch song metadata for all song ids in a snapshot and return a Map keyed
+// by song id. Used when restoring a full queue from a remote snapshot.
+async function fetchSongMap(
+  snapshot: PlaybackSnapshot,
+): Promise<Map<string, NonNullable<Awaited<ReturnType<typeof import("@/service/subsonic")>["songs"]["getSong"]>["0"]>> | null> {
+  const { subsonic } = await import("@/service/subsonic");
+  const ids = Array.from(
+    new Set([
+      snapshot.songId,
+      ...snapshot.contextQueue,
+      ...snapshot.userQueue,
+      ...snapshot.restorePrevious,
+    ]),
+  ).filter(Boolean);
+  if (ids.length === 0) return null;
+  const fetched = await Promise.all(ids.map((id) => subsonic.songs.getSong(id)));
+  const map = new Map<string, NonNullable<(typeof fetched)[number]>>();
+  for (const s of fetched) {
+    if (s) map.set(s.id, s);
+  }
+  return map;
+}
+
+// Apply the full snapshot to the local player store, restoring the exact
+// queue experience (current song, context queue, user queue, shuffle, repeat,
+// volume, progress, inUserQueue, sourceName). Song metadata is fetched from
+// the local Navidrome/Subsonic API by id (design §7.3).
+async function applySnapshotToPlayerStore(
+  snapshot: PlaybackSnapshot,
+  opts: { playing: boolean },
+): Promise<void> {
+  const songMap = await fetchSongMap(snapshot);
+  if (!songMap) return;
+  const current = songMap.get(snapshot.songId);
+  if (!current) return;
+
+  const contextSongs = snapshot.contextQueue
+    .map((id) => songMap.get(id))
+    .filter((s): s is NonNullable<typeof s> => !!s);
+  const userSongs = snapshot.userQueue
+    .map((id) => songMap.get(id))
+    .filter((s): s is NonNullable<typeof s> => !!s);
+  const restorePreviousSongs = snapshot.restorePrevious
+    .map((id) => songMap.get(id))
+    .filter((s): s is NonNullable<typeof s> => !!s);
+
+  usePlayerStore.setState((state) => {
+    const effectiveContext =
+      contextSongs.length > 0 ? contextSongs : [current];
+    state.songlist.currentSong = current;
+    state.songlist.contextQueue = {
+      songs: effectiveContext,
+      currentIndex: Math.max(
+        0,
+        Math.min(
+          snapshot.contextIndex ?? 0,
+          Math.max(0, effectiveContext.length - 1),
+        ),
+      ),
+      sourceId: null,
+      sourceName: snapshot.sourceName ?? null,
+    };
+    state.songlist.sourceQueue = {
+      songs: effectiveContext,
+      currentIndex: Math.max(
+        0,
+        Math.min(
+          snapshot.contextIndex ?? 0,
+          Math.max(0, effectiveContext.length - 1),
+        ),
+      ),
+      sourceId: null,
+      sourceName: snapshot.sourceName ?? null,
+    };
+    state.songlist.userQueue = { songs: userSongs };
+    state.songlist.isInUserQueue = snapshot.inUserQueue;
+    state.songlist.playedUserQueueHistory = restorePreviousSongs;
+    state.songlist.isShuffleActive = snapshot.shuffle;
+    state.songlist.shuffleHistory = [];
+    state.songlist.shuffleStartHistory = [];
+    state.songlist.originalContextSongs = effectiveContext;
+    state.songlist.radioList = [];
+    state.playerState.mediaType = "song";
+    state.playerState.isPlaying = opts.playing;
+    state.playerState.currentDuration = snapshot.durationSeconds;
+    state.playerState.loopState = mapRepeatModeToLoopState(snapshot.repeat);
+    if (snapshot.volume !== null) {
+      state.playerState.volume = Math.round(snapshot.volume * 100);
+    }
+    state.playerProgress.progress = snapshot.progressSeconds;
+    state.playerProgress.bufferedProgress = 0;
+  });
+}
+
 function mapLoopState(loop: LoopState): "off" | "one" | "all" {
   switch (loop) {
     case LoopState.One:
@@ -89,7 +183,7 @@ export function CoordinationObserver() {
       sourceName: state.songlist.contextQueue.sourceName ?? null,
       userQueue: state.songlist.userQueue.songs.map((s) => s.id),
       inUserQueue: state.songlist.isInUserQueue,
-      restorePrevious: [],
+      restorePrevious: state.songlist.playedUserQueueHistory.map((s) => s.id),
       shuffle: shuffleEnabled,
       repeat: mapLoopState(loopState),
       volume: volume / 100,
@@ -349,7 +443,9 @@ export function CoordinationObserver() {
           sourceName: state.songlist.contextQueue.sourceName ?? null,
           userQueue: state.songlist.userQueue.songs.map((s) => s.id),
           inUserQueue: state.songlist.isInUserQueue,
-          restorePrevious: [],
+          restorePrevious: state.songlist.playedUserQueueHistory.map(
+            (s) => s.id,
+          ),
           shuffle: shuffleEnabled,
           repeat: mapLoopState(loopState),
           volume: volume / 100,
@@ -375,7 +471,8 @@ export function CoordinationObserver() {
     volume,
   ]);
 
-  // Handle handoff_candidate: fetch metadata, load song paused, seek progress, and send target_ready (design §11.1 step 2-3).
+  // Handle handoff_candidate: fetch metadata, preload the full queue paused,
+  // seek to the snapshot progress, and send target_ready (design §11.1 step 2-3).
   useEffect(() => {
     if (!isConnected) return;
     const original = manager.callbacks.onHandoffCandidate;
@@ -387,50 +484,39 @@ export function CoordinationObserver() {
       sourceDeviceId?: string | null,
       sessionId?: string | null,
     ) => {
-      if (snapshot.songId) {
-        import("@/service/subsonic").then(({ subsonic }) => {
-          subsonic.songs
-            .getSong(snapshot.songId)
-            .then((song) => {
-              if (song) {
-                const state = usePlayerStore.getState();
-                const isSameSong = state.songlist.currentSong?.id === song.id;
-
-                playerActions.playSong(song);
-                playerActions.setPlayingState(false);
-                playerActions.setProgress(snapshot.progressSeconds);
-
-                if (isSameSong) {
-                  const audio = state.playerState.audioPlayerRef;
-                  if (audio) {
-                    seekPlaybackTarget(audio, snapshot.progressSeconds);
-                  }
-                }
-
-                manager.sendTargetReady(
-                  transactionId,
-                  generation,
-                  snapshotRevision,
-                  sourceDeviceId,
-                  sessionId,
-                );
-              }
-            })
-            .catch((err) => {
-              logger.error(
-                "[CoordinationObserver] Handoff candidate load failed:",
-                err,
-              );
-            });
+      if (!snapshot.songId) return;
+      const state = usePlayerStore.getState();
+      const isSameSong = state.songlist.currentSong?.id === snapshot.songId;
+      applySnapshotToPlayerStore(snapshot, { playing: false })
+        .then(() => {
+          if (isSameSong) {
+            const audio = usePlayerStore.getState().playerState.audioPlayerRef;
+            if (audio) {
+              seekPlaybackTarget(audio, snapshot.progressSeconds);
+            }
+          }
+          manager.sendTargetReady(
+            transactionId,
+            generation,
+            snapshotRevision,
+            sourceDeviceId,
+            sessionId,
+          );
+        })
+        .catch((err) => {
+          logger.error(
+            "[CoordinationObserver] Handoff candidate load failed:",
+            err,
+          );
         });
-      }
     };
     return () => {
       manager.callbacks.onHandoffCandidate = original;
     };
-  }, [isConnected, manager, playerActions]);
+  }, [isConnected, manager]);
 
-  // Handle handoff_committed: apply final snapshot and start playback (design §11.1 step 7).
+  // Handle handoff_committed: apply the final snapshot (with A's last-second
+  // state) and resume playback (design §11.1 step 7).
   useEffect(() => {
     if (!isConnected) return;
     const original = manager.callbacks.onHandoffCommitted;
@@ -438,25 +524,29 @@ export function CoordinationObserver() {
       snapshot: PlaybackSnapshot,
       _newGeneration: number,
     ) => {
-      if (snapshot.songId) {
-        const state = usePlayerStore.getState();
-        const isSameSong = state.songlist.currentSong?.id === snapshot.songId;
-
-        playerActions.setProgress(snapshot.progressSeconds);
-        playerActions.setPlayingState(true);
-
-        if (isSameSong) {
-          const audio = state.playerState.audioPlayerRef;
-          if (audio) {
-            seekPlaybackTarget(audio, snapshot.progressSeconds);
+      if (!snapshot.songId) return;
+      const state = usePlayerStore.getState();
+      const isSameSong = state.songlist.currentSong?.id === snapshot.songId;
+      applySnapshotToPlayerStore(snapshot, { playing: true })
+        .then(() => {
+          if (isSameSong) {
+            const audio = usePlayerStore.getState().playerState.audioPlayerRef;
+            if (audio) {
+              seekPlaybackTarget(audio, snapshot.progressSeconds);
+            }
           }
-        }
-      }
+        })
+        .catch((err) => {
+          logger.error(
+            "[CoordinationObserver] Handoff committed apply failed:",
+            err,
+          );
+        });
     };
     return () => {
       manager.callbacks.onHandoffCommitted = original;
     };
-  }, [isConnected, manager, playerActions]);
+  }, [isConnected, manager]);
 
   // Handle handoff_failed
   useEffect(() => {
