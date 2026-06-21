@@ -104,6 +104,7 @@ export interface CoordinationClient {
   sendRelinquishAck(transactionId: string, snapshot: PlaybackSnapshot): void;
   sendControlSessionBegin(targetDeviceId: DeviceId): void;
   sendControlSessionEnd(): void;
+  requestSnapshots(): void;
 }
 
 /// Unified coordination client surface (design §5.2). Both the TypeScript
@@ -140,6 +141,7 @@ export interface CoordinationClient {
   sendRelinquishAck(transactionId: string, snapshot: PlaybackSnapshot): void;
   sendControlSessionBegin(targetDeviceId: DeviceId): void;
   sendControlSessionEnd(): void;
+  requestSnapshots(): void;
 }
 
 const HEARTBEAT_INTERVAL_MS = 15_000;
@@ -729,6 +731,18 @@ export class CoordinationWsClient implements CoordinationClient {
       version: COORDINATION_PROTOCOL_VERSION,
       messageId: crypto.randomUUID(),
       type: "control_session_end",
+    };
+    this.send(env);
+  }
+
+  /// Request current online peers' playback snapshots from the server
+  /// (design §9.2 bootstrap). Fire-and-forget; the server replies with one
+  /// `snapshot_projection` envelope per online peer that has a snapshot.
+  requestSnapshots(): void {
+    const env: Envelope = {
+      version: COORDINATION_PROTOCOL_VERSION,
+      messageId: crypto.randomUUID(),
+      type: "request_snapshots",
     };
     this.send(env);
   }
