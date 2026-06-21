@@ -76,6 +76,8 @@ export interface CoordinationManagerCallbacks {
     isOnline: boolean,
     generation: SessionGeneration,
     snapshotRevision: SnapshotRevision,
+    serverTime: number,
+    lastConfirmedAt: number,
   ) => void;
   onRemoteCommand: (command: RemoteCommand, sourceDeviceId: DeviceId) => void;
   onHandoffCandidate: (
@@ -289,6 +291,8 @@ export class CoordinationManager {
             env.isOnline,
             env.generation,
             env.snapshotRevision,
+            env.serverTime ?? env.lastConfirmedAt,
+            env.lastConfirmedAt,
           );
         }
       },

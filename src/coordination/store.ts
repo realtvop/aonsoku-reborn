@@ -24,6 +24,9 @@ interface CoordinationState {
       generation: number;
       snapshotRevision: number;
       lastUpdatedAt: number;
+      serverTime: number;
+      lastConfirmedAt: number;
+      receivedAtPerformance: number;
     }
   >;
   controlledDeviceId: DeviceId | null;
@@ -83,6 +86,8 @@ export const useCoordinationStore = create<CoordinationState>()(
         isOnline,
         generation,
         snapshotRevision,
+        serverTime,
+        lastConfirmedAt,
       ) => {
         console.info(
           "[CoordinationStore] onDeviceSnapshot:",
@@ -97,6 +102,9 @@ export const useCoordinationStore = create<CoordinationState>()(
             generation,
             snapshotRevision,
             lastUpdatedAt: Date.now(),
+            serverTime,
+            lastConfirmedAt,
+            receivedAtPerformance: performance.now(),
           };
         });
       },

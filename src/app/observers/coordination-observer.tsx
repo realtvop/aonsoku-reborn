@@ -1,8 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
+import { projectPlaybackProgress } from "@/coordination/progress";
 import { useCoordinationStore } from "@/coordination/store";
 import type { PlaybackSnapshot, RemoteCommand } from "@/coordination/types";
+import { seekPlaybackTarget } from "@/player/playback/backend-registry";
 import {
   usePlayerActions,
   usePlayerCurrentSong,
@@ -12,10 +14,12 @@ import {
   usePlayerStore,
   usePlayerVolume,
 } from "@/store/player.store";
-import { seekPlaybackTarget } from "@/player/playback/backend-registry";
 import { LoopState, type QueueSourceId } from "@/types/playerContext";
 import type { ISong } from "@/types/responses/song";
+import { getPlaybackCapabilities } from "@/utils/capabilities";
 import { logger } from "@/utils/logger";
+
+const SNAPSHOT_HEARTBEAT_MS = 10_000;
 
 // Encode a QueueSourceId into the snapshot's free-form sourceId string as
 // "<type>:<id>" so the receiver can reconstruct the source identity (album /
@@ -224,6 +228,49 @@ function mapRepeatModeToLoopState(mode: string): LoopState {
   }
 }
 
+function buildPlaybackSnapshot(
+  sessionId: string,
+  song: ISong,
+  isPlaying: boolean,
+  shuffleEnabled: boolean,
+  loopState: LoopState,
+  volume: number,
+): PlaybackSnapshot {
+  const state = usePlayerStore.getState();
+  const audioProgress = state.playerState.audioPlayerRef?.currentTime;
+  const canReadWebAudioProgress =
+    !getPlaybackCapabilities().supportsNativePlayback &&
+    typeof audioProgress === "number" &&
+    Number.isFinite(audioProgress);
+
+  return {
+    sessionId,
+    logicalPlaybackSessionId: sessionId,
+    mediaKind: "song",
+    songId: song.id,
+    progressSeconds: canReadWebAudioProgress
+      ? Math.max(0, audioProgress)
+      : Math.max(0, state.playerProgress.progress),
+    durationSeconds: song.duration ?? 0,
+    isPlaying,
+    sampledAt: Date.now() / 1000,
+    contextQueue: state.songlist.contextQueue.songs.map((s) => s.id),
+    contextIndex: state.songlist.contextQueue.currentIndex,
+    sourceId: encodeSourceId(state.songlist.contextQueue.sourceId),
+    sourceName: state.songlist.contextQueue.sourceName ?? null,
+    userQueue: state.songlist.userQueue.songs.map((s) => s.id),
+    inUserQueue: state.songlist.isInUserQueue,
+    restorePrevious: state.songlist.playedUserQueueHistory.map((s) => s.id),
+    shuffle: shuffleEnabled,
+    repeat: mapLoopState(loopState),
+    volume: volume / 100,
+    accumulatedPlaySeconds: 0,
+    historyWritten: false,
+    nowPlayingSent: false,
+    scrobbleSent: false,
+  };
+}
+
 export function CoordinationObserver() {
   const isConnected = useCoordinationStore((state) => state.isConnected);
   const loadState = useCoordinationStore((state) => state.loadState);
@@ -242,10 +289,38 @@ export function CoordinationObserver() {
   const { volume } = usePlayerVolume();
   const loopState = usePlayerLoop();
   const shuffleEnabled = usePlayerShuffle();
-  const seekCount = usePlayerStore((state) => state.playerProgress.seekCount);
   const sessionIdRef = useRef<string>(crypto.randomUUID());
   const generationRef = useRef<number>(1);
   const snapshotRevisionRef = useRef<number>(0);
+
+  const publishCurrentSnapshot = useCallback(() => {
+    if (!isConnected || !currentSong) return;
+    if (usePlayerStore.getState().remoteControl.active) return;
+
+    const snapshot = buildPlaybackSnapshot(
+      sessionIdRef.current,
+      currentSong,
+      isPlaying,
+      shuffleEnabled,
+      loopState,
+      volume,
+    );
+    snapshotRevisionRef.current++;
+    manager.publishSnapshot(
+      sessionIdRef.current,
+      generationRef.current,
+      snapshotRevisionRef.current,
+      snapshot,
+    );
+  }, [
+    isConnected,
+    currentSong,
+    isPlaying,
+    shuffleEnabled,
+    loopState,
+    volume,
+    manager,
+  ]);
 
   // Load coordination state and auto-connect on mount
   useEffect(() => {
@@ -262,52 +337,36 @@ export function CoordinationObserver() {
   // Receivers interpolate progress via sampledAt + isPlaying, and the
   // handoff's relinquish_ack carries an exact final progress.
   useEffect(() => {
-    if (!isConnected || !currentSong) return;
-    const _dummySeekCount = seekCount;
-    const state = usePlayerStore.getState();
-    if (state.remoteControl.active) return;
+    publishCurrentSnapshot();
+  }, [publishCurrentSnapshot]);
 
-    const snapshot: PlaybackSnapshot = {
-      sessionId: sessionIdRef.current,
-      logicalPlaybackSessionId: sessionIdRef.current,
-      mediaKind: "song",
-      songId: currentSong.id,
-      progressSeconds: state.playerProgress.progress,
-      durationSeconds: currentSong.duration ?? 0,
-      isPlaying,
-      sampledAt: Math.floor(Date.now() / 1000),
-      contextQueue: state.songlist.contextQueue.songs.map((s) => s.id),
-      contextIndex: state.songlist.contextQueue.currentIndex,
-      sourceId: encodeSourceId(state.songlist.contextQueue.sourceId),
-      sourceName: state.songlist.contextQueue.sourceName ?? null,
-      userQueue: state.songlist.userQueue.songs.map((s) => s.id),
-      inUserQueue: state.songlist.isInUserQueue,
-      restorePrevious: state.songlist.playedUserQueueHistory.map((s) => s.id),
-      shuffle: shuffleEnabled,
-      repeat: mapLoopState(loopState),
-      volume: volume / 100,
-      accumulatedPlaySeconds: 0,
-      historyWritten: false,
-      nowPlayingSent: false,
-      scrobbleSent: false,
+  useEffect(
+    () =>
+      usePlayerStore.subscribe(
+        (state) => state.playerProgress.seekCount,
+        publishCurrentSnapshot,
+      ),
+    [publishCurrentSnapshot],
+  );
+
+  useEffect(() => {
+    if (!isConnected || !currentSong || !isPlaying) return;
+    const interval = setInterval(publishCurrentSnapshot, SNAPSHOT_HEARTBEAT_MS);
+    return () => clearInterval(interval);
+  }, [isConnected, currentSong, isPlaying, publishCurrentSnapshot]);
+
+  useEffect(() => {
+    const handleForeground = () => {
+      if (document.hidden) return;
+      publishCurrentSnapshot();
     };
-    snapshotRevisionRef.current++;
-    manager.publishSnapshot(
-      sessionIdRef.current,
-      generationRef.current,
-      snapshotRevisionRef.current,
-      snapshot,
-    );
-  }, [
-    isConnected,
-    currentSong,
-    isPlaying,
-    shuffleEnabled,
-    loopState,
-    volume,
-    seekCount,
-    manager,
-  ]);
+    document.addEventListener("visibilitychange", handleForeground);
+    window.addEventListener("pageshow", handleForeground);
+    return () => {
+      document.removeEventListener("visibilitychange", handleForeground);
+      window.removeEventListener("pageshow", handleForeground);
+    };
+  }, [publishCurrentSnapshot]);
 
   // Handle remote commands from other devices (design §10).
   useEffect(() => {
@@ -335,12 +394,10 @@ export function CoordinationObserver() {
           break;
         case "seek": {
           const audio = usePlayerStore.getState().playerState.audioPlayerRef;
-          if (audio) {
+          if (audio && !getPlaybackCapabilities().supportsNativePlayback) {
             seekPlaybackTarget(audio, command.seconds);
           }
-          usePlayerStore.setState((state) => {
-            state.playerProgress.progress = command.seconds;
-          });
+          playerActions.setProgress(command.seconds, true);
           break;
         }
         case "set_volume":
@@ -527,33 +584,14 @@ export function CoordinationObserver() {
     ) => {
       playerActions.setPlayingState(false);
       if (currentSong) {
-        const state = usePlayerStore.getState();
-        const finalSnapshot: PlaybackSnapshot = {
-          sessionId: sessionIdRef.current,
-          logicalPlaybackSessionId: sessionIdRef.current,
-          mediaKind: "song",
-          songId: currentSong.id,
-          progressSeconds: state.playerProgress.progress,
-          durationSeconds: currentSong.duration ?? 0,
-          isPlaying: false,
-          sampledAt: Math.floor(Date.now() / 1000),
-          contextQueue: state.songlist.contextQueue.songs.map((s) => s.id),
-          contextIndex: state.songlist.contextQueue.currentIndex,
-          sourceId: encodeSourceId(state.songlist.contextQueue.sourceId),
-          sourceName: state.songlist.contextQueue.sourceName ?? null,
-          userQueue: state.songlist.userQueue.songs.map((s) => s.id),
-          inUserQueue: state.songlist.isInUserQueue,
-          restorePrevious: state.songlist.playedUserQueueHistory.map(
-            (s) => s.id,
-          ),
-          shuffle: shuffleEnabled,
-          repeat: mapLoopState(loopState),
-          volume: volume / 100,
-          accumulatedPlaySeconds: 0,
-          historyWritten: false,
-          nowPlayingSent: false,
-          scrobbleSent: false,
-        };
+        const finalSnapshot = buildPlaybackSnapshot(
+          sessionIdRef.current,
+          currentSong,
+          false,
+          shuffleEnabled,
+          loopState,
+          volume,
+        );
         manager.sendRelinquishAck(transactionId, finalSnapshot);
       }
     };
@@ -705,15 +743,13 @@ export function CoordinationObserver() {
   useEffect(() => {
     if (!controlledDeviceId || !controlledSnapshot) return;
     const { snapshot } = controlledSnapshot;
+    const projectedProgress = projectPlaybackProgress(controlledSnapshot);
 
     usePlayerStore.setState((state) => {
       state.playerState.isPlaying = snapshot.isPlaying;
       state.playerState.currentDuration = snapshot.durationSeconds;
       if (!state.playerProgress.isScrubbing) {
-        state.playerProgress.progress = Math.min(
-          snapshot.progressSeconds,
-          snapshot.durationSeconds,
-        );
+        state.playerProgress.progress = projectedProgress;
       }
       state.songlist.isShuffleActive = snapshot.shuffle;
       state.playerState.loopState = mapRepeatModeToLoopState(snapshot.repeat);
@@ -854,38 +890,31 @@ export function CoordinationObserver() {
     const { snapshot } = controlledSnapshot;
     if (!snapshot.isPlaying) return;
 
-    let lastTickAt = performance.now();
-
-    const interval = setInterval(() => {
-      const now = performance.now();
-      const elapsed = (now - lastTickAt) / 1000;
-      lastTickAt = now;
+    const refreshProgress = () => {
+      const projectedProgress = projectPlaybackProgress(controlledSnapshot);
       usePlayerStore.setState((state) => {
         if (!state.playerProgress.isScrubbing) {
-          const newProgress = Math.min(
-            state.playerProgress.progress + elapsed,
-            state.playerState.currentDuration,
-          );
-          state.playerProgress.progress = newProgress;
+          state.playerProgress.progress = projectedProgress;
         }
       });
-    }, 100);
+    };
 
-    const handleVisibilityChange = () => {
+    const interval = setInterval(refreshProgress, 100);
+
+    const handleForeground = () => {
       if (document.hidden) return;
-      // Tab returned to the foreground: re-baseline the accumulator so the
-      // next tick measures from the resume instant, and ask the server for a
-      // fresh snapshot projection to correct drift accumulated while hidden.
-      lastTickAt = performance.now();
+      refreshProgress();
       if (usePlayerStore.getState().remoteControl.active) {
         manager?.requestSnapshots();
       }
     };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+    document.addEventListener("visibilitychange", handleForeground);
+    window.addEventListener("pageshow", handleForeground);
 
     return () => {
       clearInterval(interval);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      document.removeEventListener("visibilitychange", handleForeground);
+      window.removeEventListener("pageshow", handleForeground);
     };
   }, [controlledDeviceId, controlledSnapshot, manager]);
 
