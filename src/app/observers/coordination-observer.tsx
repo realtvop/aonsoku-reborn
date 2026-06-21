@@ -703,11 +703,28 @@ export function CoordinationObserver() {
     if (!controlledDeviceId || !controlledSnapshot) return;
     const { snapshot } = controlledSnapshot;
 
+    // Compensate for the time elapsed between the source device sampling its
+    // progress and us receiving/applying the snapshot. sampledAt is in Unix
+    // seconds (see publishSnapshot at line ~276). Without this, every snapshot
+    // resets progress to a stale value and the receiver permanently lags by
+    // the WebSocket round-trip latency (and much more while the tab was
+    // hidden). Clamp the delta to a sane range to avoid overcorrecting on
+    // clock skew or paused playback.
+    const nowSeconds = Date.now() / 1000;
+    const sampleAge = Math.max(0, Math.min(nowSeconds - snapshot.sampledAt, 60));
+    const compensatedProgress =
+      snapshot.isPlaying && snapshot.sampledAt > 0
+        ? snapshot.progressSeconds + sampleAge
+        : snapshot.progressSeconds;
+
     usePlayerStore.setState((state) => {
       state.playerState.isPlaying = snapshot.isPlaying;
       state.playerState.currentDuration = snapshot.durationSeconds;
       if (!state.playerProgress.isScrubbing) {
-        state.playerProgress.progress = snapshot.progressSeconds;
+        state.playerProgress.progress = Math.min(
+          compensatedProgress,
+          snapshot.durationSeconds,
+        );
       }
       state.songlist.isShuffleActive = snapshot.shuffle;
       state.playerState.loopState = mapRepeatModeToLoopState(snapshot.repeat);
