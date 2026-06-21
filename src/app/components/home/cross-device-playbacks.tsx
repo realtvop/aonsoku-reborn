@@ -9,7 +9,7 @@ import {
   Smartphone,
   Tv,
 } from "lucide-react";
-import { useDeferredValue, useEffect, useState } from "react";
+import { useDeferredValue, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 import { CachedImage } from "@/app/components/cover-image/cached-image";
@@ -184,6 +184,11 @@ function DevicePlaybackCard({
   const isControlling = controlledDeviceId === device.id;
   const [isRelaying, setIsRelaying] = useState(false);
   const { t } = useTranslation();
+  /// source_changed retry counter (design §11.2). Each `source_changed` error
+  /// refreshes the snapshot revision from the latest `snapshot_projection`
+  /// and resends `handoff_candidate_request`, up to this limit.
+  const SOURCE_CHANGED_MAX_RETRIES = 2;
+  const sourceChangedRetriesRef = useRef(0);
 
   const { data: song, isLoading } = useSongInfo(snapshotData.snapshot.songId);
 
@@ -218,7 +223,38 @@ function DevicePlaybackCard({
     // Server-side handoff validation errors (source_changed / stale_epoch /
     // bad_message / target_offline) arrive as generic `error` envelopes, not
     // handoff_failed. Surface them as relay failures while a relay is active.
+    //
+    // source_changed (design §11.2): the source device's snapshot revision
+    // advanced during the handoff window. Instead of immediately failing,
+    // refresh the latest snapshot projection from the manager and resend the
+    // `handoff_candidate_request`, up to SOURCE_CHANGED_MAX_RETRIES times.
     manager.callbacks.onError = (code, reason) => {
+      if (
+        code === "source_changed" &&
+        sourceChangedRetriesRef.current < SOURCE_CHANGED_MAX_RETRIES
+      ) {
+        sourceChangedRetriesRef.current += 1;
+        // Wait for the source device's newest snapshot_projection (the source
+        // keeps publishing on every change), then resend with the fresh
+        // generation/snapshotRevision. Keep the loading spinner active.
+        manager
+          .waitForDeviceSnapshotUpdate(device.id)
+          .then(({ generation, snapshotRevision }) => {
+            manager.requestHandoffCandidate(device.id, generation, snapshotRevision);
+          })
+          .catch(() => {
+            // Timed out waiting for a fresh projection — give up.
+            originalError(code, reason);
+            setIsRelaying(false);
+            toast.error(
+              t("settings.crossDevice.toast.relayFailed", {
+                defaultValue: "Handoff failed: {{code}}",
+                code,
+              }),
+            );
+          });
+        return;
+      }
       originalError(code, reason);
       setIsRelaying(false);
       toast.error(
@@ -234,7 +270,7 @@ function DevicePlaybackCard({
       manager.callbacks.onHandoffFailed = originalFailed;
       manager.callbacks.onError = originalError;
     };
-  }, [isRelaying, manager, t]);
+  }, [isRelaying, manager, t, device.id]);
 
   const handleRemoteControl = () => {
     if (isControlling) {
@@ -311,6 +347,7 @@ function DevicePlaybackCard({
     }
 
     setIsRelaying(true);
+    sourceChangedRetriesRef.current = 0;
     manager.requestHandoffCandidate(
       device.id,
       snapshotData.generation,

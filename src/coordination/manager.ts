@@ -123,6 +123,16 @@ export class CoordinationManager {
   /// by the stale-epoch retry path to refresh `expectedGeneration` without
   /// a round-trip to the server when a recent snapshot is available.
   private deviceGenerations = new Map<DeviceId, SessionGeneration>();
+  /// Per-device latest snapshot-revision cache, fed by `onDeviceSnapshot`.
+  /// Used by the source_changed retry path (design §11.2) to refresh
+  /// `expectedSnapshotRevision` before resending `handoff_candidate_request`.
+  private deviceSnapshotRevisions = new Map<DeviceId, SnapshotRevision>();
+  /// Pending resolvers waiting for the next `snapshot_projection` for a
+  /// given device (source_changed retry path).
+  private deviceSnapshotWaiters = new Map<
+    DeviceId,
+    Array<(gen: SessionGeneration, rev: SnapshotRevision) => void>
+  >();
   /// Token/config store — native (Keychain/Keystore) when the native plugin is
   /// available, IndexedDB/localStorage otherwise. Only one is active at a time
   /// (design §6.3).
@@ -264,6 +274,15 @@ export class CoordinationManager {
           // Feed the generation cache so the stale-epoch retry path can
           // refresh without a server round-trip.
           this.deviceGenerations.set(env.deviceId, env.generation);
+          this.deviceSnapshotRevisions.set(env.deviceId, env.snapshotRevision);
+          // Notify any source_changed retry waiters for this device.
+          const waiters = this.deviceSnapshotWaiters.get(env.deviceId);
+          if (waiters && waiters.length > 0) {
+            this.deviceSnapshotWaiters.delete(env.deviceId);
+            for (const resolve of waiters) {
+              resolve(env.generation, env.snapshotRevision);
+            }
+          }
           this.callbacks.onDeviceSnapshot(
             env.deviceId,
             env.snapshot,
@@ -313,6 +332,7 @@ export class CoordinationManager {
           // Invalidate the generation cache for this session's owning device
           // so future retries don't reuse the stale generation.
           this.deviceGenerations.delete(this.deviceId ?? "");
+          this.deviceSnapshotRevisions.delete(this.deviceId ?? "");
           this.callbacks.onSessionSuperseded(
             env.supersededGeneration,
             env.transferredToDevice ?? null,
@@ -553,6 +573,57 @@ export class CoordinationManager {
     );
   }
 
+  /// Returns the latest cached `generation` / `snapshotRevision` for a device,
+  /// or `null` if unknown. Fed by `onDeviceSnapshot` projections (design §9.2).
+  /// Used by the source_changed retry path (§11.2) to refresh the handoff
+  /// candidate request before resending.
+  getLatestDeviceSnapshot(
+    deviceId: DeviceId,
+  ): { generation: SessionGeneration; snapshotRevision: SnapshotRevision } | null {
+    const generation = this.deviceGenerations.get(deviceId);
+    const snapshotRevision = this.deviceSnapshotRevisions.get(deviceId);
+    if (generation === undefined || snapshotRevision === undefined) return null;
+    return { generation, snapshotRevision };
+  }
+
+  /// Resolves with the next `snapshot_projection` arrival for `deviceId`,
+  /// carrying the fresh `generation` / `snapshotRevision`. Rejects after
+  /// `timeoutMs` (default 8s) if no projection arrives. Used by the
+  /// source_changed retry path (design §11.2) to wait for the source device's
+  /// newest snapshot before resending `handoff_candidate_request`.
+  waitForDeviceSnapshotUpdate(
+    deviceId: DeviceId,
+    timeoutMs = 8000,
+  ): Promise<{ generation: SessionGeneration; snapshotRevision: SnapshotRevision }> {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        const arr = this.deviceSnapshotWaiters.get(deviceId);
+        if (arr) {
+          const idx = arr.indexOf(resolveFn);
+          if (idx >= 0) arr.splice(idx, 1);
+          if (arr.length === 0) this.deviceSnapshotWaiters.delete(deviceId);
+        }
+        reject(
+          new Error(
+            "source_changed retry: timed out waiting for snapshot update",
+          ),
+        );
+      }, timeoutMs);
+      const resolveFn = (gen: SessionGeneration, rev: SnapshotRevision) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve({ generation: gen, snapshotRevision: rev });
+      };
+      const arr = this.deviceSnapshotWaiters.get(deviceId) ?? [];
+      arr.push(resolveFn);
+      this.deviceSnapshotWaiters.set(deviceId, arr);
+    });
+  }
+
   sendTargetReady(
     transactionId: string,
     generation: SessionGeneration,
@@ -594,6 +665,8 @@ export class CoordinationManager {
       this.outboxTimer = null;
     }
     this.deviceGenerations.clear();
+    this.deviceSnapshotRevisions.clear();
+    this.deviceSnapshotWaiters.clear();
     this.tokens = null;
     this.httpClient = null;
   }
