@@ -320,6 +320,16 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         call.resolve()
     }
 
+    @objc func requestSnapshots(_ call: CAPPluginCall) {
+        let env: [String: Any] = [
+            "version": self.protocolVersion,
+            "messageId": UUID().uuidString,
+            "type": "request_snapshots",
+        ]
+        sendEnvelope(env)
+        call.resolve()
+    }
+
     // MARK: - WebSocket Delegate
 
     public func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenProtocolWithProtocol protocol: String?) {

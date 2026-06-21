@@ -478,6 +478,16 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         call.resolve()
     }
 
+    @PluginMethod
+    fun requestSnapshots(call: PluginCall) {
+        val env = JSONObject()
+        env.put("version", protocolVersion)
+        env.put("messageId", java.util.UUID.randomUUID().toString())
+        env.put("type", "request_snapshots")
+        sendEnvelope(env)
+        call.resolve()
+    }
+
     private fun disconnectInternal() {
         stopHeartbeat()
         mainHandler?.removeCallbacks(reconnectRunnable)
