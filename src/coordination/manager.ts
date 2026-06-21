@@ -563,6 +563,19 @@ export class CoordinationManager {
     this.coordClient?.sendRelinquishAck(transactionId, snapshot);
   }
 
+  /// §10 exclusivity: notify the server that this device is starting remote
+  /// control of `targetDeviceId`. Other devices will be forbidden from
+  /// remote-controlling or handoff-taking this device while active.
+  sendControlSessionBegin(targetDeviceId: DeviceId): void {
+    this.coordClient?.sendControlSessionBegin(targetDeviceId);
+  }
+
+  /// §10 exclusivity: notify the server that this device has stopped remote
+  /// control.
+  sendControlSessionEnd(): void {
+    this.coordClient?.sendControlSessionEnd();
+  }
+
   async disconnect(): Promise<void> {
     this.coordClient?.disconnect();
     this.coordClient = null;

@@ -230,6 +230,7 @@ function DevicePlaybackCard({
       });
       usePlayerStore.getState().actions.setPlayingState(false);
       setControlledDevice(null);
+      manager.sendControlSessionEnd();
       toast.info("已退出远程控制");
     } else {
       // Pause local playback
@@ -253,6 +254,10 @@ function DevicePlaybackCard({
         },
       });
       setControlledDevice(device.id);
+      // §10 exclusivity: mark this device as an active controller so other
+      // devices cannot remote control or handoff-take it while it is
+      // controlling A.
+      manager.sendControlSessionBegin(device.id);
       toast.success(`正在远程控制: ${device.name}`);
     }
   };
@@ -270,6 +275,7 @@ function DevicePlaybackCard({
       });
       usePlayerStore.getState().actions.setPlayingState(false);
       setControlledDevice(null);
+      manager.sendControlSessionEnd();
       toast.info("已退出远程控制");
     }
 

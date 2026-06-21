@@ -516,6 +516,37 @@ async fn handle_inbound(
                 let _ = registry.send(device_id, ack);
                 return;
             }
+            // §10 exclusivity: a device that is currently acting as a remote
+            // controller cannot itself be remote-controlled by another
+            // device. Surface as `forbidden` so the caller can react.
+            if registry.is_controlling(*target_device_id) {
+                tracing::info!(
+                    target: "coordination::ws",
+                    target = %target_device_id,
+                    "target is currently acting as a controller, refusing incoming command"
+                );
+                let ack = Envelope {
+                    version: PROTOCOL_VERSION,
+                    message_id: env.message_id,
+                    connection_id: Some(connection_id),
+                    source_device_id: Some(device_id),
+                    target_device_id: Some(*target_device_id),
+                    session_id: None,
+                    expected_generation: Some(*expected_generation),
+                    seq: None,
+                    server_time: Some(server_time),
+                    payload: Payload::CommandAck {
+                        message_id: env.message_id,
+                        result: crate::protocol::CommandResult::Error {
+                            code: ErrorCode::Forbidden,
+                            reason: "target device is currently controlling another device"
+                                .into(),
+                        },
+                    },
+                };
+                let _ = registry.send(device_id, ack);
+                return;
+            }
             // Forward the command to the target device.
             let forwarded = Envelope {
                 version: PROTOCOL_VERSION,
@@ -556,6 +587,21 @@ async fn handle_inbound(
             expected_generation,
             expected_snapshot_revision,
         } => {
+            // §10 exclusivity: a device that is currently acting as a remote
+            // controller cannot be handoff-taken by another device. Surface
+            // as `forbidden` so B's UI can react.
+            if registry.is_controlling(*source_device_id) {
+                let _ = registry.send(
+                    device_id,
+                    error_envelope(
+                        env.message_id,
+                        ErrorCode::Forbidden,
+                        "source device is currently controlling another device",
+                        server_time,
+                    ),
+                );
+                return;
+            }
             // Look up the source device's session and validate (design §11.1 step 1).
             let session = state
                 .repos
@@ -796,6 +842,26 @@ async fn handle_inbound(
                     state.handoff.mark_failed(*transaction_id, e.code);
                 }
             }
+        }
+        Payload::ControlSessionBegin { target_device_id } => {
+            // §10 exclusivity: record B as an active controller. While set,
+            // other devices cannot remote control or handoff-take B.
+            registry.begin_control(device_id, *target_device_id);
+            tracing::info!(
+                target: "coordination::ws",
+                controller = %device_id,
+                target = %target_device_id,
+                "control session begun"
+            );
+        }
+        Payload::ControlSessionEnd => {
+            // §10 exclusivity: clear B's active-controller marker.
+            registry.end_control(device_id);
+            tracing::info!(
+                target: "coordination::ws",
+                controller = %device_id,
+                "control session ended"
+            );
         }
         _ => {
             // Other payloads are not handled in this version.

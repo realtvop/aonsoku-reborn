@@ -102,6 +102,8 @@ export interface CoordinationClient {
     sessionId?: SessionId | null,
   ): void;
   sendRelinquishAck(transactionId: string, snapshot: PlaybackSnapshot): void;
+  sendControlSessionBegin(targetDeviceId: DeviceId): void;
+  sendControlSessionEnd(): void;
 }
 
 /// Unified coordination client surface (design §5.2). Both the TypeScript
@@ -136,6 +138,8 @@ export interface CoordinationClient {
     sessionId?: SessionId | null,
   ): void;
   sendRelinquishAck(transactionId: string, snapshot: PlaybackSnapshot): void;
+  sendControlSessionBegin(targetDeviceId: DeviceId): void;
+  sendControlSessionEnd(): void;
 }
 
 const HEARTBEAT_INTERVAL_MS = 15_000;
@@ -700,6 +704,30 @@ export class CoordinationWsClient implements CoordinationClient {
       type: "relinquish_ack",
       transactionId,
       snapshot,
+    };
+    this.send(env);
+  }
+
+  /// B notifies the server it is starting remote control of
+  /// `targetDeviceId` (design §10 exclusivity). The server marks B as an
+  /// active controller so other devices cannot remote control or
+  /// handoff-take B.
+  sendControlSessionBegin(targetDeviceId: DeviceId) {
+    const env: Envelope = {
+      version: COORDINATION_PROTOCOL_VERSION,
+      messageId: crypto.randomUUID(),
+      type: "control_session_begin",
+      targetDeviceId,
+    };
+    this.send(env);
+  }
+
+  /// B notifies the server it has stopped remote control (design §10).
+  sendControlSessionEnd() {
+    const env: Envelope = {
+      version: COORDINATION_PROTOCOL_VERSION,
+      messageId: crypto.randomUUID(),
+      type: "control_session_end",
     };
     this.send(env);
   }

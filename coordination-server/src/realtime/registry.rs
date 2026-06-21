@@ -28,6 +28,11 @@ pub struct ConnectionRegistry {
     by_device: RwLock<HashMap<DeviceId, DeviceConnection>>,
     by_connection: RwLock<HashMap<ConnectionId, DeviceId>>,
     by_account: RwLock<HashMap<Uuid, Vec<DeviceId>>>,
+    /// Devices currently acting as a remote controller (design §10
+    /// exclusivity). Key = controller device id (B), value = controlled
+    /// device id (A). While B is in this map, other devices may not remote
+    /// control or handoff-take B.
+    controller_of: RwLock<HashMap<DeviceId, DeviceId>>,
 }
 
 impl ConnectionRegistry {
@@ -58,6 +63,9 @@ impl ConnectionRegistry {
                 list.retain(|d| *d != device_id);
             }
         }
+        // Clear any active-control marker so a disconnecting controller does
+        // not keep another device locked out (design §10 exclusivity).
+        self.controller_of.write().remove(&device_id);
     }
 
     /// Send an envelope to a device if online.
@@ -96,6 +104,23 @@ impl ConnectionRegistry {
         if let Some(conn) = self.by_device.write().get_mut(&device_id) {
             conn.last_seq = seq;
         }
+    }
+
+    /// Mark `controller` as actively remote-controlling `controlled` (design
+    /// §10 exclusivity). While active, other devices are forbidden from
+    /// remote-controlling or handoff-taking the controller device.
+    pub fn begin_control(&self, controller: DeviceId, controlled: DeviceId) {
+        self.controller_of.write().insert(controller, controlled);
+    }
+
+    /// Clear the active-control marker for `controller` (if any).
+    pub fn end_control(&self, controller: DeviceId) {
+        self.controller_of.write().remove(&controller);
+    }
+
+    /// Whether `device` is currently acting as a remote controller.
+    pub fn is_controlling(&self, device: DeviceId) -> bool {
+        self.controller_of.read().contains_key(&device)
     }
 }
 
@@ -166,5 +191,47 @@ mod tests {
         }
         let online = reg.online_devices_for_account(acc);
         assert_eq!(online.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn control_marker_set_and_cleared() {
+        let reg = ConnectionRegistry::new();
+        let controller = Uuid::new_v4();
+        let controlled = Uuid::new_v4();
+        let acc = Uuid::new_v4();
+        let (tx, _rx) = mpsc::unbounded_channel();
+        reg.register(DeviceConnection {
+            connection_id: Uuid::new_v4(),
+            device_id: controller,
+            account_id: acc,
+            tx,
+            last_seq: 0,
+        });
+        reg.begin_control(controller, controlled);
+        assert!(reg.is_controlling(controller));
+        reg.end_control(controller);
+        assert!(!reg.is_controlling(controller));
+    }
+
+    #[tokio::test]
+    async fn unregister_clears_control_marker() {
+        let reg = ConnectionRegistry::new();
+        let controller = Uuid::new_v4();
+        let controlled = Uuid::new_v4();
+        let acc = Uuid::new_v4();
+        let (tx, _rx) = mpsc::unbounded_channel();
+        reg.register(DeviceConnection {
+            connection_id: Uuid::new_v4(),
+            device_id: controller,
+            account_id: acc,
+            tx,
+            last_seq: 0,
+        });
+        reg.begin_control(controller, controlled);
+        assert!(reg.is_controlling(controller));
+        reg.unregister(controller);
+        // After the controller disconnects the exclusivity marker is cleared
+        // so other devices can again control/handoff-take it.
+        assert!(!reg.is_controlling(controller));
     }
 }

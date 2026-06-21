@@ -232,7 +232,12 @@ export type Payload =
       type: "session_superseded";
       supersededGeneration: SessionGeneration;
       transferredToDevice?: DeviceId | null;
-    };
+    }
+  | {
+      type: "control_session_begin";
+      targetDeviceId: DeviceId;
+    }
+  | { type: "control_session_end" };
 
 export type CommandResult =
   | { status: "ok" }
