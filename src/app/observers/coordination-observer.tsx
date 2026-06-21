@@ -13,8 +13,74 @@ import {
   usePlayerVolume,
 } from "@/store/player.store";
 import { seekPlaybackTarget } from "@/player/playback/backend-registry";
-import { LoopState } from "@/types/playerContext";
+import { LoopState, type QueueSourceId } from "@/types/playerContext";
+import type { ISong } from "@/types/responses/song";
 import { logger } from "@/utils/logger";
+
+// Encode a QueueSourceId into the snapshot's free-form sourceId string as
+// "<type>:<id>" so the receiver can reconstruct the source identity (album /
+// playlist / artist / genre / radio) and re-fetch the original ordered list
+// for unshuffle support. `null` source becomes `null`.
+function encodeSourceId(sourceId: QueueSourceId): string | null {
+  if (!sourceId) return null;
+  return `${sourceId.type}:${sourceId.id}`;
+}
+
+// Decode a snapshot sourceId string ("<type>:<id>") back to QueueSourceId.
+// Returns null when absent or unparseable.
+function decodeSourceId(raw: string | null | undefined): QueueSourceId {
+  if (!raw) return null;
+  const sep = raw.indexOf(":");
+  if (sep <= 0) return null;
+  const type = raw.slice(0, sep);
+  const id = raw.slice(sep + 1);
+  if (!id) return null;
+  if (
+    type === "album" ||
+    type === "playlist" ||
+    type === "artist" ||
+    type === "genre" ||
+    type === "radio"
+  ) {
+    return { type, id };
+  }
+  return null;
+}
+
+// Re-fetch the original ordered source list (album/playlist) from the
+// Navidrome/Subsonic API so the receiver can restore shuffle-off-to-original
+// behavior. Returns null for non-refetchable sources.
+async function fetchOriginalSourceSongs(
+  sourceId: QueueSourceId,
+): Promise<ISong[] | null> {
+  if (!sourceId) return null;
+  const { subsonic } = await import("@/service/subsonic");
+  if (sourceId.type === "album") {
+    try {
+      const album = await subsonic.albums.getOne(sourceId.id);
+      return album?.song ?? null;
+    } catch (err) {
+      logger.error(
+        "[CoordinationObserver] fetchOriginalSourceSongs album failed:",
+        err,
+      );
+      return null;
+    }
+  }
+  if (sourceId.type === "playlist") {
+    try {
+      const playlist = await subsonic.playlists.getOne(sourceId.id);
+      return playlist?.entry ?? null;
+    } catch (err) {
+      logger.error(
+        "[CoordinationObserver] fetchOriginalSourceSongs playlist failed:",
+        err,
+      );
+      return null;
+    }
+  }
+  return null;
+}
 
 // Fetch song metadata for all song ids in a snapshot and return a Map keyed
 // by song id. Used when restoring a full queue from a remote snapshot.
@@ -42,7 +108,9 @@ async function fetchSongMap(
 // Apply the full snapshot to the local player store, restoring the exact
 // queue experience (current song, context queue, user queue, shuffle, repeat,
 // volume, progress, inUserQueue, sourceName). Song metadata is fetched from
-// the local Navidrome/Subsonic API by id (design §7.3).
+// the local Navidrome/Subsonic API by id (design §7.3). The original source
+// list (album/playlist order) is re-fetched when a typed sourceId is present
+// so that unshuffle restores the original order, matching the source device.
 async function applySnapshotToPlayerStore(
   snapshot: PlaybackSnapshot,
   opts: { playing: boolean },
@@ -62,32 +130,46 @@ async function applySnapshotToPlayerStore(
     .map((id) => songMap.get(id))
     .filter((s): s is NonNullable<typeof s> => !!s);
 
+  const sourceId = decodeSourceId(snapshot.sourceId);
+  // Re-fetch the original ordered list so unshuffle returns to album/playlist
+  // order exactly like on the source device. Falls back to the context queue
+  // (already-ordered) when the source cannot be re-fetched.
+  const originalSourceSongs = sourceId
+    ? (await fetchOriginalSourceSongs(sourceId)) ?? null
+    : null;
+  const sourceSongsForRestore: ISong[] =
+    originalSourceSongs && originalSourceSongs.length > 0
+      ? originalSourceSongs
+      : (contextSongs.length > 0 ? contextSongs : [current]);
+
+  // Find the current song's position in the original source list so that
+  // sourceQueue.currentIndex reflects the unshuffled position.
+  const sourceIndex = sourceSongsForRestore.findIndex(
+    (s) => s.id === current.id,
+  );
+  const sourceCurrentIndex = sourceIndex >= 0 ? sourceIndex : 0;
+
   usePlayerStore.setState((state) => {
     const effectiveContext =
       contextSongs.length > 0 ? contextSongs : [current];
+    const ctxIdx = Math.max(
+      0,
+      Math.min(
+        snapshot.contextIndex ?? 0,
+        Math.max(0, effectiveContext.length - 1),
+      ),
+    );
     state.songlist.currentSong = current;
     state.songlist.contextQueue = {
       songs: effectiveContext,
-      currentIndex: Math.max(
-        0,
-        Math.min(
-          snapshot.contextIndex ?? 0,
-          Math.max(0, effectiveContext.length - 1),
-        ),
-      ),
-      sourceId: null,
+      currentIndex: ctxIdx,
+      sourceId,
       sourceName: snapshot.sourceName ?? null,
     };
     state.songlist.sourceQueue = {
-      songs: effectiveContext,
-      currentIndex: Math.max(
-        0,
-        Math.min(
-          snapshot.contextIndex ?? 0,
-          Math.max(0, effectiveContext.length - 1),
-        ),
-      ),
-      sourceId: null,
+      songs: sourceSongsForRestore,
+      currentIndex: sourceCurrentIndex,
+      sourceId,
       sourceName: snapshot.sourceName ?? null,
     };
     state.songlist.userQueue = { songs: userSongs };
@@ -96,7 +178,7 @@ async function applySnapshotToPlayerStore(
     state.songlist.isShuffleActive = snapshot.shuffle;
     state.songlist.shuffleHistory = [];
     state.songlist.shuffleStartHistory = [];
-    state.songlist.originalContextSongs = effectiveContext;
+    state.songlist.originalContextSongs = [...sourceSongsForRestore];
     state.songlist.radioList = [];
     state.playerState.mediaType = "song";
     state.playerState.isPlaying = opts.playing;
@@ -176,7 +258,7 @@ export function CoordinationObserver() {
       sampledAt: Math.floor(Date.now() / 1000),
       contextQueue: state.songlist.contextQueue.songs.map((s) => s.id),
       contextIndex: state.songlist.contextQueue.currentIndex,
-      sourceId: state.songlist.contextQueue.sourceId?.id ?? null,
+      sourceId: encodeSourceId(state.songlist.contextQueue.sourceId),
       sourceName: state.songlist.contextQueue.sourceName ?? null,
       userQueue: state.songlist.userQueue.songs.map((s) => s.id),
       inUserQueue: state.songlist.isInUserQueue,
@@ -435,7 +517,7 @@ export function CoordinationObserver() {
           sampledAt: Math.floor(Date.now() / 1000),
           contextQueue: state.songlist.contextQueue.songs.map((s) => s.id),
           contextIndex: state.songlist.contextQueue.currentIndex,
-          sourceId: state.songlist.contextQueue.sourceId?.id ?? null,
+          sourceId: encodeSourceId(state.songlist.contextQueue.sourceId),
           sourceName: state.songlist.contextQueue.sourceName ?? null,
           userQueue: state.songlist.userQueue.songs.map((s) => s.id),
           inUserQueue: state.songlist.isInUserQueue,
@@ -639,6 +721,7 @@ export function CoordinationObserver() {
               const userSongs = remoteUserQueueIds
                 .map((id) => songMap.get(id))
                 .filter((s): s is NonNullable<typeof s> => !!s);
+              const decodedSourceId = decodeSourceId(snapshot.sourceId);
               state.songlist.currentSong = current;
               state.songlist.contextQueue = {
                 songs: contextSongs.length > 0 ? contextSongs : [current],
@@ -649,7 +732,7 @@ export function CoordinationObserver() {
                     Math.max(0, contextSongs.length - 1),
                   ),
                 ),
-                sourceId: null,
+                sourceId: decodedSourceId,
                 sourceName: snapshot.sourceName ?? null,
               };
               state.songlist.userQueue = { songs: userSongs };
@@ -667,7 +750,7 @@ export function CoordinationObserver() {
               state.songlist.contextQueue = {
                 songs: [current],
                 currentIndex: 0,
-                sourceId: null,
+                sourceId: decodeSourceId(snapshot.sourceId),
                 sourceName: snapshot.sourceName ?? null,
               };
               state.songlist.userQueue = { songs: [] };
@@ -706,7 +789,7 @@ export function CoordinationObserver() {
                       contextSongs.length - 1,
                     ),
                   ),
-                  sourceId: null,
+                  sourceId: decodeSourceId(snapshot.sourceId),
                   sourceName: snapshot.sourceName ?? null,
                 };
               }
