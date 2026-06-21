@@ -482,6 +482,10 @@ export class NativeCoordinationClient implements CoordinationClient {
       .catch(() => {});
   }
 
+  requestSnapshots(): void {
+    this.plugin.requestSnapshots().catch(() => {});
+  }
+
   private async attachListeners(): Promise<void> {
     if (this.listeners.length > 0) return;
     // `coordinationEvent` — incoming envelope JSON.
