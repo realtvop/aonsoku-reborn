@@ -7,7 +7,6 @@ import {
   usePlayerCurrentSong,
   usePlayerIsPlaying,
   usePlayerLoop,
-  usePlayerProgress,
   usePlayerShuffle,
   usePlayerStore,
   usePlayerVolume,
@@ -227,7 +226,6 @@ export function CoordinationObserver() {
 
   const playerActions = usePlayerActions();
   const currentSong = usePlayerCurrentSong();
-  const playerProgress = usePlayerProgress();
   const isPlaying = usePlayerIsPlaying();
   const { volume } = usePlayerVolume();
   const loopState = usePlayerLoop();
@@ -242,6 +240,14 @@ export function CoordinationObserver() {
   }, [loadState]);
 
   // Publish snapshot when playback state changes (design §9.2).
+  // NOTE: playerProgress is intentionally excluded from the dependency array.
+  // Progress updates fire ~4x/sec via `timeupdate` and would bump
+  // snapshotRevision on every tick, making handoff's optimistic-concurrency
+  // check (expectedSnapshotRevision) fail almost immediately. Structural
+  // changes (song/queue/shuffle/repeat/volume/play-pause) still publish; the
+  // current progress is read from the store and included in those snapshots.
+  // Receivers interpolate progress via sampledAt + isPlaying, and the
+  // handoff's relinquish_ack carries an exact final progress.
   useEffect(() => {
     if (!isConnected || !currentSong) return;
     const state = usePlayerStore.getState();
@@ -252,7 +258,7 @@ export function CoordinationObserver() {
       logicalPlaybackSessionId: sessionIdRef.current,
       mediaKind: "song",
       songId: currentSong.id,
-      progressSeconds: playerProgress,
+      progressSeconds: state.playerProgress.progress,
       durationSeconds: currentSong.duration ?? 0,
       isPlaying,
       sampledAt: Math.floor(Date.now() / 1000),
@@ -281,7 +287,6 @@ export function CoordinationObserver() {
   }, [
     isConnected,
     currentSong,
-    playerProgress,
     isPlaying,
     shuffleEnabled,
     loopState,

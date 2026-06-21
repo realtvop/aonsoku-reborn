@@ -188,6 +188,7 @@ function DevicePlaybackCard({
     if (!isRelaying) return;
     const originalCommitted = manager.callbacks.onHandoffCommitted;
     const originalFailed = manager.callbacks.onHandoffFailed;
+    const originalError = manager.callbacks.onError;
 
     manager.callbacks.onHandoffCommitted = (snapshot, newGeneration) => {
       originalCommitted(snapshot, newGeneration);
@@ -198,11 +199,22 @@ function DevicePlaybackCard({
     manager.callbacks.onHandoffFailed = (transactionId, code) => {
       originalFailed(transactionId, code);
       setIsRelaying(false);
+      toast.error(`接力失败: ${code}`);
+    };
+
+    // Server-side handoff validation errors (source_changed / stale_epoch /
+    // bad_message / target_offline) arrive as generic `error` envelopes, not
+    // handoff_failed. Surface them as relay failures while a relay is active.
+    manager.callbacks.onError = (code, reason) => {
+      originalError(code, reason);
+      setIsRelaying(false);
+      toast.error(`接力失败: ${code}`);
     };
 
     return () => {
       manager.callbacks.onHandoffCommitted = originalCommitted;
       manager.callbacks.onHandoffFailed = originalFailed;
+      manager.callbacks.onError = originalError;
     };
   }, [isRelaying, manager]);
 
