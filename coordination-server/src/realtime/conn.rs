@@ -208,7 +208,34 @@ async fn run_ws(socket: WebSocket, state: AppState, ticket: String) {
             last_seq: 0,
         })
         .await;
+
+    // Freeze A's active playback session: flip status to Offline and record
+    // offline_at so the 8-hour offline-handoff window (design §11.3) can be
+    // enforced. Without this, the session stays Online in the DB and
+    // offline_handoff (handoff.rs:261) rejects with BadMessage.
+    let now = chrono::Utc::now();
+    if let Ok(Some(session)) = state.repos.sessions.find_active_for_device(device_id).await {
+        if session.status != SessionStatus::Transferred {
+            let _ = state
+                .repos
+                .sessions
+                .set_status(session.id, SessionStatus::Offline, now)
+                .await;
+        }
+    }
+
     crate::api::devices::broadcast_device_list(&state, account_id).await;
+
+    // Replay the just-disconnected device's frozen snapshot to every other
+    // online device on the same account so their panels can surface A's card
+    // and offer the "continue on this device" handoff action (design §11.3).
+    let online_targets: Vec<DeviceId> = registry
+        .online_devices_for_account(account_id)
+        .into_iter()
+        .filter(|d| *d != device_id)
+        .collect();
+    replay_offline_snapshots_to(&state, &registry, account_id, online_targets, device_id).await;
+
     tracing::info!(target: "coordination::ws", device = %device_id, "websocket disconnected");
 }
 
@@ -258,6 +285,19 @@ async fn handle_inbound(
             };
             let _ = registry.send(confirmed_device, response);
             crate::api::devices::broadcast_device_list(state, account_id).await;
+
+            // Replay frozen snapshots of offline devices on the same account
+            // to the just-connected device (design §11.3). Without this, B
+            // never learns A's last snapshot if A went offline before B
+            // connected, and the cross-device panel filters A out.
+            replay_offline_snapshots_to(
+                state,
+                registry,
+                account_id,
+                vec![confirmed_device],
+                confirmed_device,
+            )
+            .await;
 
             // If protocol version is incompatible, send an error.
             if *protocol_version != PROTOCOL_VERSION {
@@ -364,14 +404,12 @@ async fn handle_inbound(
             // already exists and was transferred to another device, A is
             // trying to publish to a session it no longer owns. Reject the
             // write and instruct A to align its generation and pause.
-            if let Ok(Some(existing)) = state
-                .repos
-                .sessions
-                .find_by_id(actual_session_id)
-                .await
-            {
+            if let Ok(Some(existing)) = state.repos.sessions.find_by_id(actual_session_id).await {
                 if existing.status == SessionStatus::Transferred
-                    && existing.transferred_to_device.map(|d| d != device_id).unwrap_or(true)
+                    && existing
+                        .transferred_to_device
+                        .map(|d| d != device_id)
+                        .unwrap_or(true)
                 {
                     let superseded = Envelope {
                         version: PROTOCOL_VERSION,
@@ -539,8 +577,7 @@ async fn handle_inbound(
                         message_id: env.message_id,
                         result: crate::protocol::CommandResult::Error {
                             code: ErrorCode::Forbidden,
-                            reason: "target device is currently controlling another device"
-                                .into(),
+                            reason: "target device is currently controlling another device".into(),
                         },
                     },
                 };
@@ -747,10 +784,8 @@ async fn handle_inbound(
                             .flatten()
                             .and_then(|s| s.last_snapshot)
                             .and_then(|json| {
-                                serde_json::from_str::<crate::protocol::PlaybackSnapshot>(
-                                    &json,
-                                )
-                                .ok()
+                                serde_json::from_str::<crate::protocol::PlaybackSnapshot>(&json)
+                                    .ok()
                             });
 
                         match snapshot {
@@ -905,5 +940,370 @@ impl WithMessageId for Envelope {
     fn with_message_id(mut self, id: uuid::Uuid) -> Self {
         self.message_id = id;
         self
+    }
+}
+
+/// Replay the frozen snapshots of offline devices on the same account to the
+/// given target devices (design §11.3).
+///
+/// Only sessions whose status is `Offline`, that have not been transferred, and
+/// whose `offline_at` is within `offline_snapshot_ttl` (8h) are replayed. This
+/// lets a client that connected *after* a peer went offline — or that is
+/// already online when a peer disconnects — surface the peer's last playback
+/// state in the cross-device panel and offer the offline handoff action.
+///
+/// `exclude_device_id` skips the disconnected/connecting device itself.
+async fn replay_offline_snapshots_to(
+    state: &AppState,
+    registry: &Arc<ConnectionRegistry>,
+    account_id: Uuid,
+    targets: Vec<DeviceId>,
+    exclude_device_id: DeviceId,
+) {
+    if targets.is_empty() {
+        return;
+    }
+    let ttl = state.config.offline_snapshot_ttl;
+    let sessions = match state.repos.sessions.list_for_account(account_id).await {
+        Ok(s) => s,
+        Err(err) => {
+            tracing::warn!(target: "coordination::ws", "replay: list sessions failed: {:?}", err);
+            return;
+        }
+    };
+    let now = chrono::Utc::now();
+    let server_time = now.timestamp();
+    for session in sessions {
+        if session.device_id == exclude_device_id {
+            continue;
+        }
+        if session.status != SessionStatus::Offline {
+            continue;
+        }
+        if session.transferred_to_device.is_some() {
+            continue;
+        }
+        let within_ttl = session.offline_at.map(|t| now - t <= ttl).unwrap_or(false);
+        if !within_ttl {
+            continue;
+        }
+        let Some(snapshot_json) = session.last_snapshot.as_ref() else {
+            continue;
+        };
+        let Ok(snapshot) = serde_json::from_str::<crate::protocol::PlaybackSnapshot>(snapshot_json)
+        else {
+            continue;
+        };
+        let last_confirmed_at = session
+            .last_snapshot_at
+            .map(|t| t.timestamp())
+            .unwrap_or(server_time);
+        for target in &targets {
+            if *target == session.device_id {
+                continue;
+            }
+            let env = Envelope {
+                version: PROTOCOL_VERSION,
+                message_id: Uuid::new_v4(),
+                connection_id: None,
+                source_device_id: Some(session.device_id),
+                target_device_id: Some(*target),
+                session_id: Some(session.id),
+                expected_generation: Some(session.generation),
+                seq: None,
+                server_time: Some(server_time),
+                payload: Payload::SnapshotProjection {
+                    device_id: session.device_id,
+                    session_id: session.id,
+                    generation: session.generation,
+                    snapshot_revision: session.snapshot_revision,
+                    snapshot: snapshot.clone(),
+                    is_online: false,
+                    last_confirmed_at,
+                },
+            };
+            let _ = registry.send(*target, env);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Config;
+    use crate::protocol::{MediaKind, PlaybackSnapshot};
+    use crate::storage::models::{PlaybackSession, SessionStatus};
+    use crate::storage::repository::AccountRepository;
+    use crate::storage::sqlite::SqliteRepositories;
+    use chrono::Utc;
+    use tokio::sync::mpsc;
+
+    async fn setup_state() -> (tempfile::TempDir, AppState) {
+        let dir = tempfile::tempdir().unwrap();
+        let url = format!("sqlite://{}/test.db", dir.path().display());
+        let pool = crate::storage::open_pool(&url).await.unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let repos = SqliteRepositories::new(pool.clone());
+        let config = Arc::new(Config::new(
+            "127.0.0.1:0".parse().unwrap(),
+            dir.path().to_path_buf(),
+            "stable-key-test".into(),
+        ));
+        let state = AppState::new(config, pool, repos);
+        (dir, state)
+    }
+
+    fn sample_snapshot() -> PlaybackSnapshot {
+        PlaybackSnapshot {
+            session_id: Uuid::new_v4(),
+            logical_playback_session_id: Uuid::new_v4(),
+            media_kind: MediaKind::Song,
+            song_id: "song-1".into(),
+            progress_seconds: 10.0,
+            duration_seconds: 180.0,
+            is_playing: true,
+            sampled_at: 1_700_000_000.0,
+            context_queue: vec!["song-1".into()],
+            context_index: Some(0),
+            source_id: Some("album-1".into()),
+            source_name: Some("album".into()),
+            user_queue: vec![],
+            in_user_queue: false,
+            restore_previous: vec![],
+            shuffle: false,
+            repeat: "off".into(),
+            volume: Some(0.5),
+            accumulated_play_seconds: 12.0,
+            history_written: false,
+            now_playing_sent: true,
+            scrobble_sent: false,
+        }
+    }
+
+    /// Register a fake online device so `registry.send` has somewhere to
+    /// deliver. Returns the receiving end of the outbound channel.
+    fn register_fake_device(
+        registry: &Arc<ConnectionRegistry>,
+        device_id: DeviceId,
+        account_id: Uuid,
+    ) -> mpsc::UnboundedReceiver<Envelope> {
+        let (tx, rx) = mpsc::unbounded_channel();
+        registry.register(DeviceConnection {
+            connection_id: Uuid::new_v4(),
+            device_id,
+            account_id,
+            tx,
+            last_seq: 0,
+        });
+        rx
+    }
+
+    #[tokio::test]
+    async fn replay_delivers_offline_snapshot_to_target() {
+        let (_dir, state) = setup_state().await;
+        let registry = state.realtime.clone();
+
+        // Account + two devices.
+        let acc = state
+            .repos
+            .accounts
+            .upsert_by_lookup_key("lookup-k", 100)
+            .await
+            .unwrap();
+        let dev_a = state
+            .repos
+            .devices
+            .create(acc.id, "A", "web", None, 0, "h", Uuid::new_v4())
+            .await
+            .unwrap();
+        let dev_b = state
+            .repos
+            .devices
+            .create(acc.id, "B", "web", None, 0, "h2", Uuid::new_v4())
+            .await
+            .unwrap();
+
+        // A's session: Online with a snapshot, then flipped to Offline.
+        let snapshot = sample_snapshot();
+        let session = PlaybackSession {
+            id: Uuid::new_v4(),
+            device_id: dev_a.id,
+            account_id: acc.id,
+            generation: 1,
+            snapshot_revision: 1,
+            status: SessionStatus::Online,
+            last_snapshot: Some(serde_json::to_string(&snapshot).unwrap()),
+            last_snapshot_at: Some(Utc::now()),
+            offline_at: None,
+            transferred_to_device: None,
+            transferred_to_session: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        state
+            .repos
+            .sessions
+            .upsert_snapshot(&session, &serde_json::to_string(&snapshot).unwrap())
+            .await
+            .unwrap();
+        state
+            .repos
+            .sessions
+            .set_status(session.id, SessionStatus::Offline, Utc::now())
+            .await
+            .unwrap();
+
+        // B is online; A is offline (not registered).
+        let mut rx_b = register_fake_device(&registry, dev_b.id, acc.id);
+
+        replay_offline_snapshots_to(&state, &registry, acc.id, vec![dev_b.id], dev_b.id).await;
+
+        // B should receive one SnapshotProjection marked offline.
+        let env = rx_b.recv().await.expect("B received a projection");
+        match env.payload {
+            Payload::SnapshotProjection {
+                device_id,
+                is_online,
+                snapshot: proj_snapshot,
+                generation,
+                ..
+            } => {
+                assert_eq!(device_id, dev_a.id);
+                assert!(!is_online, "offline snapshot must set is_online=false");
+                assert_eq!(proj_snapshot.song_id, "song-1");
+                assert_eq!(generation, 1);
+            }
+            other => panic!("expected SnapshotProjection, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn replay_skips_expired_offline_session() {
+        let (_dir, state) = setup_state().await;
+        let registry = state.realtime.clone();
+
+        let acc = state
+            .repos
+            .accounts
+            .upsert_by_lookup_key("lookup-k2", 100)
+            .await
+            .unwrap();
+        let dev_a = state
+            .repos
+            .devices
+            .create(acc.id, "A", "web", None, 0, "h", Uuid::new_v4())
+            .await
+            .unwrap();
+        let dev_b = state
+            .repos
+            .devices
+            .create(acc.id, "B", "web", None, 0, "h2", Uuid::new_v4())
+            .await
+            .unwrap();
+
+        let snapshot = sample_snapshot();
+        // offline_at is 10 hours ago — beyond the 8h TTL.
+        let session = PlaybackSession {
+            id: Uuid::new_v4(),
+            device_id: dev_a.id,
+            account_id: acc.id,
+            generation: 1,
+            snapshot_revision: 1,
+            status: SessionStatus::Offline,
+            last_snapshot: Some(serde_json::to_string(&snapshot).unwrap()),
+            last_snapshot_at: Some(Utc::now() - chrono::Duration::hours(10)),
+            offline_at: Some(Utc::now() - chrono::Duration::hours(10)),
+            transferred_to_device: None,
+            transferred_to_session: None,
+            created_at: Utc::now() - chrono::Duration::hours(10),
+            updated_at: Utc::now() - chrono::Duration::hours(10),
+        };
+        state
+            .repos
+            .sessions
+            .upsert_snapshot(&session, &serde_json::to_string(&snapshot).unwrap())
+            .await
+            .unwrap();
+
+        let mut rx_b = register_fake_device(&registry, dev_b.id, acc.id);
+
+        replay_offline_snapshots_to(&state, &registry, acc.id, vec![dev_b.id], dev_b.id).await;
+
+        // B should receive nothing — the session is expired.
+        assert!(
+            rx_b.try_recv().is_err(),
+            "expired offline session must not be replayed"
+        );
+    }
+
+    #[tokio::test]
+    async fn replay_skips_transferred_session() {
+        let (_dir, state) = setup_state().await;
+        let registry = state.realtime.clone();
+
+        let acc = state
+            .repos
+            .accounts
+            .upsert_by_lookup_key("lookup-k3", 100)
+            .await
+            .unwrap();
+        let dev_a = state
+            .repos
+            .devices
+            .create(acc.id, "A", "web", None, 0, "h", Uuid::new_v4())
+            .await
+            .unwrap();
+        let dev_b = state
+            .repos
+            .devices
+            .create(acc.id, "B", "web", None, 0, "h2", Uuid::new_v4())
+            .await
+            .unwrap();
+
+        let snapshot = sample_snapshot();
+        let session_id = Uuid::new_v4();
+        let session = PlaybackSession {
+            id: session_id,
+            device_id: dev_a.id,
+            account_id: acc.id,
+            generation: 1,
+            snapshot_revision: 1,
+            status: SessionStatus::Online,
+            last_snapshot: Some(serde_json::to_string(&snapshot).unwrap()),
+            last_snapshot_at: Some(Utc::now()),
+            offline_at: None,
+            transferred_to_device: None,
+            transferred_to_session: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        state
+            .repos
+            .sessions
+            .upsert_snapshot(&session, &serde_json::to_string(&snapshot).unwrap())
+            .await
+            .unwrap();
+        state
+            .repos
+            .sessions
+            .set_status(session_id, SessionStatus::Offline, Utc::now())
+            .await
+            .unwrap();
+        // Mark as transferred to B.
+        state
+            .repos
+            .sessions
+            .transfer(session_id, 2, dev_b.id, session_id)
+            .await
+            .unwrap();
+
+        let mut rx_b = register_fake_device(&registry, dev_b.id, acc.id);
+
+        replay_offline_snapshots_to(&state, &registry, acc.id, vec![dev_b.id], dev_b.id).await;
+
+        assert!(
+            rx_b.try_recv().is_err(),
+            "transferred session must not be replayed"
+        );
     }
 }

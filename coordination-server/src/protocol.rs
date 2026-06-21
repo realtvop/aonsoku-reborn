@@ -531,9 +531,7 @@ pub enum Payload {
     /// B → server: B is starting remote control of `target_device_id` (design
     /// §10). The server marks B as an active controller so that other devices
     /// cannot remote control or handoff-take B while B is controlling A.
-    ControlSessionBegin {
-        target_device_id: DeviceId,
-    },
+    ControlSessionBegin { target_device_id: DeviceId },
     /// B → server: B has stopped remote control (design §10). The server
     /// clears the active-controller marker so B becomes available again.
     ControlSessionEnd,

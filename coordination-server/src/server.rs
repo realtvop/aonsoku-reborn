@@ -114,7 +114,12 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
         loop {
             ticker.tick().await;
             let cutoff = chrono::Utc::now() - gc_state.config.transferred_retention;
-            match gc_state.repos.sessions.delete_transferred_before(cutoff).await {
+            match gc_state
+                .repos
+                .sessions
+                .delete_transferred_before(cutoff)
+                .await
+            {
                 Ok(n) if n > 0 => {
                     tracing::info!(target: "coordination::gc", removed = n, "gc deleted transferred sessions");
                 }
