@@ -573,6 +573,13 @@ export class CoordinationManager {
     );
   }
 
+  /// Request a fresh snapshot broadcast from the server (§9.2 bootstrap
+  /// path). Used by the receiver to re-sync playback progress when its tab
+  /// returns to the foreground after being throttled in the background.
+  requestSnapshots(): void {
+    this.coordClient?.requestSnapshots?.();
+  }
+
   /// Returns the latest cached `generation` / `snapshotRevision` for a device,
   /// or `null` if unknown. Fed by `onDeviceSnapshot` projections (design §9.2).
   /// Used by the source_changed retry path (§11.2) to refresh the handoff

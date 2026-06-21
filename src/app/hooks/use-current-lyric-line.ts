@@ -203,7 +203,13 @@ export function useCurrentLyricLine() {
     if (isRemoteControlActive) {
       if (isPlaying) {
         const elapsed = performance.now() - lastProgressTimeRef.current;
-        timeMs = Math.floor(lastProgressRef.current + elapsed);
+        // Clamp to 500ms so a long gap (tab was hidden, rAF paused, and the
+        // progress-store subscription hasn't fired yet) doesn't make lyrics
+        // jump far ahead. The store subscription will refresh lastProgressRef
+        // shortly after, correcting any small residual error.
+        timeMs = Math.floor(
+          lastProgressRef.current + Math.min(elapsed, 500),
+        );
       } else {
         timeMs = Math.floor(lastProgressRef.current);
       }

@@ -837,17 +837,27 @@ export function CoordinationObserver() {
     }
   }, [controlledDeviceId, controlledSnapshot]);
 
-  // Interpolate controlled device progress between snapshots
+  // Interpolate controlled device progress between snapshots.
+  //
+  // Use a wall-clock based accumulator rather than a fixed +0.1s tick so the
+  // progress tracks real elapsed time even when the browser throttles
+  // background timers. When the tab becomes visible again, request a fresh
+  // snapshot projection from the server to hard-correct any residual drift.
   useEffect(() => {
     if (!controlledDeviceId || !controlledSnapshot) return;
     const { snapshot } = controlledSnapshot;
     if (!snapshot.isPlaying) return;
 
+    let lastTickAt = performance.now();
+
     const interval = setInterval(() => {
+      const now = performance.now();
+      const elapsed = (now - lastTickAt) / 1000;
+      lastTickAt = now;
       usePlayerStore.setState((state) => {
         if (!state.playerProgress.isScrubbing) {
           const newProgress = Math.min(
-            state.playerProgress.progress + 0.1,
+            state.playerProgress.progress + elapsed,
             state.playerState.currentDuration,
           );
           state.playerProgress.progress = newProgress;
@@ -855,8 +865,23 @@ export function CoordinationObserver() {
       });
     }, 100);
 
-    return () => clearInterval(interval);
-  }, [controlledDeviceId, controlledSnapshot]);
+    const handleVisibilityChange = () => {
+      if (document.hidden) return;
+      // Tab returned to the foreground: re-baseline the accumulator so the
+      // next tick measures from the resume instant, and ask the server for a
+      // fresh snapshot projection to correct drift accumulated while hidden.
+      lastTickAt = performance.now();
+      if (usePlayerStore.getState().remoteControl.active) {
+        manager?.requestSnapshots();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [controlledDeviceId, controlledSnapshot, manager]);
 
   return null;
 }
