@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 import { useCoordinationStore } from "@/coordination/store";
 import type { PlaybackSnapshot, RemoteCommand } from "@/coordination/types";
@@ -227,6 +228,7 @@ export function CoordinationObserver() {
   const isConnected = useCoordinationStore((state) => state.isConnected);
   const loadState = useCoordinationStore((state) => state.loadState);
   const manager = useCoordinationStore((state) => state.manager);
+  const { t } = useTranslation();
   const controlledDeviceId = useCoordinationStore(
     (state) => state.controlledDeviceId,
   );
@@ -650,12 +652,17 @@ export function CoordinationObserver() {
       _transactionId: string,
       code: string,
     ) => {
-      toast.error(`Relay failed: ${code}`);
+      toast.error(
+        t("settings.crossDevice.toast.relayFailed", {
+          defaultValue: "Handoff failed: {{code}}",
+          code,
+        }),
+      );
     };
     return () => {
       manager.callbacks.onHandoffFailed = original;
     };
-  }, [isConnected, manager]);
+  }, [isConnected, manager, t]);
 
   // Handle session_superseded (design §11.3): A's session was transferred to
   // another device while A was offline/away. Pause local playback, drop the
@@ -678,12 +685,18 @@ export function CoordinationObserver() {
           .getState()
           .devices.find((d) => d.id === transferredToDevice)?.name ??
         "another device";
-      toast.info(`此会话已被 ${deviceName} 接管，本机已暂停`);
+      toast.info(
+        t("settings.crossDevice.toast.sessionSuperseded", {
+          defaultValue:
+            "This session has been taken over by {{deviceName}}, playback paused.",
+          deviceName,
+        }),
+      );
     };
     return () => {
       manager.callbacks.onSessionSuperseded = original;
     };
-  }, [isConnected, manager, playerActions]);
+  }, [isConnected, manager, playerActions, t]);
 
   // Sync controlled device snapshot state to local player store
   useEffect(() => {

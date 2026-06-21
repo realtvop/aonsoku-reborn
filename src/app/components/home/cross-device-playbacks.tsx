@@ -10,6 +10,7 @@ import {
   Tv,
 } from "lucide-react";
 import { useDeferredValue, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
 import { CachedImage } from "@/app/components/cover-image/cached-image";
 import { Button } from "@/app/components/ui/button";
@@ -182,6 +183,7 @@ function DevicePlaybackCard({
   );
   const isControlling = controlledDeviceId === device.id;
   const [isRelaying, setIsRelaying] = useState(false);
+  const { t } = useTranslation();
 
   const { data: song, isLoading } = useSongInfo(snapshotData.snapshot.songId);
 
@@ -195,13 +197,22 @@ function DevicePlaybackCard({
     manager.callbacks.onHandoffCommitted = (snapshot, newGeneration) => {
       originalCommitted(snapshot, newGeneration);
       setIsRelaying(false);
-      toast.success("接力成功！");
+      toast.success(
+        t("settings.crossDevice.toast.relaySuccess", {
+          defaultValue: "Handoff successful!",
+        }),
+      );
     };
 
     manager.callbacks.onHandoffFailed = (transactionId, code) => {
       originalFailed(transactionId, code);
       setIsRelaying(false);
-      toast.error(`接力失败: ${code}`);
+      toast.error(
+        t("settings.crossDevice.toast.relayFailed", {
+          defaultValue: "Handoff failed: {{code}}",
+          code,
+        }),
+      );
     };
 
     // Server-side handoff validation errors (source_changed / stale_epoch /
@@ -210,7 +221,12 @@ function DevicePlaybackCard({
     manager.callbacks.onError = (code, reason) => {
       originalError(code, reason);
       setIsRelaying(false);
-      toast.error(`接力失败: ${code}`);
+      toast.error(
+        t("settings.crossDevice.toast.relayFailed", {
+          defaultValue: "Handoff failed: {{code}}",
+          code,
+        }),
+      );
     };
 
     return () => {
@@ -218,7 +234,7 @@ function DevicePlaybackCard({
       manager.callbacks.onHandoffFailed = originalFailed;
       manager.callbacks.onError = originalError;
     };
-  }, [isRelaying, manager]);
+  }, [isRelaying, manager, t]);
 
   const handleRemoteControl = () => {
     if (isControlling) {
@@ -233,7 +249,11 @@ function DevicePlaybackCard({
       usePlayerStore.getState().actions.setPlayingState(false);
       setControlledDevice(null);
       manager.sendControlSessionEnd();
-      toast.info("已退出远程控制");
+      toast.info(
+        t("settings.crossDevice.toast.exitRemoteControl", {
+          defaultValue: "Exited remote control",
+        }),
+      );
     } else {
       // Pause local playback
       playerActions.setPlayingState(false);
@@ -260,7 +280,12 @@ function DevicePlaybackCard({
       // devices cannot remote control or handoff-take it while it is
       // controlling A.
       manager.sendControlSessionBegin(device.id);
-      toast.success(`正在远程控制: ${device.name}`);
+      toast.success(
+        t("settings.crossDevice.toast.remoteControlSuccess", {
+          defaultValue: "Remote controlling: {{name}}",
+          name: device.name,
+        }),
+      );
     }
   };
 
@@ -278,7 +303,11 @@ function DevicePlaybackCard({
       usePlayerStore.getState().actions.setPlayingState(false);
       setControlledDevice(null);
       manager.sendControlSessionEnd();
-      toast.info("已退出远程控制");
+      toast.info(
+        t("settings.crossDevice.toast.exitRemoteControl", {
+          defaultValue: "Exited remote control",
+        }),
+      );
     }
 
     setIsRelaying(true);
@@ -287,7 +316,11 @@ function DevicePlaybackCard({
       snapshotData.generation,
       snapshotData.snapshotRevision,
     );
-    toast.info("正在准备接力...");
+    toast.info(
+      t("settings.crossDevice.toast.preparingRelay", {
+        defaultValue: "Preparing handoff...",
+      }),
+    );
     // Safety timeout to clear loading state in case of connection drop
     setTimeout(() => {
       setIsRelaying(false);
@@ -329,7 +362,14 @@ function DevicePlaybackCard({
 
         <div className="flex flex-col min-w-0">
           <span className="text-sm font-semibold truncate text-foreground">
-            {isLoading ? "正在获取歌曲..." : song?.title || "未知曲目"}
+            {isLoading
+              ? t("settings.crossDevice.playback.fetchingSong", {
+                  defaultValue: "Fetching song...",
+                })
+              : song?.title ||
+                t("settings.crossDevice.playback.unknownTrack", {
+                  defaultValue: "Unknown track",
+                })}
           </span>
           <div className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
             <span className="flex items-center gap-1 font-medium text-foreground/80">
@@ -342,7 +382,17 @@ function DevicePlaybackCard({
 
       {/* Buttons (Right) */}
       <div className="flex items-center gap-2 flex-shrink-0">
-        <SimpleTooltip text={isControlling ? "退出控制" : "远程控制"}>
+        <SimpleTooltip
+          text={
+            isControlling
+              ? t("settings.crossDevice.playback.exitControl", {
+                  defaultValue: "Exit control",
+                })
+              : t("settings.crossDevice.playback.remoteControl", {
+                  defaultValue: "Remote control",
+                })
+          }
+        >
           <Button
             variant={isControlling ? "default" : "ghost"}
             onClick={handleRemoteControl}
@@ -351,7 +401,17 @@ function DevicePlaybackCard({
             <MousePointerClick className="w-5 h-5" />
           </Button>
         </SimpleTooltip>
-        <SimpleTooltip text={isRelaying ? "正在准备接力..." : "接力"}>
+        <SimpleTooltip
+          text={
+            isRelaying
+              ? t("settings.crossDevice.toast.preparingRelay", {
+                  defaultValue: "Preparing handoff...",
+                })
+              : t("settings.crossDevice.playback.relay", {
+                  defaultValue: "Handoff",
+                })
+          }
+        >
           <Button
             variant="ghost"
             onClick={handleRelay}

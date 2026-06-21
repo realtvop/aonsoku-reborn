@@ -10,6 +10,7 @@
 	"packageClassList": [
 		"AonsokuNativePreferencesPlugin",
 		"AonsokuNativeDataPlugin",
+		"AonsokuNativeCoordination",
 		"AonsokuNativeBridgePlugin",
 		"AonsokuNativeAudioPlugin",
 		"AppPlugin",

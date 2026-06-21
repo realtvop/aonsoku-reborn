@@ -681,7 +681,22 @@
         "title": "删除所有跨设备数据？",
         "description": "此操作不可撤销。"
       },
-      "deleted": "跨设备数据已删除"
+      "deleted": "跨设备数据已删除",
+      "toast": {
+        "relaySuccess": "接力成功！",
+        "relayFailed": "接力失败: {{code}}",
+        "exitRemoteControl": "已退出远程控制",
+        "remoteControlSuccess": "正在远程控制: {{name}}",
+        "preparingRelay": "正在准备接力...",
+        "sessionSuperseded": "此会话已被 {{deviceName}} 接管，本机已暂停"
+      },
+      "playback": {
+        "fetchingSong": "正在获取歌曲...",
+        "unknownTrack": "未知曲目",
+        "exitControl": "退出控制",
+        "remoteControl": "远程控制",
+        "relay": "接力"
+      }
     },
     "privacy": {
       "services": {

@@ -669,7 +669,22 @@
         "title": "Delete all coordination data?",
         "description": "This action cannot be undone."
       },
-      "deleted": "Coordination data deleted"
+      "deleted": "Coordination data deleted",
+      "toast": {
+        "relaySuccess": "Handoff successful!",
+        "relayFailed": "Handoff failed: {{code}}",
+        "exitRemoteControl": "Exited remote control",
+        "remoteControlSuccess": "Remote controlling: {{name}}",
+        "preparingRelay": "Preparing handoff...",
+        "sessionSuperseded": "This session has been taken over by {{deviceName}}, playback paused."
+      },
+      "playback": {
+        "fetchingSong": "Fetching song...",
+        "unknownTrack": "Unknown track",
+        "exitControl": "Exit control",
+        "remoteControl": "Remote control",
+        "relay": "Handoff"
+      }
     },
     "server": {
       "group": "Server",
