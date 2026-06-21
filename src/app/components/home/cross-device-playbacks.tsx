@@ -382,25 +382,27 @@ function DevicePlaybackCard({
 
       {/* Buttons (Right) */}
       <div className="flex items-center gap-2 flex-shrink-0">
-        <SimpleTooltip
-          text={
-            isControlling
-              ? t("settings.crossDevice.playback.exitControl", {
-                  defaultValue: "Exit control",
-                })
-              : t("settings.crossDevice.playback.remoteControl", {
-                  defaultValue: "Remote control",
-                })
-          }
-        >
-          <Button
-            variant={isControlling ? "default" : "ghost"}
-            onClick={handleRemoteControl}
-            className="size-11 p-0 rounded-lg transition-all duration-200"
+        {snapshotData.isOnline && (
+          <SimpleTooltip
+            text={
+              isControlling
+                ? t("settings.crossDevice.playback.exitControl", {
+                    defaultValue: "Exit control",
+                  })
+                : t("settings.crossDevice.playback.remoteControl", {
+                    defaultValue: "Remote control",
+                  })
+            }
           >
-            <MousePointerClick className="w-5 h-5" />
-          </Button>
-        </SimpleTooltip>
+            <Button
+              variant={isControlling ? "default" : "ghost"}
+              onClick={handleRemoteControl}
+              className="size-11 p-0 rounded-lg transition-all duration-200"
+            >
+              <MousePointerClick className="w-5 h-5" />
+            </Button>
+          </SimpleTooltip>
+        )}
         <SimpleTooltip
           text={
             isRelaying
