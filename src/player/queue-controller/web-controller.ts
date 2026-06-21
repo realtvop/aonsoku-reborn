@@ -85,7 +85,7 @@ export class WebQueueController implements QueueController {
   }
 
   seek(seconds: number): void {
-    this.#getActions().setProgress(seconds);
+    this.#getActions().setProgress(seconds, true);
   }
 
   setVolume(volume: number): void {

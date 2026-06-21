@@ -86,7 +86,7 @@ export function InternalMiniPlayerProvider({ children }: PropsWithChildren) {
         playPrevSong,
         toggleShuffle: () => toggleShuffle(),
         toggleLoop: () => toggleLoop(),
-        seek: (time) => setProgress(time),
+        seek: (time) => setProgress(time, true),
         setVolume: (v) => setVolume(v),
         starCurrentSong,
       },

@@ -87,7 +87,7 @@ export function createPlaybackActions(shared: SharedDeps) {
       });
     },
 
-    setProgress: (progress: number) => {
+    setProgress: (progress: number, isSeek?: boolean) => {
       const nativeController = getNativeQueueController();
       if (nativeController) {
         nativeController.seek(progress);
@@ -99,6 +99,9 @@ export function createPlaybackActions(shared: SharedDeps) {
       });
       set((state) => {
         state.playerProgress.progress = progress;
+        if (isSeek) {
+          state.playerProgress.seekCount = (state.playerProgress.seekCount ?? 0) + 1;
+        }
       });
     },
 

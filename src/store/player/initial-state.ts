@@ -35,6 +35,7 @@ export const initialPlayerProgress = {
   bufferedProgress: 0,
   isScrubbing: false,
   scrubbingProgress: 0,
+  seekCount: 0,
 };
 
 type SetFn = (fn: (state: Draft<IPlayerContext>) => void) => void;

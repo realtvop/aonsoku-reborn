@@ -83,6 +83,7 @@ export interface IPlayerProgress {
   bufferedProgress: number;
   isScrubbing: boolean;
   scrubbingProgress: number;
+  seekCount: number;
 }
 
 export interface IVolumeSettings {
@@ -226,7 +227,7 @@ export interface IPlayerActions {
   clearPlayerState: () => void;
   clearUserQueue: () => void;
   resetProgress: () => void;
-  setProgress: (progress: number) => void;
+  setProgress: (progress: number, isSeek?: boolean) => void;
   setIsScrubbing: (value: boolean) => void;
   setScrubbingProgress: (value: number) => void;
   setVolume: (volume: number) => void;

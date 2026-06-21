@@ -429,9 +429,8 @@ function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
       };
 
       const seekSeconds = lyricLine.startTime / 1000;
-      if (isRemoteControlActive) {
-        setProgress(seekSeconds);
-      } else if (playerRef) {
+      setProgress(seekSeconds, true);
+      if (!isRemoteControlActive && playerRef) {
         playerRef.currentTime = seekSeconds;
         if (isPlaying) {
           playerRef.play().catch((e) => {

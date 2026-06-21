@@ -250,6 +250,7 @@ export function partializePlayerStoreState(state: IPlayerContext) {
     "playerState.hasPrev",
     "playerState.hasNext",
     "playerProgress.bufferedProgress",
+    "playerProgress.seekCount",
     "remoteControl",
   ];
 

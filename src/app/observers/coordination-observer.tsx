@@ -242,6 +242,7 @@ export function CoordinationObserver() {
   const { volume } = usePlayerVolume();
   const loopState = usePlayerLoop();
   const shuffleEnabled = usePlayerShuffle();
+  const seekCount = usePlayerStore((state) => state.playerProgress.seekCount);
   const sessionIdRef = useRef<string>(crypto.randomUUID());
   const generationRef = useRef<number>(1);
   const snapshotRevisionRef = useRef<number>(0);
@@ -262,6 +263,7 @@ export function CoordinationObserver() {
   // handoff's relinquish_ack carries an exact final progress.
   useEffect(() => {
     if (!isConnected || !currentSong) return;
+    const _dummySeekCount = seekCount;
     const state = usePlayerStore.getState();
     if (state.remoteControl.active) return;
 
@@ -303,6 +305,7 @@ export function CoordinationObserver() {
     shuffleEnabled,
     loopState,
     volume,
+    seekCount,
     manager,
   ]);
 
