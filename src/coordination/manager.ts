@@ -251,6 +251,10 @@ export class CoordinationManager {
       onStateChange: (s) => this.callbacks.onConnectionStateChange(s),
       onWelcome: (deviceId) => {
         this.deviceId = deviceId;
+        // Bootstrap: fetch current online peer snapshots so the cross-device
+        // panel shows A's live playback as soon as B connects, without
+        // waiting for A's next periodic publish (design §9.2).
+        this.coordClient?.requestSnapshots?.();
       },
       onDevicesChanged: (devices) => {
         this.callbacks.onDevicesChanged(devices);
