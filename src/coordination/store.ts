@@ -160,7 +160,11 @@ export const useCoordinationStore = create<CoordinationState>()(
 
       disconnectCurrentDevice: async () => {
         if (manager.getDeviceId()) {
-          await manager.revokeDevice(manager.getDeviceId()!);
+          try {
+            await manager.revokeDevice(manager.getDeviceId()!);
+          } catch (err) {
+            console.warn("Failed to revoke device on server:", err);
+          }
         }
         await manager.disconnect();
         set((s) => {

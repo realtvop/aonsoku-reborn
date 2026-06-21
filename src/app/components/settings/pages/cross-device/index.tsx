@@ -80,10 +80,14 @@ export function CrossDeviceSettings() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   useEffect(() => {
-    if (!identityUrl && url) {
+    const config = coordStore.manager.getConfig();
+    if (config) {
+      if (!serverUrl) setServerUrl(config.serverUrl);
+      if (!identityUrl) setIdentityUrl(config.identityUrl);
+    } else if (!identityUrl && url) {
       setIdentityUrl(url);
     }
-  }, [url, identityUrl]);
+  }, [coordStore.manager, url, serverUrl, identityUrl]);
 
   useEffect(() => {
     if (!deviceName) {
@@ -200,87 +204,89 @@ export function CrossDeviceSettings() {
         </HeaderDescription>
       </Header>
 
-      <form onSubmit={handleConnect}>
-        <Content>
-          <ContentItem className="items-start gap-4">
-            <ContentItemTitle
-              info={t("settings.crossDevice.serverUrl.info", {
-                defaultValue: "URL of your coordination server.",
-              })}
-            >
-              {t("settings.crossDevice.serverUrl.label", {
-                defaultValue: "Coordination server URL",
-              })}
-            </ContentItemTitle>
-            <ContentItemForm className="max-w-none w-3/5">
-              <Input
-                value={serverUrl}
-                onChange={(event) => setServerUrl(event.target.value)}
-                placeholder="https://coord.example.com"
-                autoCorrect="false"
-                autoCapitalize="false"
-                spellCheck="false"
-              />
-            </ContentItemForm>
-          </ContentItem>
-
-          <ContentItem className="items-start gap-4">
-            <ContentItemTitle
-              info={t("settings.crossDevice.identityUrl.info", {
-                defaultValue: "Your Navidrome/Subsonic server URL.",
-              })}
-            >
-              {t("settings.crossDevice.identityUrl.label", {
-                defaultValue: "Identity URL",
-              })}
-            </ContentItemTitle>
-            <ContentItemForm className="max-w-none w-3/5">
-              <Input
-                value={identityUrl}
-                onChange={(event) => setIdentityUrl(event.target.value)}
-                placeholder={url || "https://navidrome.example"}
-                autoCorrect="false"
-                autoCapitalize="false"
-                spellCheck="false"
-              />
-            </ContentItemForm>
-          </ContentItem>
-
-          <ContentItem className="items-start gap-4">
-            <ContentItemTitle
-              info={t("settings.crossDevice.deviceName.info", {
-                defaultValue: "A friendly name for this device.",
-              })}
-            >
-              {t("settings.crossDevice.deviceName.label", {
-                defaultValue: "Device name",
-              })}
-            </ContentItemTitle>
-            <ContentItemForm className="max-w-none w-3/5">
-              <Input
-                value={deviceName}
-                onChange={(event) => setDeviceName(event.target.value)}
-                placeholder={t("settings.crossDevice.deviceName.placeholder", {
-                  defaultValue: "My device",
+      {!coordStore.deviceId && (
+        <form onSubmit={handleConnect}>
+          <Content>
+            <ContentItem className="items-start gap-4">
+              <ContentItemTitle
+                info={t("settings.crossDevice.serverUrl.info", {
+                  defaultValue: "URL of your coordination server.",
                 })}
-              />
-            </ContentItemForm>
-          </ContentItem>
+              >
+                {t("settings.crossDevice.serverUrl.label", {
+                  defaultValue: "Coordination server URL",
+                })}
+              </ContentItemTitle>
+              <ContentItemForm className="max-w-none w-3/5">
+                <Input
+                  value={serverUrl}
+                  onChange={(event) => setServerUrl(event.target.value)}
+                  placeholder="https://coord.example.com"
+                  autoCorrect="false"
+                  autoCapitalize="false"
+                  spellCheck="false"
+                />
+              </ContentItemForm>
+            </ContentItem>
 
-          <div className="flex justify-end pt-2">
-            <Button type="submit" disabled={connectDisabled}>
-              {isConnecting && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              {t("settings.crossDevice.connect", {
-                defaultValue: "Connect",
-              })}
-            </Button>
-          </div>
-        </Content>
-      </form>
+            <ContentItem className="items-start gap-4">
+              <ContentItemTitle
+                info={t("settings.crossDevice.identityUrl.info", {
+                  defaultValue: "Your Navidrome/Subsonic server URL.",
+                })}
+              >
+                {t("settings.crossDevice.identityUrl.label", {
+                  defaultValue: "Identity URL",
+                })}
+              </ContentItemTitle>
+              <ContentItemForm className="max-w-none w-3/5">
+                <Input
+                  value={identityUrl}
+                  onChange={(event) => setIdentityUrl(event.target.value)}
+                  placeholder={url || "https://navidrome.example"}
+                  autoCorrect="false"
+                  autoCapitalize="false"
+                  spellCheck="false"
+                />
+              </ContentItemForm>
+            </ContentItem>
 
-      {coordStore.isConnected && (
+            <ContentItem className="items-start gap-4">
+              <ContentItemTitle
+                info={t("settings.crossDevice.deviceName.info", {
+                  defaultValue: "A friendly name for this device.",
+                })}
+              >
+                {t("settings.crossDevice.deviceName.label", {
+                  defaultValue: "Device name",
+                })}
+              </ContentItemTitle>
+              <ContentItemForm className="max-w-none w-3/5">
+                <Input
+                  value={deviceName}
+                  onChange={(event) => setDeviceName(event.target.value)}
+                  placeholder={t("settings.crossDevice.deviceName.placeholder", {
+                    defaultValue: "My device",
+                  })}
+                />
+              </ContentItemForm>
+            </ContentItem>
+
+            <div className="flex justify-end pt-2">
+              <Button type="submit" disabled={connectDisabled}>
+                {isConnecting && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                {t("settings.crossDevice.connect", {
+                  defaultValue: "Connect",
+                })}
+              </Button>
+            </div>
+          </Content>
+        </form>
+      )}
+
+      {coordStore.deviceId && (
         <>
           <ContentSeparator />
           <Header>
@@ -367,7 +373,7 @@ export function CrossDeviceSettings() {
         </>
       )}
 
-      {coordStore.isConnected && (
+      {coordStore.deviceId && (
         <>
           <ContentSeparator />
           <Content>

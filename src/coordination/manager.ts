@@ -134,6 +134,10 @@ export class CoordinationManager {
     return this.config !== null;
   }
 
+  getConfig(): CoordinationConfig | null {
+    return this.config;
+  }
+
   getDeviceId(): DeviceId | null {
     return this.deviceId;
   }
