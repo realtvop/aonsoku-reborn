@@ -903,6 +903,19 @@ async fn handle_inbound(
             );
             crate::api::devices::broadcast_device_list(state, account_id).await;
         }
+        Payload::RequestSnapshots => {
+            // Replay in-window Online peer snapshots to the requester (design
+            // §9.2 bootstrap). Offline peers are already replayed on Hello;
+            // this covers the gap where B connects while A is already playing.
+            replay_online_snapshots_to(
+                state,
+                registry,
+                account_id,
+                vec![device_id],
+                device_id,
+            )
+            .await;
+        }
         _ => {
             // Other payloads are not handled in this version.
         }
@@ -1051,6 +1064,114 @@ async fn replay_offline_snapshots_to(
                     snapshot_revision: session.snapshot_revision,
                     snapshot: snapshot.clone(),
                     is_online: false,
+                    last_confirmed_at,
+                },
+            };
+            let _ = registry.send(*target, env);
+        }
+    }
+}
+
+/// Replay online peers' current snapshots to the target device (design §9.2
+/// bootstrap). Mirrors [`replay_offline_snapshots_to`] but selects sessions
+/// with `status == Online` (and confirms the device is still connected via
+/// the registry) and emits `is_online: true` projections.
+///
+/// Invoked on `Payload::RequestSnapshots`, typically sent by a client right
+/// after the `Welcome` handshake, so the cross-device panel shows the live
+/// playback states of already-connected peers without waiting for their
+/// next periodic publish.
+///
+/// `exclude_device_id` skips the requester itself. Defensively caps at one
+/// online card per source device (the row with the most recent
+/// `last_snapshot_at`, tie-broken by `updated_at`).
+async fn replay_online_snapshots_to(
+    state: &AppState,
+    registry: &Arc<ConnectionRegistry>,
+    account_id: Uuid,
+    targets: Vec<DeviceId>,
+    exclude_device_id: DeviceId,
+) {
+    if targets.is_empty() {
+        return;
+    }
+    let sessions = match state.session_cache.list_for_account(account_id).await {
+        Ok(s) => s,
+        Err(err) => {
+            tracing::warn!(target: "coordination::ws", "replay_online: list sessions failed: {:?}", err);
+            return;
+        }
+    };
+    let now = chrono::Utc::now();
+    let server_time = now.timestamp();
+
+    // Select, per source device, the Online session with the most recent
+    // confirmed snapshot. Only include peers that are actually connected
+    // right now (the registry is authoritative for online status while a
+    // device is connected; the session row may briefly lag on disconnect).
+    let mut winners: HashMap<DeviceId, &PlaybackSession> = HashMap::new();
+    for session in &sessions {
+        if session.device_id == exclude_device_id {
+            continue;
+        }
+        if session.status != SessionStatus::Online {
+            continue;
+        }
+        if session.transferred_to_device.is_some() {
+            continue;
+        }
+        if session.last_snapshot.is_none() {
+            continue;
+        }
+        if !registry.is_online(session.device_id) {
+            continue;
+        }
+        let take = match winners.get(&session.device_id) {
+            None => true,
+            Some(cur) => {
+                let cand = session.last_snapshot_at.unwrap_or(session.updated_at);
+                let existing = cur.last_snapshot_at.unwrap_or(cur.updated_at);
+                cand > existing
+            }
+        };
+        if take {
+            winners.insert(session.device_id, session);
+        }
+    }
+
+    for (_dev, session) in winners {
+        let Some(snapshot_json) = session.last_snapshot.as_ref() else {
+            continue;
+        };
+        let Ok(snapshot) = serde_json::from_str::<crate::protocol::PlaybackSnapshot>(snapshot_json)
+        else {
+            continue;
+        };
+        let last_confirmed_at = session
+            .last_snapshot_at
+            .map(|t| t.timestamp())
+            .unwrap_or(server_time);
+        for target in &targets {
+            if *target == session.device_id {
+                continue;
+            }
+            let env = Envelope {
+                version: PROTOCOL_VERSION,
+                message_id: Uuid::new_v4(),
+                connection_id: None,
+                source_device_id: Some(session.device_id),
+                target_device_id: Some(*target),
+                session_id: Some(session.id),
+                expected_generation: Some(session.generation),
+                seq: None,
+                server_time: Some(server_time),
+                payload: Payload::SnapshotProjection {
+                    device_id: session.device_id,
+                    session_id: session.id,
+                    generation: session.generation,
+                    snapshot_revision: session.snapshot_revision,
+                    snapshot: snapshot.clone(),
+                    is_online: true,
                     last_confirmed_at,
                 },
             };
@@ -1560,5 +1681,249 @@ mod tests {
             }
         }
         assert_eq!(count, 1, "replay must emit one card per source device");
+    }
+
+    #[tokio::test]
+    async fn replay_online_delivers_snapshot_to_target() {
+        let (_dir, state) = setup_state().await;
+        let registry = state.realtime.clone();
+
+        let acc = state
+            .repos
+            .accounts
+            .upsert_by_lookup_key("lookup-online-1", 100)
+            .await
+            .unwrap();
+        let dev_a = state
+            .repos
+            .devices
+            .create(acc.id, "A", "web", None, 0, "h", Uuid::new_v4())
+            .await
+            .unwrap();
+        let dev_b = state
+            .repos
+            .devices
+            .create(acc.id, "B", "web", None, 0, "h2", Uuid::new_v4())
+            .await
+            .unwrap();
+
+        // A's session: Online with a snapshot.
+        let snapshot = sample_snapshot();
+        let session = PlaybackSession {
+            id: Uuid::new_v4(),
+            device_id: dev_a.id,
+            account_id: acc.id,
+            generation: 2,
+            snapshot_revision: 3,
+            status: SessionStatus::Online,
+            last_snapshot: Some(serde_json::to_string(&snapshot).unwrap()),
+            last_snapshot_at: Some(Utc::now()),
+            offline_at: None,
+            transferred_to_device: None,
+            transferred_to_session: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        state
+            .repos
+            .sessions
+            .upsert_snapshot(&session, &serde_json::to_string(&snapshot).unwrap())
+            .await
+            .unwrap();
+
+        // Both A and B are online (registered).
+        let _rx_a = register_fake_device(&registry, dev_a.id, acc.id);
+        let mut rx_b = register_fake_device(&registry, dev_b.id, acc.id);
+
+        replay_online_snapshots_to(&state, &registry, acc.id, vec![dev_b.id], dev_b.id).await;
+
+        // B should receive one SnapshotProjection marked online.
+        let env = rx_b.recv().await.expect("B received a projection");
+        match env.payload {
+            Payload::SnapshotProjection {
+                device_id,
+                is_online,
+                snapshot: proj_snapshot,
+                generation,
+                ..
+            } => {
+                assert_eq!(device_id, dev_a.id);
+                assert!(is_online, "online snapshot must set is_online=true");
+                assert_eq!(proj_snapshot.song_id, "song-1");
+                assert_eq!(generation, 2);
+            }
+            other => panic!("expected SnapshotProjection, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn replay_online_skips_offline_peer() {
+        let (_dir, state) = setup_state().await;
+        let registry = state.realtime.clone();
+
+        let acc = state
+            .repos
+            .accounts
+            .upsert_by_lookup_key("lookup-online-2", 100)
+            .await
+            .unwrap();
+        let dev_a = state
+            .repos
+            .devices
+            .create(acc.id, "A", "web", None, 0, "h", Uuid::new_v4())
+            .await
+            .unwrap();
+        let dev_b = state
+            .repos
+            .devices
+            .create(acc.id, "B", "web", None, 0, "h2", Uuid::new_v4())
+            .await
+            .unwrap();
+
+        // A's session is Offline — online replay must not emit it.
+        let snapshot = sample_snapshot();
+        let session = PlaybackSession {
+            id: Uuid::new_v4(),
+            device_id: dev_a.id,
+            account_id: acc.id,
+            generation: 1,
+            snapshot_revision: 1,
+            status: SessionStatus::Offline,
+            last_snapshot: Some(serde_json::to_string(&snapshot).unwrap()),
+            last_snapshot_at: Some(Utc::now()),
+            offline_at: Some(Utc::now()),
+            transferred_to_device: None,
+            transferred_to_session: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        state
+            .repos
+            .sessions
+            .upsert_snapshot(&session, &serde_json::to_string(&snapshot).unwrap())
+            .await
+            .unwrap();
+
+        // A is registered (online in registry) but its session is Offline.
+        let _rx_a = register_fake_device(&registry, dev_a.id, acc.id);
+        let mut rx_b = register_fake_device(&registry, dev_b.id, acc.id);
+
+        replay_online_snapshots_to(&state, &registry, acc.id, vec![dev_b.id], dev_b.id).await;
+
+        // B should not receive any projection.
+        assert!(
+            rx_b.try_recv().is_err(),
+            "online replay must skip offline sessions"
+        );
+    }
+
+    #[tokio::test]
+    async fn replay_online_skips_peer_without_snapshot() {
+        let (_dir, state) = setup_state().await;
+        let registry = state.realtime.clone();
+
+        let acc = state
+            .repos
+            .accounts
+            .upsert_by_lookup_key("lookup-online-3", 100)
+            .await
+            .unwrap();
+        let dev_a = state
+            .repos
+            .devices
+            .create(acc.id, "A", "web", None, 0, "h", Uuid::new_v4())
+            .await
+            .unwrap();
+        let dev_b = state
+            .repos
+            .devices
+            .create(acc.id, "B", "web", None, 0, "h2", Uuid::new_v4())
+            .await
+            .unwrap();
+
+        // A is online but has no snapshot.
+        let session = PlaybackSession {
+            id: Uuid::new_v4(),
+            device_id: dev_a.id,
+            account_id: acc.id,
+            generation: 1,
+            snapshot_revision: 1,
+            status: SessionStatus::Online,
+            last_snapshot: None,
+            last_snapshot_at: None,
+            offline_at: None,
+            transferred_to_device: None,
+            transferred_to_session: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        state
+            .repos
+            .sessions
+            .upsert_snapshot(&session, "")
+            .await
+            .unwrap();
+
+        let _rx_a = register_fake_device(&registry, dev_a.id, acc.id);
+        let mut rx_b = register_fake_device(&registry, dev_b.id, acc.id);
+
+        replay_online_snapshots_to(&state, &registry, acc.id, vec![dev_b.id], dev_b.id).await;
+
+        assert!(
+            rx_b.try_recv().is_err(),
+            "online replay must skip peers without a snapshot"
+        );
+    }
+
+    #[tokio::test]
+    async fn replay_online_excludes_self() {
+        let (_dir, state) = setup_state().await;
+        let registry = state.realtime.clone();
+
+        let acc = state
+            .repos
+            .accounts
+            .upsert_by_lookup_key("lookup-online-4", 100)
+            .await
+            .unwrap();
+        let dev_a = state
+            .repos
+            .devices
+            .create(acc.id, "A", "web", None, 0, "h", Uuid::new_v4())
+            .await
+            .unwrap();
+
+        let snapshot = sample_snapshot();
+        let session = PlaybackSession {
+            id: Uuid::new_v4(),
+            device_id: dev_a.id,
+            account_id: acc.id,
+            generation: 1,
+            snapshot_revision: 1,
+            status: SessionStatus::Online,
+            last_snapshot: Some(serde_json::to_string(&snapshot).unwrap()),
+            last_snapshot_at: Some(Utc::now()),
+            offline_at: None,
+            transferred_to_device: None,
+            transferred_to_session: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        state
+            .repos
+            .sessions
+            .upsert_snapshot(&session, &serde_json::to_string(&snapshot).unwrap())
+            .await
+            .unwrap();
+
+        // A is the requester and the only device — replay must not echo back.
+        let mut rx_a = register_fake_device(&registry, dev_a.id, acc.id);
+
+        replay_online_snapshots_to(&state, &registry, acc.id, vec![dev_a.id], dev_a.id).await;
+
+        assert!(
+            rx_a.try_recv().is_err(),
+            "online replay must exclude the requester itself"
+        );
     }
 }

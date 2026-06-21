@@ -535,6 +535,13 @@ pub enum Payload {
     /// B → server: B has stopped remote control (design §10). The server
     /// clears the active-controller marker so B becomes available again.
     ControlSessionEnd,
+    /// B → server: request current playback snapshots of all *online* peers
+    /// on the same account (design §9.2 bootstrap). Fire-and-forget — the
+    /// server replies with a stream of `SnapshotProjection { is_online: true }`
+    /// envelopes, one per online peer that has a snapshot. Lets a client that
+    /// just connected receive the live playback states of already-connected
+    /// peers without waiting for their next periodic publish.
+    RequestSnapshots,
 }
 
 /// Result returned by command execution.
