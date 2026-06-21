@@ -242,7 +242,8 @@ export type Payload =
       type: "control_session_begin";
       targetDeviceId: DeviceId;
     }
-  | { type: "control_session_end" };
+  | { type: "control_session_end" }
+  | { type: "request_snapshots" };
 
 export type CommandResult =
   | { status: "ok" }
