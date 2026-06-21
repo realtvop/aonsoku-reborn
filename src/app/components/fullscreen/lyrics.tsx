@@ -25,6 +25,7 @@ import {
 import { subsonic } from "@/service/subsonic";
 import { useIsOnline } from "@/store/cache.store";
 import {
+  useIsRemoteControlActive,
   useLyricsSettings,
   usePlayerActions,
   usePlayerIsPlaying,
@@ -321,7 +322,8 @@ function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
   const playerRef = usePlayerRef();
   const isPlaying = usePlayerIsPlaying();
   const isScrubbing = usePlayerIsScrubbing();
-  const { setAreLyricsAligned } = usePlayerActions();
+  const { setAreLyricsAligned, setProgress } = usePlayerActions();
+  const isRemoteControlActive = useIsRemoteControlActive();
   const [currentTime, setCurrentTime] = useState(0);
   const currentTimeRef = useRef(0);
   const [isTouchScrolling, setIsTouchScrolling] = useState(false);
@@ -402,7 +404,11 @@ function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
     (lineIndex: number) => {
       const lyricLine = lyricLines[lineIndex];
 
-      if (!playerRef || !lyricLine || !Number.isFinite(lyricLine.startTime)) {
+      if (!lyricLine || !Number.isFinite(lyricLine.startTime)) {
+        return;
+      }
+
+      if (!playerRef && !isRemoteControlActive) {
         return;
       }
 
@@ -422,13 +428,18 @@ function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
         timestamp: now,
       };
 
-      playerRef.currentTime = lyricLine.startTime / 1000;
-      if (isPlaying) {
-        playerRef.play().catch((e) => {
-          if (e.name !== "AbortError") {
-            logger.warn("Lyric seek play failed", e);
-          }
-        });
+      const seekSeconds = lyricLine.startTime / 1000;
+      if (isRemoteControlActive) {
+        setProgress(seekSeconds);
+      } else if (playerRef) {
+        playerRef.currentTime = seekSeconds;
+        if (isPlaying) {
+          playerRef.play().catch((e) => {
+            if (e.name !== "AbortError") {
+              logger.warn("Lyric seek play failed", e);
+            }
+          });
+        }
       }
 
       const player = getInternalLyricPlayer(lyricPlayerRef);
@@ -444,7 +455,7 @@ function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
       setCurrentTime(lyricLine.startTime);
       currentTimeRef.current = lyricLine.startTime;
     },
-    [isPlaying, lyricLines, playerRef],
+    [isPlaying, lyricLines, playerRef, isRemoteControlActive, setProgress],
   );
 
   const handleTouchStart = useCallback(
@@ -529,7 +540,8 @@ function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
   // Use requestAnimationFrame for smooth time updates
   useEffect(() => {
     const isNative = shouldUseNativePlaybackBackend();
-    if (!playerRef && !isNative) return;
+    const useStoreTime = isNative || isRemoteControlActive;
+    if (!playerRef && !useStoreTime) return;
 
     const updateTime = () => {
       if (isScrubbingRef.current) {
@@ -543,7 +555,7 @@ function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
       }
 
       let timeMs = 0;
-      if (isNative) {
+      if (useStoreTime) {
         if (isPlaying) {
           const elapsed = performance.now() - lastProgressTimeRef.current;
           timeMs = Math.floor(lastProgressRef.current + elapsed);
@@ -583,7 +595,7 @@ function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
       clearTimeout(seekingTimerRef.current);
       clearTouchScrollBlurTimer();
     };
-  }, [clearTouchScrollBlurTimer, playerRef, isPlaying]);
+  }, [clearTouchScrollBlurTimer, playerRef, isPlaying, isRemoteControlActive]);
 
   return (
     <div
