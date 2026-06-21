@@ -669,6 +669,14 @@
         "title": "Delete all coordination data?",
         "description": "This action cannot be undone."
       },
+      "disconnectConfirm": {
+        "title": "Disconnect this device?",
+        "description": "This will stop cross-device sync on this device."
+      },
+      "revokeConfirm": {
+        "title": "Revoke device?",
+        "description": "Are you sure you want to revoke access for {{name}}?"
+      },
       "deleted": "Coordination data deleted",
       "toast": {
         "relaySuccess": "Handoff successful!",

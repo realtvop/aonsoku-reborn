@@ -78,6 +78,8 @@ export function CrossDeviceSettings() {
   const [deviceName, setDeviceName] = useState("");
   const [isConnecting, setIsConnecting] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [disconnectDialogOpen, setDisconnectDialogOpen] = useState(false);
+  const [revokeTarget, setRevokeTarget] = useState<DeviceDto | null>(null);
 
   useEffect(() => {
     const config = coordStore.manager.getConfig();
@@ -137,6 +139,7 @@ export function CrossDeviceSettings() {
   const handleDisconnect = async () => {
     try {
       await coordStore.disconnectCurrentDevice();
+      setDisconnectDialogOpen(false);
       usePlayerStore.setState({
         remoteControl: {
           active: false,
@@ -338,7 +341,7 @@ export function CrossDeviceSettings() {
             )}
             <ContentItem>
               <ContentItemForm>
-                <Button variant="outline" onClick={handleDisconnect}>
+                <Button variant="outline" onClick={() => setDisconnectDialogOpen(true)}>
                   {t("settings.crossDevice.disconnect", {
                     defaultValue: "Disconnect this device",
                   })}
@@ -366,7 +369,7 @@ export function CrossDeviceSettings() {
                 device={device}
                 isCurrent={device.id === coordStore.deviceId}
                 onRename={handleRenameDevice}
-                onRevoke={handleRevokeDevice}
+                onRevoke={() => setRevokeTarget(device)}
               />
             ))}
           </Content>
@@ -417,6 +420,44 @@ export function CrossDeviceSettings() {
         cancelLabel={t("generic.cancel", { defaultValue: "Cancel" })}
         confirmLabel={t("settings.crossDevice.delete", {
           defaultValue: "Delete",
+        })}
+      />
+
+      <ConfirmationDialog
+        open={disconnectDialogOpen}
+        onOpenChange={setDisconnectDialogOpen}
+        title={t("settings.crossDevice.disconnectConfirm.title", {
+          defaultValue: "Disconnect this device?",
+        })}
+        description={t("settings.crossDevice.disconnectConfirm.description", {
+          defaultValue: "This will stop cross-device sync on this device.",
+        })}
+        onConfirm={handleDisconnect}
+        cancelLabel={t("generic.cancel", { defaultValue: "Cancel" })}
+        confirmLabel={t("settings.crossDevice.disconnect", {
+          defaultValue: "Disconnect",
+        })}
+      />
+
+      <ConfirmationDialog
+        open={revokeTarget !== null}
+        onOpenChange={(open) => !open && setRevokeTarget(null)}
+        title={t("settings.crossDevice.revokeConfirm.title", {
+          defaultValue: "Revoke device?",
+        })}
+        description={t("settings.crossDevice.revokeConfirm.description", {
+          defaultValue: `Are you sure you want to revoke access for ${revokeTarget?.name}?`,
+          name: revokeTarget?.name,
+        })}
+        onConfirm={async () => {
+          if (revokeTarget) {
+            await handleRevokeDevice(revokeTarget.id);
+            setRevokeTarget(null);
+          }
+        }}
+        cancelLabel={t("generic.cancel", { defaultValue: "Cancel" })}
+        confirmLabel={t("settings.crossDevice.device.revoke", {
+          defaultValue: "Revoke",
         })}
       />
     </Root>

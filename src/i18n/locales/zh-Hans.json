@@ -681,6 +681,14 @@
         "title": "删除所有跨设备数据？",
         "description": "此操作不可撤销。"
       },
+      "disconnectConfirm": {
+        "title": "断开此设备？",
+        "description": "这将停止在此设备上的跨设备同步。"
+      },
+      "revokeConfirm": {
+        "title": "撤销设备？",
+        "description": "确定要撤销对设备 {{name}} 的访问权限吗？"
+      },
       "deleted": "跨设备数据已删除",
       "toast": {
         "relaySuccess": "接力成功！",
