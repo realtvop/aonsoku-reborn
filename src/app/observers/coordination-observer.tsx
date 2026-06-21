@@ -4,7 +4,6 @@ import { useCoordinationStore } from "@/coordination/store";
 import type { PlaybackSnapshot, RemoteCommand } from "@/coordination/types";
 import {
   usePlayerActions,
-  usePlayerCurrentList,
   usePlayerCurrentSong,
   usePlayerIsPlaying,
   usePlayerLoop,
@@ -13,7 +12,6 @@ import {
   usePlayerStore,
   usePlayerVolume,
 } from "@/store/player.store";
-import { getEffectiveIndex } from "@/store/player/queue-utils";
 import { seekPlaybackTarget } from "@/player/playback/backend-registry";
 import { LoopState } from "@/types/playerContext";
 import { logger } from "@/utils/logger";
@@ -147,7 +145,6 @@ export function CoordinationObserver() {
 
   const playerActions = usePlayerActions();
   const currentSong = usePlayerCurrentSong();
-  const currentList = usePlayerCurrentList();
   const playerProgress = usePlayerProgress();
   const isPlaying = usePlayerIsPlaying();
   const { volume } = usePlayerVolume();
@@ -177,8 +174,8 @@ export function CoordinationObserver() {
       durationSeconds: currentSong.duration ?? 0,
       isPlaying,
       sampledAt: Math.floor(Date.now() / 1000),
-      contextQueue: currentList.map((s) => s.id),
-      contextIndex: getEffectiveIndex(state.songlist) ?? null,
+      contextQueue: state.songlist.contextQueue.songs.map((s) => s.id),
+      contextIndex: state.songlist.contextQueue.currentIndex,
       sourceId: state.songlist.contextQueue.sourceId?.id ?? null,
       sourceName: state.songlist.contextQueue.sourceName ?? null,
       userQueue: state.songlist.userQueue.songs.map((s) => s.id),
@@ -204,7 +201,6 @@ export function CoordinationObserver() {
     currentSong,
     playerProgress,
     isPlaying,
-    currentList,
     shuffleEnabled,
     loopState,
     volume,
@@ -437,8 +433,8 @@ export function CoordinationObserver() {
           durationSeconds: currentSong.duration ?? 0,
           isPlaying: false,
           sampledAt: Math.floor(Date.now() / 1000),
-          contextQueue: currentList.map((s) => s.id),
-          contextIndex: getEffectiveIndex(state.songlist) ?? null,
+          contextQueue: state.songlist.contextQueue.songs.map((s) => s.id),
+          contextIndex: state.songlist.contextQueue.currentIndex,
           sourceId: state.songlist.contextQueue.sourceId?.id ?? null,
           sourceName: state.songlist.contextQueue.sourceName ?? null,
           userQueue: state.songlist.userQueue.songs.map((s) => s.id),
@@ -465,7 +461,6 @@ export function CoordinationObserver() {
     manager,
     playerActions,
     currentSong,
-    currentList,
     shuffleEnabled,
     loopState,
     volume,
