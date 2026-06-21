@@ -402,6 +402,10 @@ export function CrossDevicePlaybacks() {
       // Exclude self
       if (device.id === currentDeviceId) return false;
 
+      // Hide devices that are currently acting as a remote controller
+      // (design §10 exclusivity) — they cannot be controlled or handoff-taken.
+      if (device.isControlling) return false;
+
       const snapshotData = deferredDeviceSnapshots[device.id];
       if (!snapshotData || !snapshotData.snapshot?.songId) return false;
 

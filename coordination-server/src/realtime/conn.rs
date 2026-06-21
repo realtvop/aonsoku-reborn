@@ -853,6 +853,9 @@ async fn handle_inbound(
                 target = %target_device_id,
                 "control session begun"
             );
+            // Re-broadcast the device list so observers see B's new
+            // controlling state and hide it from their control/handoff lists.
+            crate::api::devices::broadcast_device_list(state, account_id).await;
         }
         Payload::ControlSessionEnd => {
             // §10 exclusivity: clear B's active-controller marker.
@@ -862,6 +865,7 @@ async fn handle_inbound(
                 controller = %device_id,
                 "control session ended"
             );
+            crate::api::devices::broadcast_device_list(state, account_id).await;
         }
         _ => {
             // Other payloads are not handled in this version.

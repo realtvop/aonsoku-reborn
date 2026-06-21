@@ -300,6 +300,7 @@ export interface DeviceDto {
   revokedAt: string | null;
   historySyncCursor: number;
   legacyHistoryImported: boolean;
+  isControlling?: boolean;
 }
 
 export interface HistoryEntryDto {

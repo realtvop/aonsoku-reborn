@@ -376,6 +376,11 @@ pub struct DeviceSummary {
     pub revoked_at: Option<chrono::DateTime<chrono::Utc>>,
     pub history_sync_cursor: i64,
     pub legacy_history_imported: bool,
+    /// Whether this device is currently acting as a remote controller
+    /// (design §10 exclusivity). Other devices should hide it from their
+    /// remote-control / handoff lists while active.
+    #[serde(default)]
+    pub is_controlling: bool,
 }
 
 impl From<crate::storage::models::Device> for DeviceSummary {
@@ -391,6 +396,7 @@ impl From<crate::storage::models::Device> for DeviceSummary {
             revoked_at: device.revoked_at,
             history_sync_cursor: device.history_sync_cursor,
             legacy_history_imported: device.legacy_history_imported,
+            is_controlling: false,
         }
     }
 }

@@ -24,7 +24,15 @@ pub async fn list_devices(
         .list_for_account(claims.account_id)
         .await
         .map_err(map_err)?;
-    Ok(Json(devices.into_iter().map(DeviceDto::from).collect()))
+    let dtos = devices
+        .into_iter()
+        .map(|d| {
+            let mut dto = DeviceDto::from(d);
+            dto.is_controlling = state.realtime.is_controlling(dto.id);
+            dto
+        })
+        .collect::<Vec<_>>();
+    Ok(Json(dtos))
 }
 
 /// PATCH /v1/devices/:id
@@ -73,7 +81,11 @@ pub async fn broadcast_device_list(state: &AppState, account_id: Uuid) {
     };
     let devices = devices
         .into_iter()
-        .map(crate::protocol::DeviceSummary::from)
+        .map(|d| {
+            let mut summary = crate::protocol::DeviceSummary::from(d);
+            summary.is_controlling = state.realtime.is_controlling(summary.id);
+            summary
+        })
         .collect::<Vec<_>>();
     for target in state.realtime.online_devices_for_account(account_id) {
         let envelope = Envelope {
@@ -107,6 +119,8 @@ pub struct DeviceDto {
     pub revoked_at: Option<chrono::DateTime<chrono::Utc>>,
     pub history_sync_cursor: i64,
     pub legacy_history_imported: bool,
+    #[serde(default)]
+    pub is_controlling: bool,
 }
 
 impl From<crate::storage::models::Device> for DeviceDto {
@@ -122,6 +136,7 @@ impl From<crate::storage::models::Device> for DeviceDto {
             revoked_at: d.revoked_at,
             history_sync_cursor: d.history_sync_cursor,
             legacy_history_imported: d.legacy_history_imported,
+            is_controlling: false,
         }
     }
 }
