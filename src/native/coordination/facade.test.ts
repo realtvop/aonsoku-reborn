@@ -67,6 +67,7 @@ function makeCallbacks(): ConnectionCallbacks {
     onPrepareRelinquish: vi.fn(),
     onHandoffCommitted: vi.fn(),
     onHandoffFailed: vi.fn(),
+    onSessionSuperseded: vi.fn(),
     onError: vi.fn(),
   };
 }

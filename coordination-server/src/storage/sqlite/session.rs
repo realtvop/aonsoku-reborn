@@ -183,6 +183,20 @@ impl SessionRepository for SqliteSessionRepository {
             .map_err(|e| CoordinationError::internal(e.to_string()))?;
         Ok(row.0)
     }
+
+    async fn delete_transferred_before(
+        &self,
+        cutoff: DateTime<Utc>,
+    ) -> Result<u64, CoordinationError> {
+        let res = sqlx::query(
+            "DELETE FROM playback_sessions WHERE status = 'transferred' AND updated_at < ?",
+        )
+        .bind(cutoff)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| CoordinationError::internal(e.to_string()))?;
+        Ok(res.rows_affected())
+    }
 }
 
 #[cfg(test)]
@@ -256,5 +270,52 @@ mod tests {
         repo.transfer(s.id, 2, new_dev.id, target.id).await.unwrap();
         let back = repo.find_by_id(s.id).await.unwrap().unwrap();
         assert_eq!(back.status, SessionStatus::Transferred);
+    }
+
+    #[tokio::test]
+    async fn delete_transferred_before_removes_old_transferred_only() {
+        let (_dir, pool, acc, dev) = setup().await;
+        let repo = SqliteSessionRepository::new(pool.clone());
+        let new_dev = SqliteDeviceRepository::new(pool.clone())
+            .create(acc, "P2", "web", None, 0, "h2", Uuid::new_v4())
+            .await
+            .unwrap();
+
+        // Old transferred session (updated_at in the past).
+        let old_s = new_session(dev, acc);
+        repo.upsert_snapshot(&old_s, "{}").await.unwrap();
+        let old_target = new_session(new_dev.id, acc);
+        repo.upsert_snapshot(&old_target, "{}").await.unwrap();
+        repo.transfer(old_s.id, 2, new_dev.id, old_target.id)
+            .await
+            .unwrap();
+        // Manually backdate updated_at to 10 days ago.
+        let ten_days_ago = Utc::now() - chrono::Duration::days(10);
+        sqlx::query("UPDATE playback_sessions SET updated_at = ? WHERE id = ?")
+            .bind(ten_days_ago)
+            .bind(old_s.id.to_string())
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // Recent transferred session.
+        let recent_s = new_session(dev, acc);
+        repo.upsert_snapshot(&recent_s, "{}").await.unwrap();
+        let recent_target = new_session(new_dev.id, acc);
+        repo.upsert_snapshot(&recent_target, "{}").await.unwrap();
+        repo.transfer(recent_s.id, 2, new_dev.id, recent_target.id)
+            .await
+            .unwrap();
+
+        // Online session that should never be touched.
+        let online_s = new_session(dev, acc);
+        repo.upsert_snapshot(&online_s, "{}").await.unwrap();
+
+        let cutoff = Utc::now() - chrono::Duration::days(7);
+        let removed = repo.delete_transferred_before(cutoff).await.unwrap();
+        assert_eq!(removed, 1);
+        assert!(repo.find_by_id(old_s.id).await.unwrap().is_none());
+        assert!(repo.find_by_id(recent_s.id).await.unwrap().is_some());
+        assert!(repo.find_by_id(online_s.id).await.unwrap().is_some());
     }
 }

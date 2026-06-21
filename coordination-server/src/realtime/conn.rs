@@ -24,6 +24,7 @@ use crate::protocol::{
 };
 use crate::realtime::registry::{ConnectionRegistry, DeviceConnection};
 use crate::server::AppState;
+use crate::storage::models::SessionStatus;
 use crate::storage::repository::{
     DeviceRepository, PresenceRepository, SessionRepository, TicketRepository,
 };
@@ -357,6 +358,39 @@ async fn handle_inbound(
                 };
                 let _ = registry.send(device_id, err_env);
                 return;
+            }
+
+            // Session superseded check (design §11.3): if the session id
+            // already exists and was transferred to another device, A is
+            // trying to publish to a session it no longer owns. Reject the
+            // write and instruct A to align its generation and pause.
+            if let Ok(Some(existing)) = state
+                .repos
+                .sessions
+                .find_by_id(actual_session_id)
+                .await
+            {
+                if existing.status == SessionStatus::Transferred
+                    && existing.transferred_to_device.map(|d| d != device_id).unwrap_or(true)
+                {
+                    let superseded = Envelope {
+                        version: PROTOCOL_VERSION,
+                        message_id: Uuid::new_v4(),
+                        connection_id: Some(connection_id),
+                        source_device_id: None,
+                        target_device_id: Some(device_id),
+                        session_id: Some(actual_session_id),
+                        expected_generation: Some(existing.generation),
+                        seq: None,
+                        server_time: Some(server_time),
+                        payload: Payload::SessionSuperseded {
+                            superseded_generation: existing.generation,
+                            transferred_to_device: existing.transferred_to_device,
+                        },
+                    };
+                    let _ = registry.send(device_id, superseded);
+                    return;
+                }
             }
 
             // Store the snapshot in the session record.

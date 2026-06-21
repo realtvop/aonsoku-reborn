@@ -39,6 +39,7 @@ export interface ConnectionCallbacks {
   onPrepareRelinquish: (env: Envelope) => void;
   onHandoffCommitted: (env: Envelope) => void;
   onHandoffFailed: (env: Envelope) => void;
+  onSessionSuperseded: (env: Envelope) => void;
   onError: (code: string, reason: string) => void;
 }
 
@@ -486,6 +487,9 @@ export class CoordinationWsClient implements CoordinationClient {
         break;
       case "handoff_failed":
         this.callbacks.onHandoffFailed(env);
+        break;
+      case "session_superseded":
+        this.callbacks.onSessionSuperseded(env);
         break;
       case "error":
         this.callbacks.onError(env.code, env.reason);

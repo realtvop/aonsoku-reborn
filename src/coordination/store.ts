@@ -56,6 +56,7 @@ const callbacks = {
   onPrepareRelinquish: () => {},
   onHandoffCommitted: () => {},
   onHandoffFailed: () => {},
+  onSessionSuperseded: () => {},
   onError: () => {},
 };
 

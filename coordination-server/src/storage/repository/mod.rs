@@ -91,6 +91,13 @@ pub trait SessionRepository: Send + Sync + 'static {
         transferred_to_session: Uuid,
     ) -> Result<(), CoordinationError>;
     async fn bump_generation(&self, id: Uuid) -> Result<i64, CoordinationError>;
+    /// Delete sessions in the `transferred` status whose `updated_at` is
+    /// older than `cutoff`. Returns the number of rows removed. Used by the
+    /// GC task to bound database growth (design §11.3).
+    async fn delete_transferred_before(
+        &self,
+        cutoff: DateTime<Utc>,
+    ) -> Result<u64, CoordinationError>;
 }
 
 #[async_trait]

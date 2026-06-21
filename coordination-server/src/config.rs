@@ -96,6 +96,11 @@ pub struct Config {
     pub max_snapshot_songs: u32,
     /// Tombstone retention for history deletion sync (design §8.3).
     pub tombstone_retention: chrono::Duration,
+    /// Retention for `transferred` playback session rows before GC deletes
+    /// them (design §11.3). Bounds database growth from repeated handoffs.
+    pub transferred_retention: chrono::Duration,
+    /// Interval between transferred-session GC sweeps.
+    pub transferred_gc_interval: std::time::Duration,
 }
 
 impl Config {
@@ -126,6 +131,8 @@ impl Config {
             max_message_bytes: 512 * 1024,
             max_snapshot_songs: 2000,
             tombstone_retention: chrono::Duration::days(30),
+            transferred_retention: chrono::Duration::days(7),
+            transferred_gc_interval: std::time::Duration::from_secs(24 * 60 * 60),
         }
     }
 

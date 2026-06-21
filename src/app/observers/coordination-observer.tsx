@@ -473,6 +473,34 @@ export function CoordinationObserver() {
     };
   }, [isConnected, manager]);
 
+  // Handle session_superseded (design §11.3): A's session was transferred to
+  // another device while A was offline/away. Pause local playback, drop the
+  // stale session id/generation so the next publish uses a fresh session,
+  // and notify the user. The user must manually start a new session to
+  // resume local playback.
+  useEffect(() => {
+    if (!isConnected) return;
+    const original = manager.callbacks.onSessionSuperseded;
+    manager.callbacks.onSessionSuperseded = (
+      _supersededGeneration: number,
+      transferredToDevice: string | null,
+    ) => {
+      playerActions.setPlayingState(false);
+      sessionIdRef.current = crypto.randomUUID();
+      generationRef.current = 1;
+      snapshotRevisionRef.current = 0;
+      const deviceName =
+        useCoordinationStore
+          .getState()
+          .devices.find((d) => d.id === transferredToDevice)?.name ??
+        "another device";
+      toast.info(`此会话已被 ${deviceName} 接管，本机已暂停`);
+    };
+    return () => {
+      manager.callbacks.onSessionSuperseded = original;
+    };
+  }, [isConnected, manager, playerActions]);
+
   // Sync controlled device snapshot state to local player store
   useEffect(() => {
     if (!controlledDeviceId || !controlledSnapshot) return;

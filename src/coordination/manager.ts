@@ -95,6 +95,11 @@ export interface CoordinationManagerCallbacks {
     newGeneration: SessionGeneration,
   ) => void;
   onHandoffFailed: (transactionId: string, code: string) => void;
+  onSessionSuperseded: (
+    supersededGeneration: SessionGeneration,
+    transferredToDevice: DeviceId | null,
+    sessionId?: SessionId | null,
+  ) => void;
   onError: (code: string, reason: string) => void;
 }
 
@@ -293,6 +298,18 @@ export class CoordinationManager {
       onHandoffFailed: (env) => {
         if (env.type === "handoff_failed") {
           this.callbacks.onHandoffFailed(env.transactionId, env.code);
+        }
+      },
+      onSessionSuperseded: (env) => {
+        if (env.type === "session_superseded") {
+          // Invalidate the generation cache for this session's owning device
+          // so future retries don't reuse the stale generation.
+          this.deviceGenerations.delete(this.deviceId ?? "");
+          this.callbacks.onSessionSuperseded(
+            env.supersededGeneration,
+            env.transferredToDevice ?? null,
+            env.sessionId,
+          );
         }
       },
       onError: (code, reason) => this.callbacks.onError(code, reason),

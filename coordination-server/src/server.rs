@@ -17,6 +17,7 @@ use crate::config::Config;
 use crate::errors::{ApiError, CoordinationError};
 use crate::handoff::HandoffCoordinator;
 use crate::realtime::ConnectionRegistry;
+use crate::storage::repository::SessionRepository;
 use crate::storage::sqlite::SqliteRepositories;
 
 /// Shared application state.
@@ -100,10 +101,35 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
     let state = AppState::new(config.clone(), pool.clone(), repos);
     state.mark_ready();
 
-    let router = build_router(state);
+    let router = build_router(state.clone());
+    // Spawn the transferred-session GC task (design §11.3). It periodically
+    // deletes `transferred` session rows older than `transferred_retention`
+    // to bound database growth from repeated handoffs.
+    let gc_state = state.clone();
+    let gc_handle = tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(gc_state.config.transferred_gc_interval);
+        // Skip the first immediate tick so we don't run GC at startup before
+        // the server has served any traffic.
+        ticker.tick().await;
+        loop {
+            ticker.tick().await;
+            let cutoff = chrono::Utc::now() - gc_state.config.transferred_retention;
+            match gc_state.repos.sessions.delete_transferred_before(cutoff).await {
+                Ok(n) if n > 0 => {
+                    tracing::info!(target: "coordination::gc", removed = n, "gc deleted transferred sessions");
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    tracing::warn!(target: "coordination::gc", error = ?e, "transferred-session gc failed");
+                }
+            }
+        }
+    });
+
     let listener = tokio::net::TcpListener::bind(config.listen).await?;
     tracing::info!(addr = %config.listen, "coordination server listening");
     axum::serve(listener, router).await?;
+    gc_handle.abort();
     Ok(())
 }
 

@@ -227,7 +227,12 @@ export type Payload =
       code: CoordinationErrorCode;
     }
   | { type: "error"; code: CoordinationErrorCode; reason: string }
-  | { type: "capability_disabled"; feature: string };
+  | { type: "capability_disabled"; feature: string }
+  | {
+      type: "session_superseded";
+      supersededGeneration: SessionGeneration;
+      transferredToDevice?: DeviceId | null;
+    };
 
 export type CommandResult =
   | { status: "ok" }

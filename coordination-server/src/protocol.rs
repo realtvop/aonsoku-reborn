@@ -512,6 +512,16 @@ pub enum Payload {
     },
     /// Server → client: requested feature disabled by negotiated capabilities.
     CapabilityDisabled { feature: String },
+    /// Server → A: your session was transferred to another device while you
+    /// were offline or away (design §11.3). Pause local playback, align your
+    /// generation to `superseded_generation`, and stop publishing to this
+    /// session. The user must start a new independent session to resume
+    /// local playback.
+    SessionSuperseded {
+        superseded_generation: SessionGeneration,
+        #[serde(default)]
+        transferred_to_device: Option<DeviceId>,
+    },
 }
 
 /// Result returned by command execution.

@@ -14,6 +14,7 @@ function makeCallbacks(): ConnectionCallbacks {
     onPrepareRelinquish: vi.fn(),
     onHandoffCommitted: vi.fn(),
     onHandoffFailed: vi.fn(),
+    onSessionSuperseded: vi.fn(),
     onError: vi.fn(),
   };
 }
@@ -184,6 +185,26 @@ describe("CoordinationWsClient ack + dedup + seq", () => {
     client.internalHandleEnvelope(snapEnv);
     client.internalHandleEnvelope(snapEnv);
     expect(cb.onSnapshotProjection).toHaveBeenCalledTimes(1);
+  });
+
+  it("session_superseded dispatches onSessionSuperseded with fields", async () => {
+    await client.connect();
+    ws.onopen?.();
+    const cb = makeCallbacks();
+    (client as unknown as { callbacks: ConnectionCallbacks }).callbacks = cb;
+    const env: Envelope = {
+      version: COORDINATION_PROTOCOL_VERSION,
+      messageId: "m-superseded",
+      type: "session_superseded",
+      supersededGeneration: 3,
+      transferredToDevice: "dev-b",
+      sessionId: "sess-a",
+      expectedGeneration: 3,
+      seq: 9,
+    };
+    client.internalHandleEnvelope(env);
+    expect(cb.onSessionSuperseded).toHaveBeenCalledTimes(1);
+    expect(cb.onSessionSuperseded).toHaveBeenCalledWith(env);
   });
 
   it("lastSeq is tracked and sent in the next hello", async () => {

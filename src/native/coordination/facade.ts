@@ -651,6 +651,9 @@ export class NativeCoordinationClient implements CoordinationClient {
       case "handoff_failed":
         this.callbacks.onHandoffFailed(env);
         break;
+      case "session_superseded":
+        this.callbacks.onSessionSuperseded(env);
+        break;
       case "error":
         this.callbacks.onError(env.code, env.reason);
         break;
