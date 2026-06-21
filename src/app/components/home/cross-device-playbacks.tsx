@@ -258,6 +258,21 @@ function DevicePlaybackCard({
   };
 
   const handleRelay = () => {
+    // If currently remote controlling, exit remote control first
+    const isRemoteActive = usePlayerStore.getState().remoteControl.active;
+    if (isRemoteActive) {
+      usePlayerStore.setState({
+        remoteControl: {
+          active: false,
+          device: null,
+          sendCommand: null,
+        },
+      });
+      usePlayerStore.getState().actions.setPlayingState(false);
+      setControlledDevice(null);
+      toast.info("已退出远程控制");
+    }
+
     setIsRelaying(true);
     manager.requestHandoffCandidate(
       device.id,
@@ -270,6 +285,7 @@ function DevicePlaybackCard({
       setIsRelaying(false);
     }, 15000);
   };
+
 
   return (
     <div
