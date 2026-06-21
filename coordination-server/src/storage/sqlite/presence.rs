@@ -72,14 +72,4 @@ impl PresenceRepository for SqlitePresenceRepository {
             .await
             .map_err(|e| CoordinationError::internal(e.to_string()))
     }
-
-    async fn set_seq(&self, device_id: Uuid, seq: i64) -> Result<(), CoordinationError> {
-        sqlx::query("UPDATE device_presence SET last_seq = ? WHERE device_id = ?")
-            .bind(seq)
-            .bind(device_id.to_string())
-            .execute(&self.pool)
-            .await
-            .map_err(|e| CoordinationError::internal(e.to_string()))?;
-        Ok(())
-    }
 }

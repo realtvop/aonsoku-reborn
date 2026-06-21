@@ -184,6 +184,54 @@ impl SessionRepository for SqliteSessionRepository {
         Ok(row.0)
     }
 
+    async fn bump_and_transfer(
+        &self,
+        id: Uuid,
+        transferred_to_device: Uuid,
+        transferred_to_session: Uuid,
+    ) -> Result<i64, CoordinationError> {
+        // Single transaction: bump generation and mark transferred atomically
+        // (design §11.1 step 6, §14). A crash mid-way cannot leave the session
+        // with a bumped generation but not transferred.
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| CoordinationError::internal(e.to_string()))?;
+        let now = Utc::now();
+        let res = sqlx::query(
+            "UPDATE playback_sessions
+             SET generation = generation + 1,
+                 status = 'transferred',
+                 transferred_to_device = ?,
+                 transferred_to_session = ?,
+                 updated_at = ?
+             WHERE id = ?",
+        )
+        .bind(transferred_to_device.to_string())
+        .bind(transferred_to_session.to_string())
+        .bind(now)
+        .bind(id.to_string())
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| CoordinationError::internal(e.to_string()))?;
+        if res.rows_affected() == 0 {
+            return Err(CoordinationError::new(
+                ErrorCode::NotFound,
+                "session not found",
+            ));
+        }
+        let row: (i64,) = sqlx::query_as("SELECT generation FROM playback_sessions WHERE id = ?")
+            .bind(id.to_string())
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|e| CoordinationError::internal(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| CoordinationError::internal(e.to_string()))?;
+        Ok(row.0)
+    }
+
     async fn delete_transferred_before(
         &self,
         cutoff: DateTime<Utc>,

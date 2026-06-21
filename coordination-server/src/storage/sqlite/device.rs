@@ -126,21 +126,6 @@ impl DeviceRepository for SqliteDeviceRepository {
         Ok(())
     }
 
-    async fn mark_offline(&self, _id: Uuid, _at: DateTime<Utc>) -> Result<(), CoordinationError> {
-        // Keep last_online_at as the last *online* moment; don't overwrite it.
-        Ok(())
-    }
-
-    async fn set_history_cursor(&self, id: Uuid, cursor: i64) -> Result<(), CoordinationError> {
-        sqlx::query("UPDATE devices SET history_sync_cursor = ? WHERE id = ?")
-            .bind(cursor)
-            .bind(id.to_string())
-            .execute(&self.pool)
-            .await
-            .map_err(|e| CoordinationError::internal(e.to_string()))?;
-        Ok(())
-    }
-
     async fn mark_legacy_imported(&self, id: Uuid) -> Result<(), CoordinationError> {
         sqlx::query("UPDATE devices SET legacy_history_imported = 1 WHERE id = ?")
             .bind(id.to_string())
@@ -160,20 +145,6 @@ impl DeviceRepository for SqliteDeviceRepository {
         sqlx::query("UPDATE devices SET refresh_token_hash = ?, refresh_token_family = ?, refresh_token_last_used_at = ? WHERE id = ?")
             .bind(new_hash)
             .bind(new_family.to_string())
-            .bind(used_at)
-            .bind(id.to_string())
-            .execute(&self.pool)
-            .await
-            .map_err(|e| CoordinationError::internal(e.to_string()))?;
-        Ok(())
-    }
-
-    async fn touch_refresh_token(
-        &self,
-        id: Uuid,
-        used_at: DateTime<Utc>,
-    ) -> Result<(), CoordinationError> {
-        sqlx::query("UPDATE devices SET refresh_token_last_used_at = ? WHERE id = ?")
             .bind(used_at)
             .bind(id.to_string())
             .execute(&self.pool)

@@ -16,8 +16,7 @@ use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLaye
 use crate::config::Config;
 use crate::errors::{ApiError, CoordinationError};
 use crate::handoff::HandoffCoordinator;
-use crate::realtime::ConnectionRegistry;
-use crate::storage::repository::SessionRepository;
+use crate::realtime::{ConnectionRegistry, SessionCache};
 use crate::storage::sqlite::SqliteRepositories;
 
 /// Shared application state.
@@ -28,17 +27,23 @@ pub struct AppState {
     pub repos: SqliteRepositories,
     pub realtime: Arc<ConnectionRegistry>,
     pub handoff: Arc<HandoffCoordinator>,
+    /// In-memory front for `repos.sessions`. Snapshot upserts hit memory;
+    /// authoritative transitions and a periodic ticker flush to SQLite
+    /// (design §9.2 — debounced persistence).
+    pub session_cache: Arc<SessionCache>,
     ready: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl AppState {
     pub fn new(config: Arc<Config>, pool: SqlitePool, repos: SqliteRepositories) -> Self {
+        let session_cache = Arc::new(SessionCache::new(Arc::new(repos.sessions.clone())));
         Self {
             config,
             pool,
             repos,
             realtime: Arc::new(ConnectionRegistry::new()),
             handoff: Arc::new(HandoffCoordinator::new()),
+            session_cache,
             ready: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
@@ -102,9 +107,40 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
     state.mark_ready();
 
     let router = build_router(state.clone());
+    // Spawn the dirty-session flush ticker (design §9.2). Debounced snapshot
+    // upserts live in `session_cache`; this task periodically flushes them to
+    // SQLite so a crash loses at most `snapshot_flush_interval` of snapshots.
+    let flush_state = state.clone();
+    let flush_handle = tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(flush_state.config.snapshot_flush_interval);
+        // Skip the first immediate tick — nothing is dirty at startup.
+        ticker.tick().await;
+        loop {
+            ticker.tick().await;
+            match flush_state.session_cache.flush_dirty().await {
+                Ok(n) if n > 0 => {
+                    tracing::debug!(
+                        target: "coordination::session_cache",
+                        flushed = n,
+                        "flushed dirty sessions to sqlite"
+                    );
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    tracing::warn!(
+                        target: "coordination::session_cache",
+                        error = ?e,
+                        "dirty-session flush failed"
+                    );
+                }
+            }
+        }
+    });
+
     // Spawn the transferred-session GC task (design §11.3). It periodically
     // deletes `transferred` session rows older than `transferred_retention`
-    // to bound database growth from repeated handoffs.
+    // to bound database growth from repeated handoffs. Goes through the cache
+    // so the in-memory map stays consistent with the backing store.
     let gc_state = state.clone();
     let gc_handle = tokio::spawn(async move {
         let mut ticker = tokio::time::interval(gc_state.config.transferred_gc_interval);
@@ -115,8 +151,7 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
             ticker.tick().await;
             let cutoff = chrono::Utc::now() - gc_state.config.transferred_retention;
             match gc_state
-                .repos
-                .sessions
+                .session_cache
                 .delete_transferred_before(cutoff)
                 .await
             {
@@ -135,6 +170,7 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
     tracing::info!(addr = %config.listen, "coordination server listening");
     axum::serve(listener, router).await?;
     gc_handle.abort();
+    flush_handle.abort();
     Ok(())
 }
 

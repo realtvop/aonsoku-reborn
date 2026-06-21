@@ -80,20 +80,15 @@ async fn run_ws(socket: WebSocket, state: AppState, ticket: String) {
     };
     registry.register(conn);
 
-    // Mark device online in SQLite presence.
-    let presence = crate::storage::models::DevicePresence {
-        device_id,
-        account_id,
-        is_online: true,
-        last_seen_at: Some(chrono::Utc::now()),
-        last_seq: 0,
-    };
-    let _ = state.repos.presence.upsert(&presence).await;
-    let _ = state
-        .repos
-        .devices
-        .mark_online(device_id, chrono::Utc::now())
-        .await;
+    // Online status is tracked solely by the in-memory registry; the
+    // `device_presence` and `devices.last_online_at` rows are only touched on
+    // disconnect to persist the "last seen online" moment. This avoids a
+    // SQLite write on every connect and every 15s heartbeat (design §9.2 —
+    // presence is authoritative in memory while connected).
+
+    // Prime the session cache for this account so subsequent reads/handoffs
+    // are served from memory (design §9.2 — debounced persistence).
+    let _ = state.session_cache.prime_account(account_id).await;
 
     tracing::info!(target: "coordination::ws", device = %device_id, "websocket connected");
 
@@ -191,12 +186,17 @@ async fn run_ws(socket: WebSocket, state: AppState, ticket: String) {
     }
     hb_handle.abort();
 
-    // Mark offline.
+    // Mark offline: drop the in-memory connection, persist the last-online
+    // moment and a presence row with is_online=false. While connected, online
+    // status was served from the registry; this write records the "last seen
+    // online" timestamp for the device list API and leaves a tombstone so
+    // consumers reading presence after a restart see the device as offline.
     registry.unregister(device_id);
+    let now = chrono::Utc::now();
     let _ = state
         .repos
         .devices
-        .mark_offline(device_id, chrono::Utc::now())
+        .mark_online(device_id, now)
         .await;
     let _ = state
         .repos
@@ -205,7 +205,7 @@ async fn run_ws(socket: WebSocket, state: AppState, ticket: String) {
             device_id,
             account_id,
             is_online: false,
-            last_seen_at: Some(chrono::Utc::now()),
+            last_seen_at: Some(now),
             last_seq: 0,
         })
         .await;
@@ -215,11 +215,10 @@ async fn run_ws(socket: WebSocket, state: AppState, ticket: String) {
     // enforced. Without this, the session stays Online in the DB and
     // offline_handoff (handoff.rs:261) rejects with BadMessage.
     let now = chrono::Utc::now();
-    if let Ok(Some(session)) = state.repos.sessions.find_active_for_device(device_id).await {
+    if let Ok(Some(session)) = state.session_cache.find_active_for_device(device_id).await {
         if session.status != SessionStatus::Transferred {
             let _ = state
-                .repos
-                .sessions
+                .session_cache
                 .set_status(session.id, SessionStatus::Offline, now)
                 .await;
         }
@@ -335,18 +334,8 @@ async fn handle_inbound(
                 payload: Payload::HeartbeatAck { server_time },
             };
             let _ = registry.send(device_id, ack);
-            // Update presence.
-            let _ = state
-                .repos
-                .presence
-                .upsert(&crate::storage::models::DevicePresence {
-                    device_id,
-                    account_id,
-                    is_online: true,
-                    last_seen_at: Some(chrono::Utc::now()),
-                    last_seq: seq as i64,
-                })
-                .await;
+            // Heartbeat does not write to SQLite — online status lives in the
+            // in-memory registry. Presence is persisted only on disconnect.
         }
         Payload::Snapshot {
             session_id,
@@ -405,7 +394,7 @@ async fn handle_inbound(
             // already exists and was transferred to another device, A is
             // trying to publish to a session it no longer owns. Reject the
             // write and instruct A to align its generation and pause.
-            if let Ok(Some(existing)) = state.repos.sessions.find_by_id(actual_session_id).await {
+            if let Ok(Some(existing)) = state.session_cache.find_by_id(actual_session_id).await {
                 if existing.status == SessionStatus::Transferred
                     && existing
                         .transferred_to_device
@@ -450,8 +439,7 @@ async fn handle_inbound(
                 updated_at: chrono::Utc::now(),
             };
             if let Err(err) = state
-                .repos
-                .sessions
+                .session_cache
                 .upsert_snapshot(&session, &snapshot_json)
                 .await
             {
@@ -464,8 +452,7 @@ async fn handle_inbound(
             // sessions from the same device, so hard-delete them now — before
             // broadcasting, so peers never see a stale offline card.
             if let Err(err) = state
-                .repos
-                .sessions
+                .session_cache
                 .delete_offline_for_device(device_id, Some(actual_session_id))
                 .await
             {
@@ -763,7 +750,7 @@ async fn handle_inbound(
                 let _ = state
                     .handoff
                     .start_transaction(
-                        &state.repos.sessions,
+                        &*state.session_cache,
                         registry,
                         *transaction_id,
                         source_device,
@@ -779,7 +766,7 @@ async fn handle_inbound(
                 match state
                     .handoff
                     .offline_handoff(
-                        &state.repos.sessions,
+                        &*state.session_cache,
                         registry,
                         source_device,
                         session,
@@ -791,8 +778,7 @@ async fn handle_inbound(
                     Ok(new_generation) => {
                         // Reload the session and replay A's latest snapshot to B.
                         let snapshot = state
-                            .repos
-                            .sessions
+                            .session_cache
                             .find_by_id(session)
                             .await
                             .ok()
@@ -878,7 +864,7 @@ async fn handle_inbound(
             match state
                 .handoff
                 .commit_relinquish(
-                    &state.repos.sessions,
+                    &*state.session_cache,
                     registry,
                     *transaction_id,
                     snapshot.clone(),
@@ -986,7 +972,7 @@ async fn replay_offline_snapshots_to(
         return;
     }
     let ttl = state.config.offline_snapshot_ttl;
-    let sessions = match state.repos.sessions.list_for_account(account_id).await {
+    let sessions = match state.session_cache.list_for_account(account_id).await {
         Ok(s) => s,
         Err(err) => {
             tracing::warn!(target: "coordination::ws", "replay: list sessions failed: {:?}", err);
@@ -1442,21 +1428,24 @@ mod tests {
         };
         handle_inbound(&state, &registry, dev_a.id, acc.id, Uuid::new_v4(), 0, env).await;
 
-        // The stale Offline session must be hard-deleted.
+        // The stale Offline session must be hard-deleted (the cache forwards
+        // delete_offline_for_device to the backing store, so this is visible
+        // immediately).
         assert!(
             state
-                .repos
-                .sessions
+                .session_cache
                 .find_by_id(stale_session_id)
                 .await
                 .unwrap()
                 .is_none(),
             "stale offline session must be cleared when A publishes a fresh snapshot"
         );
-        // The fresh session must exist as Online.
+        // The fresh session exists in the cache as Online. The debounced
+        // upsert has not yet hit SQLite, so flush to materialise the row before
+        // asserting persistence.
+        state.session_cache.flush_dirty().await.unwrap();
         let fresh = state
-            .repos
-            .sessions
+            .session_cache
             .find_by_id(fresh_session_id)
             .await
             .unwrap()

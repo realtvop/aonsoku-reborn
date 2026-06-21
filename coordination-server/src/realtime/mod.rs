@@ -12,6 +12,8 @@
 
 pub mod conn;
 pub mod registry;
+pub mod session_cache;
 
 pub use conn::handle_ws;
 pub use registry::{ConnectionRegistry, DeviceConnection};
+pub use session_cache::SessionCache;

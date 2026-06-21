@@ -101,6 +101,12 @@ pub struct Config {
     pub transferred_retention: chrono::Duration,
     /// Interval between transferred-session GC sweeps.
     pub transferred_gc_interval: std::time::Duration,
+    /// Interval between background flushes of dirty in-memory playback
+    /// sessions to SQLite (design §9.2). Snapshot upserts are debounced:
+    /// they hit the cache immediately and the backing store at most once
+    /// per interval. Authoritative state transitions (Offline/Transferred/
+    /// generation bumps) flush immediately regardless of this interval.
+    pub snapshot_flush_interval: std::time::Duration,
 }
 
 impl Config {
@@ -133,6 +139,11 @@ impl Config {
             tombstone_retention: chrono::Duration::days(30),
             transferred_retention: chrono::Duration::days(7),
             transferred_gc_interval: std::time::Duration::from_secs(24 * 60 * 60),
+            // 30s balances write amplification against recovery granularity:
+            // at most ~30s of snapshots are lost on a crash between status
+            // transitions, and the SQLite write rate drops ~6x vs the 5s
+            // per-snapshot baseline.
+            snapshot_flush_interval: std::time::Duration::from_secs(30),
         }
     }
 

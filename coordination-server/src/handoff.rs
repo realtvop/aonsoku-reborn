@@ -187,16 +187,16 @@ impl HandoffCoordinator {
             ));
         }
 
-        // CAS commit: bump the generation and mark the session transferred.
-        // The new session for B is created by the caller; here we just transfer.
-        let new_generation = session_repo.bump_generation(txn.source_session_id).await?;
-        // Mark source session as transferred to B's device.
-        session_repo
-            .transfer(
+        // CAS commit: atomically bump the generation and mark the source
+        // session transferred in a single SQLite transaction (design §11.1
+        // step 6, §14 — the two operations must commit together so a crash
+        // cannot leave the session with a bumped generation but not yet
+        // transferred). The target session id is the final_snapshot's
+        // session_id; the new session for B is created by the caller.
+        let new_generation = session_repo
+            .bump_and_transfer(
                 txn.source_session_id,
-                new_generation,
                 txn.target_device_id,
-                // The target session id is the final_snapshot's session_id.
                 final_snapshot.session_id,
             )
             .await?;
@@ -280,15 +280,11 @@ impl HandoffCoordinator {
             ));
         }
 
-        // Promote A's generation and grant to B.
-        let new_generation = session_repo.bump_generation(source_session_id).await?;
-        session_repo
-            .transfer(
-                source_session_id,
-                new_generation,
-                target_device_id,
-                source_session_id, // B resumes the same logical session
-            )
+        // Atomically promote A's generation and grant to B in a single
+        // transaction (design §11.1 step 6, §14). B resumes the same logical
+        // session, so the transferred_to_session is the source session itself.
+        let new_generation = session_repo
+            .bump_and_transfer(source_session_id, target_device_id, source_session_id)
             .await?;
 
         Ok(new_generation)

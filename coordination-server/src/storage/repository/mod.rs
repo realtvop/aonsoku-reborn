@@ -21,9 +21,7 @@ pub trait AccountRepository: Send + Sync + 'static {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Account>, CoordinationError>;
     async fn find_by_lookup_key(&self, key: &str) -> Result<Option<Account>, CoordinationError>;
     async fn set_history_limit(&self, id: Uuid, limit: u32) -> Result<Account, CoordinationError>;
-    async fn bump_history_generation(&self, id: Uuid) -> Result<Account, CoordinationError>;
     async fn delete_account(&self, id: Uuid) -> Result<(), CoordinationError>;
-    async fn touch(&self, id: Uuid) -> Result<(), CoordinationError>;
 }
 
 #[async_trait]
@@ -44,19 +42,12 @@ pub trait DeviceRepository: Send + Sync + 'static {
     async fn rename(&self, id: Uuid, name: &str) -> Result<Device, CoordinationError>;
     async fn revoke(&self, id: Uuid) -> Result<Device, CoordinationError>;
     async fn mark_online(&self, id: Uuid, at: DateTime<Utc>) -> Result<(), CoordinationError>;
-    async fn mark_offline(&self, id: Uuid, at: DateTime<Utc>) -> Result<(), CoordinationError>;
-    async fn set_history_cursor(&self, id: Uuid, cursor: i64) -> Result<(), CoordinationError>;
     async fn mark_legacy_imported(&self, id: Uuid) -> Result<(), CoordinationError>;
     async fn rotate_refresh_token(
         &self,
         id: Uuid,
         new_hash: &str,
         new_family: Uuid,
-        used_at: DateTime<Utc>,
-    ) -> Result<(), CoordinationError>;
-    async fn touch_refresh_token(
-        &self,
-        id: Uuid,
         used_at: DateTime<Utc>,
     ) -> Result<(), CoordinationError>;
 }
@@ -91,6 +82,17 @@ pub trait SessionRepository: Send + Sync + 'static {
         transferred_to_session: Uuid,
     ) -> Result<(), CoordinationError>;
     async fn bump_generation(&self, id: Uuid) -> Result<i64, CoordinationError>;
+    /// Atomically bump a session's generation and mark it transferred in a
+    /// single transaction (design §11.1 step 6, §14). Returns the new
+    /// generation. Equivalent to calling `bump_generation` then `transfer`
+    /// but guaranteed atomic — a crash between the two cannot leave the
+    /// session with a bumped generation but not yet transferred.
+    async fn bump_and_transfer(
+        &self,
+        id: Uuid,
+        transferred_to_device: Uuid,
+        transferred_to_session: Uuid,
+    ) -> Result<i64, CoordinationError>;
     /// Delete sessions in the `transferred` status whose `updated_at` is
     /// older than `cutoff`. Returns the number of rows removed. Used by the
     /// GC task to bound database growth (design §11.3).
@@ -150,7 +152,6 @@ pub trait PresenceRepository: Send + Sync + 'static {
         &self,
         account_id: Uuid,
     ) -> Result<Vec<DevicePresence>, CoordinationError>;
-    async fn set_seq(&self, device_id: Uuid, seq: i64) -> Result<(), CoordinationError>;
 }
 
 #[async_trait]

@@ -102,34 +102,10 @@ impl AccountRepository for SqliteAccountRepository {
             .ok_or_else(|| CoordinationError::new(ErrorCode::NotFound, "account not found"))
     }
 
-    async fn bump_history_generation(&self, id: Uuid) -> Result<Account, CoordinationError> {
-        let now = Utc::now();
-        sqlx::query("UPDATE accounts SET history_generation = history_generation + 1, updated_at = ? WHERE id = ?")
-            .bind(now)
-            .bind(id.to_string())
-            .execute(&self.pool)
-            .await
-            .map_err(|e| CoordinationError::internal(e.to_string()))?;
-        self.find_by_id(id)
-            .await?
-            .ok_or_else(|| CoordinationError::new(ErrorCode::NotFound, "account not found"))
-    }
-
     async fn delete_account(&self, id: Uuid) -> Result<(), CoordinationError> {
         let now = Utc::now();
         sqlx::query("UPDATE accounts SET deleted_at = ?, updated_at = ? WHERE id = ?")
             .bind(now)
-            .bind(now)
-            .bind(id.to_string())
-            .execute(&self.pool)
-            .await
-            .map_err(|e| CoordinationError::internal(e.to_string()))?;
-        Ok(())
-    }
-
-    async fn touch(&self, id: Uuid) -> Result<(), CoordinationError> {
-        let now = Utc::now();
-        sqlx::query("UPDATE accounts SET updated_at = ? WHERE id = ?")
             .bind(now)
             .bind(id.to_string())
             .execute(&self.pool)
@@ -161,15 +137,6 @@ mod tests {
         let b = repo.upsert_by_lookup_key("k1", 100).await.unwrap();
         assert_eq!(a.id, b.id);
         assert_eq!(a.history_limit, 100);
-    }
-
-    #[tokio::test]
-    async fn bump_generation_increments() {
-        let (_dir, pool) = setup().await;
-        let repo = SqliteAccountRepository::new(pool);
-        let a = repo.upsert_by_lookup_key("k2", 100).await.unwrap();
-        let b = repo.bump_history_generation(a.id).await.unwrap();
-        assert_eq!(b.history_generation, a.history_generation + 1);
     }
 
     #[tokio::test]

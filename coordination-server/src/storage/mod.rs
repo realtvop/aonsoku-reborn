@@ -5,6 +5,7 @@
 //! that hide SQL details (design §5.1). The server runs migrations on boot
 //! before accepting traffic (design §14).
 
+pub mod inmemory;
 pub mod models;
 pub mod repository;
 pub mod sqlite;
