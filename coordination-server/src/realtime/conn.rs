@@ -5,6 +5,7 @@
 //! processes incoming envelopes. Outgoing envelopes are sent through the
 //! connection registry's channel.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::{
@@ -24,7 +25,7 @@ use crate::protocol::{
 };
 use crate::realtime::registry::{ConnectionRegistry, DeviceConnection};
 use crate::server::AppState;
-use crate::storage::models::SessionStatus;
+use crate::storage::models::{PlaybackSession, SessionStatus};
 use crate::storage::repository::{
     DeviceRepository, PresenceRepository, SessionRepository, TicketRepository,
 };
@@ -455,6 +456,20 @@ async fn handle_inbound(
                 .await
             {
                 tracing::error!(target: "coordination::ws", "failed to upsert snapshot: {:?}", err);
+            }
+
+            // Invariant (design §9.2 overwrite semantics, §11.3): only this
+            // device's most recent activity may remain as an offline-relay
+            // candidate. A fresh snapshot supersedes any older frozen offline
+            // sessions from the same device, so hard-delete them now — before
+            // broadcasting, so peers never see a stale offline card.
+            if let Err(err) = state
+                .repos
+                .sessions
+                .delete_offline_for_device(device_id, Some(actual_session_id))
+                .await
+            {
+                tracing::warn!(target: "coordination::ws", "delete_offline_for_device failed: {:?}", err);
             }
 
             // Broadcast to all other online devices on the same account.
@@ -953,6 +968,13 @@ impl WithMessageId for Envelope {
 /// state in the cross-device panel and offer the offline handoff action.
 ///
 /// `exclude_device_id` skips the disconnected/connecting device itself.
+///
+/// Defensively caps at one offline card per source device: when a device has
+/// more than one in-window `Offline` row (e.g. a stale row that survived
+/// `delete_offline_for_device` due to a race, or a server restart), only the
+/// row with the most recent `last_snapshot_at` (tie-broken by `updated_at`) is
+/// emitted. This keeps the cross-device panel to one "continue on this
+/// device" affordance per peer (design §11.3, §9.2 overwrite semantics).
 async fn replay_offline_snapshots_to(
     state: &AppState,
     registry: &Arc<ConnectionRegistry>,
@@ -973,7 +995,15 @@ async fn replay_offline_snapshots_to(
     };
     let now = chrono::Utc::now();
     let server_time = now.timestamp();
-    for session in sessions {
+
+    // Select, per source device, the in-window Offline session with the
+    // most recent confirmed snapshot. This is a defensive dedup: the
+    // snapshot-publish path (`handle_inbound(Payload::Snapshot)`) already
+    // hard-deletes older Offline rows for the same device, but races and
+    // server restarts can briefly leave more than one, and replay must
+    // never surface a stale candidate.
+    let mut winners: HashMap<DeviceId, &PlaybackSession> = HashMap::new();
+    for session in &sessions {
         if session.device_id == exclude_device_id {
             continue;
         }
@@ -983,10 +1013,26 @@ async fn replay_offline_snapshots_to(
         if session.transferred_to_device.is_some() {
             continue;
         }
-        let within_ttl = session.offline_at.map(|t| now - t <= ttl).unwrap_or(false);
-        if !within_ttl {
+        if !session.offline_at.map(|t| now - t <= ttl).unwrap_or(false) {
             continue;
         }
+        if session.last_snapshot.is_none() {
+            continue;
+        }
+        let take = match winners.get(&session.device_id) {
+            None => true,
+            Some(cur) => {
+                let cand = session.last_snapshot_at.unwrap_or(session.updated_at);
+                let existing = cur.last_snapshot_at.unwrap_or(cur.updated_at);
+                cand > existing
+            }
+        };
+        if take {
+            winners.insert(session.device_id, session);
+        }
+    }
+
+    for (_dev, session) in winners {
         let Some(snapshot_json) = session.last_snapshot.as_ref() else {
             continue;
         };
@@ -1305,5 +1351,225 @@ mod tests {
             rx_b.try_recv().is_err(),
             "transferred session must not be replayed"
         );
+    }
+
+    #[tokio::test]
+    async fn snapshot_clears_stale_offline_sessions_for_same_device() {
+        let (_dir, state) = setup_state().await;
+        let registry = state.realtime.clone();
+
+        let acc = state
+            .repos
+            .accounts
+            .upsert_by_lookup_key("lookup-clear", 100)
+            .await
+            .unwrap();
+        let dev_a = state
+            .repos
+            .devices
+            .create(acc.id, "A", "web", None, 0, "h", Uuid::new_v4())
+            .await
+            .unwrap();
+        let dev_b = state
+            .repos
+            .devices
+            .create(acc.id, "B", "web", None, 0, "h2", Uuid::new_v4())
+            .await
+            .unwrap();
+
+        // Stale Offline session left by a prior disconnect of A (within TTL).
+        let stale_snapshot = sample_snapshot();
+        let stale_session_id = Uuid::new_v4();
+        let stale = PlaybackSession {
+            id: stale_session_id,
+            device_id: dev_a.id,
+            account_id: acc.id,
+            generation: 1,
+            snapshot_revision: 1,
+            status: SessionStatus::Online,
+            last_snapshot: Some(serde_json::to_string(&stale_snapshot).unwrap()),
+            last_snapshot_at: Some(Utc::now() - chrono::Duration::hours(1)),
+            offline_at: None,
+            transferred_to_device: None,
+            transferred_to_session: None,
+            created_at: Utc::now() - chrono::Duration::hours(2),
+            updated_at: Utc::now() - chrono::Duration::hours(1),
+        };
+        state
+            .repos
+            .sessions
+            .upsert_snapshot(&stale, &serde_json::to_string(&stale_snapshot).unwrap())
+            .await
+            .unwrap();
+        state
+            .repos
+            .sessions
+            .set_status(stale_session_id, SessionStatus::Offline, Utc::now())
+            .await
+            .unwrap();
+        assert!(state
+            .repos
+            .sessions
+            .find_by_id(stale_session_id)
+            .await
+            .unwrap()
+            .is_some());
+
+        // Register A and B so handle_inbound has a recipient for the fan-out
+        // (the projection goes to B; A is the source).
+        let _rx_a = register_fake_device(&registry, dev_a.id, acc.id);
+        let mut rx_b = register_fake_device(&registry, dev_b.id, acc.id);
+
+        // A publishes a fresh snapshot — a brand-new logical session id.
+        let fresh_session_id = Uuid::new_v4();
+        let fresh_snapshot = sample_snapshot();
+        let env = Envelope {
+            version: PROTOCOL_VERSION,
+            message_id: Uuid::new_v4(),
+            connection_id: Some(Uuid::new_v4()),
+            source_device_id: Some(dev_a.id),
+            target_device_id: None,
+            session_id: Some(fresh_session_id),
+            expected_generation: None,
+            seq: None,
+            server_time: None,
+            payload: Payload::Snapshot {
+                session_id: Some(fresh_session_id),
+                generation: 2,
+                snapshot_revision: 1,
+                snapshot: fresh_snapshot.clone(),
+            },
+        };
+        handle_inbound(&state, &registry, dev_a.id, acc.id, Uuid::new_v4(), 0, env).await;
+
+        // The stale Offline session must be hard-deleted.
+        assert!(
+            state
+                .repos
+                .sessions
+                .find_by_id(stale_session_id)
+                .await
+                .unwrap()
+                .is_none(),
+            "stale offline session must be cleared when A publishes a fresh snapshot"
+        );
+        // The fresh session must exist as Online.
+        let fresh = state
+            .repos
+            .sessions
+            .find_by_id(fresh_session_id)
+            .await
+            .unwrap()
+            .expect("fresh session persisted");
+        assert_eq!(fresh.status, SessionStatus::Online);
+        assert_eq!(fresh.generation, 2);
+
+        // B receives the live projection for the fresh session only.
+        let mut saw_fresh = false;
+        while let Ok(env) = rx_b.try_recv() {
+            if let Payload::SnapshotProjection { session_id, .. } = env.payload {
+                assert_ne!(
+                    session_id, stale_session_id,
+                    "stale offline session must not be projected"
+                );
+                if session_id == fresh_session_id {
+                    saw_fresh = true;
+                }
+            }
+        }
+        assert!(saw_fresh, "B must receive the fresh online projection");
+    }
+
+    #[tokio::test]
+    async fn replay_dedups_multiple_offline_sessions_per_device() {
+        let (_dir, state) = setup_state().await;
+        let registry = state.realtime.clone();
+
+        let acc = state
+            .repos
+            .accounts
+            .upsert_by_lookup_key("lookup-dedup", 100)
+            .await
+            .unwrap();
+        let dev_a = state
+            .repos
+            .devices
+            .create(acc.id, "A", "web", None, 0, "h", Uuid::new_v4())
+            .await
+            .unwrap();
+        let dev_b = state
+            .repos
+            .devices
+            .create(acc.id, "B", "web", None, 0, "h2", Uuid::new_v4())
+            .await
+            .unwrap();
+
+        // Two in-window Offline sessions from A: an older one and a newer one.
+        let old_snapshot = sample_snapshot();
+        let old_session_id = Uuid::new_v4();
+        let older_at = Utc::now() - chrono::Duration::hours(3);
+        let old = PlaybackSession {
+            id: old_session_id,
+            device_id: dev_a.id,
+            account_id: acc.id,
+            generation: 1,
+            snapshot_revision: 1,
+            status: SessionStatus::Offline,
+            last_snapshot: Some(serde_json::to_string(&old_snapshot).unwrap()),
+            last_snapshot_at: Some(older_at),
+            offline_at: Some(older_at),
+            transferred_to_device: None,
+            transferred_to_session: None,
+            created_at: older_at,
+            updated_at: older_at,
+        };
+        state
+            .repos
+            .sessions
+            .upsert_snapshot(&old, &serde_json::to_string(&old_snapshot).unwrap())
+            .await
+            .unwrap();
+
+        let new_snapshot = sample_snapshot();
+        let new_session_id = Uuid::new_v4();
+        let newer_at = Utc::now() - chrono::Duration::minutes(10);
+        let new = PlaybackSession {
+            id: new_session_id,
+            device_id: dev_a.id,
+            account_id: acc.id,
+            generation: 1,
+            snapshot_revision: 2,
+            status: SessionStatus::Offline,
+            last_snapshot: Some(serde_json::to_string(&new_snapshot).unwrap()),
+            last_snapshot_at: Some(newer_at),
+            offline_at: Some(newer_at),
+            transferred_to_device: None,
+            transferred_to_session: None,
+            created_at: newer_at,
+            updated_at: newer_at,
+        };
+        state
+            .repos
+            .sessions
+            .upsert_snapshot(&new, &serde_json::to_string(&new_snapshot).unwrap())
+            .await
+            .unwrap();
+
+        let mut rx_b = register_fake_device(&registry, dev_b.id, acc.id);
+
+        replay_offline_snapshots_to(&state, &registry, acc.id, vec![dev_b.id], dev_b.id).await;
+
+        // B must receive exactly one projection, and it must be the newer one.
+        let mut count = 0;
+        while let Ok(env) = rx_b.try_recv() {
+            if let Payload::SnapshotProjection { session_id, .. } = env.payload {
+                count += 1;
+                assert_eq!(
+                    session_id, new_session_id,
+                    "dedup must keep only the most recent offline session per device"
+                );
+            }
+        }
+        assert_eq!(count, 1, "replay must emit one card per source device");
     }
 }

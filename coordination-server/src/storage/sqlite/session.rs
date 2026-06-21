@@ -197,6 +197,30 @@ impl SessionRepository for SqliteSessionRepository {
         .map_err(|e| CoordinationError::internal(e.to_string()))?;
         Ok(res.rows_affected())
     }
+
+    async fn delete_offline_for_device(
+        &self,
+        device_id: Uuid,
+        keep_session_id: Option<Uuid>,
+    ) -> Result<u64, CoordinationError> {
+        let res = match keep_session_id {
+            Some(keep) => sqlx::query(
+                "DELETE FROM playback_sessions
+                     WHERE device_id = ? AND status = 'offline' AND id <> ?",
+            )
+            .bind(device_id.to_string())
+            .bind(keep.to_string()),
+            None => sqlx::query(
+                "DELETE FROM playback_sessions
+                     WHERE device_id = ? AND status = 'offline'",
+            )
+            .bind(device_id.to_string()),
+        }
+        .execute(&self.pool)
+        .await
+        .map_err(|e| CoordinationError::internal(e.to_string()))?;
+        Ok(res.rows_affected())
+    }
 }
 
 #[cfg(test)]
@@ -317,5 +341,74 @@ mod tests {
         assert!(repo.find_by_id(old_s.id).await.unwrap().is_none());
         assert!(repo.find_by_id(recent_s.id).await.unwrap().is_some());
         assert!(repo.find_by_id(online_s.id).await.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn delete_offline_for_device_keeps_current_and_online() {
+        let (_dir, pool, acc, dev) = setup().await;
+        let repo = SqliteSessionRepository::new(pool.clone());
+        let new_dev = SqliteDeviceRepository::new(pool.clone())
+            .create(acc, "P2", "web", None, 0, "h2", Uuid::new_v4())
+            .await
+            .unwrap();
+
+        // Two stale Offline sessions from dev (left by prior disconnects).
+        let off1 = new_session(dev, acc);
+        repo.upsert_snapshot(&off1, "{}").await.unwrap();
+        repo.set_status(off1.id, SessionStatus::Offline, Utc::now())
+            .await
+            .unwrap();
+        let off2 = new_session(dev, acc);
+        repo.upsert_snapshot(&off2, "{}").await.unwrap();
+        repo.set_status(off2.id, SessionStatus::Offline, Utc::now())
+            .await
+            .unwrap();
+
+        // The fresh Online session from dev — the new activity to keep.
+        let online = new_session(dev, acc);
+        repo.upsert_snapshot(&online, "{}").await.unwrap();
+
+        // A transferred session from dev must be left untouched (GC owns it).
+        let target = new_session(new_dev.id, acc);
+        repo.upsert_snapshot(&target, "{}").await.unwrap();
+        let xfer = new_session(dev, acc);
+        repo.upsert_snapshot(&xfer, "{}").await.unwrap();
+        repo.transfer(xfer.id, 2, new_dev.id, target.id)
+            .await
+            .unwrap();
+
+        // Publish a fresh snapshot for `online`; cleanup keeps online.id.
+        let removed = repo
+            .delete_offline_for_device(dev, Some(online.id))
+            .await
+            .unwrap();
+        assert_eq!(removed, 2);
+        assert!(repo.find_by_id(off1.id).await.unwrap().is_none());
+        assert!(repo.find_by_id(off2.id).await.unwrap().is_none());
+        // Online and Transferred rows survive.
+        assert!(repo.find_by_id(online.id).await.unwrap().is_some());
+        assert!(repo.find_by_id(xfer.id).await.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn delete_offline_for_device_without_keep_removes_all_offline() {
+        let (_dir, pool, acc, dev) = setup().await;
+        let repo = SqliteSessionRepository::new(pool);
+
+        let off1 = new_session(dev, acc);
+        repo.upsert_snapshot(&off1, "{}").await.unwrap();
+        repo.set_status(off1.id, SessionStatus::Offline, Utc::now())
+            .await
+            .unwrap();
+        let off2 = new_session(dev, acc);
+        repo.upsert_snapshot(&off2, "{}").await.unwrap();
+        repo.set_status(off2.id, SessionStatus::Offline, Utc::now())
+            .await
+            .unwrap();
+
+        let removed = repo.delete_offline_for_device(dev, None).await.unwrap();
+        assert_eq!(removed, 2);
+        assert!(repo.find_by_id(off1.id).await.unwrap().is_none());
+        assert!(repo.find_by_id(off2.id).await.unwrap().is_none());
     }
 }

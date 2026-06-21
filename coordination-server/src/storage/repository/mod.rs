@@ -98,6 +98,18 @@ pub trait SessionRepository: Send + Sync + 'static {
         &self,
         cutoff: DateTime<Utc>,
     ) -> Result<u64, CoordinationError>;
+    /// Hard-delete every `Offline`-status playback_sessions row owned by
+    /// `device_id` except the one with the given `keep_session_id` (when
+    /// `Some`). Returns the number of rows removed. Called when a device
+    /// publishes a fresh snapshot: any older frozen offline candidates from
+    /// the same device are no longer the "last activity" and must not remain
+    /// replayable for offline handoff (design §11.3, §9.2 overwrite
+    /// semantics — offline relay keeps only the last activity per device).
+    async fn delete_offline_for_device(
+        &self,
+        device_id: Uuid,
+        keep_session_id: Option<Uuid>,
+    ) -> Result<u64, CoordinationError>;
 }
 
 #[async_trait]
