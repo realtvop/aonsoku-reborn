@@ -400,12 +400,14 @@ export function Player() {
         </div>
         {/* Mobile Controls - Only Play/Pause and Next */}
         <div className="flex md:hidden items-center gap-0.5">
-          <DevicePanel
-            open={panelOpen}
-            onOpenChange={setPanelOpen}
-            actions={deviceActions}
-            trigger={<PlayerDeviceButton onClick={(e) => { e.stopPropagation(); setPanelOpen(!panelOpen); }} isActive={panelOpen} />}
-          />
+          {isMobile && (
+            <DevicePanel
+              open={panelOpen}
+              onOpenChange={setPanelOpen}
+              actions={deviceActions}
+              trigger={<PlayerDeviceButton onClick={(e) => { e.stopPropagation(); setPanelOpen(!panelOpen); }} isActive={panelOpen} />}
+            />
+          )}
           <Button
             variant="ghost"
             disabled={!song && !radio}
@@ -449,12 +451,14 @@ export function Player() {
               disabled={!song && !radio}
             />
 
-            <DevicePanel
-              open={panelOpen}
-              onOpenChange={setPanelOpen}
-              actions={deviceActions}
-              trigger={<PlayerDeviceButton onClick={(e) => { e.stopPropagation(); setPanelOpen(!panelOpen); }} isActive={panelOpen} />}
-            />
+            {!isMobile && (
+              <DevicePanel
+                open={panelOpen}
+                onOpenChange={setPanelOpen}
+                actions={deviceActions}
+                trigger={<PlayerDeviceButton onClick={(e) => { e.stopPropagation(); setPanelOpen(!panelOpen); }} isActive={panelOpen} />}
+              />
+            )}
 
             {isSong && hasMiniPlayerSupport && <MemoMiniPlayerButton />}
           </div>
