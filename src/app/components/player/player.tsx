@@ -421,9 +421,9 @@ export function Player() {
               disabled={!song && !radio}
             />
 
-            {isSong && hasMiniPlayerSupport && <MemoMiniPlayerButton />}
-
             <PlayerDeviceButton onClick={() => setPanelOpen(true)} isActive={panelOpen} />
+
+            {isSong && hasMiniPlayerSupport && <MemoMiniPlayerButton />}
           </div>
         </div>
       </div>

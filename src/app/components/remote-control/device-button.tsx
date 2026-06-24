@@ -1,5 +1,6 @@
 import { Share2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import clsx from "clsx";
 import { Button } from "@/app/components/ui/button";
 import { SimpleTooltip } from "@/app/components/ui/simple-tooltip";
 
@@ -19,15 +20,18 @@ export function PlayerDeviceButton({ onClick, isActive = false }: PlayerDeviceBu
     >
       <Button
         variant="ghost"
+        size="icon"
         onClick={onClick}
-        className={`size-11 p-0 rounded-lg transition-all duration-200 ${
-          isActive ? "text-primary bg-primary/10" : "text-foreground hover:bg-accent/40"
-        }`}
+        className={clsx(
+          "rounded-full w-10 h-10 p-2 text-secondary-foreground relative",
+          isActive && "player-button-active"
+        )}
         aria-label={t("settings.crossDevice.title", {
           defaultValue: "Devices",
         })}
+        unfocusable
       >
-        <Share2 className="w-5 h-5" />
+        <Share2 className={clsx("w-4 h-4", isActive && "text-primary")} />
       </Button>
     </SimpleTooltip>
   );
