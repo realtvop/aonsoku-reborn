@@ -82,6 +82,28 @@ function DevicePanelContent({ onOpenChange, actions }: DevicePanelContentProps) 
   const deviceId = useCoordinationStore((state) => state.deviceId);
   const models = useDevicePlaybackModels();
 
+  const sectionsContent = (
+    <div className="flex flex-col gap-5 p-5">
+      <ThisDeviceSection
+        model={models.thisDevice}
+        isControlling={actions.isControlling}
+        controlledDeviceName={actions.controlledDeviceName}
+        onExitControl={actions.exitRemoteControl}
+      />
+
+      <LiveDevicesSection
+        models={models.liveDevices}
+        onControl={actions.enterRemoteControl}
+        onContinue={actions.requestHandoff}
+      />
+
+      <OfflineSnapshotsSection
+        models={models.offlineSnapshots}
+        onContinue={actions.requestHandoff}
+      />
+    </div>
+  );
+
   const handleGoToSettings = () => {
     onOpenChange(false);
     if (isMobile) {
@@ -179,27 +201,13 @@ function DevicePanelContent({ onOpenChange, actions }: DevicePanelContentProps) 
               {t("settings.crossDevice.connect", { defaultValue: "Configure Settings" })}
             </Button>
           </div>
+        ) : isMobile ? (
+          <div className="h-full overflow-y-auto">
+            {sectionsContent}
+          </div>
         ) : (
           <ScrollArea className="h-full">
-            <div className="flex flex-col gap-5 p-5">
-              <ThisDeviceSection
-                model={models.thisDevice}
-                isControlling={actions.isControlling}
-                controlledDeviceName={actions.controlledDeviceName}
-                onExitControl={actions.exitRemoteControl}
-              />
-
-              <LiveDevicesSection
-                models={models.liveDevices}
-                onControl={actions.enterRemoteControl}
-                onContinue={actions.requestHandoff}
-              />
-
-              <OfflineSnapshotsSection
-                models={models.offlineSnapshots}
-                onContinue={actions.requestHandoff}
-              />
-            </div>
+            {sectionsContent}
           </ScrollArea>
         )}
       </div>
