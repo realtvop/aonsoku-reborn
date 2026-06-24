@@ -13,7 +13,6 @@ import { useTranslation } from "react-i18next";
 import { CachedImage } from "@/app/components/cover-image/cached-image";
 import { Button } from "@/app/components/ui/button";
 import { subsonic } from "@/service/subsonic";
-import { convertSecondsToTime } from "@/utils/convertSecondsToTime";
 import type { DevicePlaybackModel } from "./types";
 import { cn } from "@/lib/utils";
 
@@ -68,47 +67,18 @@ export function DevicePlaybackCard({
   isOffline = false,
 }: DevicePlaybackCardProps) {
   const { t } = useTranslation();
-  const { device, snapshot, isOnline, projectedProgressSeconds, durationSeconds, lastSeenText } = model;
+  const { device, snapshot, isOnline } = model;
   const { data: song, isLoading } = useSongInfo(snapshot?.songId);
-
-  const progressPercent = durationSeconds > 0
-    ? (projectedProgressSeconds / durationSeconds) * 100
-    : 0;
 
   return (
     <div
       className={cn(
-        "group relative flex flex-col gap-3 p-4 rounded-xl border transition-all duration-300",
-        "bg-card/30 backdrop-blur-md border-border/40 hover:border-border/80 hover:bg-card/50 shadow-sm"
+        "bg-card/40 backdrop-blur-md border rounded-xl p-3 flex items-center justify-between gap-4 transition-all duration-300",
+        "border-border/40 hover:border-border/80 hover:bg-card/50 shadow-sm"
       )}
     >
-      {/* Top row: Device Info & Status Indicator */}
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <div className="flex items-center gap-1.5 font-medium text-foreground/80">
-          {getDeviceIcon(device.platform)}
-          <span className="truncate max-w-[150px]">{device.name}</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          {isOnline ? (
-            <span className="flex items-center gap-1">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              <span className="text-[10px] text-emerald-500 uppercase tracking-wider font-semibold">
-                {t("settings.crossDevice.connectionState.connected", { defaultValue: "Online" })}
-              </span>
-            </span>
-          ) : (
-            <span className="text-[10px] uppercase tracking-wider font-medium text-muted-foreground/70">
-              {lastSeenText ? t("settings.crossDevice.device.lastOnline", { defaultValue: "Last online {{time}}", time: lastSeenText }) : t("settings.crossDevice.connectionState.disconnected", { defaultValue: "Offline" })}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Middle row: Album Art & Track details */}
-      <div className="flex items-center gap-3">
+      {/* Track Info & Device Info (Left) */}
+      <div className="flex items-center gap-3 min-w-0 flex-1">
         <div className="relative w-12 h-12 rounded-lg overflow-hidden aspect-square bg-muted flex-shrink-0 shadow-sm border border-border/20">
           {song ? (
             <CachedImage
@@ -142,58 +112,51 @@ export function DevicePlaybackCard({
           )}
         </div>
 
-        <div className="flex flex-col min-w-0 flex-1">
+        <div className="flex flex-col min-w-0 text-left">
           <span className="text-sm font-semibold truncate text-foreground leading-tight">
             {isLoading
               ? t("settings.crossDevice.playback.fetchingSong", { defaultValue: "Fetching song..." })
               : song?.title || t("settings.crossDevice.playback.unknownTrack", { defaultValue: "Unknown track" })}
           </span>
-          <span className="text-xs text-muted-foreground truncate leading-normal mt-0.5">
-            {song?.artist || t("settings.crossDevice.playback.unknownArtist", { defaultValue: "Unknown artist" })}
+          <span className="text-xs text-muted-foreground truncate leading-normal mt-1 flex items-center gap-1.5">
+            <span className="flex items-center gap-1 font-medium text-foreground/80">
+              {getDeviceIcon(device.platform)}
+              {device.name}
+            </span>
+            {song?.artist && (
+              <>
+                <span className="text-muted-foreground/45">•</span>
+                <span className="truncate">{song.artist}</span>
+              </>
+            )}
           </span>
         </div>
       </div>
 
-      {/* Progress timeline */}
-      {snapshot && durationSeconds > 0 && (
-        <div className="flex flex-col gap-1 w-full mt-1">
-          <div className="relative w-full h-1 bg-muted/60 rounded-full overflow-hidden">
-            <div
-              className="absolute left-0 top-0 h-full bg-primary/80 transition-all duration-300 rounded-full"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-          <div className="flex items-center justify-between text-[10px] text-muted-foreground/80 font-mono">
-            <span>{convertSecondsToTime(projectedProgressSeconds)}</span>
-            <span>{convertSecondsToTime(durationSeconds)}</span>
-          </div>
-        </div>
-      )}
-
-      {/* Bottom row: Primary action buttons */}
-      <div className="flex items-center gap-2 mt-1">
+      {/* Action Buttons (Right) */}
+      <div className="flex items-center gap-1 flex-shrink-0">
         {!isOffline && onControl && (
           <Button
-            variant="outline"
-            size="sm"
+            variant="ghost"
+            size="icon"
             onClick={onControl}
-            className="flex-1 h-8 text-xs gap-1.5 font-medium border-border/60 hover:bg-accent/40 active:bg-accent/60 transition-all"
+            className="h-9 w-9 rounded-lg hover:bg-accent/50 text-muted-foreground hover:text-foreground transition-all"
+            title={t("settings.crossDevice.playback.remoteControl", { defaultValue: "Control" })}
           >
-            <MousePointerClick className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
-            {t("settings.crossDevice.playback.remoteControl", { defaultValue: "Control" })}
+            <MousePointerClick className="w-4.5 h-4.5" />
           </Button>
         )}
         {onContinue && (
           <Button
-            variant="secondary"
-            size="sm"
+            variant="ghost"
+            size="icon"
             onClick={onContinue}
-            className="flex-1 h-8 text-xs gap-1.5 font-semibold bg-primary/10 text-primary hover:bg-primary/20 active:bg-primary/30 border border-primary/20 transition-all"
-          >
-            <ArrowRightLeft className="w-3.5 h-3.5" />
-            {isOffline
+            className="h-9 w-9 rounded-lg hover:bg-accent/50 text-muted-foreground hover:text-foreground transition-all"
+            title={isOffline
               ? t("settings.crossDevice.playback.continue", { defaultValue: "Continue" })
               : t("settings.crossDevice.playback.relay", { defaultValue: "Continue here" })}
+          >
+            <ArrowRightLeft className="w-4.5 h-4.5" />
           </Button>
         )}
       </div>
