@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import { PlayerDeviceButton } from "@/app/components/remote-control/device-button";
 import { DevicePanel } from "@/app/components/remote-control/device-panel";
 import { useDevicePlaybackActions } from "@/app/components/remote-control/use-device-playback-actions";
+import { HandoffConfirmationDialog } from "@/app/components/remote-control/handoff-confirmation-dialog";
 import { MiniPlayerButton } from "@/app/components/mini-player/button";
 import { RadioInfo } from "@/app/components/player/radio-info";
 import { TrackInfo } from "@/app/components/player/track-info";
@@ -73,6 +74,13 @@ export function Player() {
   const { t } = useTranslation();
   const [panelOpen, setPanelOpen] = useState(false);
   const deviceActions = useDevicePlaybackActions();
+
+  useEffect(() => {
+    const handleOpen = () => setPanelOpen(true);
+    window.addEventListener("open-device-panel", handleOpen);
+    return () => window.removeEventListener("open-device-panel", handleOpen);
+  }, []);
+
   const radioLabel = t("radios.label");
   const audioRef = useRef<HTMLAudioElement>(null);
   const radioRef = useRef<HTMLAudioElement>(null);
@@ -481,6 +489,14 @@ export function Player() {
           data-testid="player-radio-audio"
         />
       )}
+
+      <HandoffConfirmationDialog
+        open={deviceActions.isConfirmationOpen}
+        onOpenChange={deviceActions.setIsConfirmationOpen}
+        pendingDevice={deviceActions.pendingDevice}
+        onConfirm={deviceActions.confirmLocalReplacement}
+        onCancel={deviceActions.cancelPendingHandoff}
+      />
     </footer>
   );
 }

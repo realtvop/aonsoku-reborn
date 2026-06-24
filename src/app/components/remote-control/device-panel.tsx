@@ -23,6 +23,7 @@ import {
   LiveDevicesSection,
   OfflineSnapshotsSection,
 } from "./sections";
+import { HandoffStatusRow } from "./handoff-status-row";
 import type { DevicePlaybackActions } from "./use-device-playback-actions";
 
 interface DevicePanelProps {
@@ -105,6 +106,8 @@ function DevicePanelContent({ onOpenChange, actions }: DevicePanelContentProps) 
 
   const sectionsContent = (
     <div className="flex flex-col gap-5 p-5">
+      <HandoffStatusRow phase={actions.handoffPhase} error={actions.handoffError} />
+
       <ThisDeviceSection
         model={models.thisDevice}
         isControlling={actions.isControlling}

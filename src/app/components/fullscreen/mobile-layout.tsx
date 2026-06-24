@@ -1,10 +1,11 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, ListChecks, ListMusic, MicVocalIcon, MonitorSpeaker } from "lucide-react";
-import { forwardRef, memo, useState, type ReactNode } from "react";
+import { forwardRef, memo, useState, useEffect, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/app/components/ui/button";
 import { DevicePanel } from "@/app/components/remote-control/device-panel";
 import { useDevicePlaybackActions } from "@/app/components/remote-control/use-device-playback-actions";
+import { HandoffConfirmationDialog } from "@/app/components/remote-control/handoff-confirmation-dialog";
 import { Drawer as DrawerPrimitive } from "vaul";
 import { useFullscreenContrast } from "@/app/hooks/use-fullscreen-contrast";
 import { useHasLyrics } from "@/app/hooks/use-has-lyrics";
@@ -130,6 +131,12 @@ const MobileBottomTabs = memo(function MobileBottomTabs() {
   const [panelOpen, setPanelOpen] = useState(false);
   const deviceActions = useDevicePlaybackActions();
 
+  useEffect(() => {
+    const handleOpen = () => setPanelOpen(true);
+    window.addEventListener("open-device-panel", handleOpen);
+    return () => window.removeEventListener("open-device-panel", handleOpen);
+  }, []);
+
   const lyricsDisabled = hasLyrics === false;
   const customLyricsDisabled =
     !customServerEnabled || customServerUrl.trim().length === 0;
@@ -184,6 +191,13 @@ const MobileBottomTabs = memo(function MobileBottomTabs() {
             active={panelOpen}
           />
         }
+      />
+      <HandoffConfirmationDialog
+        open={deviceActions.isConfirmationOpen}
+        onOpenChange={deviceActions.setIsConfirmationOpen}
+        pendingDevice={deviceActions.pendingDevice}
+        onConfirm={deviceActions.confirmLocalReplacement}
+        onCancel={deviceActions.cancelPendingHandoff}
       />
     </div>
   );
