@@ -1,3 +1,4 @@
+import React from "react";
 import { MonitorSpeaker } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import clsx from "clsx";
@@ -5,11 +6,14 @@ import { Button } from "@/app/components/ui/button";
 import { SimpleTooltip } from "@/app/components/ui/simple-tooltip";
 
 interface PlayerDeviceButtonProps {
-  onClick: () => void;
+  onClick?: () => void;
   isActive?: boolean;
 }
 
-export function PlayerDeviceButton({ onClick, isActive = false }: PlayerDeviceButtonProps) {
+export const PlayerDeviceButton = React.forwardRef<
+  HTMLButtonElement,
+  PlayerDeviceButtonProps & React.ComponentPropsWithoutRef<typeof Button>
+>(({ onClick, isActive = false, ...props }, ref) => {
   const { t } = useTranslation();
 
   return (
@@ -19,6 +23,7 @@ export function PlayerDeviceButton({ onClick, isActive = false }: PlayerDeviceBu
       })}
     >
       <Button
+        ref={ref}
         variant="ghost"
         size="icon"
         onClick={onClick}
@@ -30,9 +35,12 @@ export function PlayerDeviceButton({ onClick, isActive = false }: PlayerDeviceBu
           defaultValue: "Devices",
         })}
         unfocusable
+        {...props}
       >
         <MonitorSpeaker className={clsx("w-4 h-4", isActive && "text-primary")} />
       </Button>
     </SimpleTooltip>
   );
-}
+});
+
+PlayerDeviceButton.displayName = "PlayerDeviceButton";

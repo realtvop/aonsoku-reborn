@@ -1,9 +1,8 @@
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { MonitorSpeaker, Settings, WifiOff } from "lucide-react";
-import { Popover, PopoverContent } from "@/app/components/ui/popover";
-import * as PopoverPrimitive from "@radix-ui/react-popover";
-import { Sheet, SheetContent } from "@/app/components/ui/sheet";
+import { Popover, PopoverTrigger, PopoverContent } from "@/app/components/ui/popover";
+import { Sheet, SheetTrigger, SheetContent } from "@/app/components/ui/sheet";
 import { ScrollArea } from "@/app/components/ui/scroll-area";
 import { Button } from "@/app/components/ui/button";
 import { useCoordinationStore } from "@/coordination/store";
@@ -30,27 +29,25 @@ export function DevicePanel({ open, onOpenChange, actions, trigger }: DevicePane
 
   if (isMobile) {
     return (
-      <>
-        {trigger}
-        <Sheet open={open} onOpenChange={onOpenChange}>
-          <SheetContent
-            side="bottom"
-            className="flex flex-col h-[70vh] w-full p-0 border-t border-border/40 bg-background/95 backdrop-blur-xl"
-          >
-            <DevicePanelContent onOpenChange={onOpenChange} actions={actions} />
-          </SheetContent>
-        </Sheet>
-      </>
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetTrigger asChild>
+          {trigger}
+        </SheetTrigger>
+        <SheetContent
+          side="bottom"
+          className="flex flex-col h-[70vh] w-full p-0 border-t border-border/40 bg-background/95 backdrop-blur-xl"
+        >
+          <DevicePanelContent onOpenChange={onOpenChange} actions={actions} />
+        </SheetContent>
+      </Sheet>
     );
   }
 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverPrimitive.Anchor asChild>
-        <div className="inline-block">
-          {trigger}
-        </div>
-      </PopoverPrimitive.Anchor>
+      <PopoverTrigger asChild>
+        {trigger}
+      </PopoverTrigger>
       <PopoverContent
         align="end"
         side="top"
