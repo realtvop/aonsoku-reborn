@@ -26,6 +26,7 @@ use crate::protocol::{
     HandoffPhase, HandoffState, PlaybackSnapshot, SessionGeneration, SnapshotRevision,
 };
 use crate::realtime::registry::ConnectionRegistry;
+use crate::storage::models::SessionStatus;
 use crate::storage::repository::SessionRepository;
 
 /// In-flight handoff transactions keyed by transaction id.
@@ -41,9 +42,8 @@ impl HandoffCoordinator {
 
     /// Start a handoff transaction after B sends `target_ready` (design §11.1 step 3-4).
     ///
-    /// Checks that A's session generation and snapshot revision still match
-    /// what B observed, then creates a pending transaction and sends
-    /// `prepare_relinquish` to A.
+    /// Checks that A's session generation still matches what B observed,
+    /// then creates a pending transaction and sends `prepare_relinquish` to A.
     #[allow(clippy::too_many_arguments)]
     pub async fn start_transaction(
         &self,
@@ -90,10 +90,10 @@ impl HandoffCoordinator {
                 "source session generation has changed",
             ));
         }
-        if session.snapshot_revision != expected_snapshot_revision {
+        if session.status != SessionStatus::Online || session.transferred_to_device.is_some() {
             return Err(CoordinationError::new(
-                ErrorCode::SourceChanged,
-                "source snapshot has changed",
+                ErrorCode::HandoffConflict,
+                "source session is no longer available for handoff",
             ));
         }
 
@@ -177,10 +177,10 @@ impl HandoffCoordinator {
                 "source session generation changed during relinquish",
             ));
         }
-        if session.snapshot_revision != txn.source_snapshot_revision {
+        if session.status == SessionStatus::Transferred || session.transferred_to_device.is_some() {
             return Err(CoordinationError::new(
-                ErrorCode::SourceChanged,
-                "source snapshot changed during relinquish",
+                ErrorCode::HandoffConflict,
+                "source session was already transferred",
             ));
         }
 
@@ -370,7 +370,7 @@ impl HandoffCoordinator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::{MediaKind, Payload, PROTOCOL_VERSION};
+    use crate::protocol::{MediaKind, PROTOCOL_VERSION, Payload};
     use crate::realtime::registry::DeviceConnection;
     use crate::storage::models::{PlaybackSession, SessionStatus};
     use crate::storage::repository::{AccountRepository, DeviceRepository, SessionRepository};
@@ -517,13 +517,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn start_transaction_tolerates_snapshot_revision_update() {
+        let (_dir, session_repo, session_id) = setup_session_repo().await;
+        let coord = HandoffCoordinator::new();
+        let registry = Arc::new(ConnectionRegistry::new());
+        let state = coord
+            .start_transaction(
+                &session_repo,
+                &registry,
+                Uuid::new_v4(),
+                Uuid::new_v4(),
+                session_id,
+                1,
+                0,
+                Uuid::new_v4(),
+                15,
+            )
+            .await
+            .unwrap();
+        assert_eq!(state.source_session_id, session_id);
+        assert_eq!(state.source_generation, 1);
+    }
+
+    #[tokio::test]
     async fn fail_transaction_notifies_target() {
         let (_dir, session_repo, session_id) = setup_session_repo().await;
         let coord = HandoffCoordinator::new();
         let registry = Arc::new(ConnectionRegistry::new());
         let account_id = Uuid::new_v4();
         let source_device_id = Uuid::new_v4();
-        let target_device_id = Uuid::new_v4();
+        let target_device_id = session_repo
+            .find_by_id(session_id)
+            .await
+            .unwrap()
+            .expect("session exists")
+            .device_id;
         let mut rx_target = register_fake_device(&registry, target_device_id, account_id);
         let transaction_id = Uuid::new_v4();
 
@@ -563,13 +591,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn commit_failure_can_be_reported_to_target() {
+    async fn commit_relinquish_tolerates_snapshot_revision_update() {
         let (_dir, session_repo, session_id) = setup_session_repo().await;
         let coord = HandoffCoordinator::new();
         let registry = Arc::new(ConnectionRegistry::new());
         let account_id = Uuid::new_v4();
         let source_device_id = Uuid::new_v4();
-        let target_device_id = Uuid::new_v4();
+        let target_device_id = session_repo
+            .find_by_id(session_id)
+            .await
+            .unwrap()
+            .expect("session exists")
+            .device_id;
         let mut rx_target = register_fake_device(&registry, target_device_id, account_id);
         let transaction_id = Uuid::new_v4();
 
@@ -595,6 +628,60 @@ mod tests {
             .expect("session exists");
         session.snapshot_revision = 2;
         session_repo.upsert_snapshot(&session, "{}").await.unwrap();
+
+        let new_generation = coord
+            .commit_relinquish(
+                &session_repo,
+                &registry,
+                transaction_id,
+                sample_snapshot(session_id),
+            )
+            .await
+            .unwrap();
+        assert_eq!(new_generation, 2);
+
+        let env = rx_target.recv().await.expect("target received commit");
+        match env.payload {
+            Payload::HandoffCommitted {
+                transaction_id: got_transaction_id,
+                new_generation: got_generation,
+                ..
+            } => {
+                assert_eq!(got_transaction_id, transaction_id);
+                assert_eq!(got_generation, new_generation);
+            }
+            other => panic!("expected HandoffCommitted, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn commit_generation_change_can_be_reported_to_target() {
+        let (_dir, session_repo, session_id) = setup_session_repo().await;
+        let coord = HandoffCoordinator::new();
+        let registry = Arc::new(ConnectionRegistry::new());
+        let account_id = Uuid::new_v4();
+        let source_device_id = Uuid::new_v4();
+        let target_device_id = Uuid::new_v4();
+        let mut rx_target = register_fake_device(&registry, target_device_id, account_id);
+        let transaction_id = Uuid::new_v4();
+
+        coord
+            .start_transaction(
+                &session_repo,
+                &registry,
+                transaction_id,
+                source_device_id,
+                session_id,
+                1,
+                1,
+                target_device_id,
+                15,
+            )
+            .await
+            .unwrap();
+
+        let bumped = session_repo.bump_generation(session_id).await.unwrap();
+        assert_eq!(bumped, 2);
 
         let err = coord
             .commit_relinquish(

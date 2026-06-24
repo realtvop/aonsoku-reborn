@@ -10,8 +10,8 @@ use std::sync::Arc;
 
 use axum::{
     extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
         Query, State,
+        ws::{Message, WebSocket, WebSocketUpgrade},
     },
     response::IntoResponse,
 };
@@ -21,7 +21,7 @@ use uuid::Uuid;
 
 use crate::errors::ErrorCode;
 use crate::protocol::{
-    CapabilitySet, ConnectionId, ConnectionSeq, DeviceId, Envelope, Payload, PROTOCOL_VERSION,
+    CapabilitySet, ConnectionId, ConnectionSeq, DeviceId, Envelope, PROTOCOL_VERSION, Payload,
 };
 use crate::realtime::registry::{ConnectionRegistry, DeviceConnection};
 use crate::server::AppState;
@@ -1516,13 +1516,15 @@ mod tests {
             .set_status(stale_session_id, SessionStatus::Offline, Utc::now())
             .await
             .unwrap();
-        assert!(state
-            .repos
-            .sessions
-            .find_by_id(stale_session_id)
-            .await
-            .unwrap()
-            .is_some());
+        assert!(
+            state
+                .repos
+                .sessions
+                .find_by_id(stale_session_id)
+                .await
+                .unwrap()
+                .is_some()
+        );
 
         // Register A and B so handle_inbound has a recipient for the fan-out
         // (the projection goes to B; A is the source).
@@ -1930,7 +1932,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn target_ready_source_changed_notifies_target() {
+    async fn target_ready_tolerates_snapshot_revision_update() {
         let (_dir, state) = setup_state().await;
         let registry = state.realtime.clone();
 
@@ -1975,7 +1977,7 @@ mod tests {
             .await
             .unwrap();
 
-        let _rx_a = register_fake_device(&registry, dev_a.id, acc.id);
+        let mut rx_a = register_fake_device(&registry, dev_a.id, acc.id);
         let mut rx_b = register_fake_device(&registry, dev_b.id, acc.id);
         let transaction_id = Uuid::new_v4();
         let env = Envelope {
@@ -1999,16 +2001,21 @@ mod tests {
 
         handle_inbound(&state, &registry, dev_b.id, acc.id, Uuid::new_v4(), 0, env).await;
 
-        let env = rx_b.recv().await.expect("B received handoff failure");
+        assert!(
+            rx_b.try_recv().is_err(),
+            "target_ready should not fail only because snapshot_revision changed"
+        );
+        let env = rx_a.recv().await.expect("A received prepare_relinquish");
         match env.payload {
-            Payload::HandoffFailed {
+            Payload::PrepareRelinquish {
                 transaction_id: got_transaction_id,
-                code,
+                expected_snapshot_revision,
+                ..
             } => {
                 assert_eq!(got_transaction_id, transaction_id);
-                assert_eq!(code, ErrorCode::SourceChanged);
+                assert_eq!(expected_snapshot_revision, 1);
             }
-            other => panic!("expected HandoffFailed, got {:?}", other),
+            other => panic!("expected PrepareRelinquish, got {:?}", other),
         }
     }
 
