@@ -13,6 +13,13 @@ import { useTranslation } from "react-i18next";
 import { CachedImage } from "@/app/components/cover-image/cached-image";
 import { Button } from "@/app/components/ui/button";
 import { subsonic } from "@/service/subsonic";
+import { useCoordinationStore } from "@/coordination/store";
+import {
+  usePlayerCurrentSong,
+  usePlayerMediaType,
+  usePlayerSonglist,
+  usePlayerIsPlaying,
+} from "@/store/player.store";
 import type { DevicePlaybackModel } from "./types";
 import { cn } from "@/lib/utils";
 
@@ -70,7 +77,54 @@ export function DevicePlaybackCard({
 }: DevicePlaybackCardProps) {
   const { t } = useTranslation();
   const { device, snapshot, isOnline } = model;
-  const { data: song, isLoading } = useSongInfo(snapshot?.songId);
+
+  const currentDeviceId = useCoordinationStore((state) => state.deviceId);
+  const isSelf = device.id === currentDeviceId;
+
+  // Local song hooks
+  const localSong = usePlayerCurrentSong();
+  const { isSong: localIsSong, isRadio: localIsRadio } = usePlayerMediaType();
+  const { currentSongIndex, radioList } = usePlayerSonglist();
+  const localRadio = radioList[currentSongIndex];
+  const localIsPlaying = usePlayerIsPlaying();
+
+  // Remote song query
+  const { data: remoteSong, isLoading: isRemoteLoading } = useSongInfo(
+    !isSelf ? snapshot?.songId : undefined
+  );
+
+  // Resolved values based on local vs remote
+  const isLoading = !isSelf ? isRemoteLoading : false;
+
+  let songTitle = "";
+  let songArtist = "";
+  let coverArt = "";
+  let coverArtType: "song" | "album" = "song";
+  let albumId = "";
+
+  if (isSelf) {
+    if (localIsSong && localSong) {
+      songTitle = localSong.title;
+      songArtist = localSong.artist;
+      coverArt = localSong.coverArt;
+      coverArtType = "song";
+      albumId = localSong.albumId;
+    } else if (localIsRadio && localRadio) {
+      songTitle = localRadio.name;
+      songArtist = t("radios.label", { defaultValue: "Radio" });
+      coverArt = "";
+    }
+  } else {
+    if (remoteSong) {
+      songTitle = remoteSong.title;
+      songArtist = remoteSong.artist;
+      coverArt = remoteSong.coverArt;
+      coverArtType = "song";
+      albumId = remoteSong.albumId;
+    }
+  }
+
+  const hasPlayingOverlay = isSelf ? localIsPlaying : (snapshot?.isPlaying && isOnline);
 
   return (
     <div
@@ -84,15 +138,15 @@ export function DevicePlaybackCard({
       {/* Track Info & Device Info (Left) */}
       <div className="flex items-center gap-3 min-w-0 flex-1">
         <div className="relative w-12 h-12 rounded-lg overflow-hidden aspect-square bg-muted flex-shrink-0 shadow-sm border border-border/20">
-          {song ? (
+          {coverArt ? (
             <CachedImage
-              coverArtId={song.coverArt}
-              coverArtType="song"
-              albumId={song.albumId}
+              coverArtId={coverArt}
+              coverArtType={coverArtType}
+              albumId={albumId}
               width="100%"
               height="100%"
               className="w-full h-full object-cover"
-              alt={song.title}
+              alt={songTitle}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-muted text-muted-foreground">
@@ -105,7 +159,7 @@ export function DevicePlaybackCard({
           )}
 
           {/* Playing overlay indicator */}
-          {snapshot?.isPlaying && isOnline && (
+          {hasPlayingOverlay && (
             <div className="absolute inset-0 bg-black/40 flex items-center justify-center backdrop-blur-[1px]">
               <div className="flex items-end gap-0.5 h-3">
                 <span className="w-0.5 bg-primary animate-[bounce_0.8s_infinite_100ms]"></span>
@@ -120,17 +174,17 @@ export function DevicePlaybackCard({
           <span className="text-sm font-semibold truncate text-foreground leading-tight">
             {isLoading
               ? t("settings.crossDevice.playback.fetchingSong", { defaultValue: "Fetching song..." })
-              : song?.title || t("settings.crossDevice.playback.unknownTrack", { defaultValue: "Unknown track" })}
+              : songTitle || t("settings.crossDevice.playback.unknownTrack", { defaultValue: "Unknown track" })}
           </span>
           <span className="text-xs text-muted-foreground truncate leading-normal mt-1 flex items-center gap-1.5">
             <span className="flex items-center gap-1 font-medium text-foreground/80">
               {getDeviceIcon(device.platform)}
               {device.name}
             </span>
-            {song?.artist && (
+            {songArtist && (
               <>
                 <span className="text-muted-foreground/45">•</span>
-                <span className="truncate">{song.artist}</span>
+                <span className="truncate">{songArtist}</span>
               </>
             )}
           </span>
