@@ -369,28 +369,7 @@ export function Player() {
           {isSong && <MemoTrackInfo song={song} />}
           {isRadio && <MemoRadioInfo radio={radio} />}
 
-          {deviceActions.isControlling && deviceActions.controlledDeviceName && (
-            <div className="flex items-center gap-1.5 ml-2 flex-shrink-0 bg-primary/10 border border-primary/20 rounded-full px-2.5 py-1 backdrop-blur-md animate-in fade-in slide-in-from-left-2 duration-300">
-              <span className="relative flex h-1.5 w-1.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary"></span>
-              </span>
-              <span className="text-[10px] md:text-xs font-semibold text-primary truncate max-w-[120px]">
-                {t("settings.crossDevice.playback.controlling", {
-                  defaultValue: "Controlling {{name}}",
-                  name: deviceActions.controlledDeviceName,
-                })}
-              </span>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={deviceActions.exitRemoteControl}
-                className="h-5 px-2 text-[9px] font-bold rounded-full uppercase scale-90 hover:scale-95 active:scale-90 transition-transform"
-              >
-                {t("settings.crossDevice.playback.exitControl", { defaultValue: "Exit" })}
-              </Button>
-            </div>
-          )}
+
         </div>
         {/* Main Controls */}
         <div className="hidden md:col-span-2 md:flex flex-col justify-center items-center px-4 gap-1">
@@ -448,7 +427,15 @@ export function Player() {
                 open={panelOpen}
                 onOpenChange={setPanelOpen}
                 actions={deviceActions}
-                trigger={<PlayerDeviceButton onClick={(e) => { e.stopPropagation(); setPanelOpen(!panelOpen); }} isActive={panelOpen} />}
+                trigger={
+                  <PlayerDeviceButton
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPanelOpen(!panelOpen);
+                    }}
+                    isActive={deviceActions.isControlling}
+                  />
+                }
               />
             )}
 
