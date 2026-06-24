@@ -275,6 +275,9 @@ export function CoordinationObserver() {
   const isConnected = useCoordinationStore((state) => state.isConnected);
   const loadState = useCoordinationStore((state) => state.loadState);
   const manager = useCoordinationStore((state) => state.manager);
+  const setLocalDeviceSnapshot = useCoordinationStore(
+    (state) => state.setLocalDeviceSnapshot,
+  );
   const { t } = useTranslation();
   const controlledDeviceId = useCoordinationStore(
     (state) => state.controlledDeviceId,
@@ -306,6 +309,11 @@ export function CoordinationObserver() {
       volume,
     );
     snapshotRevisionRef.current++;
+    setLocalDeviceSnapshot(
+      snapshot,
+      generationRef.current,
+      snapshotRevisionRef.current,
+    );
     manager.publishSnapshot(
       sessionIdRef.current,
       generationRef.current,
@@ -320,6 +328,7 @@ export function CoordinationObserver() {
     loopState,
     volume,
     manager,
+    setLocalDeviceSnapshot,
   ]);
 
   // Load coordination state and auto-connect on mount

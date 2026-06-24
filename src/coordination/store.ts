@@ -3,10 +3,10 @@
 
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import { CoordinationManager } from "./manager";
 import type { CoordinationCredentials } from "./httpClient";
-import type { ConnectionState } from "./wsClient";
+import { CoordinationManager } from "./manager";
 import type { DeviceDto, DeviceId, PlaybackSnapshot } from "./types";
+import type { ConnectionState } from "./wsClient";
 
 interface CoordinationState {
   manager: CoordinationManager;
@@ -48,6 +48,11 @@ interface CoordinationState {
   revokeDevice: (id: DeviceId) => Promise<void>;
   setError: (error: string | null) => void;
   setControlledDevice: (id: DeviceId | null) => void;
+  setLocalDeviceSnapshot: (
+    snapshot: PlaybackSnapshot,
+    generation: number,
+    snapshotRevision: number,
+  ) => void;
 }
 
 const callbacks = {
@@ -212,6 +217,24 @@ export const useCoordinationStore = create<CoordinationState>()(
       setControlledDevice: (id) => {
         set((s) => {
           s.controlledDeviceId = id;
+        });
+      },
+
+      setLocalDeviceSnapshot: (snapshot, generation, snapshotRevision) => {
+        const deviceId = manager.getDeviceId();
+        if (!deviceId) return;
+        const nowSeconds = Date.now() / 1000;
+        set((s) => {
+          s.deviceSnapshots[deviceId] = {
+            snapshot,
+            isOnline: s.isConnected,
+            generation,
+            snapshotRevision,
+            lastUpdatedAt: Date.now(),
+            serverTime: nowSeconds,
+            lastConfirmedAt: nowSeconds,
+            receivedAtPerformance: performance.now(),
+          };
         });
       },
     };

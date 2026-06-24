@@ -99,7 +99,9 @@ describe("deriveDevicePlaybackModels", () => {
     });
 
     expect(result.thisDevice?.device.id).toBe("self");
-    expect(result.liveDevices.map((model) => model.device.id)).toEqual(["live"]);
+    expect(result.liveDevices.map((model) => model.device.id)).toEqual([
+      "live",
+    ]);
     expect(result.offlineSnapshots.map((model) => model.device.id)).toEqual([
       "offline",
     ]);
@@ -184,5 +186,40 @@ describe("deriveDevicePlaybackModels", () => {
 
     expect(result.liveDevices[0].projectedProgressSeconds).toBe(35);
     expect(result.liveDevices[0].durationSeconds).toBe(120);
+  });
+
+  it("keeps the current device visible when the device list is stale", () => {
+    const result = deriveDevicePlaybackModels({
+      devices: [device({ id: "phone", name: "iPhone", platform: "ios" })],
+      deviceSnapshots: {
+        self: snapshotState(),
+        phone: snapshotState(),
+      },
+      currentDeviceId: "self",
+      controlledDeviceId: null,
+      now: NOW,
+      nowPerformance: NOW_PERFORMANCE,
+    });
+
+    expect(result.thisDevice?.device.id).toBe("self");
+    expect(result.thisDevice?.device.name).toBe("This device");
+    expect(result.thisDevice?.snapshot?.songId).toBe("song-1");
+    expect(result.liveDevices.map((model) => model.device.id)).toEqual([
+      "phone",
+    ]);
+  });
+
+  it("keeps the current device visible before the first snapshot arrives", () => {
+    const result = deriveDevicePlaybackModels({
+      devices: [],
+      deviceSnapshots: {},
+      currentDeviceId: "self",
+      controlledDeviceId: null,
+      now: NOW,
+      nowPerformance: NOW_PERFORMANCE,
+    });
+
+    expect(result.thisDevice?.device.id).toBe("self");
+    expect(result.thisDevice?.snapshot).toBeNull();
   });
 });

@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
 import { projectPlaybackProgress } from "@/coordination/progress";
 import { useCoordinationStore } from "@/coordination/store";
-import type { DeviceDto, DeviceId, PlaybackSnapshot } from "@/coordination/types";
+import type {
+  DeviceDto,
+  DeviceId,
+  PlaybackSnapshot,
+} from "@/coordination/types";
 import dateTime from "@/utils/dateTime";
-import type { DevicePlaybackModel, DerivedDevicesGroup } from "./types";
+import type { DerivedDevicesGroup, DevicePlaybackModel } from "./types";
 
 const OFFLINE_EXPIRY_MS = 8 * 60 * 60 * 1000;
 
@@ -27,7 +31,9 @@ interface DeriveDevicePlaybackModelsOptions {
   nowPerformance: number;
 }
 
-function hasSongSnapshot(snapshot: PlaybackSnapshot | null): snapshot is PlaybackSnapshot {
+function hasSongSnapshot(
+  snapshot: PlaybackSnapshot | null,
+): snapshot is PlaybackSnapshot {
   return !!snapshot?.songId;
 }
 
@@ -37,6 +43,21 @@ function isOfflineSnapshotFresh(
 ): boolean {
   if (!snapshotData || snapshotData.isOnline) return false;
   return now - snapshotData.lastUpdatedAt < OFFLINE_EXPIRY_MS;
+}
+
+function fallbackCurrentDevice(id: DeviceId): DeviceDto {
+  return {
+    id,
+    name: "This device",
+    platform: "local",
+    clientVersion: null,
+    capabilities: 0,
+    createdAt: new Date(0).toISOString(),
+    lastOnlineAt: null,
+    revokedAt: null,
+    historySyncCursor: 0,
+    legacyHistoryImported: false,
+  };
 }
 
 export function deriveDevicePlaybackModels({
@@ -51,8 +72,12 @@ export function deriveDevicePlaybackModels({
   const liveDevices: DevicePlaybackModel[] = [];
   const offlineSnapshots: DevicePlaybackModel[] = [];
   const hiddenDevices: DevicePlaybackModel[] = [];
+  const modelDevices =
+    currentDeviceId && !devices.some((device) => device.id === currentDeviceId)
+      ? [fallbackCurrentDevice(currentDeviceId), ...devices]
+      : devices;
 
-  for (const device of devices) {
+  for (const device of modelDevices) {
     const isSelf = device.id === currentDeviceId;
     const snapshotData = deviceSnapshots[device.id];
     const snapshot = snapshotData?.snapshot ?? null;
@@ -124,7 +149,9 @@ export function deriveDevicePlaybackModels({
 export function useDevicePlaybackModels(): DerivedDevicesGroup {
   const currentDeviceId = useCoordinationStore((state) => state.deviceId);
   const devices = useCoordinationStore((state) => state.devices);
-  const deviceSnapshots = useCoordinationStore((state) => state.deviceSnapshots);
+  const deviceSnapshots = useCoordinationStore(
+    (state) => state.deviceSnapshots,
+  );
   const controlledDeviceId = useCoordinationStore(
     (state) => state.controlledDeviceId,
   );
