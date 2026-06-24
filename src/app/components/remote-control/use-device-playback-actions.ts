@@ -14,6 +14,7 @@ import { getHandoffErrorMessage } from "./handoff-error-message";
 import type { DevicePlaybackModel } from "./types";
 
 const SOURCE_CHANGED_MAX_RETRIES = 2;
+const SOURCE_CHANGED_SNAPSHOT_WAIT_MS = 2500;
 const HANDOFF_CLEAR_DELAY_MS = 1000;
 const HANDOFF_SAFETY_TIMEOUT_MS = 15000;
 
@@ -256,11 +257,19 @@ export function useDevicePlaybackActions(): DevicePlaybackActions {
 
       safetyTimeoutRef.current = window.setTimeout(() => {
         if (!activeHandoffRef.current) return;
-        activeHandoffRef.current = null;
-        setHandoffPhase(null);
+        const message = getHandoffErrorMessage(t, "source_pause_timeout");
+        finishHandoff(null, message);
+        toast.error(message);
       }, HANDOFF_SAFETY_TIMEOUT_MS);
     },
-    [clearHandoffTimers, manager, playerActions, setControlledDevice, t],
+    [
+      clearHandoffTimers,
+      finishHandoff,
+      manager,
+      playerActions,
+      setControlledDevice,
+      t,
+    ],
   );
 
   const exitRemoteControl = useCallback(() => {
@@ -410,6 +419,15 @@ export function useDevicePlaybackActions(): DevicePlaybackActions {
       ) {
         sourceChangedRetriesRef.current += 1;
         setHandoffPhase("prepare");
+        if (!activeHandoff.isOnline) {
+          originalError(code, reason);
+          const message = getHandoffErrorMessage(t, code, reason);
+          finishHandoff(null, message);
+          toast.error(message);
+          return;
+        }
+
+        manager.requestSnapshots();
         const cached = manager.getLatestDeviceSnapshot(activeHandoff.deviceId);
 
         if (
@@ -427,16 +445,11 @@ export function useDevicePlaybackActions(): DevicePlaybackActions {
           return;
         }
 
-        if (!activeHandoff.isOnline) {
-          originalError(code, reason);
-          const message = getHandoffErrorMessage(t, code, reason);
-          finishHandoff(null, message);
-          toast.error(message);
-          return;
-        }
-
         manager
-          .waitForDeviceSnapshotUpdate(activeHandoff.deviceId)
+          .waitForDeviceSnapshotUpdate(
+            activeHandoff.deviceId,
+            SOURCE_CHANGED_SNAPSHOT_WAIT_MS,
+          )
           .then(({ generation, snapshotRevision }) => {
             if (!activeHandoffRef.current) return;
             lastSentGenerationRef.current = generation;
