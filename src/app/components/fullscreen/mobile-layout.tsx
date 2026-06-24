@@ -1,8 +1,10 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, ListChecks, ListMusic, MicVocalIcon } from "lucide-react";
-import { memo, type ReactNode } from "react";
+import { ChevronDown, ListChecks, ListMusic, MicVocalIcon, MonitorSpeaker } from "lucide-react";
+import { memo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/app/components/ui/button";
+import { DevicePanel } from "@/app/components/remote-control/device-panel";
+import { useDevicePlaybackActions } from "@/app/components/remote-control/use-device-playback-actions";
 import { Drawer as DrawerPrimitive } from "vaul";
 import { useFullscreenContrast } from "@/app/hooks/use-fullscreen-contrast";
 import { useHasLyrics } from "@/app/hooks/use-has-lyrics";
@@ -125,6 +127,9 @@ const MobileBottomTabs = memo(function MobileBottomTabs() {
   const { hasLyrics } = useHasLyrics();
   const { customServerEnabled, customServerUrl } = useLyricsSettings();
 
+  const [panelOpen, setPanelOpen] = useState(false);
+  const deviceActions = useDevicePlaybackActions();
+
   const lyricsDisabled = hasLyrics === false;
   const customLyricsDisabled =
     !customServerEnabled || customServerUrl.trim().length === 0;
@@ -132,7 +137,7 @@ const MobileBottomTabs = memo(function MobileBottomTabs() {
   return (
     <div
       className={cn(
-        "shrink-0 flex items-center justify-between w-full mx-auto px-0 pt-2 pb-5 w-[65dvw] max-w-[450px]",
+        "shrink-0 flex items-center justify-between w-full mx-auto px-0 pt-2 pb-5 w-[75dvw] max-w-[480px]",
       )}
       role="tablist"
     >
@@ -166,6 +171,19 @@ const MobileBottomTabs = memo(function MobileBottomTabs() {
           setFullscreenTabWithHistory(
             fullscreenPlayerTab === "queue" ? "playing" : "queue",
           )
+        }
+      />
+      <DevicePanel
+        open={panelOpen}
+        onOpenChange={setPanelOpen}
+        actions={deviceActions}
+        trigger={
+          <MobileTabButton
+            icon={<MonitorSpeaker className="size-5" />}
+            label={t("settings.crossDevice.title", { defaultValue: "Devices" })}
+            active={panelOpen}
+            onClick={() => setPanelOpen(!panelOpen)}
+          />
         }
       />
     </div>

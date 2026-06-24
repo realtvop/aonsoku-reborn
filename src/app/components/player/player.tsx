@@ -400,14 +400,6 @@ export function Player() {
         </div>
         {/* Mobile Controls - Only Play/Pause and Next */}
         <div className="flex md:hidden items-center gap-0.5">
-          {isMobile && (
-            <DevicePanel
-              open={panelOpen}
-              onOpenChange={setPanelOpen}
-              actions={deviceActions}
-              trigger={<PlayerDeviceButton onClick={(e) => { e.stopPropagation(); setPanelOpen(!panelOpen); }} isActive={panelOpen} />}
-            />
-          )}
           <Button
             variant="ghost"
             disabled={!song && !radio}
