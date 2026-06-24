@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { MonitorSpeaker, Settings, WifiOff } from "lucide-react";
-import { Popover, PopoverContent } from "@/app/components/ui/popover";
-import * as PopoverPrimitive from "@radix-ui/react-popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/app/components/ui/popover";
 import {
   Drawer,
   DrawerTrigger,
@@ -74,11 +73,9 @@ export function DevicePanel({ open, onOpenChange, actions, trigger }: DevicePane
 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverPrimitive.Anchor asChild>
-        <div className="inline-block">
-          {trigger}
-        </div>
-      </PopoverPrimitive.Anchor>
+      <PopoverTrigger asChild>
+        {trigger}
+      </PopoverTrigger>
       <PopoverContent
         align="end"
         side="top"
@@ -111,13 +108,14 @@ function DevicePanelContent({ onOpenChange, actions }: DevicePanelContentProps) 
       <ThisDeviceSection
         model={models.thisDevice}
         isControlling={actions.isControlling}
-        controlledDeviceName={actions.controlledDeviceName}
         onExitControl={actions.exitRemoteControl}
       />
 
       <LiveDevicesSection
         models={models.liveDevices}
+        controlledDeviceName={actions.controlledDeviceName}
         onControl={actions.enterRemoteControl}
+        onExitControl={actions.exitRemoteControl}
         onContinue={actions.requestHandoff}
       />
 

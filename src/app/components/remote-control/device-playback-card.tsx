@@ -58,6 +58,7 @@ interface DevicePlaybackCardProps {
   onControl?: () => void;
   onContinue?: () => void;
   isOffline?: boolean;
+  isActive?: boolean;
 }
 
 export function DevicePlaybackCard({
@@ -65,6 +66,7 @@ export function DevicePlaybackCard({
   onControl,
   onContinue,
   isOffline = false,
+  isActive = false,
 }: DevicePlaybackCardProps) {
   const { t } = useTranslation();
   const { device, snapshot, isOnline } = model;
@@ -74,7 +76,9 @@ export function DevicePlaybackCard({
     <div
       className={cn(
         "bg-card/40 backdrop-blur-md border rounded-xl p-3 flex items-center justify-between gap-4 transition-all duration-300",
-        "border-border/40 hover:border-border/80 hover:bg-card/50 shadow-sm"
+        isActive
+          ? "border-primary/50 bg-primary/5"
+          : "border-border/40 hover:border-border/80 hover:bg-card/50 shadow-sm"
       )}
     >
       {/* Track Info & Device Info (Left) */}
@@ -135,12 +139,18 @@ export function DevicePlaybackCard({
 
       {/* Action Buttons (Right) */}
       <div className="flex items-center gap-1 flex-shrink-0">
-        {!isOffline && onControl && (
+        {!isOffline && (onControl || isActive) && (
           <Button
-            variant="ghost"
+            variant={isActive ? "default" : "ghost"}
             size="icon"
             onClick={onControl}
-            className="h-9 w-9 rounded-lg hover:bg-accent/50 text-muted-foreground hover:text-foreground transition-all"
+            className={cn(
+              "h-9 w-9 rounded-lg transition-all",
+              isActive
+                ? "text-primary-foreground bg-primary hover:bg-primary/90"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
+              isActive && !onControl && "pointer-events-none"
+            )}
             title={t("settings.crossDevice.playback.remoteControl", { defaultValue: "Control" })}
           >
             <MousePointerClick className="w-4.5 h-4.5" />

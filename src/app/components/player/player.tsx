@@ -429,10 +429,6 @@ export function Player() {
                 actions={deviceActions}
                 trigger={
                   <PlayerDeviceButton
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setPanelOpen(!panelOpen);
-                    }}
                     isActive={deviceActions.isControlling}
                   />
                 }

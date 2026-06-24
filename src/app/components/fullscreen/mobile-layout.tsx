@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, ListChecks, ListMusic, MicVocalIcon, MonitorSpeaker } from "lucide-react";
-import { memo, useState, type ReactNode } from "react";
+import { forwardRef, memo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/app/components/ui/button";
 import { DevicePanel } from "@/app/components/remote-control/device-panel";
@@ -83,21 +83,19 @@ const MobileHeader = memo(function MobileHeader({
   );
 });
 
-function MobileTabButton({
-  icon,
-  active,
-  disabled = false,
-  onClick,
-  label,
-}: {
-  icon: ReactNode;
-  active: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-  label: string;
-}) {
+const MobileTabButton = forwardRef<
+  HTMLButtonElement,
+  {
+    icon: ReactNode;
+    active: boolean;
+    disabled?: boolean;
+    onClick?: () => void;
+    label: string;
+  } & React.ComponentPropsWithoutRef<typeof Button>
+>(({ icon, active, disabled = false, onClick, label, ...props }, ref) => {
   return (
     <Button
+      ref={ref}
       variant="ghost"
       size="icon"
       role="tab"
@@ -115,11 +113,13 @@ function MobileTabButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
+      {...props}
     >
       {icon}
     </Button>
   );
-}
+});
+MobileTabButton.displayName = "MobileTabButton";
 
 const MobileBottomTabs = memo(function MobileBottomTabs() {
   const { t } = useTranslation();
@@ -182,7 +182,6 @@ const MobileBottomTabs = memo(function MobileBottomTabs() {
             icon={<MonitorSpeaker className="size-5" />}
             label={t("settings.crossDevice.title", { defaultValue: "Devices" })}
             active={panelOpen}
-            onClick={() => setPanelOpen(!panelOpen)}
           />
         }
       />
