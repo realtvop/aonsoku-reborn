@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { MonitorSpeaker, Settings, WifiOff } from "lucide-react";
@@ -34,6 +35,21 @@ interface DevicePanelProps {
 
 export function DevicePanel({ open, onOpenChange, actions, trigger }: DevicePanelProps) {
   const isMobile = usePlayerBreakpoint();
+
+  useEffect(() => {
+    if (isMobile) {
+      if (open) {
+        window.dispatchEvent(new CustomEvent("device-panel-opened"));
+      } else {
+        window.dispatchEvent(new CustomEvent("device-panel-closed"));
+      }
+    }
+    return () => {
+      if (isMobile) {
+        window.dispatchEvent(new CustomEvent("device-panel-closed"));
+      }
+    };
+  }, [open, isMobile]);
 
   if (isMobile) {
     return (
