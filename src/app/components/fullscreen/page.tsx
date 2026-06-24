@@ -39,13 +39,14 @@ export default function FullscreenMode({
   const { autoFullscreenEnabled } = useFullscreenPlayerSettings();
   const backdropStyle = useBackdropStyle();
   const drawerContentRef = useRef<HTMLDivElement>(null);
+  const [devicePanelOpen, setDevicePanelOpen] = useState(false);
+
   const mouseDrawerDragHandlers = useFullscreenMouseDrawerDrag({
     closeAnimationMs: DRAWER_CLOSE_ANIMATION_MS,
     drawerRef: drawerContentRef,
     open,
+    disabled: devicePanelOpen,
   });
-
-  const [devicePanelOpen, setDevicePanelOpen] = useState(false);
 
   useEffect(() => {
     const handleOpen = () => setDevicePanelOpen(true);

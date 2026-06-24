@@ -27,6 +27,7 @@ type UseFullscreenMouseDrawerDragOptions = {
   closeAnimationMs: number;
   drawerRef: RefObject<HTMLElement>;
   open?: boolean;
+  disabled?: boolean;
 };
 
 function isMouseDrawerDragBlocked(target: EventTarget | null) {
@@ -76,6 +77,7 @@ export function useFullscreenMouseDrawerDrag({
   closeAnimationMs,
   drawerRef,
   open,
+  disabled = false,
 }: UseFullscreenMouseDrawerDragOptions) {
   const dragStateRef = useRef<MouseDrawerDragState | null>(null);
   const resetTimerRef = useRef<number | null>(null);
@@ -139,6 +141,7 @@ export function useFullscreenMouseDrawerDrag({
 
   const handlePointerDown = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
+      if (disabled) return;
       if (event.pointerType !== "mouse" || event.button !== 0) return;
       if (isMouseDrawerDragBlocked(event.target)) return;
 
@@ -160,7 +163,7 @@ export function useFullscreenMouseDrawerDrag({
       event.preventDefault();
       event.stopPropagation();
     },
-    [clearResetTimer, drawerRef],
+    [clearResetTimer, drawerRef, disabled],
   );
 
   const handlePointerMove = useCallback(

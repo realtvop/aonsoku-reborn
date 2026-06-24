@@ -131,7 +131,7 @@ function DevicePanelContent({ onOpenChange, actions }: DevicePanelContentProps) 
   };
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden text-left">
+    <div className="flex flex-col h-full w-full overflow-hidden text-left" data-vaul-no-drag>
       {/* Custom Header (Reusable across Sheet and Popover) */}
       {isMobile ? (
         <>
