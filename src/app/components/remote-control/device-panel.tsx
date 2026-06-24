@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { MonitorSpeaker, Settings, WifiOff } from "lucide-react";
@@ -35,10 +35,12 @@ interface DevicePanelProps {
 
 export function DevicePanel({ open, onOpenChange, actions, trigger }: DevicePanelProps) {
   const isMobile = usePlayerBreakpoint();
+  const [activeSnapPoint, setActiveSnapPoint] = useState<string | number>("380px");
 
   useEffect(() => {
     if (isMobile) {
       if (open) {
+        setActiveSnapPoint("380px");
         window.dispatchEvent(new CustomEvent("device-panel-opened"));
       } else {
         window.dispatchEvent(new CustomEvent("device-panel-closed"));
@@ -53,7 +55,13 @@ export function DevicePanel({ open, onOpenChange, actions, trigger }: DevicePane
 
   if (isMobile) {
     return (
-      <Drawer open={open} onOpenChange={onOpenChange}>
+      <Drawer
+        open={open}
+        onOpenChange={onOpenChange}
+        snapPoints={["380px", 1]}
+        activeSnapPoint={activeSnapPoint}
+        setActiveSnapPoint={setActiveSnapPoint}
+      >
         <DrawerTrigger asChild>
           {trigger}
         </DrawerTrigger>
@@ -131,7 +139,7 @@ function DevicePanelContent({ onOpenChange, actions }: DevicePanelContentProps) 
   };
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden text-left" data-vaul-no-drag>
+    <div className="flex flex-col h-full w-full overflow-hidden text-left">
       {/* Custom Header (Reusable across Sheet and Popover) */}
       {isMobile ? (
         <>
