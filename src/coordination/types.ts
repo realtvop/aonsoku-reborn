@@ -208,6 +208,8 @@ export type Payload =
       transactionId: string;
       generation: SessionGeneration;
       snapshotRevision: SnapshotRevision;
+      sourceDeviceId?: DeviceId | null;
+      sessionId?: SessionId | null;
     }
   | {
       type: "prepare_relinquish";

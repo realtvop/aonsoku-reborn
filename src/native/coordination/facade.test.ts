@@ -345,7 +345,13 @@ describe("NativeCoordinationClient", () => {
     );
 
     client.sendTargetReady("tx-1", 1, 2, "dev-2", "sess-1");
-    expect(mockPlugin.sendTargetReady).toHaveBeenCalledWith("tx-1", 1, 2);
+    expect(mockPlugin.sendTargetReady).toHaveBeenCalledWith(
+      "tx-1",
+      1,
+      2,
+      "dev-2",
+      "sess-1",
+    );
 
     client.sendRelinquishAck("tx-1", snapshot("sess-1"));
     expect(mockPlugin.sendRelinquishAck).toHaveBeenCalledWith({

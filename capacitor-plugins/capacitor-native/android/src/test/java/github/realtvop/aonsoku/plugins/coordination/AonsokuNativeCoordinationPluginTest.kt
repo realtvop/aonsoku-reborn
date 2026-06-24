@@ -38,6 +38,29 @@ class AonsokuNativeCoordinationPluginTest {
         assertNotEqualsUuid(a, b)
     }
 
+    // --- buildTargetReadyEnvelope ---------------------------------------------
+
+    @Test
+    fun targetReadyEnvelopeIncludesSourceDeviceAndSession() {
+        val env = AonsokuNativeCoordinationPlugin.buildTargetReadyEnvelope(
+            protocolVersion = 1,
+            transactionId = "tx-1",
+            generation = 2,
+            snapshotRevision = 3,
+            sourceDeviceId = "dev-2",
+            sessionId = "sess-1",
+        )
+
+        assertEquals(1, env.getInt("version"))
+        assertEquals("target_ready", env.getString("type"))
+        assertFalse(env.getString("messageId").isBlank())
+        assertEquals("tx-1", env.getString("transactionId"))
+        assertEquals(2, env.getInt("generation"))
+        assertEquals(3, env.getInt("snapshotRevision"))
+        assertEquals("dev-2", env.getString("sourceDeviceId"))
+        assertEquals("sess-1", env.getString("sessionId"))
+    }
+
     // --- parseJsonObject -------------------------------------------------------
 
     @Test

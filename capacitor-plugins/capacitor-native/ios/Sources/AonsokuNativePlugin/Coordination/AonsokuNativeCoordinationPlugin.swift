@@ -282,8 +282,10 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     }
 
     @objc func sendTargetReady(_ call: CAPPluginCall) {
-        guard let transactionId = call.getString("transactionId") else {
-            call.reject("missing transactionId")
+        guard let transactionId = call.getString("transactionId"),
+              let sourceDeviceId = call.getString("sourceDeviceId"),
+              let sessionId = call.getString("sessionId") else {
+            call.reject("missing target_ready fields")
             return
         }
         let env: [String: Any] = [
@@ -293,6 +295,8 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
             "transactionId": transactionId,
             "generation": call.getInt("generation") ?? 0,
             "snapshotRevision": call.getInt("snapshotRevision") ?? 0,
+            "sourceDeviceId": sourceDeviceId,
+            "sessionId": sessionId,
         ]
         sendEnvelope(env)
         call.resolve()

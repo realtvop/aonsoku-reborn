@@ -465,11 +465,18 @@ export class NativeCoordinationClient implements CoordinationClient {
     transactionId: string,
     generation: SessionGeneration,
     snapshotRevision: SnapshotRevision,
-    _sourceDeviceId?: DeviceId | null,
-    _sessionId?: SessionId | null,
+    sourceDeviceId?: DeviceId | null,
+    sessionId?: SessionId | null,
   ): void {
+    if (!sourceDeviceId || !sessionId) return;
     this.plugin
-      .sendTargetReady(transactionId, generation, snapshotRevision)
+      .sendTargetReady(
+        transactionId,
+        generation,
+        snapshotRevision,
+        sourceDeviceId,
+        sessionId,
+      )
       .catch(() => {});
   }
 

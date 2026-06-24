@@ -72,6 +72,26 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             return env
         }
 
+        internal fun buildTargetReadyEnvelope(
+            protocolVersion: Int,
+            transactionId: String,
+            generation: Int,
+            snapshotRevision: Int,
+            sourceDeviceId: String,
+            sessionId: String,
+        ): JSONObject {
+            val env = JSONObject()
+            env.put("version", protocolVersion)
+            env.put("messageId", java.util.UUID.randomUUID().toString())
+            env.put("type", "target_ready")
+            env.put("transactionId", transactionId)
+            env.put("generation", generation)
+            env.put("snapshotRevision", snapshotRevision)
+            env.put("sourceDeviceId", sourceDeviceId)
+            env.put("sessionId", sessionId)
+            return env
+        }
+
         /// Parse a JSON object string, returning null on failure so callers
         /// can reject the plugin call with a structured error instead of
         /// crashing the bridge with an uncaught JSONException.
@@ -452,13 +472,16 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     @PluginMethod
     fun sendTargetReady(call: PluginCall) {
         val transactionId = call.getString("transactionId") ?: return call.reject("missing transactionId")
-        val env = JSONObject()
-        env.put("version", protocolVersion)
-        env.put("messageId", java.util.UUID.randomUUID().toString())
-        env.put("type", "target_ready")
-        env.put("transactionId", transactionId)
-        env.put("generation", call.getInt("generation", 0) ?: 0)
-        env.put("snapshotRevision", call.getInt("snapshotRevision", 0) ?: 0)
+        val sourceDeviceId = call.getString("sourceDeviceId") ?: return call.reject("missing sourceDeviceId")
+        val sessionId = call.getString("sessionId") ?: return call.reject("missing sessionId")
+        val env = buildTargetReadyEnvelope(
+            protocolVersion,
+            transactionId,
+            call.getInt("generation", 0) ?: 0,
+            call.getInt("snapshotRevision", 0) ?: 0,
+            sourceDeviceId,
+            sessionId,
+        )
         sendEnvelope(env)
         call.resolve()
     }

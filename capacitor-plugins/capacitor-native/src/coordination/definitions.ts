@@ -131,6 +131,8 @@ export interface AonsokuNativeCoordinationPlugin extends Plugin {
     transactionId: string,
     generation: number,
     snapshotRevision: number,
+    sourceDeviceId: string,
+    sessionId: string,
   ): Promise<void>;
 
   /// Send relinquish_ack with final snapshot (design §11.1 step 5).
