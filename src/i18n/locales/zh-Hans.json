@@ -626,6 +626,11 @@
     "crossDevice": {
       "title": "跨设备",
       "description": "在不同设备间同步播放历史并继续播放。",
+      "setup": {
+        "title": "连接此设备",
+        "description": "在需要同步的每台设备上使用同一个协调服务器。",
+        "requirement": "当前音乐服务器凭据仅用于授权此设备。"
+      },
       "serverUrl": {
         "label": "协调服务器地址",
         "info": "你的协调服务器 URL。"
@@ -641,6 +646,9 @@
       },
       "connect": "连接",
       "status": "连接状态",
+      "statusInfo": "连接后，此设备可用于播放接力。",
+      "currentDevice": "当前设备",
+      "disconnectShort": "断开",
       "connectionState": {
         "label": "状态",
         "disconnected": "未连接",
@@ -662,6 +670,8 @@
       "connected": "已连接",
       "disconnected": "已断开",
       "devices": "已绑定设备",
+      "deviceCount": "{{count}} 台设备",
+      "devicesDescription": "为设备重命名以便识别，或撤销不再使用的会话。",
       "device": {
         "current": "当前设备",
         "lastOnline": "上次在线 {{time}}",

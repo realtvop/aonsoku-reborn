@@ -614,6 +614,11 @@
     "crossDevice": {
       "title": "Cross-Device",
       "description": "Sync history and continue playback across your devices.",
+      "setup": {
+        "title": "Connect this device",
+        "description": "Use the same coordination server on every device you want to keep in sync.",
+        "requirement": "Your current music server credentials are used only to authorize this device."
+      },
       "serverUrl": {
         "label": "Coordination server URL",
         "info": "URL of your coordination server."
@@ -629,6 +634,9 @@
       },
       "connect": "Connect",
       "status": "Connection status",
+      "statusInfo": "This device stays available for playback handoff while connected.",
+      "currentDevice": "Current device",
+      "disconnectShort": "Disconnect",
       "connectionState": {
         "label": "State",
         "disconnected": "Disconnected",
@@ -650,6 +658,8 @@
       "connected": "Connected",
       "disconnected": "Disconnected",
       "devices": "Bound devices",
+      "deviceCount": "{{count}} devices",
+      "devicesDescription": "Rename devices so they are easy to recognize, or revoke old sessions.",
       "device": {
         "current": "Current",
         "lastOnline": "Last online {{time}}",
