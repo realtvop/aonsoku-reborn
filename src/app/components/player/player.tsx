@@ -1,7 +1,10 @@
 import { Pause, Play, SkipForward } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
+import { PlayerDeviceButton } from "@/app/components/remote-control/device-button";
+import { DevicePanel } from "@/app/components/remote-control/device-panel";
+import { useDevicePlaybackActions } from "@/app/components/remote-control/use-device-playback-actions";
 import { MiniPlayerButton } from "@/app/components/mini-player/button";
 import { RadioInfo } from "@/app/components/player/radio-info";
 import { TrackInfo } from "@/app/components/player/track-info";
@@ -68,6 +71,8 @@ const MemoAudioPlayer = memo(AudioPlayer);
 
 export function Player() {
   const { t } = useTranslation();
+  const [panelOpen, setPanelOpen] = useState(false);
+  const deviceActions = useDevicePlaybackActions();
   const radioLabel = t("radios.label");
   const audioRef = useRef<HTMLAudioElement>(null);
   const radioRef = useRef<HTMLAudioElement>(null);
@@ -372,6 +377,7 @@ export function Player() {
         </div>
         {/* Mobile Controls - Only Play/Pause and Next */}
         <div className="flex md:hidden items-center gap-0.5">
+          <PlayerDeviceButton onClick={() => setPanelOpen(true)} isActive={panelOpen} />
           <Button
             variant="ghost"
             disabled={!song && !radio}
@@ -416,6 +422,8 @@ export function Player() {
             />
 
             {isSong && hasMiniPlayerSupport && <MemoMiniPlayerButton />}
+
+            <PlayerDeviceButton onClick={() => setPanelOpen(true)} isActive={panelOpen} />
           </div>
         </div>
       </div>
@@ -461,6 +469,8 @@ export function Player() {
           data-testid="player-radio-audio"
         />
       )}
+
+      <DevicePanel open={panelOpen} onOpenChange={setPanelOpen} actions={deviceActions} />
     </footer>
   );
 }
