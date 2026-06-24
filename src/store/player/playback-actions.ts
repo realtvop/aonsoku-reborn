@@ -20,6 +20,16 @@ export function createPlaybackActions(shared: SharedDeps) {
 
   return {
     setPlayingState: (status: boolean) => {
+      if (isRemoteActive()) {
+        remoteSend(
+          status ? LanControlMessageType.PLAY : LanControlMessageType.PAUSE,
+        );
+        set((state) => {
+          state.playerState.isPlaying = status;
+        });
+        return;
+      }
+
       const nativeController = getNativeQueueController();
       if (nativeController) {
         if (status) {
@@ -34,17 +44,20 @@ export function createPlaybackActions(shared: SharedDeps) {
       logger.info(
         `[setPlayingState] ${prev} → ${status} | isRemote=${!!isRemoteActive()}`,
       );
-      if (isRemoteActive()) {
-        remoteSend(
-          status ? LanControlMessageType.PLAY : LanControlMessageType.PAUSE,
-        );
-      }
       set((state) => {
         state.playerState.isPlaying = status;
       });
     },
 
     togglePlayPause: () => {
+      if (isRemoteActive()) {
+        remoteSend(LanControlMessageType.PLAY_PAUSE);
+        set((state) => {
+          state.playerState.isPlaying = !state.playerState.isPlaying;
+        });
+        return;
+      }
+
       const nativeController = getNativeQueueController();
       if (nativeController) {
         nativeController.togglePlayPause();
@@ -60,6 +73,21 @@ export function createPlaybackActions(shared: SharedDeps) {
     },
 
     toggleLoop: () => {
+      if (isRemoteActive()) {
+        const { loopState } = get().playerState;
+        const newState = (loopState + 1) % (2 + 1);
+
+        remoteSend(LanControlMessageType.TOGGLE_REPEAT);
+        set((state) => {
+          state.playerState.loopState = newState as 0 | 1 | 2;
+          rebuildContextQueueForLoopState(
+            state.songlist,
+            state.playerState.loopState,
+          );
+        });
+        return;
+      }
+
       const nativeController = getNativeQueueController();
       if (nativeController) {
         nativeController.toggleLoop();
@@ -88,15 +116,26 @@ export function createPlaybackActions(shared: SharedDeps) {
     },
 
     setProgress: (progress: number, isSeek?: boolean) => {
+      if (isRemoteActive()) {
+        remoteSend(LanControlMessageType.SEEK, {
+          seconds: progress,
+        });
+        set((state) => {
+          state.playerProgress.progress = progress;
+          if (isSeek) {
+            state.playerProgress.seekCount =
+              (state.playerProgress.seekCount ?? 0) + 1;
+          }
+        });
+        return;
+      }
+
       const nativeController = getNativeQueueController();
       if (nativeController) {
         nativeController.seek(progress);
         return;
       }
 
-      remoteSend(LanControlMessageType.SEEK, {
-        seconds: progress,
-      });
       set((state) => {
         state.playerProgress.progress = progress;
         if (isSeek) {
