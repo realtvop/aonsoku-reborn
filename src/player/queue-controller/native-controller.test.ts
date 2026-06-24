@@ -369,6 +369,48 @@ describe("NativeQueueController shuffle and loop queue updates", () => {
   });
 });
 
+describe("NativeQueueController handoff preparation", () => {
+  beforeEach(() => {
+    for (const value of Object.values(mocks.plugin)) {
+      if (typeof value === "function") {
+        vi.mocked(value).mockClear();
+      }
+    }
+    mocks.storeState.playerState.loopState = LoopState.All;
+    mocks.storeState.songlist.contextQueue.songs = [
+      { id: "song-1", title: "Song 1", duration: 123 } as never,
+      { id: "song-2", title: "Song 2", duration: 234 } as never,
+    ];
+    mocks.storeState.songlist.contextQueue.currentIndex = 1;
+    mocks.storeState.songlist.contextQueue.sourceId = {
+      type: "album",
+      id: "album-1",
+    };
+    mocks.storeState.songlist.contextQueue.sourceName = "Album 1";
+  });
+
+  it("syncs the current queue and seeks before resolving", async () => {
+    const controller = new NativeQueueController();
+
+    await controller.prepareHandoffPlayback(42, { autoplay: false });
+
+    expect(mocks.plugin.setContextQueue).toHaveBeenCalledWith({
+      songs: [
+        expect.objectContaining({ id: "song-1" }),
+        expect.objectContaining({ id: "song-2" }),
+      ],
+      currentIndex: 1,
+      autoplay: false,
+      repeatMode: "all",
+      sourceId: { type: "album", id: "album-1" },
+      sourceName: "Album 1",
+    });
+    expect(mocks.plugin.seek).toHaveBeenCalledWith({ position: 42 });
+
+    controller.dispose();
+  });
+});
+
 function emit<TEvent extends keyof NativeAudioEvents>(
   eventName: TEvent,
   event: NativeAudioEvents[TEvent],

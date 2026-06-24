@@ -117,12 +117,14 @@ export class NativeQueueController implements QueueController {
   #queueSynced = false;
   #terminalPlaybackResetTimer: ReturnType<typeof setTimeout> | null = null;
 
-  #syncContextQueueToNative(autoplay = true): void {
+  #syncContextQueueToNative(autoplay = true): Promise<void> {
     const { songlist, playerState } = usePlayerStore.getState();
-    if (songlist.contextQueue.songs.length === 0) return;
+    if (songlist.contextQueue.songs.length === 0) {
+      return Promise.resolve();
+    }
 
     this.#nativeDrivenTransition = true;
-    this.#plugin
+    return this.#plugin
       .setContextQueue({
         songs: songlist.contextQueue.songs.map(songToNativeQueueSong),
         currentIndex: songlist.contextQueue.currentIndex,
@@ -133,6 +135,7 @@ export class NativeQueueController implements QueueController {
       })
       .catch((err) => {
         logger.error("[NativeQueueController] queue sync failed", err);
+        throw err;
       });
   }
 
@@ -636,6 +639,14 @@ export class NativeQueueController implements QueueController {
       state.playerProgress.progress = seconds;
       state.playerProgress.seekCount = (state.playerProgress.seekCount ?? 0) + 1;
     });
+  }
+
+  async prepareHandoffPlayback(
+    progressSeconds: number,
+    options: { autoplay: boolean },
+  ): Promise<void> {
+    await this.#syncContextQueueToNative(options.autoplay);
+    await this.#plugin.seek({ position: Math.max(0, progressSeconds) });
   }
 
   setVolume(volume: number): void {

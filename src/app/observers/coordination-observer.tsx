@@ -5,6 +5,7 @@ import { projectPlaybackProgress } from "@/coordination/progress";
 import { useCoordinationStore } from "@/coordination/store";
 import type { PlaybackSnapshot, RemoteCommand } from "@/coordination/types";
 import { seekPlaybackTarget } from "@/player/playback/backend-registry";
+import { getNativeQueueController } from "@/player/queue-controller";
 import {
   usePlayerActions,
   usePlayerCurrentSong,
@@ -269,6 +270,19 @@ function buildPlaybackSnapshot(
     nowPlayingSent: false,
     scrobbleSent: false,
   };
+}
+
+async function prepareNativeHandoffPlayback(
+  snapshot: PlaybackSnapshot,
+  autoplay: boolean,
+): Promise<boolean> {
+  const nativeController = getNativeQueueController();
+  if (!nativeController) return false;
+
+  await nativeController.prepareHandoffPlayback(snapshot.progressSeconds, {
+    autoplay,
+  });
+  return true;
 }
 
 export function CoordinationObserver() {
@@ -634,7 +648,22 @@ export function CoordinationObserver() {
       const state = usePlayerStore.getState();
       const isSameSong = state.songlist.currentSong?.id === snapshot.songId;
       applySnapshotToPlayerStore(snapshot, { playing: false })
-        .then(() => {
+        .then(async () => {
+          const nativePrepared = await prepareNativeHandoffPlayback(
+            snapshot,
+            false,
+          );
+          if (nativePrepared) {
+            manager.sendTargetReady(
+              transactionId,
+              generation,
+              snapshotRevision,
+              sourceDeviceId,
+              sessionId,
+            );
+            return;
+          }
+
           if (isSameSong) {
             const audio = usePlayerStore.getState().playerState.audioPlayerRef;
             if (audio) {
@@ -674,7 +703,13 @@ export function CoordinationObserver() {
       const state = usePlayerStore.getState();
       const isSameSong = state.songlist.currentSong?.id === snapshot.songId;
       applySnapshotToPlayerStore(snapshot, { playing: true })
-        .then(() => {
+        .then(async () => {
+          const nativePrepared = await prepareNativeHandoffPlayback(
+            snapshot,
+            true,
+          );
+          if (nativePrepared) return;
+
           if (isSameSong) {
             const audio = usePlayerStore.getState().playerState.audioPlayerRef;
             if (audio) {
