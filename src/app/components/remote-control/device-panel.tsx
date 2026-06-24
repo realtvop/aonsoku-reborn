@@ -46,7 +46,9 @@ export function DevicePanel({ open, onOpenChange, actions, trigger }: DevicePane
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
-        {trigger}
+        <div className="inline-block">
+          {trigger}
+        </div>
       </PopoverTrigger>
       <PopoverContent
         align="end"
