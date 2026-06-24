@@ -16,4 +16,5 @@ export interface DerivedDevicesGroup {
   thisDevice: DevicePlaybackModel | null;
   liveDevices: DevicePlaybackModel[];
   offlineSnapshots: DevicePlaybackModel[];
+  hiddenDevices: DevicePlaybackModel[];
 }

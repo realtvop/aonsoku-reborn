@@ -1,113 +1,149 @@
-import { useMemo, useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { projectPlaybackProgress } from "@/coordination/progress";
 import { useCoordinationStore } from "@/coordination/store";
-import type { DevicePlaybackModel, DerivedDevicesGroup } from "./types";
+import type { DeviceDto, DeviceId, PlaybackSnapshot } from "@/coordination/types";
 import dateTime from "@/utils/dateTime";
+import type { DevicePlaybackModel, DerivedDevicesGroup } from "./types";
 
-const OFFLINE_EXPIRY_MS = 8 * 60 * 60 * 1000; // 8 hours
+const OFFLINE_EXPIRY_MS = 8 * 60 * 60 * 1000;
+
+type DeviceSnapshotState = {
+  snapshot: PlaybackSnapshot;
+  isOnline: boolean;
+  generation: number;
+  snapshotRevision: number;
+  lastUpdatedAt: number;
+  serverTime: number;
+  lastConfirmedAt: number;
+  receivedAtPerformance: number;
+};
+
+interface DeriveDevicePlaybackModelsOptions {
+  devices: DeviceDto[];
+  deviceSnapshots: Record<DeviceId, DeviceSnapshotState>;
+  currentDeviceId: DeviceId | null;
+  controlledDeviceId: DeviceId | null;
+  now: number;
+  nowPerformance: number;
+}
+
+function hasSongSnapshot(snapshot: PlaybackSnapshot | null): snapshot is PlaybackSnapshot {
+  return !!snapshot?.songId;
+}
+
+function isOfflineSnapshotFresh(
+  snapshotData: DeviceSnapshotState | undefined,
+  now: number,
+): boolean {
+  if (!snapshotData || snapshotData.isOnline) return false;
+  return now - snapshotData.lastUpdatedAt < OFFLINE_EXPIRY_MS;
+}
+
+export function deriveDevicePlaybackModels({
+  devices,
+  deviceSnapshots,
+  currentDeviceId,
+  controlledDeviceId,
+  now,
+  nowPerformance,
+}: DeriveDevicePlaybackModelsOptions): DerivedDevicesGroup {
+  let thisDevice: DevicePlaybackModel | null = null;
+  const liveDevices: DevicePlaybackModel[] = [];
+  const offlineSnapshots: DevicePlaybackModel[] = [];
+  const hiddenDevices: DevicePlaybackModel[] = [];
+
+  for (const device of devices) {
+    const isSelf = device.id === currentDeviceId;
+    const snapshotData = deviceSnapshots[device.id];
+    const snapshot = snapshotData?.snapshot ?? null;
+    const isOnline = snapshotData?.isOnline ?? false;
+    const durationSeconds = snapshot?.durationSeconds ?? 0;
+    const projectedProgressSeconds = snapshotData
+      ? projectPlaybackProgress(
+          {
+            snapshot: snapshotData.snapshot,
+            serverTime: snapshotData.serverTime,
+            lastConfirmedAt: snapshotData.lastConfirmedAt,
+            receivedAtPerformance: snapshotData.receivedAtPerformance,
+          },
+          nowPerformance,
+        )
+      : 0;
+    const isControllingOthers = device.isControlling === true;
+    const hasSupportedSnapshot = hasSongSnapshot(snapshot);
+    const isFreshOfflineSnapshot = isOfflineSnapshotFresh(snapshotData, now);
+    const canBeControlled =
+      !isSelf &&
+      isOnline &&
+      hasSupportedSnapshot &&
+      !isControllingOthers &&
+      controlledDeviceId !== device.id;
+    const canBeContinuedLocally =
+      !isSelf &&
+      hasSupportedSnapshot &&
+      !isControllingOthers &&
+      (isOnline || isFreshOfflineSnapshot);
+    const lastUpdatedAt = snapshotData?.lastUpdatedAt ?? 0;
+    const lastSeenText = device.lastOnlineAt
+      ? dateTime(device.lastOnlineAt).fromNow()
+      : "";
+
+    const model: DevicePlaybackModel = {
+      device,
+      snapshot,
+      isOnline,
+      canBeControlled,
+      canBeContinuedLocally,
+      projectedProgressSeconds,
+      durationSeconds,
+      lastUpdatedAt,
+      lastSeenText,
+    };
+
+    if (isSelf) {
+      thisDevice = model;
+    } else if (isControllingOthers) {
+      hiddenDevices.push(model);
+    } else if (isOnline && hasSupportedSnapshot) {
+      liveDevices.push(model);
+    } else if (hasSupportedSnapshot && isFreshOfflineSnapshot) {
+      offlineSnapshots.push(model);
+    } else {
+      hiddenDevices.push(model);
+    }
+  }
+
+  return {
+    thisDevice,
+    liveDevices,
+    offlineSnapshots,
+    hiddenDevices,
+  };
+}
 
 export function useDevicePlaybackModels(): DerivedDevicesGroup {
   const currentDeviceId = useCoordinationStore((state) => state.deviceId);
   const devices = useCoordinationStore((state) => state.devices);
   const deviceSnapshots = useCoordinationStore((state) => state.deviceSnapshots);
-  const controlledDeviceId = useCoordinationStore((state) => state.controlledDeviceId);
+  const controlledDeviceId = useCoordinationStore(
+    (state) => state.controlledDeviceId,
+  );
+  const [, setTicker] = useState(0);
 
-  // Trigger re-render to update progress projection interpolation
-  const [ticker, setTicker] = useState(0);
   useEffect(() => {
-    const interval = setInterval(() => {
-      setTicker((t) => t + 1);
+    const interval = window.setInterval(() => {
+      setTicker((value) => value + 1);
     }, 1000);
-    return () => clearInterval(interval);
+
+    return () => window.clearInterval(interval);
   }, []);
 
-  return useMemo(() => {
-    // Reference ticker to trigger re-evaluation of progress projection on the interval
-    const _ = ticker;
-    let thisDevice: DevicePlaybackModel | null = null;
-    const liveDevices: DevicePlaybackModel[] = [];
-    const offlineSnapshots: DevicePlaybackModel[] = [];
-
-    for (const device of devices) {
-      const isSelf = device.id === currentDeviceId;
-      const snapshotData = deviceSnapshots[device.id];
-      const isOnline = snapshotData?.isOnline ?? false;
-      const snapshot = snapshotData?.snapshot ?? null;
-
-      // Project progress
-      let projectedProgressSeconds = 0;
-      let durationSeconds = 0;
-      if (snapshot) {
-        durationSeconds = snapshot.durationSeconds;
-        if (snapshot.isPlaying && isOnline) {
-          const elapsed = Date.now() / 1000 - snapshot.sampledAt;
-          projectedProgressSeconds = Math.min(
-            durationSeconds,
-            Math.max(0, snapshot.progressSeconds + elapsed)
-          );
-        } else {
-          projectedProgressSeconds = snapshot.progressSeconds;
-        }
-      }
-
-      // Check if device is acting as a remote controller
-      const isControllingOthers = device.isControlling;
-
-      // Compute capabilities / actions availability
-      // Live devices can be controlled if they are online, have a snapshot,
-      // and are not currently acting as a controller themselves.
-      const canBeControlled =
-        !isSelf &&
-        isOnline &&
-        !!snapshot &&
-        !isControllingOthers &&
-        controlledDeviceId !== device.id;
-
-      // Devices can be continued locally if they have a snapshot,
-      // are not themselves a controller, and are not our current device.
-      const canBeContinuedLocally =
-        !isSelf &&
-        !!snapshot &&
-        !isControllingOthers;
-
-      const lastUpdatedAt = snapshotData?.lastUpdatedAt ?? 0;
-      let lastSeenText = "";
-      if (device.lastOnlineAt) {
-        lastSeenText = dateTime(device.lastOnlineAt).fromNow();
-      }
-
-      const model: DevicePlaybackModel = {
-        device,
-        snapshot,
-        isOnline,
-        canBeControlled,
-        canBeContinuedLocally,
-        projectedProgressSeconds,
-        durationSeconds,
-        lastUpdatedAt,
-        lastSeenText,
-      };
-
-      if (isSelf) {
-        thisDevice = model;
-      } else if (isControllingOthers) {
-        // Exclusivity rule: skip/hide device if it is active as a controller
-        continue;
-      } else if (isOnline && snapshot && snapshot.songId) {
-        liveDevices.push(model);
-      } else if (
-        !isOnline &&
-        snapshot &&
-        snapshot.songId &&
-        Date.now() - lastUpdatedAt < OFFLINE_EXPIRY_MS
-      ) {
-        offlineSnapshots.push(model);
-      }
-    }
-
-    return {
-      thisDevice,
-      liveDevices,
-      offlineSnapshots,
-    };
-  }, [devices, deviceSnapshots, currentDeviceId, controlledDeviceId, ticker]);
+  return deriveDevicePlaybackModels({
+    devices,
+    deviceSnapshots,
+    currentDeviceId,
+    controlledDeviceId,
+    now: Date.now(),
+    nowPerformance: performance.now(),
+  });
 }
