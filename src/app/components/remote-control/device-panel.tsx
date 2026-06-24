@@ -1,7 +1,8 @@
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { MonitorSpeaker, Settings, WifiOff } from "lucide-react";
-import { Popover, PopoverTrigger, PopoverContent } from "@/app/components/ui/popover";
+import * as PopoverPrimitive from "@radix-ui/react-popover";
+import { Popover, PopoverContent } from "@/app/components/ui/popover";
 import { Sheet, SheetTrigger, SheetContent } from "@/app/components/ui/sheet";
 import { ScrollArea } from "@/app/components/ui/scroll-area";
 import { Button } from "@/app/components/ui/button";
@@ -45,9 +46,11 @@ export function DevicePanel({ open, onOpenChange, actions, trigger }: DevicePane
 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger asChild>
-        {trigger}
-      </PopoverTrigger>
+      <PopoverPrimitive.Anchor asChild>
+        <div className="inline-block">
+          {trigger}
+        </div>
+      </PopoverPrimitive.Anchor>
       <PopoverContent
         align="end"
         side="top"

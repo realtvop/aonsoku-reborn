@@ -404,7 +404,7 @@ export function Player() {
             open={panelOpen}
             onOpenChange={setPanelOpen}
             actions={deviceActions}
-            trigger={<PlayerDeviceButton isActive={panelOpen} />}
+            trigger={<PlayerDeviceButton onClick={(e) => { e.stopPropagation(); setPanelOpen(!panelOpen); }} isActive={panelOpen} />}
           />
           <Button
             variant="ghost"
@@ -453,7 +453,7 @@ export function Player() {
               open={panelOpen}
               onOpenChange={setPanelOpen}
               actions={deviceActions}
-              trigger={<PlayerDeviceButton isActive={panelOpen} />}
+              trigger={<PlayerDeviceButton onClick={(e) => { e.stopPropagation(); setPanelOpen(!panelOpen); }} isActive={panelOpen} />}
             />
 
             {isSong && hasMiniPlayerSupport && <MemoMiniPlayerButton />}
