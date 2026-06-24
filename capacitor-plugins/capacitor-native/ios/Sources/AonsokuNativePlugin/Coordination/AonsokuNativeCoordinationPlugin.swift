@@ -91,24 +91,24 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         }
         let historyLimit = call.getInt("historyLimit") ?? 100
 
-        KeychainManager.shared.set(accessToken, forKey: "coord_access_token", service: keychainService)
-        KeychainManager.shared.set(refreshToken, forKey: "coord_refresh_token", service: keychainService)
-        KeychainManager.shared.set(deviceId, forKey: "coord_device_id", service: keychainService)
-        KeychainManager.shared.set(accountId, forKey: "coord_account_id", service: keychainService)
-        KeychainManager.shared.set(String(historyLimit), forKey: "coord_history_limit", service: keychainService)
+        KeychainManager.set(accessToken, forKey: "coord_access_token", service: keychainService)
+        KeychainManager.set(refreshToken, forKey: "coord_refresh_token", service: keychainService)
+        KeychainManager.set(deviceId, forKey: "coord_device_id", service: keychainService)
+        KeychainManager.set(accountId, forKey: "coord_account_id", service: keychainService)
+        KeychainManager.set(String(historyLimit), forKey: "coord_history_limit", service: keychainService)
 
         call.resolve()
     }
 
     @objc func loadTokens(_ call: CAPPluginCall) {
-        guard let accessToken = KeychainManager.shared.get("coord_access_token", service: keychainService),
-              let refreshToken = KeychainManager.shared.get("coord_refresh_token", service: keychainService),
-              let deviceId = KeychainManager.shared.get("coord_device_id", service: keychainService),
-              let accountId = KeychainManager.shared.get("coord_account_id", service: keychainService) else {
+        guard let accessToken = KeychainManager.get("coord_access_token", service: keychainService),
+              let refreshToken = KeychainManager.get("coord_refresh_token", service: keychainService),
+              let deviceId = KeychainManager.get("coord_device_id", service: keychainService),
+              let accountId = KeychainManager.get("coord_account_id", service: keychainService) else {
             call.resolve()
             return
         }
-        let historyLimitStr = KeychainManager.shared.get("coord_history_limit", service: keychainService) ?? "100"
+        let historyLimitStr = KeychainManager.get("coord_history_limit", service: keychainService) ?? "100"
         call.resolve([
             "accessToken": accessToken,
             "refreshToken": refreshToken,
@@ -119,11 +119,11 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     }
 
     @objc func clearTokens(_ call: CAPPluginCall) {
-        KeychainManager.shared.delete("coord_access_token", service: keychainService)
-        KeychainManager.shared.delete("coord_refresh_token", service: keychainService)
-        KeychainManager.shared.delete("coord_device_id", service: keychainService)
-        KeychainManager.shared.delete("coord_account_id", service: keychainService)
-        KeychainManager.shared.delete("coord_history_limit", service: keychainService)
+        KeychainManager.delete("coord_access_token", service: keychainService)
+        KeychainManager.delete("coord_refresh_token", service: keychainService)
+        KeychainManager.delete("coord_device_id", service: keychainService)
+        KeychainManager.delete("coord_account_id", service: keychainService)
+        KeychainManager.delete("coord_history_limit", service: keychainService)
         call.resolve()
     }
 
@@ -191,12 +191,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         // eligible for execution while the app is backgrounded, as long as
         // the audio session is active. Extended idle mode keeps the session
         // from being torn down during short idle periods.
-        let config: URLSessionConfiguration
-        if let existing = URLSessionConfiguration.background(withIdentifier: Self.backgroundSessionIdentifier) {
-            config = existing
-        } else {
-            config = URLSessionConfiguration.background(withIdentifier: Self.backgroundSessionIdentifier)
-        }
+        let config = URLSessionConfiguration.background(withIdentifier: Self.backgroundSessionIdentifier)
         config.shouldUseExtendedBackgroundIdleMode = true
         config.waitsForConnectivity = true
         config.isDiscretionary = false
