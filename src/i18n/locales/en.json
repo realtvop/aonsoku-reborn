@@ -686,12 +686,26 @@
         "preparingRelay": "Preparing handoff...",
         "sessionSuperseded": "This session has been taken over by {{deviceName}}, playback paused."
       },
+      "handoffError": {
+        "targetOffline": "The device went offline.",
+        "snapshotExpired": "That playback snapshot is too old to continue.",
+        "handoffConflict": "Another handoff already took this session.",
+        "sourceChanged": "The source changed before it could be transferred.",
+        "sourcePauseTimeout": "The source device did not confirm pause in time.",
+        "unsupportedMedia": "This media type cannot be continued on another device.",
+        "deviceRevoked": "This device is no longer allowed to use cross-device sync.",
+        "protocolIncompatible": "Update Aonsoku on one or more devices.",
+        "forbidden": "This device cannot be controlled or transferred right now.",
+        "fallback": "Handoff failed: {{reason}}"
+      },
       "playback": {
         "fetchingSong": "Fetching song...",
         "unknownTrack": "Unknown track",
         "exitControl": "Exit control",
         "remoteControl": "Remote control",
-        "relay": "Handoff"
+        "relay": "Handoff",
+        "peerDevice": "remote device",
+        "controllingDevice": "Controlling {{name}}"
       }
     },
     "server": {

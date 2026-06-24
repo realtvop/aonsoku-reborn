@@ -6,6 +6,7 @@ import { PlayerDeviceButton } from "@/app/components/remote-control/device-butto
 import { DevicePanel } from "@/app/components/remote-control/device-panel";
 import { useDevicePlaybackActions } from "@/app/components/remote-control/use-device-playback-actions";
 import { HandoffConfirmationDialog } from "@/app/components/remote-control/handoff-confirmation-dialog";
+import { RemoteModePlayerStatus } from "@/app/components/remote-control/remote-mode-player-status";
 import { MiniPlayerButton } from "@/app/components/mini-player/button";
 import { RadioInfo } from "@/app/components/player/radio-info";
 import { TrackInfo } from "@/app/components/player/track-info";
@@ -376,6 +377,12 @@ export function Player() {
         <div className="flex items-center gap-1 w-full min-w-0 md:gap-2">
           {isSong && <MemoTrackInfo song={song} />}
           {isRadio && <MemoRadioInfo radio={radio} />}
+          {isRemoteControlActive && (
+            <RemoteModePlayerStatus
+              onExit={deviceActions.exitRemoteControl}
+              compact={isMobile}
+            />
+          )}
         </div>
         {/* Main Controls */}
         <div className="hidden md:col-span-2 md:flex flex-col justify-center items-center px-4 gap-1">

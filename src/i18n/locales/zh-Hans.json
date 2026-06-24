@@ -698,12 +698,26 @@
         "preparingRelay": "正在准备接力...",
         "sessionSuperseded": "此会话已被 {{deviceName}} 接管，本机已暂停"
       },
+      "handoffError": {
+        "targetOffline": "设备已离线。",
+        "snapshotExpired": "这次播放快照太旧，无法继续播放。",
+        "handoffConflict": "另一次接力已经接管了这个会话。",
+        "sourceChanged": "来源设备在转移前已切换播放内容。",
+        "sourcePauseTimeout": "来源设备未能及时确认暂停。",
+        "unsupportedMedia": "这种媒体类型不能在其他设备上继续播放。",
+        "deviceRevoked": "此设备已不再允许使用跨设备同步。",
+        "protocolIncompatible": "请更新一个或多个设备上的 Aonsoku。",
+        "forbidden": "当前无法控制或转移此设备。",
+        "fallback": "接力失败: {{reason}}"
+      },
       "playback": {
         "fetchingSong": "正在获取歌曲...",
         "unknownTrack": "未知曲目",
         "exitControl": "退出控制",
         "remoteControl": "远程控制",
-        "relay": "接力"
+        "relay": "接力",
+        "peerDevice": "远程设备",
+        "controllingDevice": "正在控制 {{name}}"
       }
     },
     "privacy": {

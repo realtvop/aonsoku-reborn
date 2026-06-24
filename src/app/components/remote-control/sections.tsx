@@ -69,8 +69,16 @@ export function LiveDevicesSection({
               key={model.device.id}
               model={model}
               isActive={isActive}
-              onControl={isActive ? onExitControl : () => onControl(model)}
-              onContinue={() => onContinue(model)}
+              onControl={
+                isActive
+                  ? onExitControl
+                  : model.canBeControlled
+                    ? () => onControl(model)
+                    : undefined
+              }
+              onContinue={
+                model.canBeContinuedLocally ? () => onContinue(model) : undefined
+              }
             />
           );
         })}
@@ -114,7 +122,9 @@ export function OfflineSnapshotsSection({
               key={model.device.id}
               model={model}
               isOffline={true}
-              onContinue={() => onContinue(model)}
+              onContinue={
+                model.canBeContinuedLocally ? () => onContinue(model) : undefined
+              }
             />
           ))}
         </div>

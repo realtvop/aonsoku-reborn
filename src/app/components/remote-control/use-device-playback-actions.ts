@@ -10,6 +10,7 @@ import type {
 } from "@/coordination/types";
 import { usePlayerActions, usePlayerStore } from "@/store/player.store";
 import { LanControlMessageType } from "@/types/lanControl";
+import { getHandoffErrorMessage } from "./handoff-error-message";
 import type { DevicePlaybackModel } from "./types";
 
 const SOURCE_CHANGED_MAX_RETRIES = 2;
@@ -210,10 +211,7 @@ export function useDevicePlaybackActions(): DevicePlaybackActions {
         useCoordinationStore.getState().deviceSnapshots[model.device.id];
 
       if (!snapshotData) {
-        const message = t("settings.crossDevice.toast.relayFailed", {
-          defaultValue: "Handoff failed: {{code}}",
-          code: "snapshot_expired",
-        });
+        const message = getHandoffErrorMessage(t, "snapshot_expired");
         setHandoffError(message);
         toast.error(message);
         return;
@@ -394,10 +392,7 @@ export function useDevicePlaybackActions(): DevicePlaybackActions {
     manager.callbacks.onHandoffFailed = (transactionId, code) => {
       originalFailed(transactionId, code);
       if (!activeHandoffRef.current) return;
-      const message = t("settings.crossDevice.toast.relayFailed", {
-        defaultValue: "Handoff failed: {{code}}",
-        code,
-      });
+      const message = getHandoffErrorMessage(t, code);
       finishHandoff(null, message);
       toast.error(message);
     };
@@ -434,10 +429,7 @@ export function useDevicePlaybackActions(): DevicePlaybackActions {
 
         if (!activeHandoff.isOnline) {
           originalError(code, reason);
-          const message = t("settings.crossDevice.toast.relayFailed", {
-            defaultValue: "Handoff failed: {{code}}",
-            code,
-          });
+          const message = getHandoffErrorMessage(t, code, reason);
           finishHandoff(null, message);
           toast.error(message);
           return;
@@ -457,10 +449,7 @@ export function useDevicePlaybackActions(): DevicePlaybackActions {
           })
           .catch(() => {
             originalError(code, reason);
-            const message = t("settings.crossDevice.toast.relayFailed", {
-              defaultValue: "Handoff failed: {{code}}",
-              code,
-            });
+            const message = getHandoffErrorMessage(t, code, reason);
             finishHandoff(null, message);
             toast.error(message);
           });
@@ -468,10 +457,7 @@ export function useDevicePlaybackActions(): DevicePlaybackActions {
       }
 
       originalError(code as CoordinationErrorCode, reason);
-      const message = t("settings.crossDevice.toast.relayFailed", {
-        defaultValue: "Handoff failed: {{code}}",
-        code,
-      });
+      const message = getHandoffErrorMessage(t, code, reason);
       finishHandoff(null, message);
       toast.error(message);
     };
