@@ -60,7 +60,7 @@ export function HomeDevicePlaybackOverview() {
     <div className="flex flex-col gap-3 mb-6 w-full animate-in fade-in duration-300">
       <div className="flex items-center justify-between px-1">
         <div className="flex items-center gap-2">
-          <MonitorSpeaker className="w-4 h-4 text-primary animate-pulse" />
+          <MonitorSpeaker className="w-4 h-4 text-primary" />
           <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
             {t("settings.crossDevice.playback.otherDevices", { defaultValue: "Other devices playing" })}
           </h3>
