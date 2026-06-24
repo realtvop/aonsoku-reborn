@@ -35,12 +35,12 @@ interface DevicePanelProps {
 
 export function DevicePanel({ open, onOpenChange, actions, trigger }: DevicePanelProps) {
   const isMobile = usePlayerBreakpoint();
-  const [activeSnapPoint, setActiveSnapPoint] = useState<string | number>("380px");
+  const [activeSnapPoint, setActiveSnapPoint] = useState<string | number>(0.5);
 
   useEffect(() => {
     if (isMobile) {
       if (open) {
-        setActiveSnapPoint("380px");
+        setActiveSnapPoint(0.5);
         window.dispatchEvent(new CustomEvent("device-panel-opened"));
       } else {
         window.dispatchEvent(new CustomEvent("device-panel-closed"));
@@ -58,7 +58,7 @@ export function DevicePanel({ open, onOpenChange, actions, trigger }: DevicePane
       <Drawer
         open={open}
         onOpenChange={onOpenChange}
-        snapPoints={["380px", 1]}
+        snapPoints={[0.5, 1]}
         activeSnapPoint={activeSnapPoint}
         setActiveSnapPoint={setActiveSnapPoint}
       >
