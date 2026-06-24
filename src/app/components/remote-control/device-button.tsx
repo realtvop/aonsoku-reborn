@@ -1,4 +1,4 @@
-import { Share2 } from "lucide-react";
+import { MonitorSpeaker } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import clsx from "clsx";
 import { Button } from "@/app/components/ui/button";
@@ -31,7 +31,7 @@ export function PlayerDeviceButton({ onClick, isActive = false }: PlayerDeviceBu
         })}
         unfocusable
       >
-        <Share2 className={clsx("w-4 h-4", isActive && "text-primary")} />
+        <MonitorSpeaker className={clsx("w-4 h-4", isActive && "text-primary")} />
       </Button>
     </SimpleTooltip>
   );

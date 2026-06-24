@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { Share2, Settings, WifiOff } from "lucide-react";
+import { MonitorSpeaker, Settings, WifiOff } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -59,7 +59,7 @@ export function DevicePanel({ open, onOpenChange, actions }: DevicePanelProps) {
         <SheetHeader className="p-6 pb-4 border-b border-border/20">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Share2 className="w-5 h-5 text-primary" />
+              <MonitorSpeaker className="w-5 h-5 text-primary" />
               <SheetTitle className="text-lg font-bold">
                 {t("settings.crossDevice.title", { defaultValue: "Devices" })}
               </SheetTitle>
