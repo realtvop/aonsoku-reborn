@@ -193,11 +193,7 @@ async fn run_ws(socket: WebSocket, state: AppState, ticket: String) {
     // consumers reading presence after a restart see the device as offline.
     registry.unregister(device_id);
     let now = chrono::Utc::now();
-    let _ = state
-        .repos
-        .devices
-        .mark_online(device_id, now)
-        .await;
+    let _ = state.repos.devices.mark_online(device_id, now).await;
     let _ = state
         .repos
         .presence
@@ -747,7 +743,7 @@ async fn handle_inbound(
                 // A is online: run the two-phase online handoff (design §11.1).
                 // start_transaction validates A, sends prepare_relinquish, and
                 // drives the rest of the flow via RelinquishAck/commit_relinquish.
-                let _ = state
+                if let Err(e) = state
                     .handoff
                     .start_transaction(
                         &*state.session_cache,
@@ -760,7 +756,17 @@ async fn handle_inbound(
                         device_id, // B is the target
                         15,
                     )
-                    .await;
+                    .await
+                {
+                    crate::handoff::HandoffCoordinator::send_failure_to_target(
+                        registry,
+                        device_id,
+                        *transaction_id,
+                        e.code,
+                        Some(source_device),
+                        Some(session),
+                    );
+                }
             } else {
                 // A is offline: take over A's frozen snapshot directly (design §11.3).
                 match state
@@ -875,7 +881,9 @@ async fn handle_inbound(
                     // Success: B has been notified by commit_relinquish.
                 }
                 Err(e) => {
-                    state.handoff.mark_failed(*transaction_id, e.code);
+                    state
+                        .handoff
+                        .fail_transaction(registry, *transaction_id, e.code);
                 }
             }
         }
@@ -907,14 +915,8 @@ async fn handle_inbound(
             // Replay in-window Online peer snapshots to the requester (design
             // §9.2 bootstrap). Offline peers are already replayed on Hello;
             // this covers the gap where B connects while A is already playing.
-            replay_online_snapshots_to(
-                state,
-                registry,
-                account_id,
-                vec![device_id],
-                device_id,
-            )
-            .await;
+            replay_online_snapshots_to(state, registry, account_id, vec![device_id], device_id)
+                .await;
         }
         _ => {
             // Other payloads are not handled in this version.
@@ -1925,5 +1927,189 @@ mod tests {
             rx_a.try_recv().is_err(),
             "online replay must exclude the requester itself"
         );
+    }
+
+    #[tokio::test]
+    async fn target_ready_source_changed_notifies_target() {
+        let (_dir, state) = setup_state().await;
+        let registry = state.realtime.clone();
+
+        let acc = state
+            .repos
+            .accounts
+            .upsert_by_lookup_key("lookup-handoff-source-changed", 100)
+            .await
+            .unwrap();
+        let dev_a = state
+            .repos
+            .devices
+            .create(acc.id, "A", "web", None, 0, "h", Uuid::new_v4())
+            .await
+            .unwrap();
+        let dev_b = state
+            .repos
+            .devices
+            .create(acc.id, "B", "web", None, 0, "h2", Uuid::new_v4())
+            .await
+            .unwrap();
+
+        let snapshot = sample_snapshot();
+        let session = PlaybackSession {
+            id: Uuid::new_v4(),
+            device_id: dev_a.id,
+            account_id: acc.id,
+            generation: 1,
+            snapshot_revision: 2,
+            status: SessionStatus::Online,
+            last_snapshot: Some(serde_json::to_string(&snapshot).unwrap()),
+            last_snapshot_at: Some(Utc::now()),
+            offline_at: None,
+            transferred_to_device: None,
+            transferred_to_session: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        state
+            .session_cache
+            .upsert_snapshot(&session, &serde_json::to_string(&snapshot).unwrap())
+            .await
+            .unwrap();
+
+        let _rx_a = register_fake_device(&registry, dev_a.id, acc.id);
+        let mut rx_b = register_fake_device(&registry, dev_b.id, acc.id);
+        let transaction_id = Uuid::new_v4();
+        let env = Envelope {
+            version: PROTOCOL_VERSION,
+            message_id: Uuid::new_v4(),
+            connection_id: Some(Uuid::new_v4()),
+            source_device_id: Some(dev_b.id),
+            target_device_id: None,
+            session_id: None,
+            expected_generation: None,
+            seq: None,
+            server_time: None,
+            payload: Payload::TargetReady {
+                transaction_id,
+                generation: 1,
+                snapshot_revision: 1,
+                source_device_id: Some(dev_a.id),
+                session_id: Some(session.id),
+            },
+        };
+
+        handle_inbound(&state, &registry, dev_b.id, acc.id, Uuid::new_v4(), 0, env).await;
+
+        let env = rx_b.recv().await.expect("B received handoff failure");
+        match env.payload {
+            Payload::HandoffFailed {
+                transaction_id: got_transaction_id,
+                code,
+            } => {
+                assert_eq!(got_transaction_id, transaction_id);
+                assert_eq!(code, ErrorCode::SourceChanged);
+            }
+            other => panic!("expected HandoffFailed, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn target_ready_handoff_conflict_notifies_target() {
+        let (_dir, state) = setup_state().await;
+        let registry = state.realtime.clone();
+
+        let acc = state
+            .repos
+            .accounts
+            .upsert_by_lookup_key("lookup-handoff-conflict", 100)
+            .await
+            .unwrap();
+        let dev_a = state
+            .repos
+            .devices
+            .create(acc.id, "A", "web", None, 0, "h", Uuid::new_v4())
+            .await
+            .unwrap();
+        let dev_b = state
+            .repos
+            .devices
+            .create(acc.id, "B", "web", None, 0, "h2", Uuid::new_v4())
+            .await
+            .unwrap();
+
+        let snapshot = sample_snapshot();
+        let session = PlaybackSession {
+            id: Uuid::new_v4(),
+            device_id: dev_a.id,
+            account_id: acc.id,
+            generation: 1,
+            snapshot_revision: 1,
+            status: SessionStatus::Online,
+            last_snapshot: Some(serde_json::to_string(&snapshot).unwrap()),
+            last_snapshot_at: Some(Utc::now()),
+            offline_at: None,
+            transferred_to_device: None,
+            transferred_to_session: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        state
+            .session_cache
+            .upsert_snapshot(&session, &serde_json::to_string(&snapshot).unwrap())
+            .await
+            .unwrap();
+
+        let _rx_a = register_fake_device(&registry, dev_a.id, acc.id);
+        let mut rx_b = register_fake_device(&registry, dev_b.id, acc.id);
+        state
+            .handoff
+            .start_transaction(
+                &*state.session_cache,
+                &registry,
+                Uuid::new_v4(),
+                dev_a.id,
+                session.id,
+                1,
+                1,
+                dev_b.id,
+                15,
+            )
+            .await
+            .unwrap();
+
+        let transaction_id = Uuid::new_v4();
+        let env = Envelope {
+            version: PROTOCOL_VERSION,
+            message_id: Uuid::new_v4(),
+            connection_id: Some(Uuid::new_v4()),
+            source_device_id: Some(dev_b.id),
+            target_device_id: None,
+            session_id: None,
+            expected_generation: None,
+            seq: None,
+            server_time: None,
+            payload: Payload::TargetReady {
+                transaction_id,
+                generation: 1,
+                snapshot_revision: 1,
+                source_device_id: Some(dev_a.id),
+                session_id: Some(session.id),
+            },
+        };
+
+        handle_inbound(&state, &registry, dev_b.id, acc.id, Uuid::new_v4(), 0, env).await;
+
+        let mut saw_failure = false;
+        while let Ok(env) = rx_b.try_recv() {
+            if let Payload::HandoffFailed {
+                transaction_id: got_transaction_id,
+                code,
+            } = env.payload
+            {
+                assert_eq!(got_transaction_id, transaction_id);
+                assert_eq!(code, ErrorCode::HandoffConflict);
+                saw_failure = true;
+            }
+        }
+        assert!(saw_failure, "B must receive handoff_conflict failure");
     }
 }

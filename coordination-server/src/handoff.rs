@@ -172,15 +172,12 @@ impl HandoffCoordinator {
                 CoordinationError::new(ErrorCode::NotFound, "source session not found")
             })?;
         if session.generation != txn.source_generation {
-            // Source changed during preparation.
-            self.mark_failed(transaction_id, ErrorCode::SourceChanged);
             return Err(CoordinationError::new(
                 ErrorCode::SourceChanged,
                 "source session generation changed during relinquish",
             ));
         }
         if session.snapshot_revision != txn.source_snapshot_revision {
-            self.mark_failed(transaction_id, ErrorCode::SourceChanged);
             return Err(CoordinationError::new(
                 ErrorCode::SourceChanged,
                 "source snapshot changed during relinquish",
@@ -232,6 +229,58 @@ impl HandoffCoordinator {
         self.transactions.write().remove(&transaction_id);
 
         Ok(new_generation)
+    }
+
+    pub fn send_failure_to_target(
+        registry: &Arc<ConnectionRegistry>,
+        target_device_id: Uuid,
+        transaction_id: Uuid,
+        code: ErrorCode,
+        source_device_id: Option<Uuid>,
+        session_id: Option<Uuid>,
+    ) {
+        let failed = crate::protocol::Envelope {
+            version: crate::protocol::PROTOCOL_VERSION,
+            message_id: Uuid::new_v4(),
+            connection_id: None,
+            source_device_id,
+            target_device_id: Some(target_device_id),
+            session_id,
+            expected_generation: None,
+            seq: None,
+            server_time: Some(Utc::now().timestamp()),
+            payload: crate::protocol::Payload::HandoffFailed {
+                transaction_id,
+                code,
+            },
+        };
+        let _ = registry.send(target_device_id, failed);
+    }
+
+    pub fn fail_transaction(
+        &self,
+        registry: &Arc<ConnectionRegistry>,
+        transaction_id: Uuid,
+        code: ErrorCode,
+    ) {
+        let txn = {
+            let mut txns = self.transactions.write();
+            if let Some(t) = txns.get_mut(&transaction_id) {
+                t.phase = HandoffPhase::Failed;
+                t.error_code = Some(code);
+            }
+            txns.remove(&transaction_id)
+        };
+        if let Some(txn) = txn {
+            Self::send_failure_to_target(
+                registry,
+                txn.target_device_id,
+                transaction_id,
+                code,
+                Some(txn.source_device_id),
+                Some(txn.source_session_id),
+            );
+        }
     }
 
     /// Handle offline handoff (design §11.3). B takes over A's frozen
@@ -290,38 +339,14 @@ impl HandoffCoordinator {
         Ok(new_generation)
     }
 
-    /// Mark a transaction as failed and notify both parties.
+    /// Mark a transaction as failed and remove it without notifying peers.
     pub fn mark_failed(&self, transaction_id: Uuid, code: ErrorCode) {
-        let target_device = {
+        {
             let mut txns = self.transactions.write();
             if let Some(t) = txns.get_mut(&transaction_id) {
                 t.phase = HandoffPhase::Failed;
                 t.error_code = Some(code);
-                Some(t.target_device_id)
-            } else {
-                None
             }
-        };
-        if let Some(target) = target_device {
-            let failed = crate::protocol::Envelope {
-                version: crate::protocol::PROTOCOL_VERSION,
-                message_id: Uuid::new_v4(),
-                connection_id: None,
-                source_device_id: None,
-                target_device_id: Some(target),
-                session_id: None,
-                expected_generation: None,
-                seq: None,
-                server_time: Some(Utc::now().timestamp()),
-                payload: crate::protocol::Payload::HandoffFailed {
-                    transaction_id,
-                    code,
-                },
-            };
-            // Best-effort send; target may be offline.
-            // We'd need the registry here, but to keep this method non-async
-            // we skip sending. The caller should notify separately.
-            let _ = failed;
         }
         self.transactions.write().remove(&transaction_id);
     }
@@ -345,9 +370,12 @@ impl HandoffCoordinator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::{MediaKind, Payload, PROTOCOL_VERSION};
+    use crate::realtime::registry::DeviceConnection;
     use crate::storage::models::{PlaybackSession, SessionStatus};
     use crate::storage::repository::{AccountRepository, DeviceRepository, SessionRepository};
     use crate::storage::sqlite::SqliteSessionRepository;
+    use tokio::sync::mpsc;
 
     async fn setup_session_repo() -> (tempfile::TempDir, SqliteSessionRepository, uuid::Uuid) {
         let dir = tempfile::tempdir().unwrap();
@@ -379,6 +407,49 @@ mod tests {
         };
         session_repo.upsert_snapshot(&session, "{}").await.unwrap();
         (dir, session_repo, session.id)
+    }
+
+    fn sample_snapshot(session_id: Uuid) -> PlaybackSnapshot {
+        PlaybackSnapshot {
+            session_id,
+            logical_playback_session_id: session_id,
+            media_kind: MediaKind::Song,
+            song_id: "song-1".into(),
+            progress_seconds: 10.0,
+            duration_seconds: 180.0,
+            is_playing: false,
+            sampled_at: 1_700_000_000.0,
+            context_queue: vec!["song-1".into()],
+            context_index: Some(0),
+            source_id: None,
+            source_name: None,
+            user_queue: vec![],
+            in_user_queue: false,
+            restore_previous: vec![],
+            shuffle: false,
+            repeat: "off".into(),
+            volume: Some(0.5),
+            accumulated_play_seconds: 12.0,
+            history_written: false,
+            now_playing_sent: true,
+            scrobble_sent: false,
+        }
+    }
+
+    fn register_fake_device(
+        registry: &Arc<ConnectionRegistry>,
+        device_id: Uuid,
+        account_id: Uuid,
+    ) -> mpsc::UnboundedReceiver<crate::protocol::Envelope> {
+        let (tx, rx) = mpsc::unbounded_channel();
+        registry.register(DeviceConnection {
+            connection_id: Uuid::new_v4(),
+            device_id,
+            account_id,
+            tx,
+            last_seq: 0,
+        });
+        rx
     }
 
     #[tokio::test]
@@ -443,6 +514,111 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(err.code, ErrorCode::StaleEpoch);
+    }
+
+    #[tokio::test]
+    async fn fail_transaction_notifies_target() {
+        let (_dir, session_repo, session_id) = setup_session_repo().await;
+        let coord = HandoffCoordinator::new();
+        let registry = Arc::new(ConnectionRegistry::new());
+        let account_id = Uuid::new_v4();
+        let source_device_id = Uuid::new_v4();
+        let target_device_id = Uuid::new_v4();
+        let mut rx_target = register_fake_device(&registry, target_device_id, account_id);
+        let transaction_id = Uuid::new_v4();
+
+        coord
+            .start_transaction(
+                &session_repo,
+                &registry,
+                transaction_id,
+                source_device_id,
+                session_id,
+                1,
+                1,
+                target_device_id,
+                15,
+            )
+            .await
+            .unwrap();
+
+        coord.fail_transaction(&registry, transaction_id, ErrorCode::SourceChanged);
+
+        let env = rx_target.recv().await.expect("target received failure");
+        assert_eq!(env.version, PROTOCOL_VERSION);
+        assert_eq!(env.source_device_id, Some(source_device_id));
+        assert_eq!(env.target_device_id, Some(target_device_id));
+        assert_eq!(env.session_id, Some(session_id));
+        match env.payload {
+            Payload::HandoffFailed {
+                transaction_id: got_transaction_id,
+                code,
+            } => {
+                assert_eq!(got_transaction_id, transaction_id);
+                assert_eq!(code, ErrorCode::SourceChanged);
+            }
+            other => panic!("expected HandoffFailed, got {:?}", other),
+        }
+        assert!(coord.get_state(transaction_id).is_none());
+    }
+
+    #[tokio::test]
+    async fn commit_failure_can_be_reported_to_target() {
+        let (_dir, session_repo, session_id) = setup_session_repo().await;
+        let coord = HandoffCoordinator::new();
+        let registry = Arc::new(ConnectionRegistry::new());
+        let account_id = Uuid::new_v4();
+        let source_device_id = Uuid::new_v4();
+        let target_device_id = Uuid::new_v4();
+        let mut rx_target = register_fake_device(&registry, target_device_id, account_id);
+        let transaction_id = Uuid::new_v4();
+
+        coord
+            .start_transaction(
+                &session_repo,
+                &registry,
+                transaction_id,
+                source_device_id,
+                session_id,
+                1,
+                1,
+                target_device_id,
+                15,
+            )
+            .await
+            .unwrap();
+
+        let mut session = session_repo
+            .find_by_id(session_id)
+            .await
+            .unwrap()
+            .expect("session exists");
+        session.snapshot_revision = 2;
+        session_repo.upsert_snapshot(&session, "{}").await.unwrap();
+
+        let err = coord
+            .commit_relinquish(
+                &session_repo,
+                &registry,
+                transaction_id,
+                sample_snapshot(Uuid::new_v4()),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(err.code, ErrorCode::SourceChanged);
+
+        coord.fail_transaction(&registry, transaction_id, err.code);
+        let env = rx_target.recv().await.expect("target received failure");
+        match env.payload {
+            Payload::HandoffFailed {
+                transaction_id: got_transaction_id,
+                code,
+            } => {
+                assert_eq!(got_transaction_id, transaction_id);
+                assert_eq!(code, ErrorCode::SourceChanged);
+            }
+            other => panic!("expected HandoffFailed, got {:?}", other),
+        }
     }
 
     #[tokio::test]
