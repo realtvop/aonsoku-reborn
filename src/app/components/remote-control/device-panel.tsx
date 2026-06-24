@@ -1,9 +1,16 @@
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { MonitorSpeaker, Settings, WifiOff } from "lucide-react";
-import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { Popover, PopoverContent } from "@/app/components/ui/popover";
-import { Sheet, SheetTrigger, SheetContent } from "@/app/components/ui/sheet";
+import * as PopoverPrimitive from "@radix-ui/react-popover";
+import {
+  Drawer,
+  DrawerTrigger,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerDescription,
+} from "@/app/components/ui/drawer";
 import { ScrollArea } from "@/app/components/ui/scroll-area";
 import { Button } from "@/app/components/ui/button";
 import { useCoordinationStore } from "@/coordination/store";
@@ -30,17 +37,14 @@ export function DevicePanel({ open, onOpenChange, actions, trigger }: DevicePane
 
   if (isMobile) {
     return (
-      <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetTrigger asChild>
+      <Drawer open={open} onOpenChange={onOpenChange}>
+        <DrawerTrigger asChild>
           {trigger}
-        </SheetTrigger>
-        <SheetContent
-          side="bottom"
-          className="flex flex-col h-[70vh] w-full p-0 border-t border-border/40 bg-background/95 backdrop-blur-xl"
-        >
+        </DrawerTrigger>
+        <DrawerContent className="h-[calc(100dvh-env(safe-area-inset-top)-12px)] rounded-t-[24px]">
           <DevicePanelContent onOpenChange={onOpenChange} actions={actions} />
-        </SheetContent>
-      </Sheet>
+        </DrawerContent>
+      </Drawer>
     );
   }
 
@@ -89,32 +93,62 @@ function DevicePanelContent({ onOpenChange, actions }: DevicePanelContentProps) 
   };
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden">
+    <div className="flex flex-col h-full w-full overflow-hidden text-left">
       {/* Custom Header (Reusable across Sheet and Popover) */}
-      <div className="p-5 pb-4 border-b border-border/20 flex flex-col gap-1 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <MonitorSpeaker className="w-5 h-5 text-primary animate-pulse" />
-            <h2 className="text-sm font-bold text-foreground">
-              {t("settings.crossDevice.title", { defaultValue: "Devices" })}
-            </h2>
+      {isMobile ? (
+        <>
+          <DrawerHeader className="text-left pb-4 flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MonitorSpeaker className="w-5 h-5 text-primary animate-pulse" />
+                <DrawerTitle className="text-sm font-bold text-foreground">
+                  {t("settings.crossDevice.title", { defaultValue: "Devices" })}
+                </DrawerTitle>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleGoToSettings}
+                className="h-8 w-8 rounded-lg hover:bg-accent/50"
+                title={t("sidebar.settings", { defaultValue: "Settings" })}
+              >
+                <Settings className="w-4 h-4 text-muted-foreground hover:text-foreground transition-colors" />
+              </Button>
+            </div>
+            <DrawerDescription className="text-xs text-muted-foreground text-left mt-0.5">
+              {t("settings.crossDevice.description", {
+                defaultValue: "Manage active devices and continue playback.",
+              })}
+            </DrawerDescription>
+          </DrawerHeader>
+          <div className="border-t border-border/20" />
+        </>
+      ) : (
+        <div className="p-5 pb-4 border-b border-border/20 flex flex-col gap-1 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <MonitorSpeaker className="w-5 h-5 text-primary animate-pulse" />
+              <h2 className="text-sm font-bold text-foreground">
+                {t("settings.crossDevice.title", { defaultValue: "Devices" })}
+              </h2>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleGoToSettings}
+              className="h-8 w-8 rounded-lg hover:bg-accent/50"
+              title={t("sidebar.settings", { defaultValue: "Settings" })}
+            >
+              <Settings className="w-4 h-4 text-muted-foreground hover:text-foreground transition-colors" />
+            </Button>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleGoToSettings}
-            className="h-8 w-8 rounded-lg hover:bg-accent/50"
-            title={t("sidebar.settings", { defaultValue: "Settings" })}
-          >
-            <Settings className="w-4 h-4 text-muted-foreground hover:text-foreground transition-colors" />
-          </Button>
+          <p className="text-xs text-muted-foreground text-left mt-0.5">
+            {t("settings.crossDevice.description", {
+              defaultValue: "Manage active devices and continue playback.",
+            })}
+          </p>
         </div>
-        <p className="text-xs text-muted-foreground text-left mt-0.5">
-          {t("settings.crossDevice.description", {
-            defaultValue: "Manage active devices and continue playback.",
-          })}
-        </p>
-      </div>
+      )}
 
       {/* Main List Scroll Area */}
       <div className="flex-1 overflow-hidden">
