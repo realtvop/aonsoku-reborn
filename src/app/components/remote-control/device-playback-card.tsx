@@ -97,7 +97,6 @@ export function DevicePlaybackCard({
   const isLoading = !isSelf ? isRemoteLoading : false;
 
   let songTitle = "";
-  let songArtist = "";
   let coverArt = "";
   let coverArtType: "song" | "album" = "song";
   let albumId = "";
@@ -105,19 +104,16 @@ export function DevicePlaybackCard({
   if (isSelf) {
     if (localIsSong && localSong) {
       songTitle = localSong.title;
-      songArtist = localSong.artist;
       coverArt = localSong.coverArt;
       coverArtType = "song";
       albumId = localSong.albumId;
     } else if (localIsRadio && localRadio) {
       songTitle = localRadio.name;
-      songArtist = t("radios.label", { defaultValue: "Radio" });
       coverArt = "";
     }
   } else {
     if (remoteSong) {
       songTitle = remoteSong.title;
-      songArtist = remoteSong.artist;
       coverArt = remoteSong.coverArt;
       coverArtType = "song";
       albumId = remoteSong.albumId;
@@ -181,12 +177,6 @@ export function DevicePlaybackCard({
               {getDeviceIcon(device.platform)}
               {device.name}
             </span>
-            {songArtist && (
-              <>
-                <span className="text-muted-foreground/45">•</span>
-                <span className="truncate">{songArtist}</span>
-              </>
-            )}
           </span>
         </div>
       </div>
