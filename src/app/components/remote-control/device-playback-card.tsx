@@ -18,7 +18,6 @@ import {
   usePlayerCurrentSong,
   usePlayerMediaType,
   usePlayerSonglist,
-  usePlayerIsPlaying,
 } from "@/store/player.store";
 import type { DevicePlaybackModel } from "./types";
 import { cn } from "@/lib/utils";
@@ -76,7 +75,7 @@ export function DevicePlaybackCard({
   isActive = false,
 }: DevicePlaybackCardProps) {
   const { t } = useTranslation();
-  const { device, snapshot, isOnline } = model;
+  const { device, snapshot } = model;
 
   const currentDeviceId = useCoordinationStore((state) => state.deviceId);
   const isSelf = device.id === currentDeviceId;
@@ -86,7 +85,6 @@ export function DevicePlaybackCard({
   const { isSong: localIsSong, isRadio: localIsRadio } = usePlayerMediaType();
   const { currentSongIndex, radioList } = usePlayerSonglist();
   const localRadio = radioList[currentSongIndex];
-  const localIsPlaying = usePlayerIsPlaying();
 
   // Remote song query
   const { data: remoteSong, isLoading: isRemoteLoading } = useSongInfo(
@@ -120,8 +118,6 @@ export function DevicePlaybackCard({
     }
   }
 
-  const hasPlayingOverlay = isSelf ? localIsPlaying : (snapshot?.isPlaying && isOnline);
-
   return (
     <div
       className={cn(
@@ -151,17 +147,6 @@ export function DevicePlaybackCard({
               ) : (
                 <Radio className="w-5 h-5 text-muted-foreground/60" />
               )}
-            </div>
-          )}
-
-          {/* Playing overlay indicator */}
-          {hasPlayingOverlay && (
-            <div className="absolute inset-0 bg-black/40 flex items-center justify-center backdrop-blur-[1px]">
-              <div className="flex items-end gap-0.5 h-3">
-                <span className="w-0.5 bg-primary animate-[bounce_0.8s_infinite_100ms]"></span>
-                <span className="w-0.5 bg-primary animate-[bounce_0.8s_infinite_300ms] h-2"></span>
-                <span className="w-0.5 bg-primary animate-[bounce_0.8s_infinite_200ms] h-1.5"></span>
-              </div>
             </div>
           )}
         </div>
