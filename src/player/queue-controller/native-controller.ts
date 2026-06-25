@@ -644,7 +644,8 @@ export class NativeQueueController implements QueueController {
 
     usePlayerStore.setState((state) => {
       state.playerProgress.progress = seconds;
-      state.playerProgress.seekCount = (state.playerProgress.seekCount ?? 0) + 1;
+      state.playerProgress.seekCount =
+        (state.playerProgress.seekCount ?? 0) + 1;
     });
   }
 

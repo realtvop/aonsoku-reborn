@@ -414,9 +414,7 @@ export function CrossDeviceSettings() {
             {coordStore.error && (
               <div className="mt-3 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-destructive">
                 <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                <span className="text-xs leading-5">
-                  {coordStore.error}
-                </span>
+                <span className="text-xs leading-5">{coordStore.error}</span>
               </div>
             )}
           </Content>

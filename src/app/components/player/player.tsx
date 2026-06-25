@@ -399,7 +399,9 @@ export function Player() {
           {(isSong || remoteProjection.active) && (
             <MemoTrackInfo song={displaySong} />
           )}
-          {!remoteProjection.active && isRadio && <MemoRadioInfo radio={radio} />}
+          {!remoteProjection.active && isRadio && (
+            <MemoRadioInfo radio={radio} />
+          )}
         </div>
         {/* Main Controls */}
         <div className="hidden md:col-span-2 md:flex flex-col justify-center items-center px-4 gap-1">
@@ -459,9 +461,7 @@ export function Player() {
                 onOpenChange={handleDevicePanelOpenChange}
                 actions={deviceActions}
                 trigger={
-                  <PlayerDeviceButton
-                    isActive={deviceActions.isControlling}
-                  />
+                  <PlayerDeviceButton isActive={deviceActions.isControlling} />
                 }
               />
             )}

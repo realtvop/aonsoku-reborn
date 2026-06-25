@@ -25,7 +25,9 @@ export function ThisDeviceSection({
   return (
     <div className="flex flex-col gap-2.5">
       <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-1">
-        {t("settings.crossDevice.playback.thisDevice", { defaultValue: "This Device" })}
+        {t("settings.crossDevice.playback.thisDevice", {
+          defaultValue: "This Device",
+        })}
       </span>
       <DevicePlaybackCard
         model={model}
@@ -59,7 +61,9 @@ export function LiveDevicesSection({
   return (
     <div className="flex flex-col gap-3">
       <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-1">
-        {t("settings.crossDevice.playback.liveDevices", { defaultValue: "Live peer devices" })}
+        {t("settings.crossDevice.playback.liveDevices", {
+          defaultValue: "Live peer devices",
+        })}
       </span>
       <div className="flex flex-col gap-3">
         {models.map((model) => {
@@ -77,7 +81,9 @@ export function LiveDevicesSection({
                     : undefined
               }
               onContinue={
-                model.canBeContinuedLocally ? () => onContinue(model) : undefined
+                model.canBeContinuedLocally
+                  ? () => onContinue(model)
+                  : undefined
               }
             />
           );
@@ -110,9 +116,15 @@ export function OfflineSnapshotsSection({
         className="flex items-center justify-between w-full py-1 px-1 hover:text-foreground text-muted-foreground transition-colors"
       >
         <span className="text-xs font-bold uppercase tracking-wider text-left">
-          {t("settings.crossDevice.playback.offlineSnapshots", { defaultValue: "Continue from offline playback" })}
+          {t("settings.crossDevice.playback.offlineSnapshots", {
+            defaultValue: "Continue from offline playback",
+          })}
         </span>
-        {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+        {isExpanded ? (
+          <ChevronDown className="w-4 h-4" />
+        ) : (
+          <ChevronRight className="w-4 h-4" />
+        )}
       </button>
 
       {isExpanded && (
@@ -123,7 +135,9 @@ export function OfflineSnapshotsSection({
               model={model}
               isOffline={true}
               onContinue={
-                model.canBeContinuedLocally ? () => onContinue(model) : undefined
+                model.canBeContinuedLocally
+                  ? () => onContinue(model)
+                  : undefined
               }
             />
           ))}

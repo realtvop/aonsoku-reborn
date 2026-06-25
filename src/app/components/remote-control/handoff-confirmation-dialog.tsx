@@ -12,7 +12,11 @@ import {
   AlertDialogTitle,
 } from "@/app/components/ui/alert-dialog";
 import { subsonic } from "@/service/subsonic";
-import { usePlayerCurrentSong, usePlayerMediaType, usePlayerSonglist } from "@/store/player.store";
+import {
+  usePlayerCurrentSong,
+  usePlayerMediaType,
+  usePlayerSonglist,
+} from "@/store/player.store";
 import { convertSecondsToTime } from "@/utils/convertSecondsToTime";
 import { CachedImage } from "@/app/components/cover-image/cached-image";
 import type { DevicePlaybackModel } from "./types";
@@ -54,10 +58,13 @@ export function HandoffConfirmationDialog({
 
   // Target song info
   const targetSongId = pendingDevice?.snapshot?.songId;
-  const { data: targetSong, isLoading: targetLoading } = useSongInfo(targetSongId);
+  const { data: targetSong, isLoading: targetLoading } =
+    useSongInfo(targetSongId);
 
   // local details
-  let localTitle = t("player.noSongPlaying", { defaultValue: "No song playing" });
+  let localTitle = t("player.noSongPlaying", {
+    defaultValue: "No song playing",
+  });
   let localArtist = "";
   let localCover = "";
   let localAlbumId = "";
@@ -74,8 +81,13 @@ export function HandoffConfirmationDialog({
 
   // target details
   const targetTitle = targetLoading
-    ? t("settings.crossDevice.playback.fetchingSong", { defaultValue: "Fetching song..." })
-    : targetSong?.title || t("settings.crossDevice.playback.unknownTrack", { defaultValue: "Unknown track" });
+    ? t("settings.crossDevice.playback.fetchingSong", {
+        defaultValue: "Fetching song...",
+      })
+    : targetSong?.title ||
+      t("settings.crossDevice.playback.unknownTrack", {
+        defaultValue: "Unknown track",
+      });
   const targetArtist = targetSong?.artist || "";
   const targetCover = targetSong?.coverArt || "";
   const targetAlbumId = targetSong?.albumId || "";
@@ -96,7 +108,8 @@ export function HandoffConfirmationDialog({
           </AlertDialogTitle>
           <AlertDialogDescription className="text-xs text-muted-foreground">
             {t("settings.crossDevice.playback.continueConfirmDesc", {
-              defaultValue: "This will replace the active local playback on this device.",
+              defaultValue:
+                "This will replace the active local playback on this device.",
             })}
           </AlertDialogDescription>
         </AlertDialogHeader>
@@ -123,7 +136,9 @@ export function HandoffConfirmationDialog({
             </div>
             <div className="flex flex-col min-w-0 text-left">
               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                {t("settings.crossDevice.playback.currentLocal", { defaultValue: "Current on this device" })}
+                {t("settings.crossDevice.playback.currentLocal", {
+                  defaultValue: "Current on this device",
+                })}
               </span>
               <span className="text-xs font-semibold truncate text-foreground leading-snug mt-0.5">
                 {localTitle}
@@ -181,11 +196,19 @@ export function HandoffConfirmationDialog({
         </div>
 
         <AlertDialogFooter className="gap-2 sm:gap-0">
-          <AlertDialogCancel onClick={onCancel} className="h-9 text-xs rounded-xl font-semibold border-border/60 hover:bg-accent/40">
+          <AlertDialogCancel
+            onClick={onCancel}
+            className="h-9 text-xs rounded-xl font-semibold border-border/60 hover:bg-accent/40"
+          >
             {t("generic.cancel", { defaultValue: "Cancel" })}
           </AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm} className="h-9 text-xs rounded-xl font-semibold bg-primary hover:bg-primary/95 text-primary-foreground shadow-sm">
-            {t("settings.crossDevice.playback.relay", { defaultValue: "Continue here" })}
+          <AlertDialogAction
+            onClick={onConfirm}
+            className="h-9 text-xs rounded-xl font-semibold bg-primary hover:bg-primary/95 text-primary-foreground shadow-sm"
+          >
+            {t("settings.crossDevice.playback.relay", {
+              defaultValue: "Continue here",
+            })}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -22,8 +22,7 @@ function testT(key: string, options?: Record<string, unknown>): string {
       "Update Aonsoku on one or more devices.",
     "settings.crossDevice.handoffError.forbidden":
       "This device cannot be controlled or transferred right now.",
-    "settings.crossDevice.handoffError.fallback":
-      `Handoff failed: ${String(options?.reason)}`,
+    "settings.crossDevice.handoffError.fallback": `Handoff failed: ${String(options?.reason)}`,
   };
 
   return defaults[key] ?? String(options?.defaultValue ?? key);

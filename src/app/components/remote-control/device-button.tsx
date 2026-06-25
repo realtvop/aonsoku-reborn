@@ -29,7 +29,7 @@ export const PlayerDeviceButton = React.forwardRef<
         onClick={onClick}
         className={clsx(
           "rounded-full w-10 h-10 p-2 text-secondary-foreground relative",
-          isActive && "player-button-active"
+          isActive && "player-button-active",
         )}
         aria-label={t("settings.crossDevice.title", {
           defaultValue: "Devices",
@@ -37,7 +37,9 @@ export const PlayerDeviceButton = React.forwardRef<
         unfocusable
         {...props}
       >
-        <MonitorSpeaker className={clsx("w-4 h-4", isActive && "text-primary")} />
+        <MonitorSpeaker
+          className={clsx("w-4 h-4", isActive && "text-primary")}
+        />
       </Button>
     </SimpleTooltip>
   );

@@ -1,5 +1,11 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, ListChecks, ListMusic, MicVocalIcon, MonitorSpeaker } from "lucide-react";
+import {
+  ChevronDown,
+  ListChecks,
+  ListMusic,
+  MicVocalIcon,
+  MonitorSpeaker,
+} from "lucide-react";
 import {
   forwardRef,
   memo,

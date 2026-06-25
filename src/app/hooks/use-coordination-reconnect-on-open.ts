@@ -12,11 +12,7 @@ export function useCoordinationReconnectOnOpen() {
 
   return useCallback(
     (open: boolean) => {
-      if (
-        !open ||
-        isConnected ||
-        CONNECTING_STATES.has(connectionState)
-      ) {
+      if (!open || isConnected || CONNECTING_STATES.has(connectionState)) {
         return;
       }
 

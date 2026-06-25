@@ -79,9 +79,7 @@ function fallbackRemoteSong(snapshot: PlaybackSnapshot): ISong {
 
 export function useRemotePlaybackProjection() {
   const isRemoteActive = usePlayerStore((s) => s.remoteControl.active);
-  const controlledDeviceId = useCoordinationStore(
-    (s) => s.controlledDeviceId,
-  );
+  const controlledDeviceId = useCoordinationStore((s) => s.controlledDeviceId);
   const snapshotData = useCoordinationStore((s) =>
     controlledDeviceId ? s.deviceSnapshots[controlledDeviceId] : undefined,
   );

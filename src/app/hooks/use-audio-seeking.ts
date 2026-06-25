@@ -59,7 +59,6 @@ export function useAudioSeeking({ audioRef }: UseAudioSeekingOptions) {
     ],
   );
 
-
   return {
     localProgress,
     setLocalProgress,

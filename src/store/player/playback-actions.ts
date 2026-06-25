@@ -129,7 +129,8 @@ export function createPlaybackActions(shared: SharedDeps) {
       set((state) => {
         state.playerProgress.progress = progress;
         if (isSeek) {
-          state.playerProgress.seekCount = (state.playerProgress.seekCount ?? 0) + 1;
+          state.playerProgress.seekCount =
+            (state.playerProgress.seekCount ?? 0) + 1;
         }
       });
     },

@@ -48,8 +48,8 @@ export function HandoffStatusRow({ phase, error }: HandoffStatusRowProps) {
         error
           ? "border-destructive/30 bg-destructive/5 text-destructive"
           : isSuccess
-          ? "border-primary/30 bg-primary/5 text-foreground"
-          : "border-border/40 bg-muted/40 text-muted-foreground"
+            ? "border-primary/30 bg-primary/5 text-foreground"
+            : "border-border/40 bg-muted/40 text-muted-foreground",
       )}
     >
       {error ? (
@@ -64,7 +64,12 @@ export function HandoffStatusRow({ phase, error }: HandoffStatusRowProps) {
           ) : (
             <Loader2 className="w-4 h-4 text-primary animate-spin flex-shrink-0" />
           )}
-          <span className={cn("leading-snug text-left flex-1", isSuccess && "text-primary font-semibold")}>
+          <span
+            className={cn(
+              "leading-snug text-left flex-1",
+              isSuccess && "text-primary font-semibold",
+            )}
+          >
             {phase && getPhaseText(phase)}
           </span>
         </>

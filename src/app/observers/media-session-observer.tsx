@@ -157,7 +157,7 @@ export function MediaSessionObserver() {
     }
 
     const duration = isRemoteActive
-      ? (remoteProjection.duration || song.duration || 0)
+      ? remoteProjection.duration || song.duration || 0
       : currentDuration;
 
     if (!isValidDuration(duration)) {
@@ -257,9 +257,7 @@ export function MediaSessionObserver() {
         position,
         duration,
         isShuffleActive: remoteProjection.isShuffleActive,
-        repeatMode: playbackRepeatModeFromLoopState(
-          remoteProjection.loopState,
-        ),
+        repeatMode: playbackRepeatModeFromLoopState(remoteProjection.loopState),
         volume:
           typeof remoteProjection.volume === "number"
             ? remoteProjection.volume / 100

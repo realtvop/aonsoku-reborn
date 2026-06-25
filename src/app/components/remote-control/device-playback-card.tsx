@@ -88,7 +88,7 @@ export function DevicePlaybackCard({
 
   // Remote song query
   const { data: remoteSong, isLoading: isRemoteLoading } = useSongInfo(
-    !isSelf ? snapshot?.songId : undefined
+    !isSelf ? snapshot?.songId : undefined,
   );
 
   // Resolved values based on local vs remote
@@ -124,7 +124,7 @@ export function DevicePlaybackCard({
         "bg-card/40 backdrop-blur-md border rounded-xl p-3 flex items-center justify-between gap-4 transition-all duration-300",
         isActive
           ? "border-primary/50 bg-primary/5"
-          : "border-border/40 hover:border-border/80 hover:bg-card/50 shadow-sm"
+          : "border-border/40 hover:border-border/80 hover:bg-card/50 shadow-sm",
       )}
     >
       {/* Track Info & Device Info (Left) */}
@@ -154,8 +154,13 @@ export function DevicePlaybackCard({
         <div className="flex flex-col min-w-0 text-left">
           <span className="text-sm font-semibold truncate text-foreground leading-tight">
             {isLoading
-              ? t("settings.crossDevice.playback.fetchingSong", { defaultValue: "Fetching song..." })
-              : songTitle || t("settings.crossDevice.playback.unknownTrack", { defaultValue: "Unknown track" })}
+              ? t("settings.crossDevice.playback.fetchingSong", {
+                  defaultValue: "Fetching song...",
+                })
+              : songTitle ||
+                t("settings.crossDevice.playback.unknownTrack", {
+                  defaultValue: "Unknown track",
+                })}
           </span>
           <span className="text-xs text-muted-foreground truncate leading-normal mt-1 flex items-center gap-1.5">
             <span className="flex items-center gap-1 font-medium text-foreground/80">
@@ -178,9 +183,11 @@ export function DevicePlaybackCard({
               isActive
                 ? "text-primary-foreground bg-primary hover:bg-primary/90"
                 : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
-              isActive && !onControl && "pointer-events-none"
+              isActive && !onControl && "pointer-events-none",
             )}
-            title={t("settings.crossDevice.playback.remoteControl", { defaultValue: "Control" })}
+            title={t("settings.crossDevice.playback.remoteControl", {
+              defaultValue: "Control",
+            })}
           >
             <MousePointerClick className="w-4.5 h-4.5" />
           </Button>
@@ -191,9 +198,15 @@ export function DevicePlaybackCard({
             size="icon"
             onClick={onContinue}
             className="h-9 w-9 rounded-lg hover:bg-accent/50 text-muted-foreground hover:text-foreground transition-all"
-            title={isOffline
-              ? t("settings.crossDevice.playback.continue", { defaultValue: "Continue" })
-              : t("settings.crossDevice.playback.relay", { defaultValue: "Continue here" })}
+            title={
+              isOffline
+                ? t("settings.crossDevice.playback.continue", {
+                    defaultValue: "Continue",
+                  })
+                : t("settings.crossDevice.playback.relay", {
+                    defaultValue: "Continue here",
+                  })
+            }
           >
             <ArrowRightLeft className="w-4.5 h-4.5" />
           </Button>

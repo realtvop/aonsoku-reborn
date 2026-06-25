@@ -632,7 +632,10 @@ export class CoordinationManager {
   /// candidate request before resending.
   getLatestDeviceSnapshot(
     deviceId: DeviceId,
-  ): { generation: SessionGeneration; snapshotRevision: SnapshotRevision } | null {
+  ): {
+    generation: SessionGeneration;
+    snapshotRevision: SnapshotRevision;
+  } | null {
     const generation = this.deviceGenerations.get(deviceId);
     const snapshotRevision = this.deviceSnapshotRevisions.get(deviceId);
     if (generation === undefined || snapshotRevision === undefined) return null;
@@ -647,7 +650,10 @@ export class CoordinationManager {
   waitForDeviceSnapshotUpdate(
     deviceId: DeviceId,
     timeoutMs = 8000,
-  ): Promise<{ generation: SessionGeneration; snapshotRevision: SnapshotRevision }> {
+  ): Promise<{
+    generation: SessionGeneration;
+    snapshotRevision: SnapshotRevision;
+  }> {
     return new Promise((resolve, reject) => {
       let settled = false;
       const timer = setTimeout(() => {

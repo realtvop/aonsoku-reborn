@@ -35,7 +35,9 @@ export function VolumeBar() {
       ? systemVolume
       : playerVolume;
   const isDisabled =
-    !remoteProjection.active && requiresSystemVolume && !supportsSystemVolumeControl;
+    !remoteProjection.active &&
+    requiresSystemVolume &&
+    !supportsSystemVolumeControl;
 
   const handleWheel = useCallback(
     (e: WheelEvent<HTMLDivElement>) => {

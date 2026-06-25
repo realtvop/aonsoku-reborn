@@ -185,8 +185,8 @@ export function useDevicePlaybackActions(): DevicePlaybackActions {
   const controlledDeviceName = useMemo(
     () =>
       controlledDeviceId
-        ? devices.find((device) => device.id === controlledDeviceId)?.name ??
-          null
+        ? (devices.find((device) => device.id === controlledDeviceId)?.name ??
+          null)
         : null,
     [controlledDeviceId, devices],
   );

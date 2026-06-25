@@ -120,9 +120,7 @@ describe("remote control actions on native runtimes", () => {
 
     actions.setSongList?.([makeSong("remote-song")], 0, true, undefined);
 
-    expect(remoteSend).toHaveBeenCalledWith(
-      LanControlMessageType.CLEAR_QUEUE,
-    );
+    expect(remoteSend).toHaveBeenCalledWith(LanControlMessageType.CLEAR_QUEUE);
     expect(state.songlist.contextQueue.songs).toEqual([localSong]);
     expect(state.songlist.contextQueue.sourceName).toBe("Local Album");
     expect(state.songlist.isShuffleActive).toBe(false);
@@ -144,7 +142,9 @@ describe("remote control actions on native runtimes", () => {
 
     actions.toggleLoop?.();
 
-    expect(remoteSend).toHaveBeenCalledWith(LanControlMessageType.TOGGLE_REPEAT);
+    expect(remoteSend).toHaveBeenCalledWith(
+      LanControlMessageType.TOGGLE_REPEAT,
+    );
     expect(state.songlist.contextQueue.songs).toEqual([localSong]);
     expect(state.playerState.loopState).toBe(LoopState.Off);
   });

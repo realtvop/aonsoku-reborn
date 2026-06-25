@@ -1,5 +1,13 @@
 import { useTranslation } from "react-i18next";
-import { MonitorSpeaker, Laptop, Smartphone, Tv, Cast, ArrowRight, Radio } from "lucide-react";
+import {
+  MonitorSpeaker,
+  Laptop,
+  Smartphone,
+  Tv,
+  Cast,
+  ArrowRight,
+  Radio,
+} from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { subsonic } from "@/service/subsonic";
 import { CachedImage } from "@/app/components/cover-image/cached-image";
@@ -47,7 +55,7 @@ function getDeviceIcon(platform: string) {
 export function HomeDevicePlaybackOverview() {
   const { t } = useTranslation();
   const { liveDevices, offlineSnapshots } = useDevicePlaybackModels();
-  
+
   const allDevices = [...liveDevices, ...offlineSnapshots];
 
   if (allDevices.length === 0) return null;
@@ -62,7 +70,9 @@ export function HomeDevicePlaybackOverview() {
         <div className="flex items-center gap-2">
           <MonitorSpeaker className="w-4 h-4 text-primary" />
           <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-            {t("settings.crossDevice.playback.otherDevices", { defaultValue: "Other devices playing" })}
+            {t("settings.crossDevice.playback.otherDevices", {
+              defaultValue: "Other devices playing",
+            })}
           </h3>
         </div>
         <button
@@ -70,14 +80,20 @@ export function HomeDevicePlaybackOverview() {
           onClick={handleOpenPanel}
           className="text-xs text-primary hover:text-primary/80 font-semibold flex items-center gap-1 transition-colors group"
         >
-          {t("settings.crossDevice.playback.showDevices", { defaultValue: "Show Devices" })}
+          {t("settings.crossDevice.playback.showDevices", {
+            defaultValue: "Show Devices",
+          })}
           <ArrowRight className="w-3 h-3 transition-transform group-hover:translate-x-0.5" />
         </button>
       </div>
 
       <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
         {allDevices.map((model) => (
-          <OverviewCard key={model.device.id} model={model} onClick={handleOpenPanel} />
+          <OverviewCard
+            key={model.device.id}
+            model={model}
+            onClick={handleOpenPanel}
+          />
         ))}
       </div>
     </div>
@@ -131,8 +147,13 @@ function OverviewCard({ model, onClick }: OverviewCardProps) {
         <div className="flex flex-col min-w-0">
           <span className="text-xs font-semibold truncate text-foreground leading-tight">
             {isLoading
-              ? t("settings.crossDevice.playback.fetchingSong", { defaultValue: "Fetching song..." })
-              : song?.title || t("settings.crossDevice.playback.unknownTrack", { defaultValue: "Unknown track" })}
+              ? t("settings.crossDevice.playback.fetchingSong", {
+                  defaultValue: "Fetching song...",
+                })
+              : song?.title ||
+                t("settings.crossDevice.playback.unknownTrack", {
+                  defaultValue: "Unknown track",
+                })}
           </span>
           <span className="text-[10px] text-muted-foreground truncate leading-normal mt-0.5 flex items-center gap-1">
             <span className="flex items-center gap-1 font-semibold text-foreground/80">
@@ -140,10 +161,18 @@ function OverviewCard({ model, onClick }: OverviewCardProps) {
               {device.name}
             </span>
             <span>·</span>
-            <span className={cn("font-medium", isOnline ? "text-primary" : "text-muted-foreground")}>
+            <span
+              className={cn(
+                "font-medium",
+                isOnline ? "text-primary" : "text-muted-foreground",
+              )}
+            >
               {isOnline
-                ? t("settings.crossDevice.connectionState.connected", { defaultValue: "Online" })
-                : lastSeenText || t("settings.crossDevice.never", { defaultValue: "Offline" })}
+                ? t("settings.crossDevice.connectionState.connected", {
+                    defaultValue: "Online",
+                  })
+                : lastSeenText ||
+                  t("settings.crossDevice.never", { defaultValue: "Offline" })}
             </span>
           </span>
         </div>

@@ -2,7 +2,11 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { MonitorSpeaker, Settings, WifiOff } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/app/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/app/components/ui/popover";
 import {
   Drawer,
   DrawerTrigger,
@@ -33,7 +37,12 @@ interface DevicePanelProps {
   trigger: React.ReactNode;
 }
 
-export function DevicePanel({ open, onOpenChange, actions, trigger }: DevicePanelProps) {
+export function DevicePanel({
+  open,
+  onOpenChange,
+  actions,
+  trigger,
+}: DevicePanelProps) {
   const isMobile = usePlayerBreakpoint();
   const [activeSnapPoint, setActiveSnapPoint] = useState<string | number>(0.5);
 
@@ -63,9 +72,7 @@ export function DevicePanel({ open, onOpenChange, actions, trigger }: DevicePane
         activeSnapPoint={activeSnapPoint}
         setActiveSnapPoint={setActiveSnapPoint}
       >
-        <DrawerTrigger asChild>
-          {trigger}
-        </DrawerTrigger>
+        <DrawerTrigger asChild>{trigger}</DrawerTrigger>
         <DrawerContent className="h-[calc(100dvh-env(safe-area-inset-top)-12px)] rounded-t-[24px]">
           <DevicePanelContent onOpenChange={onOpenChange} actions={actions} />
         </DrawerContent>
@@ -75,9 +82,7 @@ export function DevicePanel({ open, onOpenChange, actions, trigger }: DevicePane
 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger asChild>
-        {trigger}
-      </PopoverTrigger>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent
         align="end"
         side="top"
@@ -95,7 +100,10 @@ interface DevicePanelContentProps {
   actions: DevicePlaybackActions;
 }
 
-function DevicePanelContent({ onOpenChange, actions }: DevicePanelContentProps) {
+function DevicePanelContent({
+  onOpenChange,
+  actions,
+}: DevicePanelContentProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const isMobile = usePlayerBreakpoint();
@@ -107,7 +115,10 @@ function DevicePanelContent({ onOpenChange, actions }: DevicePanelContentProps) 
 
   const sectionsContent = (
     <div className="flex flex-col gap-5 p-5">
-      <HandoffStatusRow phase={actions.handoffPhase} error={actions.handoffError} />
+      <HandoffStatusRow
+        phase={actions.handoffPhase}
+        error={actions.handoffError}
+      />
 
       <ThisDeviceSection
         model={models.thisDevice}
@@ -213,7 +224,8 @@ function DevicePanelContent({ onOpenChange, actions }: DevicePanelContentProps) 
               </h3>
               <p className="text-[11px] text-muted-foreground max-w-xs leading-relaxed">
                 {t("settings.crossDevice.error.missingFields", {
-                  defaultValue: "Connect your device in Settings to sync and control playback across devices.",
+                  defaultValue:
+                    "Connect your device in Settings to sync and control playback across devices.",
                 })}
               </p>
             </div>
@@ -224,17 +236,15 @@ function DevicePanelContent({ onOpenChange, actions }: DevicePanelContentProps) 
               className="mt-2 text-xs font-semibold gap-1.5"
             >
               <Settings className="w-3.5 h-3.5" />
-              {t("settings.crossDevice.connect", { defaultValue: "Configure Settings" })}
+              {t("settings.crossDevice.connect", {
+                defaultValue: "Configure Settings",
+              })}
             </Button>
           </div>
         ) : isMobile ? (
-          <div className="h-full overflow-y-auto">
-            {sectionsContent}
-          </div>
+          <div className="h-full overflow-y-auto">{sectionsContent}</div>
         ) : (
-          <ScrollArea className="h-full">
-            {sectionsContent}
-          </ScrollArea>
+          <ScrollArea className="h-full">{sectionsContent}</ScrollArea>
         )}
       </div>
     </div>

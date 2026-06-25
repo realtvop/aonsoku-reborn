@@ -32,15 +32,17 @@ export function LikeButton({
   const effectiveIsStarred = remoteProjection.active
     ? typeof remoteProjection.song?.starred === "string"
     : isSongStarred;
-  const handleClick = onClick ?? (() => {
-    if (remoteProjection.active) {
-      usePlayerStore
-        .getState()
-        .remoteControl.sendCommand?.(LanControlMessageType.TOGGLE_LIKE);
-      return;
-    }
-    starCurrentSong();
-  });
+  const handleClick =
+    onClick ??
+    (() => {
+      if (remoteProjection.active) {
+        usePlayerStore
+          .getState()
+          .remoteControl.sendCommand?.(LanControlMessageType.TOGGLE_LIKE);
+        return;
+      }
+      starCurrentSong();
+    });
 
   return (
     <Button

@@ -85,54 +85,57 @@ export const useCoordinationStore = create<CoordinationState>()(
         authType,
       };
     }
-    const manager = new CoordinationManager({
-      ...callbacks,
-      onConnectionStateChange: (state) => {
-        set((s) => {
-          s.connectionState = state;
-          s.isConnected = state === "connected";
-        });
-      },
-      onDevicesChanged: (devices) => {
-        set((s) => {
-          s.devices = devices;
-          s.lastSyncAt = Date.now();
-        });
-      },
-      onDeviceSnapshot: (
-        deviceId,
-        snapshot,
-        isOnline,
-        generation,
-        snapshotRevision,
-        serverTime,
-        lastConfirmedAt,
-      ) => {
-        console.info(
-          "[CoordinationStore] onDeviceSnapshot:",
+    const manager = new CoordinationManager(
+      {
+        ...callbacks,
+        onConnectionStateChange: (state) => {
+          set((s) => {
+            s.connectionState = state;
+            s.isConnected = state === "connected";
+          });
+        },
+        onDevicesChanged: (devices) => {
+          set((s) => {
+            s.devices = devices;
+            s.lastSyncAt = Date.now();
+          });
+        },
+        onDeviceSnapshot: (
           deviceId,
           snapshot,
           isOnline,
-        );
-        set((s) => {
-          s.deviceSnapshots[deviceId] = {
+          generation,
+          snapshotRevision,
+          serverTime,
+          lastConfirmedAt,
+        ) => {
+          console.info(
+            "[CoordinationStore] onDeviceSnapshot:",
+            deviceId,
             snapshot,
             isOnline,
-            generation,
-            snapshotRevision,
-            lastUpdatedAt: Date.now(),
-            serverTime,
-            lastConfirmedAt,
-            receivedAtPerformance: performance.now(),
-          };
-        });
+          );
+          set((s) => {
+            s.deviceSnapshots[deviceId] = {
+              snapshot,
+              isOnline,
+              generation,
+              snapshotRevision,
+              lastUpdatedAt: Date.now(),
+              serverTime,
+              lastConfirmedAt,
+              receivedAtPerformance: performance.now(),
+            };
+          });
+        },
+        onError: (code, reason) => {
+          set((s) => {
+            s.error = `${code}: ${reason}`;
+          });
+        },
       },
-      onError: (code, reason) => {
-        set((s) => {
-          s.error = `${code}: ${reason}`;
-        });
-      },
-    }, getRecoveryCredentials);
+      getRecoveryCredentials,
+    );
 
     return {
       manager,

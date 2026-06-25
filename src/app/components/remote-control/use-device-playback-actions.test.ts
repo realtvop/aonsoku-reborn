@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { LanControlMessageType } from "@/types/lanControl";
 import { mapLanControlToRemoteCommand } from "./use-device-playback-actions";
 
-function playerState(overrides: { isShuffleActive?: boolean; loopState?: number } = {}) {
+function playerState(
+  overrides: { isShuffleActive?: boolean; loopState?: number } = {},
+) {
   return {
     isShuffleActive: false,
     loopState: 0,
@@ -20,10 +22,8 @@ describe("mapLanControlToRemoteCommand", () => {
       ),
     ).toEqual({ type: "toggle_play_pause" });
     expect(
-      mapLanControlToRemoteCommand(
-        LanControlMessageType.NEXT,
-        undefined,
-        () => playerState(),
+      mapLanControlToRemoteCommand(LanControlMessageType.NEXT, undefined, () =>
+        playerState(),
       ),
     ).toEqual({ type: "next" });
     expect(
@@ -118,10 +118,8 @@ describe("mapLanControlToRemoteCommand", () => {
       ),
     ).toBeNull();
     expect(
-      mapLanControlToRemoteCommand(
-        LanControlMessageType.PLAY_SONG,
-        {},
-        () => playerState(),
+      mapLanControlToRemoteCommand(LanControlMessageType.PLAY_SONG, {}, () =>
+        playerState(),
       ),
     ).toBeNull();
   });

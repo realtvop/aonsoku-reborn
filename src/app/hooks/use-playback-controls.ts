@@ -1,6 +1,4 @@
-import {
-  useRemotePlaybackProjection,
-} from "@/app/components/remote-control/use-remote-playback-projection";
+import { useRemotePlaybackProjection } from "@/app/components/remote-control/use-remote-playback-projection";
 import {
   usePlayerActions,
   usePlayerIsBuffering,

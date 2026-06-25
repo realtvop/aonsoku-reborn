@@ -135,9 +135,7 @@ export const FullscreenSongQueue = memo(function FullscreenSongQueue({
   const localUserQueue = useUserQueue();
   const remoteProjection = useRemotePlaybackProjection();
   const isRemoteQueue = remoteProjection.active;
-  const currentSong = isRemoteQueue
-    ? remoteProjection.song
-    : localCurrentSong;
+  const currentSong = isRemoteQueue ? remoteProjection.song : localCurrentSong;
   const contextSongs = isRemoteQueue
     ? remoteProjection.contextSongs
     : localContextQueue.contextSongs;
