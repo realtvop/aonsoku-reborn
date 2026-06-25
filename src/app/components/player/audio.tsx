@@ -708,6 +708,7 @@ export function AudioPlayer({
         sessionRef.current.markLoopRestarting();
         sessionRef.current.markLoopRestartSyncHandled();
         seekAudio(audio, 0);
+        setStoreProgress(0, true);
         safePlay(audio, "LoopRestartSync");
       }
 
@@ -744,6 +745,7 @@ export function AudioPlayer({
     setStoreBufferedProgress,
     setStoreCurrentDuration,
     setStoreIsBuffering,
+    setStoreProgress,
     songId,
   ]);
 
@@ -806,6 +808,7 @@ export function AudioPlayer({
             );
             sessionRef.current.markLoopRestarting();
             seekAudio(audio, 0);
+            setStoreProgress(0, true);
             usePlayerStore.setState((state) => {
               state.playerState.seekToStart = false;
             });
@@ -868,6 +871,7 @@ export function AudioPlayer({
     safePlay,
     seekToStart,
     seekAudio,
+    setStoreProgress,
     shouldUseWebAudioReplayGain,
     songId,
   ]);
@@ -1020,6 +1024,7 @@ export function AudioPlayer({
           sessionRef.current.markLoopRestarting();
           sessionRef.current.markLoopRestartSyncHandled();
           seekAudio(e.currentTarget, 0);
+          setStoreProgress(0, true);
           safePlay(e.currentTarget, "LoopRestartSync");
         } else {
           logger.info(
