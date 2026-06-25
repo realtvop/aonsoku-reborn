@@ -9,11 +9,18 @@ import {
   unregisterBackButtonHandler,
 } from "@/utils/back-button-registry";
 
+type AlertDialogProps = React.ComponentPropsWithoutRef<
+  typeof AlertDialogPrimitive.Root
+> & {
+  backButtonPriority?: number;
+};
+
 const AlertDialog = ({
+  backButtonPriority = 0,
   open,
   onOpenChange,
   ...props
-}: React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Root>) => {
+}: AlertDialogProps) => {
   React.useEffect(() => {
     if (!open || !onOpenChange) return;
 
@@ -22,11 +29,11 @@ const AlertDialog = ({
       return true;
     };
 
-    registerBackButtonHandler(handler);
+    registerBackButtonHandler(handler, { priority: backButtonPriority });
     return () => {
       unregisterBackButtonHandler(handler);
     };
-  }, [open, onOpenChange]);
+  }, [backButtonPriority, open, onOpenChange]);
 
   return (
     <AlertDialogPrimitive.Root

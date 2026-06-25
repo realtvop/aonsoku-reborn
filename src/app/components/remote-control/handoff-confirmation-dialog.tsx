@@ -82,7 +82,11 @@ export function HandoffConfirmationDialog({
   const targetProgress = pendingDevice?.snapshot?.progressSeconds ?? 0;
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      backButtonPriority={20}
+    >
       <AlertDialogContent className="max-w-md p-6 rounded-2xl border border-border/40 bg-background/95 backdrop-blur-xl shadow-2xl">
         <AlertDialogHeader className="text-left gap-1">
           <AlertDialogTitle className="text-base font-bold text-foreground">

@@ -58,6 +58,7 @@ export function DevicePanel({ open, onOpenChange, actions, trigger }: DevicePane
       <Drawer
         open={open}
         onOpenChange={onOpenChange}
+        backButtonPriority={10}
         snapPoints={[0.5, 1]}
         activeSnapPoint={activeSnapPoint}
         setActiveSnapPoint={setActiveSnapPoint}
