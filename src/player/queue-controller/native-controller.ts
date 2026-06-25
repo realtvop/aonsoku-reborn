@@ -508,14 +508,21 @@ export class NativeQueueController implements QueueController {
 
   toggleShuffle(): void {
     const current = usePlayerStore.getState().songlist.isShuffleActive;
+    this.setShuffleState(!current);
+  }
+
+  setShuffleState(enabled: boolean): void {
+    const current = usePlayerStore.getState().songlist.isShuffleActive;
+    if (current === enabled) return;
+
     const prevOriginalContextSongs =
       usePlayerStore.getState().songlist.originalContextSongs;
     const prevOriginalUserSongs =
       usePlayerStore.getState().songlist.originalUserSongs;
     const prevUserSongs = usePlayerStore.getState().songlist.userQueue.songs;
 
-    this.#plugin.setShuffle({ enabled: !current }).catch((err) => {
-      logger.error("[NativeQueueController] toggleShuffle failed", err);
+    this.#plugin.setShuffle({ enabled }).catch((err) => {
+      logger.error("[NativeQueueController] setShuffleState failed", err);
       usePlayerStore.setState((state) => {
         state.songlist.isShuffleActive = current;
         state.songlist.originalContextSongs = prevOriginalContextSongs;
@@ -525,7 +532,7 @@ export class NativeQueueController implements QueueController {
     });
 
     usePlayerStore.setState((state) => {
-      if (!current) {
+      if (enabled) {
         const currentSong = getCurrentSong(state.songlist);
         const sourceSongs =
           state.songlist.sourceQueue.songs.length > 0
@@ -562,7 +569,7 @@ export class NativeQueueController implements QueueController {
           state.playerState.loopState,
         );
       }
-      state.songlist.isShuffleActive = !current;
+      state.songlist.isShuffleActive = enabled;
     });
     this.#updateContextQueueOnNative();
   }

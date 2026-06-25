@@ -65,6 +65,8 @@ export interface QueueController {
 
   toggleShuffle(): void;
 
+  setShuffleState(enabled: boolean): void;
+
   setLoopState(state: LoopState): void;
 
   toggleLoop(): void;

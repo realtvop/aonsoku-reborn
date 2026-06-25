@@ -58,6 +58,13 @@ export class WebQueueController implements QueueController {
     this.#getActions().toggleShuffle();
   }
 
+  setShuffleState(enabled: boolean): void {
+    const store = this.#getStore();
+    if (store.songlist.isShuffleActive !== enabled) {
+      this.#getActions().toggleShuffle();
+    }
+  }
+
   setLoopState(_state: LoopState): void {
     const store = this.#getStore();
     const current = store.playerState.loopState;

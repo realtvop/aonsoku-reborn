@@ -349,6 +349,19 @@ describe("NativeQueueController shuffle and loop queue updates", () => {
     controller.dispose();
   });
 
+  it("sets native shuffle to an explicit target state", () => {
+    mocks.storeState.songlist.isShuffleActive = true;
+    const controller = new NativeQueueController();
+
+    controller.setShuffleState(false);
+
+    expect(mocks.plugin.setShuffle).toHaveBeenCalledWith({ enabled: false });
+    expect(mocks.storeState.songlist.isShuffleActive).toBe(false);
+    expect(mocks.plugin.updateContextQueue).toHaveBeenCalled();
+
+    controller.dispose();
+  });
+
   it("updates native queue without reloading when loop state changes", () => {
     const controller = new NativeQueueController();
 

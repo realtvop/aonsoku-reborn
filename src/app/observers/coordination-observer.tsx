@@ -426,13 +426,24 @@ export function CoordinationObserver() {
         case "set_volume":
           playerActions.setVolume(command.volume * 100);
           break;
-        case "set_shuffle":
+        case "set_shuffle": {
+          const nativeController = getNativeQueueController();
+          if (nativeController) {
+            nativeController.setShuffleState(command.enabled);
+            break;
+          }
           if (command.enabled !== shuffleEnabled) {
             playerActions.toggleShuffle();
           }
           break;
+        }
         case "set_repeat": {
           const targetLoop = mapRepeatModeToLoopState(command.mode);
+          const nativeController = getNativeQueueController();
+          if (nativeController) {
+            nativeController.setLoopState(targetLoop);
+            break;
+          }
           const currentLoop = usePlayerStore.getState().playerState.loopState;
           if (targetLoop === currentLoop) break;
           // toggleLoop cycles Off → All → One → Off.
