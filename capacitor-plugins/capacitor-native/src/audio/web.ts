@@ -7,6 +7,7 @@ import type {
   NativeAudioMetadata,
   NativeAudioQueueOptions,
   NativeAudioRepeatModeOptions,
+  NativeRemotePlaybackStateOptions,
   NativeAudioSeekOptions,
   NativeAudioShuffleOptions,
   NativeAudioSource,
@@ -72,6 +73,20 @@ export class AonsokuNativeAudioWeb
 
   updateMetadata(_metadata: NativeAudioMetadata): Promise<void> {
     return Promise.reject(createNativeAudioUnavailableError("updateMetadata"));
+  }
+
+  updateRemotePlaybackState(
+    _options: NativeRemotePlaybackStateOptions,
+  ): Promise<void> {
+    return Promise.reject(
+      createNativeAudioUnavailableError("updateRemotePlaybackState"),
+    );
+  }
+
+  clearRemotePlaybackState(): Promise<void> {
+    return Promise.reject(
+      createNativeAudioUnavailableError("clearRemotePlaybackState"),
+    );
   }
 
   preload(_options: { source: NativeAudioSource }): Promise<void> {

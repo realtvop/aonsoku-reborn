@@ -33,6 +33,13 @@ describe("mapLanControlToRemoteCommand", () => {
         () => playerState(),
       ),
     ).toEqual({ type: "seek", seconds: 42 });
+    expect(
+      mapLanControlToRemoteCommand(
+        LanControlMessageType.TOGGLE_LIKE,
+        undefined,
+        () => playerState(),
+      ),
+    ).toEqual({ type: "toggle_like" });
   });
 
   it("maps queue and play intents without changing protocol shape", () => {

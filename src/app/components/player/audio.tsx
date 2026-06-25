@@ -41,6 +41,7 @@ import {
   useReplayGainActions,
   useReplayGainState,
 } from "@/store/player.store";
+import { LanControlMessageType } from "@/types/lanControl";
 import { getPlaybackCapabilities } from "@/utils/capabilities";
 import { logger } from "@/utils/logger";
 import { calculateReplayGain, ReplayGainParams } from "@/utils/replayGain";
@@ -534,6 +535,38 @@ export function AudioPlayer({
   const handleNativeRemoteCommand = useCallback(
     (event: Parameters<typeof handlePlaybackRemoteCommand>[0]) => {
       const audio = audioRef.current;
+      const remoteControl = usePlayerStore.getState().remoteControl;
+
+      if (remoteControl.active && remoteControl.sendCommand) {
+        switch (event.command) {
+          case "play":
+            remoteControl.sendCommand(LanControlMessageType.PLAY);
+            return;
+          case "pause":
+            remoteControl.sendCommand(LanControlMessageType.PAUSE);
+            return;
+          case "togglePlayPause":
+            remoteControl.sendCommand(LanControlMessageType.PLAY_PAUSE);
+            return;
+          case "next":
+            remoteControl.sendCommand(LanControlMessageType.NEXT);
+            return;
+          case "previous":
+            remoteControl.sendCommand(LanControlMessageType.PREVIOUS);
+            return;
+          case "seek":
+            remoteControl.sendCommand(LanControlMessageType.SEEK, {
+              seconds: Math.max(0, event.position ?? 0),
+            });
+            return;
+          case "like":
+            remoteControl.sendCommand(LanControlMessageType.TOGGLE_LIKE);
+            return;
+          case "shuffle":
+            remoteControl.sendCommand(LanControlMessageType.TOGGLE_SHUFFLE);
+            return;
+        }
+      }
 
       handlePlaybackRemoteCommand(event, {
         isPlaying: () => usePlayerStore.getState().playerState.isPlaying,

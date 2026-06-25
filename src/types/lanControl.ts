@@ -26,6 +26,7 @@ export enum LanControlMessageType {
   TOGGLE_REPEAT = "toggle_repeat",
   SET_SHUFFLE = "set_shuffle",
   SET_REPEAT = "set_repeat",
+  TOGGLE_LIKE = "toggle_like",
   GET_STATE = "get_state",
   GET_QUEUE = "get_queue",
   GET_CURRENT_SONG = "get_current_song",

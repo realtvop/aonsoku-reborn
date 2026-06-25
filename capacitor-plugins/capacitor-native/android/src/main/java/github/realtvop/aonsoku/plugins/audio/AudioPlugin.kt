@@ -1020,6 +1020,60 @@ class AudioPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun updateRemotePlaybackState(call: PluginCall) {
+        val metadataObject = call.getObject("metadata")
+        val title = metadataObject?.getString("title")
+        val artist = metadataObject?.getString("artist")
+        val album = metadataObject?.getString("album")
+        val artworkUrl = metadataObject?.getString("artworkUrl")
+        val duration = call.getDouble("duration") ?: metadataObject?.optDouble("duration", 0.0) ?: 0.0
+        val position = call.getDouble("position") ?: 0.0
+        val isPlaying = call.getBoolean("isPlaying") ?: false
+
+        pluginScope.launch {
+            try {
+                val service = awaitService()
+                mainHandler.post {
+                    val metadataBuilder = MediaMetadata.Builder()
+                        .setTitle(title)
+                        .setArtist(artist)
+                        .setAlbumTitle(album)
+                    if (duration > 0) {
+                        metadataBuilder.setDurationMs((duration * 1000).toLong())
+                    }
+                    if (artworkUrl != null) {
+                        metadataBuilder.setArtworkUri(Uri.parse(artworkUrl))
+                    }
+                    service.updateRemotePlaybackProjection(
+                        metadataBuilder.build(),
+                        isPlaying,
+                        position,
+                        duration,
+                    )
+                    call.resolve()
+                }
+            } catch (_: TimeoutCancellationException) {
+                call.reject("Playback service is not ready (timeout)")
+            }
+        }
+    }
+
+    @PluginMethod
+    fun clearRemotePlaybackState(call: PluginCall) {
+        pluginScope.launch {
+            try {
+                val service = awaitService()
+                mainHandler.post {
+                    service.clearRemotePlaybackProjection()
+                    call.resolve()
+                }
+            } catch (_: TimeoutCancellationException) {
+                call.reject("Playback service is not ready (timeout)")
+            }
+        }
+    }
+
+    @PluginMethod
     fun clear(call: PluginCall) {
         pluginScope.launch {
             try {

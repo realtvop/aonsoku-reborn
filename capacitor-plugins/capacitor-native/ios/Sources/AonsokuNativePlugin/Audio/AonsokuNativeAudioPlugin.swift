@@ -21,6 +21,8 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "skipToNext", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "skipToPrevious", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "updateMetadata", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "updateRemotePlaybackState", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "clearRemotePlaybackState", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "preload", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "clear", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "storeAudioFile", returnType: CAPPluginReturnPromise),
@@ -82,6 +84,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
     private var currentRequestId: String?
     private var playbackGeneration = 0
     private var currentMetadata = NativeAudioMetadata()
+    private var remotePlaybackProjection: NativeRemotePlaybackProjection?
     private var loadedDurationSeconds: Double?
     private var artworkTask: URLSessionDataTask?
     private var nowPlayingRevision = 0
@@ -185,6 +188,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
                     self.currentSourceUrl = resolvedSource.url
                     self.currentRadioId = resolvedSource.radioId
                     self.currentRequestId = requestId
+                    self.remotePlaybackProjection = nil
                     self.currentMetadata = metadata
                     self.loadedDurationSeconds = metadata.duration
                     self.addObservers(for: item, player: player, generation: generation, requestId: requestId)
@@ -397,8 +401,39 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func updateMetadata(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
+            self.remotePlaybackProjection = nil
             self.currentMetadata = self.metadata(from: call)
             self.updateNowPlayingInfo()
+            call.resolve()
+        }
+    }
+
+    @objc func updateRemotePlaybackState(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            let metadata = self.metadata(from: call.getObject("metadata"))
+            let position = max(0, self.numberValue(call.getValue("position")) ?? 0)
+            let duration = max(
+                0,
+                self.numberValue(call.getValue("duration")) ??
+                    metadata.duration ??
+                    0
+            )
+            self.remotePlaybackProjection = NativeRemotePlaybackProjection(
+                metadata: metadata,
+                isPlaying: call.getBool("isPlaying") ?? false,
+                position: position,
+                duration: duration
+            )
+            self.currentMetadata = metadata
+            self.updateNowPlayingInfo()
+            call.resolve()
+        }
+    }
+
+    @objc func clearRemotePlaybackState(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            self.remotePlaybackProjection = nil
+            self.clearNowPlayingInfo()
             call.resolve()
         }
     }
@@ -1740,6 +1775,22 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private func applyNowPlayingPlaybackFields(to info: inout [String: Any]) {
+        if let remotePlaybackProjection {
+            if remotePlaybackProjection.duration > 0 {
+                info[MPMediaItemPropertyPlaybackDuration] =
+                    remotePlaybackProjection.duration
+            } else {
+                info.removeValue(forKey: MPMediaItemPropertyPlaybackDuration)
+            }
+
+            info[MPNowPlayingInfoPropertyElapsedPlaybackTime] =
+                remotePlaybackProjection.position
+            info[MPNowPlayingInfoPropertyPlaybackRate] =
+                remotePlaybackProjection.isPlaying ? 1.0 : 0.0
+            info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = 1.0
+            return
+        }
+
         let duration = durationSeconds()
         if duration > 0 {
             info[MPMediaItemPropertyPlaybackDuration] = duration
@@ -1808,6 +1859,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         nowPlayingRevision += 1
         artworkTask?.cancel()
         artworkTask = nil
+        remotePlaybackProjection = nil
         currentMetadata = NativeAudioMetadata()
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
@@ -3050,6 +3102,13 @@ private struct NativeAudioMetadata {
     var album: String?
     var duration: Double?
     var artworkUrl: String?
+}
+
+private struct NativeRemotePlaybackProjection {
+    var metadata: NativeAudioMetadata
+    var isPlaying: Bool
+    var position: Double
+    var duration: Double
 }
 
 private struct NativeCachedAudioFile {

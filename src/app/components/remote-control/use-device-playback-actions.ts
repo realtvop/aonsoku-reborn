@@ -152,6 +152,8 @@ export function mapLanControlToRemoteCommand(
       return typeof d?.mode === "string"
         ? { type: "set_repeat", mode: d.mode }
         : null;
+    case LanControlMessageType.TOGGLE_LIKE:
+      return { type: "toggle_like" };
     default:
       return null;
   }

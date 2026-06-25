@@ -81,6 +81,12 @@ class PlaybackService : MediaSessionService() {
     var isQueueEngineActive = false
     var savedRestoreTime: Double? = null
     var currentSongMetadata: MediaMetadata? = null
+    var isRemotePlaybackProjectionActive = false
+        private set
+    private var remotePlaybackMetadata: MediaMetadata? = null
+    private var remotePlaybackIsPlaying = false
+    private var remotePlaybackPositionSeconds = 0.0
+    private var remotePlaybackDurationSeconds = 0.0
 
     private val httpClient = SubsonicHttpClient()
     private val credentialStore by lazy {
@@ -321,7 +327,9 @@ class PlaybackService : MediaSessionService() {
             }
 
             override fun getMediaMetadata(): MediaMetadata {
-                return currentSongMetadata ?: super.getMediaMetadata()
+                return remotePlaybackMetadata
+                    ?: currentSongMetadata
+                    ?: super.getMediaMetadata()
             }
         }
 
@@ -594,7 +602,12 @@ class PlaybackService : MediaSessionService() {
         val title: String
         val text: String
         var subText: String? = null
-        if (session != null) {
+        if (isRemotePlaybackProjectionActive && remotePlaybackMetadata != null) {
+            val metadata = remotePlaybackMetadata!!
+            title = metadata.title?.toString() ?: "Aonsoku"
+            text = metadata.artist?.toString() ?: "Playing"
+            subText = metadata.albumTitle?.toString()
+        } else if (session != null) {
             val metadata = session.player.mediaMetadata
             title = metadata.title?.toString() ?: "Aonsoku"
             text = metadata.artist?.toString() ?: "Playing"
@@ -668,8 +681,10 @@ class PlaybackService : MediaSessionService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        val playPauseIcon = if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
-        val playPauseLabel = if (isPlaying) "Pause" else "Play"
+        val effectiveIsPlaying =
+            if (isRemotePlaybackProjectionActive) remotePlaybackIsPlaying else isPlaying
+        val playPauseIcon = if (effectiveIsPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
+        val playPauseLabel = if (effectiveIsPlaying) "Pause" else "Play"
 
         val shuffleIconName = if (queueEngine.isShuffleActive) "ic_shuffle_on" else "ic_shuffle"
         val shuffleIconResId = resources.getIdentifier(shuffleIconName, "drawable", packageName)
@@ -712,7 +727,8 @@ class PlaybackService : MediaSessionService() {
     private var isForegroundStarted = false
 
     private fun showNotification() {
-        val isPlaying = player?.isPlaying ?: false
+        val isPlaying =
+            if (isRemotePlaybackProjectionActive) remotePlaybackIsPlaying else player?.isPlaying ?: false
         val notification = buildNotification(isPlaying)
         if (!isForegroundStarted) {
             try {
@@ -841,6 +857,11 @@ class PlaybackService : MediaSessionService() {
         AonsokuNativeCoordinationPlugin.attachToActiveForegroundService()
         when (intent?.action) {
             ACTION_PLAY_PAUSE -> {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemoteCommand("togglePlayPause")
+                    updateNotification()
+                    return START_STICKY
+                }
                 val currentPlayer = player ?: return START_STICKY
                 if (currentPlayer.isPlaying) {
                     currentPlayer.pause()
@@ -873,6 +894,11 @@ class PlaybackService : MediaSessionService() {
                 emitRemoteCommand("like")
             }
             ACTION_STOP -> {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemoteCommand("pause")
+                    clearRemotePlaybackProjection()
+                    return START_STICKY
+                }
                 player?.stop()
                 player?.clearMediaItems()
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -1143,6 +1169,39 @@ class PlaybackService : MediaSessionService() {
         queueEngine.markAsShuffled(originalSongs)
         player?.shuffleModeEnabled = true
         persistence.markStateDirty()
+    }
+
+    fun updateRemotePlaybackProjection(
+        metadata: MediaMetadata,
+        isPlaying: Boolean,
+        position: Double,
+        duration: Double
+    ) {
+        isRemotePlaybackProjectionActive = true
+        remotePlaybackMetadata = metadata
+        remotePlaybackIsPlaying = isPlaying
+        remotePlaybackPositionSeconds = position.coerceAtLeast(0.0)
+        remotePlaybackDurationSeconds = duration.coerceAtLeast(0.0)
+        currentSongMetadata = metadata
+        updateNotification()
+    }
+
+    fun clearRemotePlaybackProjection() {
+        if (!isRemotePlaybackProjectionActive) return
+        isRemotePlaybackProjectionActive = false
+        remotePlaybackMetadata = null
+        remotePlaybackIsPlaying = false
+        remotePlaybackPositionSeconds = 0.0
+        remotePlaybackDurationSeconds = 0.0
+        currentSongMetadata = null
+        if (player?.isPlaying == true || isQueueEngineActive) {
+            updateNotification()
+            return
+        }
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        isForegroundStarted = false
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.cancel(NOTIFICATION_ID)
     }
 
     fun clearQueueState() {

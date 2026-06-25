@@ -32,6 +32,13 @@ export interface NativeAudioMetadata {
   artworkUrl?: string;
 }
 
+export interface NativeRemotePlaybackStateOptions {
+  metadata: NativeAudioMetadata;
+  isPlaying: boolean;
+  position: number;
+  duration: number;
+}
+
 export interface NativeAudioLoadOptions {
   source: NativeAudioSource;
   metadata?: NativeAudioMetadata;
@@ -375,6 +382,10 @@ export interface NativeAudioPlugin extends Plugin {
   skipToNext(): Promise<void>;
   skipToPrevious(): Promise<void>;
   updateMetadata(metadata: NativeAudioMetadata): Promise<void>;
+  updateRemotePlaybackState(
+    options: NativeRemotePlaybackStateOptions,
+  ): Promise<void>;
+  clearRemotePlaybackState(): Promise<void>;
   preload(options: { source: NativeAudioSource }): Promise<void>;
   clear(): Promise<void>;
   storeAudioFile(
