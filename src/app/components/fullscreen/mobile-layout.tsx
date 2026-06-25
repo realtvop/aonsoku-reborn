@@ -1,6 +1,13 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, ListChecks, ListMusic, MicVocalIcon, MonitorSpeaker } from "lucide-react";
-import { forwardRef, memo, useState, useEffect, type ReactNode } from "react";
+import {
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/app/components/ui/button";
 import { DevicePanel } from "@/app/components/remote-control/device-panel";
@@ -8,6 +15,7 @@ import { useDevicePlaybackActions } from "@/app/components/remote-control/use-de
 import { HandoffConfirmationDialog } from "@/app/components/remote-control/handoff-confirmation-dialog";
 import { Drawer as DrawerPrimitive } from "vaul";
 import { useFullscreenContrast } from "@/app/hooks/use-fullscreen-contrast";
+import { useCoordinationReconnectOnOpen } from "@/app/hooks/use-coordination-reconnect-on-open";
 import { useHasLyrics } from "@/app/hooks/use-has-lyrics";
 import { useIsTouchPrimary } from "@/app/hooks/use-input-mode";
 import { cn } from "@/lib/utils";
@@ -129,13 +137,22 @@ const MobileBottomTabs = memo(function MobileBottomTabs() {
   const { customServerEnabled, customServerUrl } = useLyricsSettings();
 
   const [panelOpen, setPanelOpen] = useState(false);
+  const reconnectCoordinationOnOpen = useCoordinationReconnectOnOpen();
   const deviceActions = useDevicePlaybackActions();
 
+  const handleDevicePanelOpenChange = useCallback(
+    (open: boolean) => {
+      setPanelOpen(open);
+      reconnectCoordinationOnOpen(open);
+    },
+    [reconnectCoordinationOnOpen],
+  );
+
   useEffect(() => {
-    const handleOpen = () => setPanelOpen(true);
+    const handleOpen = () => handleDevicePanelOpenChange(true);
     window.addEventListener("open-device-panel", handleOpen);
     return () => window.removeEventListener("open-device-panel", handleOpen);
-  }, []);
+  }, [handleDevicePanelOpenChange]);
 
   const lyricsDisabled = hasLyrics === false;
   const customLyricsDisabled =
@@ -182,7 +199,7 @@ const MobileBottomTabs = memo(function MobileBottomTabs() {
       />
       <DevicePanel
         open={panelOpen}
-        onOpenChange={setPanelOpen}
+        onOpenChange={handleDevicePanelOpenChange}
         actions={deviceActions}
         trigger={
           <MobileTabButton

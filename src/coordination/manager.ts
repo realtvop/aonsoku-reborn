@@ -188,7 +188,19 @@ export class CoordinationManager {
 
   async reconnect(): Promise<void> {
     if (!this.config || !this.tokens) return;
-    if (this.coordClient) return; // Already connected or connecting
+    if (this.coordClient) {
+      const state = this.coordClient.getState();
+      if (
+        state === "connected" ||
+        state === "connecting" ||
+        state === "reconnecting"
+      ) {
+        return;
+      }
+
+      this.coordClient.disconnect();
+      this.coordClient = null;
+    }
 
     await this.openWebSocket();
     this.startOutboxProcessor();

@@ -11,6 +11,7 @@ import { RadioInfo } from "@/app/components/player/radio-info";
 import { TrackInfo } from "@/app/components/player/track-info";
 import { Button } from "@/app/components/ui/button";
 import { useAudioSource } from "@/app/hooks/use-audio-source";
+import { useCoordinationReconnectOnOpen } from "@/app/hooks/use-coordination-reconnect-on-open";
 import { usePlayHistory } from "@/app/hooks/use-play-history";
 import { usePlayerBreakpoint } from "@/app/hooks/use-player-breakpoint";
 import { usePreloadAudio } from "@/app/hooks/use-preload-audio";
@@ -73,13 +74,22 @@ const MemoAudioPlayer = memo(AudioPlayer);
 export function Player() {
   const { t } = useTranslation();
   const [panelOpen, setPanelOpen] = useState(false);
+  const reconnectCoordinationOnOpen = useCoordinationReconnectOnOpen();
   const deviceActions = useDevicePlaybackActions();
 
+  const handleDevicePanelOpenChange = useCallback(
+    (open: boolean) => {
+      setPanelOpen(open);
+      reconnectCoordinationOnOpen(open);
+    },
+    [reconnectCoordinationOnOpen],
+  );
+
   useEffect(() => {
-    const handleOpen = () => setPanelOpen(true);
+    const handleOpen = () => handleDevicePanelOpenChange(true);
     window.addEventListener("open-device-panel", handleOpen);
     return () => window.removeEventListener("open-device-panel", handleOpen);
-  }, []);
+  }, [handleDevicePanelOpenChange]);
 
   const radioLabel = t("radios.label");
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -431,7 +441,7 @@ export function Player() {
             {!isMobile && (
               <DevicePanel
                 open={panelOpen}
-                onOpenChange={setPanelOpen}
+                onOpenChange={handleDevicePanelOpenChange}
                 actions={deviceActions}
                 trigger={
                   <PlayerDeviceButton
