@@ -436,7 +436,11 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func clearRemotePlaybackState(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
             self.remotePlaybackProjection = nil
-            self.clearNowPlayingInfo()
+            if self.player != nil || self.isQueueEngineActive {
+                self.updateNowPlayingInfo()
+            } else {
+                self.clearNowPlayingInfo()
+            }
             call.resolve()
         }
     }
@@ -1779,6 +1783,9 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private func applyNowPlayingPlaybackFields(to info: inout [String: Any]) {
         if let remotePlaybackProjection {
+            MPNowPlayingInfoCenter.default().playbackState =
+                remotePlaybackProjection.isPlaying ? .playing : .paused
+
             if remotePlaybackProjection.duration > 0 {
                 info[MPMediaItemPropertyPlaybackDuration] =
                     remotePlaybackProjection.duration
@@ -1807,6 +1814,8 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         let isActivelyPlaying = player?.timeControlStatus == .playing ||
             player?.timeControlStatus == .waitingToPlayAtSpecifiedRate ||
             isQueueTransitioning
+        MPNowPlayingInfoCenter.default().playbackState =
+            isActivelyPlaying ? .playing : .paused
         info[MPNowPlayingInfoPropertyPlaybackRate] = isActivelyPlaying ? 1.0 : 0.0
         info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = 1.0
     }
