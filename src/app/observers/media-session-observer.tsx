@@ -15,7 +15,10 @@ import {
   usePlayerStore,
 } from "@/store/player.store";
 import { appName } from "@/utils/appName";
-import { getCoverArtUrlFromSongPreference } from "@/utils/coverArt";
+import {
+  getCoverArtUrlFromSongPreference,
+  getSongCoverArtId,
+} from "@/utils/coverArt";
 import { clampProgress, isValidDuration } from "@/utils/duration";
 import { logger } from "@/utils/logger";
 import { manageMediaSession } from "@/utils/setMediaSession";
@@ -242,6 +245,13 @@ export function MediaSessionObserver() {
             size: "300",
           })
         : undefined;
+    const coverArtId =
+      song.coverArt || song.albumId
+        ? getSongCoverArtId({
+            coverArt: song.coverArt ?? "",
+            albumId: song.albumId,
+          })
+        : undefined;
 
     nativeRemoteProjectionActiveRef.current = true;
     plugin
@@ -252,6 +262,7 @@ export function MediaSessionObserver() {
           album: song.album,
           duration,
           artworkUrl,
+          coverArtId,
         },
         isPlaying: remoteProjection.isPlaying,
         position,

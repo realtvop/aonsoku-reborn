@@ -30,6 +30,7 @@ export interface NativeAudioMetadata {
   album?: string;
   duration?: number;
   artworkUrl?: string;
+  coverArtId?: string;
 }
 
 export interface NativeRemotePlaybackStateOptions {

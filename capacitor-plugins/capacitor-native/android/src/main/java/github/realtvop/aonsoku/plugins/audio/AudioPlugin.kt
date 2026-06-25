@@ -1026,6 +1026,7 @@ class AudioPlugin : Plugin() {
         val artist = metadataObject?.getString("artist")
         val album = metadataObject?.getString("album")
         val artworkUrl = metadataObject?.getString("artworkUrl")
+        val coverArtId = metadataObject?.getString("coverArtId")
         val duration = call.getDouble("duration") ?: metadataObject?.optDouble("duration", 0.0) ?: 0.0
         val position = call.getDouble("position") ?: 0.0
         val isPlaying = call.getBoolean("isPlaying") ?: false
@@ -1055,6 +1056,8 @@ class AudioPlugin : Plugin() {
                         isShuffleActive,
                         repeatMode,
                         volume,
+                        artworkUrl,
+                        coverArtId,
                     )
                     call.resolve()
                 }

@@ -1702,7 +1702,8 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             artist: call.getString("artist"),
             album: call.getString("album"),
             duration: positiveDuration(call.getDouble("duration")),
-            artworkUrl: call.getString("artworkUrl")
+            artworkUrl: call.getString("artworkUrl"),
+            coverArtId: call.getString("coverArtId")
         )
     }
 
@@ -1716,7 +1717,8 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             artist: object["artist"] as? String,
             album: object["album"] as? String,
             duration: positiveDuration(numberValue(object["duration"])),
-            artworkUrl: object["artworkUrl"] as? String
+            artworkUrl: object["artworkUrl"] as? String,
+            coverArtId: object["coverArtId"] as? String
         )
     }
 
@@ -1760,7 +1762,11 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
 
         if let artworkUrl = currentMetadata.artworkUrl {
-            loadNowPlayingArtwork(artworkUrl, revision: revision)
+            loadNowPlayingArtwork(
+                artworkUrl,
+                coverArtId: currentMetadata.coverArtId,
+                revision: revision
+            )
         }
     }
 
@@ -1820,12 +1826,16 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = 1.0
     }
 
-    private func loadNowPlayingArtwork(_ urlString: String, revision: Int) {
-        var coverArtId: String?
+    private func loadNowPlayingArtwork(
+        _ urlString: String,
+        coverArtId explicitCoverArtId: String?,
+        revision: Int
+    ) {
+        var coverArtId = explicitCoverArtId
         if let components = URLComponents(string: urlString),
            components.scheme == "aonsoku-media",
            let queryItems = components.queryItems {
-            coverArtId = queryItems.first(where: { $0.name == "id" })?.value
+            coverArtId = coverArtId ?? queryItems.first(where: { $0.name == "id" })?.value
         }
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -3114,6 +3124,7 @@ private struct NativeAudioMetadata {
     var album: String?
     var duration: Double?
     var artworkUrl: String?
+    var coverArtId: String?
 }
 
 private struct NativeRemotePlaybackProjection {

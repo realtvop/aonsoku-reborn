@@ -75,6 +75,7 @@ class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
     private var player: Player? = null
     private var cachedArtworkBitmap: Bitmap? = null
+    private var artworkLoadRevision = 0
     private var isBoundToActivity = false
 
     val queueEngine = NativeQueueEngine()
@@ -92,6 +93,7 @@ class PlaybackService : MediaSessionService() {
     private var remotePlaybackIsShuffleActive = false
     private var remotePlaybackRepeatMode = "off"
     private var remotePlaybackVolume: Double? = null
+    private var remotePlaybackArtworkKey: String? = null
 
     private val httpClient = SubsonicHttpClient()
     private val credentialStore by lazy {
@@ -1171,8 +1173,13 @@ class PlaybackService : MediaSessionService() {
 
 
 
-    fun loadAndCacheArtwork(artworkUrl: String?, song: QueueSong? = null) {
+    fun loadAndCacheArtwork(
+        artworkUrl: String?,
+        song: QueueSong? = null,
+        coverArtIdOverride: String? = null
+    ) {
         val url = artworkUrl ?: return
+        val revision = ++artworkLoadRevision
         cachedArtworkBitmap = null
         serviceScope.launch(Dispatchers.IO) {
             try {
@@ -1180,7 +1187,7 @@ class PlaybackService : MediaSessionService() {
                     val filePath = url.substring(7)
                     BitmapFactory.decodeFile(filePath)
                 } else {
-                    val coverArtId = song?.coverArtId
+                    val coverArtId = song?.coverArtId ?: coverArtIdOverride ?: extractCoverArtId(url)
                     val credentials = credentialStore.retrieve()
                     if (!coverArtId.isNullOrEmpty() && credentials != null) {
                         try {
@@ -1204,6 +1211,7 @@ class PlaybackService : MediaSessionService() {
                 }
                 if (bitmap != null) {
                     withContext(Dispatchers.Main) {
+                        if (revision != artworkLoadRevision) return@withContext
                         cachedArtworkBitmap = bitmap
                         updateNotification()
                     }
@@ -1211,6 +1219,14 @@ class PlaybackService : MediaSessionService() {
             } catch (e: Exception) {
                 NativeLogger.warn("Failed to load artwork: ${e.message}", "playback-service")
             }
+        }
+    }
+
+    private fun extractCoverArtId(url: String): String? {
+        return try {
+            Uri.parse(url).getQueryParameter("id")
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -1307,7 +1323,9 @@ class PlaybackService : MediaSessionService() {
         duration: Double,
         isShuffleActive: Boolean,
         repeatMode: String,
-        volume: Double?
+        volume: Double?,
+        artworkUrl: String?,
+        coverArtId: String?
     ) {
         isRemotePlaybackProjectionActive = true
         remotePlaybackMetadata = metadata
@@ -1323,6 +1341,18 @@ class PlaybackService : MediaSessionService() {
         remotePlaybackVolume = volume
         currentSongMetadata = metadata
         projectRemoteMediaItemToPlayer()
+        val artworkKey = listOfNotNull(coverArtId, artworkUrl).joinToString("|")
+        if (remotePlaybackArtworkKey != artworkKey) {
+            remotePlaybackArtworkKey = artworkKey
+            artworkLoadRevision += 1
+            cachedArtworkBitmap = null
+            if (!artworkUrl.isNullOrEmpty()) {
+                loadAndCacheArtwork(
+                    artworkUrl,
+                    coverArtIdOverride = coverArtId,
+                )
+            }
+        }
         updateNotification()
         mediaSession?.setCustomLayout(getCustomLayoutButtons())
     }
@@ -1368,6 +1398,7 @@ class PlaybackService : MediaSessionService() {
         remotePlaybackIsShuffleActive = false
         remotePlaybackRepeatMode = "off"
         remotePlaybackVolume = null
+        remotePlaybackArtworkKey = null
         currentSongMetadata = null
         restoreLocalMediaItemProjection()
         if (player?.isPlaying == true || isQueueEngineActive) {
