@@ -529,11 +529,15 @@ export class CoordinationManager {
     await this.httpClient.revokeDevice(id);
   }
 
+  async forgetCurrentDevice(): Promise<void> {
+    await this.tokenStore.clearTokens();
+    await this.disconnect();
+  }
+
   async deleteAccount(): Promise<void> {
     if (!this.httpClient) throw new Error("coordination: not connected");
     await this.httpClient.deleteAccount();
-    await this.tokenStore.clearTokens();
-    await this.disconnect();
+    await this.forgetCurrentDevice();
   }
 
   publishSnapshot(

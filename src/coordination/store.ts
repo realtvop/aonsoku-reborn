@@ -193,7 +193,7 @@ export const useCoordinationStore = create<CoordinationState>()(
             console.warn("Failed to revoke device on server:", err);
           }
         }
-        await manager.disconnect();
+        await manager.forgetCurrentDevice();
         set((s) => {
           s.isConnected = false;
           s.deviceId = null;
