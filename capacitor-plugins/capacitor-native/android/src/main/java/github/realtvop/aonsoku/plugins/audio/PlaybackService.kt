@@ -662,7 +662,6 @@ class PlaybackService : MediaSessionService() {
                         if (isRemotePlaybackProjectionActive || !isQueueEngineActive) {
                             val commandName = when (playerCommand) {
                                 Player.COMMAND_PLAY_PAUSE -> "togglePlayPause"
-                                Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM -> "seek"
                                 else -> null
                             }
                             if (commandName != null) {
