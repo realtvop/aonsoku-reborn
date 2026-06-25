@@ -2,6 +2,7 @@ import { clsx } from "clsx";
 import { EllipsisVertical } from "lucide-react";
 import { memo } from "react";
 import { Button } from "@/app/components/ui/button";
+import { useRemotePlaybackProjection } from "@/app/components/remote-control/use-remote-playback-projection";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,6 +28,8 @@ export const FullscreenSongInfoRow = memo(function FullscreenSongInfoRow({
     (state) => state.songlist.currentSong,
     (a, b) => a?.id === b?.id,
   );
+  const remoteProjection = useRemotePlaybackProjection();
+  const displaySong = remoteProjection.song ?? currentSong;
   const { hoverBg } = useFullscreenContrast();
   const { open, setOpen, triggerProps } = useTouchMenuGuard();
 
@@ -52,7 +55,7 @@ export const FullscreenSongInfoRow = memo(function FullscreenSongInfoRow({
             className="size-11 rounded-full"
             iconClassName="w-6 h-6"
           />
-          {currentSong && (
+          {displaySong && (
             <DropdownMenu open={open} onOpenChange={setOpen}>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -75,7 +78,7 @@ export const FullscreenSongInfoRow = memo(function FullscreenSongInfoRow({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <CurrentSongMenuOptions song={currentSong} />
+                <CurrentSongMenuOptions song={displaySong} />
               </DropdownMenuContent>
             </DropdownMenu>
           )}

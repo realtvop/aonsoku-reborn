@@ -149,6 +149,16 @@ export function createPlaybackActions(shared: SharedDeps) {
     },
 
     setVolume: (volume: number) => {
+      if (isRemoteActive()) {
+        remoteSend(LanControlMessageType.SET_VOLUME, {
+          volume,
+        });
+        set((state) => {
+          state.playerState.volume = volume;
+        });
+        return;
+      }
+
       const caps = getPlaybackCapabilities();
       if (!caps.canSetVolume) return;
       remoteSend(LanControlMessageType.SET_VOLUME, {

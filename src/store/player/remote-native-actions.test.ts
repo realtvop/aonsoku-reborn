@@ -30,6 +30,7 @@ function makeState() {
     playerState: {
       isPlaying: false,
       loopState: LoopState.Off,
+      volume: 100,
     },
     playerProgress: {
       progress: 0,
@@ -146,5 +147,23 @@ describe("remote control actions on native runtimes", () => {
     expect(remoteSend).toHaveBeenCalledWith(LanControlMessageType.TOGGLE_REPEAT);
     expect(state.songlist.contextQueue.songs).toEqual([localSong]);
     expect(state.playerState.loopState).toBe(LoopState.Off);
+  });
+
+  it("sends remote volume before checking native local volume capability", () => {
+    const state = makeState();
+    const remoteSend = vi.fn(() => true);
+    const actions = createPlaybackActions({
+      set: (fn) => fn(state as never),
+      get: () => state as never,
+      isRemoteActive: () => true,
+      remoteSend,
+    });
+
+    actions.setVolume?.(35);
+
+    expect(remoteSend).toHaveBeenCalledWith(LanControlMessageType.SET_VOLUME, {
+      volume: 35,
+    });
+    expect(state.playerState.volume).toBe(35);
   });
 });

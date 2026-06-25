@@ -1,6 +1,7 @@
 import { clsx } from "clsx";
 import { AnimatePresence, motion } from "framer-motion";
 import { memo } from "react";
+import { useRemotePlaybackProjection } from "@/app/components/remote-control/use-remote-playback-projection";
 import { usePlayerStore } from "@/store/player.store";
 import { ISong } from "@/types/responses/song";
 import { ALBUM_ARTISTS_MAX_NUMBER } from "@/utils/multipleArtists";
@@ -23,8 +24,10 @@ export const SongInfo = memo(function SongInfo({
     (state) => state.songlist.currentSong,
     (a, b) => a?.id === b?.id,
   );
+  const remoteProjection = useRemotePlaybackProjection();
+  const displaySong = remoteProjection.song ?? currentSong;
 
-  if (!currentSong?.id) return null;
+  if (!displaySong?.id) return null;
 
   return (
     <div
@@ -35,7 +38,7 @@ export const SongInfo = memo(function SongInfo({
     >
       <AnimatePresence mode="wait">
         <motion.div
-          key={currentSong.id ?? "no-song"}
+          key={displaySong.id ?? "no-song"}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
@@ -49,14 +52,14 @@ export const SongInfo = memo(function SongInfo({
                 compact ? "text-xl md:text-2xl" : "text-2xl md:text-3xl",
               )}
             >
-              {currentSong.title}
+              {displaySong.title}
             </h2>
           </ScrollingTitle>
         </motion.div>
       </AnimatePresence>
       <AnimatePresence mode="wait">
         <motion.div
-          key={currentSong.id ?? "no-song-sub"}
+          key={displaySong.id ?? "no-song-sub"}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
@@ -70,7 +73,7 @@ export const SongInfo = memo(function SongInfo({
                 "text-foreground/70",
               )}
             >
-              <ArtistNames song={currentSong} />
+              <ArtistNames song={displaySong} />
             </div>
           </ScrollingTitle>
         </motion.div>
@@ -90,13 +93,15 @@ export const AlbumName = memo(function AlbumName({
     (state) => state.songlist.currentSong,
     (a, b) => a?.id === b?.id,
   );
+  const remoteProjection = useRemotePlaybackProjection();
+  const displaySong = remoteProjection.song ?? currentSong;
 
-  if (!currentSong?.id) return null;
+  if (!displaySong?.id) return null;
 
   return (
     <AnimatePresence mode="wait">
       <motion.div
-        key={currentSong.id ?? "no-album"}
+        key={displaySong.id ?? "no-album"}
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 8 }}
@@ -113,7 +118,7 @@ export const AlbumName = memo(function AlbumName({
               "text-foreground/70",
             )}
           >
-            {currentSong.album}
+            {displaySong.album}
           </p>
         </ScrollingTitle>
       </motion.div>
@@ -126,16 +131,18 @@ export const CompactSongInfo = memo(function CompactSongInfo() {
     (state) => state.songlist.currentSong,
     (a, b) => a?.id === b?.id,
   );
+  const remoteProjection = useRemotePlaybackProjection();
+  const displaySong = remoteProjection.song ?? currentSong;
 
-  if (!currentSong?.id) return null;
+  if (!displaySong?.id) return null;
 
   return (
     <div className="flex items-center gap-2 min-w-0 flex-1">
       <CompactSongArtwork />
       <div className="flex flex-col min-w-0">
-        <p className="text-sm font-medium truncate">{currentSong.title}</p>
+        <p className="text-sm font-medium truncate">{displaySong.title}</p>
         <p className="text-xs text-foreground/70 truncate">
-          {currentSong.artist}
+          {displaySong.artist}
         </p>
       </div>
     </div>

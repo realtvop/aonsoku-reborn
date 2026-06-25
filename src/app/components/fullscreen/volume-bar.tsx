@@ -1,6 +1,7 @@
 import { useCallback, useRef, type WheelEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { VolumeIcon } from "@/app/components/icons/volume-icon";
+import { useRemotePlaybackProjection } from "@/app/components/remote-control/use-remote-playback-projection";
 import { Button } from "@/app/components/ui/button";
 import { Slider } from "@/app/components/ui/slider";
 import { useFullscreenContrast } from "@/app/hooks/use-fullscreen-contrast";
@@ -14,6 +15,7 @@ export function VolumeBar() {
   const { setVolume: setPlayerVolume, handleVolumeWheel: handlePlayerWheel } =
     usePlayerVolume();
   const { min, max, step } = useVolumeSettings();
+  const remoteProjection = useRemotePlaybackProjection();
   const {
     volume: systemVolume,
     setSystemVolume,
@@ -25,17 +27,24 @@ export function VolumeBar() {
   const { t } = useTranslation();
   const { requiresSystemVolume } = getPlaybackCapabilities();
   const { hoverBg10 } = useFullscreenContrast();
+  const remoteVolume = remoteProjection.volume ?? playerVolume;
 
-  const displayVolume = supportsSystemVolumeControl
-    ? systemVolume
-    : playerVolume;
-  const isDisabled = requiresSystemVolume && !supportsSystemVolumeControl;
+  const displayVolume = remoteProjection.active
+    ? remoteVolume
+    : supportsSystemVolumeControl
+      ? systemVolume
+      : playerVolume;
+  const isDisabled =
+    !remoteProjection.active && requiresSystemVolume && !supportsSystemVolumeControl;
 
   const handleWheel = useCallback(
     (e: WheelEvent<HTMLDivElement>) => {
       if (isDisabled || wheelRafRef.current !== null) return;
       wheelRafRef.current = requestAnimationFrame(() => {
-        if (supportsSystemVolumeControl) {
+        if (remoteProjection.active) {
+          const delta = e.deltaY > 0 ? -step : step;
+          setPlayerVolume(Math.min(max, Math.max(min, remoteVolume + delta)));
+        } else if (supportsSystemVolumeControl) {
           handleSystemWheel(e.deltaY > 0);
         } else {
           handlePlayerWheel(e.deltaY > 0);
@@ -46,30 +55,64 @@ export function VolumeBar() {
     [
       handlePlayerWheel,
       handleSystemWheel,
-      supportsSystemVolumeControl,
       isDisabled,
+      max,
+      min,
+      remoteProjection.active,
+      remoteVolume,
+      setPlayerVolume,
+      step,
+      supportsSystemVolumeControl,
     ],
   );
 
   const handleSliderChange = useCallback(
     ([value]: number[]) => {
-      if (supportsSystemVolumeControl) {
+      if (remoteProjection.active) {
+        setPlayerVolume(value);
+      } else if (supportsSystemVolumeControl) {
         setSystemVolume(value);
       } else {
         setPlayerVolume(value);
       }
     },
-    [supportsSystemVolumeControl, setSystemVolume, setPlayerVolume],
+    [
+      remoteProjection.active,
+      supportsSystemVolumeControl,
+      setSystemVolume,
+      setPlayerVolume,
+    ],
   );
 
   const handleSliderCommit = useCallback(
     ([value]: number[]) => {
-      if (supportsSystemVolumeControl) {
+      if (remoteProjection.active) {
+        setPlayerVolume(value);
+      } else if (supportsSystemVolumeControl) {
         commitSystemVolume(value);
       }
     },
-    [supportsSystemVolumeControl, commitSystemVolume],
+    [
+      commitSystemVolume,
+      remoteProjection.active,
+      setPlayerVolume,
+      supportsSystemVolumeControl,
+    ],
   );
+
+  const handleMuteButtonClick = useCallback(() => {
+    if (!remoteProjection.active) {
+      handleMuteClick();
+      return;
+    }
+
+    setPlayerVolume(displayVolume === 0 ? 100 : 0);
+  }, [
+    displayVolume,
+    handleMuteClick,
+    remoteProjection.active,
+    setPlayerVolume,
+  ]);
 
   return (
     <div
@@ -81,7 +124,7 @@ export function VolumeBar() {
         variant="ghost"
         size="icon"
         className={`size-8 p-0 shrink-0 ${hoverBg10}`}
-        onClick={handleMuteClick}
+        onClick={handleMuteButtonClick}
         disabled={isDisabled}
         aria-label={
           displayVolume === 0
