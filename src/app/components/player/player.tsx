@@ -6,6 +6,7 @@ import { PlayerDeviceButton } from "@/app/components/remote-control/device-butto
 import { DevicePanel } from "@/app/components/remote-control/device-panel";
 import { useDevicePlaybackActions } from "@/app/components/remote-control/use-device-playback-actions";
 import { HandoffConfirmationDialog } from "@/app/components/remote-control/handoff-confirmation-dialog";
+import { useRemotePlaybackProjection } from "@/app/components/remote-control/use-remote-playback-projection";
 import { MiniPlayerButton } from "@/app/components/mini-player/button";
 import { RadioInfo } from "@/app/components/player/radio-info";
 import { TrackInfo } from "@/app/components/player/track-info";
@@ -118,6 +119,7 @@ export function Player() {
   const { replayGainType, replayGainPreAmp, replayGainDefaultGain } =
     useReplayGainState();
   const { hasNext } = usePlayerPrevAndNext();
+  const remoteProjection = useRemotePlaybackProjection();
 
   usePlayHistory();
   useScrobble();
@@ -143,6 +145,16 @@ export function Player() {
 
   const song = currentList[currentSongIndex] ?? null;
   const radio = radioList[currentSongIndex];
+  const displaySong = remoteProjection.song ?? song;
+  const displayIsPlaying = remoteProjection.active
+    ? remoteProjection.isPlaying
+    : isPlaying;
+  const displayHasNext = remoteProjection.active
+    ? remoteProjection.hasNext
+    : hasNext;
+  const displayLoopState = remoteProjection.active
+    ? remoteProjection.loopState
+    : loopState;
   const songId = song?.id;
   const { source: audioSource, resolvedSongId } = useAudioSource(song?.id);
   const audioSrc = audioSource ? getAudioSourceUrl(audioSource) : "";
@@ -384,12 +396,14 @@ export function Player() {
       <div className="w-full h-full grid grid-cols-[1fr_auto] gap-3 px-3 md:grid-cols-player md:gap-2 md:px-4">
         {/* Track Info */}
         <div className="flex items-center gap-1 w-full min-w-0 md:gap-2">
-          {isSong && <MemoTrackInfo song={song} />}
-          {isRadio && <MemoRadioInfo radio={radio} />}
+          {(isSong || remoteProjection.active) && (
+            <MemoTrackInfo song={displaySong} />
+          )}
+          {!remoteProjection.active && isRadio && <MemoRadioInfo radio={radio} />}
         </div>
         {/* Main Controls */}
         <div className="hidden md:col-span-2 md:flex flex-col justify-center items-center px-4 gap-1">
-          <MemoPlayerControls song={song} radio={radio} />
+          <MemoPlayerControls song={displaySong} radio={radio} />
 
           {isSong && <MemoPlayerProgress audioRef={getAudioRef()} />}
         </div>
@@ -397,12 +411,12 @@ export function Player() {
         <div className="flex md:hidden items-center gap-0.5">
           <Button
             variant="ghost"
-            disabled={!song && !radio}
+            disabled={!displaySong && !radio}
             onClick={togglePlayPause}
-            data-testid={`player-button-${isPlaying ? "pause" : "play"}`}
+            data-testid={`player-button-${displayIsPlaying ? "pause" : "play"}`}
             className="size-11 p-0"
           >
-            {isPlaying ? (
+            {displayIsPlaying ? (
               <Pause className="text-foreground fill-foreground size-5" />
             ) : (
               <Play className="text-foreground fill-foreground size-5" />
@@ -411,7 +425,8 @@ export function Player() {
           <Button
             variant="ghost"
             disabled={
-              (!song && !radio) || (!hasNext && loopState !== LoopState.All)
+              (!displaySong && !radio) ||
+              (!displayHasNext && displayLoopState !== LoopState.All)
             }
             onClick={playNextSong}
             data-testid="player-button-next-mobile"
