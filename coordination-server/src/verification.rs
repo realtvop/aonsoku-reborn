@@ -36,6 +36,34 @@ impl SubsonicProof {
     }
 }
 
+/// Pluggable credential verifier used by HTTP handlers. Production uses
+/// [`HttpCredentialVerifier`]; tests can inject a mock without calling a real
+/// Navidrome/Subsonic server.
+#[async_trait::async_trait]
+pub trait CredentialVerifier: Send + Sync + 'static {
+    async fn verify(
+        &self,
+        normalised_identity: &str,
+        proof: &SubsonicProof,
+        policy: &SsrfPolicy,
+    ) -> Result<(), CoordinationError>;
+}
+
+#[derive(Debug, Default)]
+pub struct HttpCredentialVerifier;
+
+#[async_trait::async_trait]
+impl CredentialVerifier for HttpCredentialVerifier {
+    async fn verify(
+        &self,
+        normalised_identity: &str,
+        proof: &SubsonicProof,
+        policy: &SsrfPolicy,
+    ) -> Result<(), CoordinationError> {
+        verify_credentials(normalised_identity, proof, policy).await
+    }
+}
+
 /// Minimal Subsonic ping response envelope.
 #[derive(Debug, Deserialize)]
 struct SubsonicResponse {

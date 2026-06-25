@@ -28,6 +28,11 @@ export interface CoordinationCredentials {
   authType: AuthType | null;
 }
 
+export type CoordinationRecoveryProvider = () =>
+  | CoordinationCredentials
+  | null
+  | Promise<CoordinationCredentials | null>;
+
 export interface StoredDeviceTokens {
   deviceId: DeviceId;
   accountId: AccountId;
@@ -48,6 +53,7 @@ export class CoordinationHttpClient {
     private readonly onTokensUpdated?: (
       tokens: StoredDeviceTokens | null,
     ) => Promise<void> | void,
+    private readonly getRecoveryCredentials?: CoordinationRecoveryProvider,
   ) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
   }
@@ -121,27 +127,81 @@ export class CoordinationHttpClient {
       refreshToken: this.tokens.refreshToken,
     };
     try {
-      const resp = await this.request<TokenRefreshResponse>("/v1/auth/token", {
+      const resp = await this.requestTokenRefresh(req);
+      await this.applyTokenRefreshResponse(resp);
+    } catch (e) {
+      if (e instanceof CoordinationApiError) {
+        if (e.code === "device_revoked") {
+          this.tokens = null;
+          this.onTokensUpdated?.(null);
+        } else if (e.code === "authentication_failed") {
+          await this.recoverTokens(req);
+          return;
+        }
+      }
+      throw e;
+    }
+  }
+
+  private async requestTokenRefresh(
+    req: TokenRefreshRequest,
+  ): Promise<TokenRefreshResponse> {
+    return this.request<TokenRefreshResponse>(
+      "/v1/auth/token",
+      {
         method: "POST",
         body: JSON.stringify(req),
+      },
+      false,
+    );
+  }
+
+  private async recoverTokens(req: TokenRefreshRequest): Promise<void> {
+    const creds = await this.getRecoveryCredentials?.();
+    if (!creds) {
+      throw new CoordinationApiError(
+        "authentication_failed",
+        "invalid refresh token",
+        401,
+      );
+    }
+    try {
+      const challenge = await this.requestChallenge({
+        identityUrl: creds.identityUrl,
+        username: creds.username,
       });
-      this.tokens = {
-        ...this.tokens,
-        accessToken: resp.accessToken,
-        refreshToken: resp.refreshToken,
-        accessTokenExpiresAt: Date.now() + resp.expiresIn * 1000,
-      };
-      this.onTokensUpdated?.(this.tokens);
+      const proof = buildSubsonicProof(creds);
+      const resp = await this.requestTokenRefresh({
+        ...req,
+        challengeId: challenge.challengeId,
+        identityUrl: creds.identityUrl,
+        username: creds.username,
+        authMode: proof.authMode,
+        token: proof.token,
+        salt: proof.salt,
+        password: proof.password,
+      });
+      await this.applyTokenRefreshResponse(resp);
     } catch (e) {
-      if (
-        e instanceof CoordinationApiError &&
-        (e.code === "device_revoked" || e.code === "authentication_failed")
-      ) {
+      if (e instanceof CoordinationApiError && e.code === "device_revoked") {
         this.tokens = null;
         this.onTokensUpdated?.(null);
       }
       throw e;
     }
+  }
+
+  private async applyTokenRefreshResponse(
+    resp: TokenRefreshResponse,
+  ): Promise<void> {
+    if (!this.tokens) return;
+    this.tokens = {
+      ...this.tokens,
+      accessToken: resp.accessToken,
+      refreshToken: resp.refreshToken,
+      accessTokenExpiresAt: Date.now() + resp.expiresIn * 1000,
+    };
+    await this.onTokensUpdated?.(this.tokens);
   }
 
   async requestChallenge(req: ChallengeRequest): Promise<ChallengeResponse> {

@@ -8,6 +8,7 @@ import {
   CoordinationHttpClient,
   buildSubsonicProof,
   type CoordinationCredentials,
+  type CoordinationRecoveryProvider,
   type StoredDeviceTokens,
 } from "./httpClient";
 import {
@@ -140,7 +141,10 @@ export class CoordinationManager {
   /// (design §6.3).
   private tokenStore: CoordinationTokenStore = tsTokenStore;
 
-  constructor(private readonly callbacks: CoordinationManagerCallbacks) {}
+  constructor(
+    private readonly callbacks: CoordinationManagerCallbacks,
+    private readonly getRecoveryCredentials?: CoordinationRecoveryProvider,
+  ) {}
 
   isConfigured(): boolean {
     return this.config !== null;
@@ -180,6 +184,7 @@ export class CoordinationManager {
           this.tokens = tokens;
           await this.tokenStore.saveTokens(tokens);
         },
+        this.getRecoveryCredentials,
       );
       this.httpClient.setTokens(this.tokens);
       this.deviceId = this.tokens.deviceId;
@@ -226,6 +231,7 @@ export class CoordinationManager {
         this.tokens = tokens;
         await this.tokenStore.saveTokens(tokens);
       },
+      this.getRecoveryCredentials,
     );
 
     // 1. Request a one-time challenge.

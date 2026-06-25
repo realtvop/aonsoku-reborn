@@ -5,6 +5,7 @@ import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import type { CoordinationCredentials } from "./httpClient";
 import { CoordinationManager } from "./manager";
+import { useAppStore } from "@/store/app.store";
 import type { DeviceDto, DeviceId, PlaybackSnapshot } from "./types";
 import type { ConnectionState } from "./wsClient";
 
@@ -71,6 +72,19 @@ const callbacks = {
 export const useCoordinationStore = create<CoordinationState>()(
   immer((set) => {
     let loadStatePromise: Promise<void> | null = null;
+    function getRecoveryCredentials(): CoordinationCredentials | null {
+      const config = manager.getConfig();
+      const { username, password, authType } = useAppStore.getState().data;
+      if (!config?.identityUrl || !username || !password || authType === null) {
+        return null;
+      }
+      return {
+        identityUrl: config.identityUrl,
+        username,
+        password,
+        authType,
+      };
+    }
     const manager = new CoordinationManager({
       ...callbacks,
       onConnectionStateChange: (state) => {
@@ -118,7 +132,7 @@ export const useCoordinationStore = create<CoordinationState>()(
           s.error = `${code}: ${reason}`;
         });
       },
-    });
+    }, getRecoveryCredentials);
 
     return {
       manager,

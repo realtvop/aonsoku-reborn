@@ -285,6 +285,13 @@ export interface RegisterResponse {
 export interface TokenRefreshRequest {
   deviceId: DeviceId;
   refreshToken: string;
+  challengeId?: string;
+  identityUrl?: string;
+  username?: string;
+  authMode?: "token" | "password";
+  token?: string;
+  salt?: string;
+  password?: string;
 }
 export interface TokenRefreshResponse {
   accessToken: string;

@@ -19,7 +19,7 @@ use crate::storage::repository::{
 use crate::storage::tokens::{
     account_lookup_key, generate_refresh_token, hash_refresh_token, new_uuid,
 };
-use crate::verification::{verify_credentials, SubsonicProof};
+use crate::verification::SubsonicProof;
 
 /// POST /v1/auth/challenge
 ///
@@ -95,7 +95,9 @@ pub async fn post_register(
             )));
         }
     };
-    verify_credentials(&normalised, &proof, state.config.ssrf_policy())
+    state
+        .verifier
+        .verify(&normalised, &proof, state.config.ssrf_policy())
         .await
         .map_err(map_err)?;
 
@@ -155,6 +157,13 @@ pub async fn post_register(
 pub struct TokenRefreshRequest {
     pub device_id: Uuid,
     pub refresh_token: String,
+    pub challenge_id: Option<Uuid>,
+    pub identity_url: Option<String>,
+    pub username: Option<String>,
+    pub auth_mode: Option<String>,
+    pub token: Option<String>,
+    pub salt: Option<String>,
+    pub password: Option<String>,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -187,43 +196,158 @@ pub async fn post_token(
     }
     // Verify the refresh token hash in constant time.
     let provided_hash = hash_refresh_token(&body.refresh_token);
-    if !crate::storage::tokens::verify_hash_equals(&provided_hash, &device.refresh_token_hash) {
-        return Err(map_err(CoordinationError::new(
-            ErrorCode::AuthenticationFailed,
-            "invalid refresh token",
-        )));
-    }
-    // Check inactivity expiry.
-    if !crate::auth::refresh_token_active(
+    let refresh_hash_valid =
+        crate::storage::tokens::verify_hash_equals(&provided_hash, &device.refresh_token_hash);
+    let refresh_active = crate::auth::refresh_token_active(
         device.refresh_token_last_used_at,
         state.config.refresh_token_max_age,
         chrono::Utc::now(),
-    ) {
+    );
+
+    if !refresh_hash_valid || !refresh_active {
+        if has_recovery_proof(&body) {
+            recover_refresh_token(&state, &body, &device).await?;
+        } else {
+            let reason = if refresh_hash_valid {
+                "refresh token expired"
+            } else {
+                "invalid refresh token"
+            };
+            return Err(map_err(CoordinationError::new(
+                ErrorCode::AuthenticationFailed,
+                reason,
+            )));
+        }
+    }
+
+    // Rotate: issue a new refresh token, update hash + family + last_used.
+    Ok(Json(
+        issue_rotated_tokens(&state, device.id, device.account_id).await?,
+    ))
+}
+
+fn has_recovery_proof(body: &TokenRefreshRequest) -> bool {
+    body.challenge_id.is_some()
+        || body.identity_url.is_some()
+        || body.username.is_some()
+        || body.auth_mode.is_some()
+        || body.token.is_some()
+        || body.salt.is_some()
+        || body.password.is_some()
+}
+
+async fn recover_refresh_token(
+    state: &AppState,
+    body: &TokenRefreshRequest,
+    device: &crate::storage::models::Device,
+) -> Result<(), (StatusCode, Json<ApiError>)> {
+    let challenge_id = body.challenge_id.ok_or_else(|| {
+        map_err(CoordinationError::new(
+            ErrorCode::BadMessage,
+            "challengeId is required for refresh recovery",
+        ))
+    })?;
+    let identity_url = body.identity_url.as_deref().ok_or_else(|| {
+        map_err(CoordinationError::new(
+            ErrorCode::BadMessage,
+            "identityUrl is required for refresh recovery",
+        ))
+    })?;
+    let username = body.username.as_deref().ok_or_else(|| {
+        map_err(CoordinationError::new(
+            ErrorCode::BadMessage,
+            "username is required for refresh recovery",
+        ))
+    })?;
+    let auth_mode = body.auth_mode.as_deref().ok_or_else(|| {
+        map_err(CoordinationError::new(
+            ErrorCode::BadMessage,
+            "authMode is required for refresh recovery",
+        ))
+    })?;
+
+    let consumed = state
+        .repos
+        .challenges
+        .consume(challenge_id)
+        .await
+        .map_err(map_err)?;
+    if !consumed {
         return Err(map_err(CoordinationError::new(
-            ErrorCode::AuthenticationFailed,
-            "refresh token expired",
+            ErrorCode::ChallengeExpired,
+            "challenge expired or already consumed",
         )));
     }
-    // Rotate: issue a new refresh token, update hash + family + last_used.
+
+    let normalised =
+        normalise_identity_url(identity_url, state.config.ssrf.allow_http).map_err(map_err)?;
+    let canonical_user = canonicalise_username(username);
+    let proof = match auth_mode {
+        "token" => SubsonicProof::Token {
+            username: username.to_string(),
+            token: body.token.clone().unwrap_or_default(),
+            salt: body.salt.clone().unwrap_or_default(),
+        },
+        "password" => SubsonicProof::Password {
+            username: username.to_string(),
+            password: body.password.clone().unwrap_or_default(),
+        },
+        _ => {
+            return Err(map_err(CoordinationError::new(
+                ErrorCode::BadMessage,
+                "authMode must be 'token' or 'password'",
+            )));
+        }
+    };
+
+    state
+        .verifier
+        .verify(&normalised, &proof, state.config.ssrf_policy())
+        .await
+        .map_err(map_err)?;
+
+    let lookup_key = account_lookup_key(&state.config.stable_key, &normalised, &canonical_user);
+    let account = state
+        .repos
+        .accounts
+        .find_by_lookup_key(&lookup_key)
+        .await
+        .map_err(map_err)?
+        .ok_or_else(|| CoordinationError::new(ErrorCode::AuthenticationFailed, "account mismatch"))
+        .map_err(map_err)?;
+    if account.id != device.account_id {
+        return Err(map_err(CoordinationError::new(
+            ErrorCode::AuthenticationFailed,
+            "account mismatch",
+        )));
+    }
+    Ok(())
+}
+
+async fn issue_rotated_tokens(
+    state: &AppState,
+    device_id: Uuid,
+    account_id: Uuid,
+) -> Result<TokenRefreshResponse, (StatusCode, Json<ApiError>)> {
     let new_refresh = generate_refresh_token();
     let new_hash = hash_refresh_token(&new_refresh);
     state
         .repos
         .devices
-        .rotate_refresh_token(device.id, &new_hash, new_uuid(), chrono::Utc::now())
+        .rotate_refresh_token(device_id, &new_hash, new_uuid(), chrono::Utc::now())
         .await
         .map_err(map_err)?;
     let access_token = sign_access_token(
         &state.config.stable_key,
-        device.id,
-        device.account_id,
+        device_id,
+        account_id,
         state.config.access_token_ttl,
     );
-    Ok(Json(TokenRefreshResponse {
+    Ok(TokenRefreshResponse {
         access_token,
         refresh_token: new_refresh,
         expires_in: state.config.access_token_ttl.num_seconds(),
-    }))
+    })
 }
 
 /// POST /v1/auth/ws-ticket

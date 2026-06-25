@@ -18,6 +18,7 @@ use crate::errors::{ApiError, CoordinationError};
 use crate::handoff::HandoffCoordinator;
 use crate::realtime::{ConnectionRegistry, SessionCache};
 use crate::storage::sqlite::SqliteRepositories;
+use crate::verification::{CredentialVerifier, HttpCredentialVerifier};
 
 /// Shared application state.
 #[derive(Clone)]
@@ -27,6 +28,7 @@ pub struct AppState {
     pub repos: SqliteRepositories,
     pub realtime: Arc<ConnectionRegistry>,
     pub handoff: Arc<HandoffCoordinator>,
+    pub verifier: Arc<dyn CredentialVerifier>,
     /// In-memory front for `repos.sessions`. Snapshot upserts hit memory;
     /// authoritative transitions and a periodic ticker flush to SQLite
     /// (design §9.2 — debounced persistence).
@@ -36,6 +38,15 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(config: Arc<Config>, pool: SqlitePool, repos: SqliteRepositories) -> Self {
+        Self::with_verifier(config, pool, repos, Arc::new(HttpCredentialVerifier))
+    }
+
+    pub fn with_verifier(
+        config: Arc<Config>,
+        pool: SqlitePool,
+        repos: SqliteRepositories,
+        verifier: Arc<dyn CredentialVerifier>,
+    ) -> Self {
         let session_cache = Arc::new(SessionCache::new(Arc::new(repos.sessions.clone())));
         Self {
             config,
@@ -43,6 +54,7 @@ impl AppState {
             repos,
             realtime: Arc::new(ConnectionRegistry::new()),
             handoff: Arc::new(HandoffCoordinator::new()),
+            verifier,
             session_cache,
             ready: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
