@@ -285,6 +285,7 @@ export class CoordinationManager {
       onStateChange: (s) => this.callbacks.onConnectionStateChange(s),
       onWelcome: (deviceId) => {
         this.deviceId = deviceId;
+        this.refreshDevices().catch(() => {});
         // Bootstrap: fetch current online peer snapshots so the cross-device
         // panel shows A's live playback as soon as B connects, without
         // waiting for A's next periodic publish (design §9.2).
@@ -526,11 +527,13 @@ export class CoordinationManager {
   async renameDevice(id: DeviceId, name: string): Promise<void> {
     if (!this.httpClient) throw new Error("coordination: not connected");
     await this.httpClient.renameDevice(id, name);
+    await this.refreshDevices();
   }
 
   async revokeDevice(id: DeviceId): Promise<void> {
     if (!this.httpClient) throw new Error("coordination: not connected");
     await this.httpClient.revokeDevice(id);
+    await this.refreshDevices();
   }
 
   async forgetCurrentDevice(): Promise<void> {
@@ -608,6 +611,19 @@ export class CoordinationManager {
   /// returns to the foreground after being throttled in the background.
   requestSnapshots(): void {
     this.coordClient?.requestSnapshots?.();
+  }
+
+  private async refreshDevices(): Promise<void> {
+    if (!this.httpClient) return;
+    try {
+      const devices = await this.httpClient.listDevices();
+      this.callbacks.onDevicesChanged(devices);
+    } catch (err) {
+      this.callbacks.onError(
+        "devices_refresh_failed",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
   }
 
   /// Returns the latest cached `generation` / `snapshotRevision` for a device,
