@@ -19,12 +19,12 @@ function repeatModeToLoopState(mode: PlaybackSnapshot["repeat"]): LoopState {
   }
 }
 
-function fallbackRemoteSong(snapshot: PlaybackSnapshot): ISong {
+function fallbackRemoteSongById(id: string, duration = 0): ISong {
   return {
-    id: snapshot.songId,
+    id,
     parent: "",
     isDir: false,
-    title: snapshot.songId,
+    title: id,
     album: "",
     artist: "",
     track: 0,
@@ -34,7 +34,7 @@ function fallbackRemoteSong(snapshot: PlaybackSnapshot): ISong {
     size: 0,
     contentType: "",
     suffix: "",
-    duration: snapshot.durationSeconds,
+    duration,
     bitRate: 0,
     path: "",
     playCount: 0,
@@ -48,7 +48,7 @@ function fallbackRemoteSong(snapshot: PlaybackSnapshot): ISong {
     bpm: 0,
     starred: undefined,
     comment: "",
-    sortName: snapshot.songId,
+    sortName: id,
     mediaType: "song",
     musicBrainzId: "",
     genres: [],
@@ -72,6 +72,10 @@ function fallbackRemoteSong(snapshot: PlaybackSnapshot): ISong {
   };
 }
 
+function fallbackRemoteSong(snapshot: PlaybackSnapshot): ISong {
+  return fallbackRemoteSongById(snapshot.songId, snapshot.durationSeconds);
+}
+
 export function useRemotePlaybackProjection() {
   const isRemoteActive = usePlayerStore((s) => s.remoteControl.active);
   const controlledDeviceId = useCoordinationStore(
@@ -92,6 +96,29 @@ export function useRemotePlaybackProjection() {
     staleTime: Infinity,
   });
 
+  const queueSongIds = useMemo(() => {
+    if (!isRemoteActive || !snapshot) return [];
+    return Array.from(
+      new Set([
+        snapshot.songId,
+        ...snapshot.contextQueue,
+        ...snapshot.userQueue,
+      ]),
+    ).filter(Boolean);
+  }, [isRemoteActive, snapshot]);
+
+  const { data: remoteQueueSongs } = useQuery({
+    queryKey: ["remote-queue-songs", queueSongIds],
+    queryFn: async () => {
+      const entries = await Promise.all(
+        queueSongIds.map(async (id) => [id, await subsonic.songs.getSong(id)]),
+      );
+      return new Map(entries.filter(([, song]) => !!song) as [string, ISong][]);
+    },
+    enabled: queueSongIds.length > 0,
+    staleTime: Infinity,
+  });
+
   return useMemo(() => {
     if (!isRemoteActive || !snapshot || !snapshotData) {
       return {
@@ -106,10 +133,19 @@ export function useRemotePlaybackProjection() {
         loopState: LoopState.Off,
         hasPrev: false,
         hasNext: false,
+        contextSongs: [] as ISong[],
+        contextIndex: 0,
+        userQueueSongs: [] as ISong[],
+        sourceName: null as string | null,
       };
     }
 
     const song = remoteSong ?? fallbackRemoteSong(snapshot);
+    const remoteSongById = (id: string) =>
+      remoteQueueSongs?.get(id) ??
+      (id === song.id ? song : fallbackRemoteSongById(id));
+    const contextSongs = snapshot.contextQueue.map(remoteSongById);
+    const userQueueSongs = snapshot.userQueue.map(remoteSongById);
     const progress = projectPlaybackProgress({
       snapshot,
       serverTime: snapshotData.serverTime,
@@ -139,6 +175,10 @@ export function useRemotePlaybackProjection() {
       loopState: repeatModeToLoopState(snapshot.repeat),
       hasPrev: progress > 3 || hasContextPrevious,
       hasNext: hasContextNext || snapshot.userQueue.length > 0,
+      contextSongs,
+      contextIndex,
+      userQueueSongs,
+      sourceName: snapshot.sourceName,
     };
-  }, [isRemoteActive, remoteSong, snapshot, snapshotData]);
+  }, [isRemoteActive, remoteQueueSongs, remoteSong, snapshot, snapshotData]);
 }

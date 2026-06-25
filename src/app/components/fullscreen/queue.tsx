@@ -25,6 +25,7 @@ import {
   SortableQueueItem,
 } from "@/app/components/queue/queue-item-row";
 import { QueueSourceLabel } from "@/app/components/queue/queue-source-label";
+import { useRemotePlaybackProjection } from "@/app/components/remote-control/use-remote-playback-projection";
 import { Button } from "@/app/components/ui/button";
 import {
   ScrollArea,
@@ -129,9 +130,24 @@ export const FullscreenSongQueue = memo(function FullscreenSongQueue({
   const isMobile = useIsMobile();
   const hasSongs = useHasQueueSongs();
   const currentSongIndex = usePlayerCurrentSongIndex();
-  const currentSong = usePlayerCurrentSong();
-  const { contextSongs, contextIndex } = useContextQueue();
-  const { userQueueSongs, clearUserQueue } = useUserQueue();
+  const localCurrentSong = usePlayerCurrentSong();
+  const localContextQueue = useContextQueue();
+  const localUserQueue = useUserQueue();
+  const remoteProjection = useRemotePlaybackProjection();
+  const isRemoteQueue = remoteProjection.active;
+  const currentSong = isRemoteQueue
+    ? remoteProjection.song
+    : localCurrentSong;
+  const contextSongs = isRemoteQueue
+    ? remoteProjection.contextSongs
+    : localContextQueue.contextSongs;
+  const contextIndex = isRemoteQueue
+    ? remoteProjection.contextIndex
+    : localContextQueue.contextIndex;
+  const userQueueSongs = isRemoteQueue
+    ? remoteProjection.userQueueSongs
+    : localUserQueue.userQueueSongs;
+  const clearUserQueue = localUserQueue.clearUserQueue;
   const { t } = useTranslation();
   const playHistory = usePlayHistory();
   const filteredHistory = useMemo(() => {
@@ -157,6 +173,7 @@ export const FullscreenSongQueue = memo(function FullscreenSongQueue({
   );
 
   if (
+    !isRemoteQueue &&
     !hasSongs &&
     filteredHistory.length === 0 &&
     userQueueSongs.length === 0
@@ -187,6 +204,8 @@ export const FullscreenSongQueue = memo(function FullscreenSongQueue({
       thumbClassName={thumbClassName}
       clearPlayHistory={clearPlayHistory}
       clearUserQueue={clearUserQueue}
+      isRemoteQueue={isRemoteQueue}
+      remoteSourceName={remoteProjection.sourceName}
       onCurrentSongClick={onCurrentSongClick}
       isMobile={isMobile}
       snapHaptic={snapHaptic}
@@ -212,6 +231,8 @@ function UnifiedQueueView({
   thumbClassName,
   clearPlayHistory,
   clearUserQueue,
+  isRemoteQueue,
+  remoteSourceName,
   onCurrentSongClick,
   isMobile,
   snapHaptic,
@@ -233,6 +254,8 @@ function UnifiedQueueView({
   thumbClassName?: string;
   clearPlayHistory: () => void;
   clearUserQueue: () => void;
+  isRemoteQueue: boolean;
+  remoteSourceName: string | null;
   onCurrentSongClick?: () => void;
   isMobile: boolean;
   snapHaptic?: () => void;
@@ -242,6 +265,13 @@ function UnifiedQueueView({
     usePlayerActions();
   const loopState = usePlayerLoop();
   const isShuffleActive = usePlayerShuffle();
+  const remoteProjection = useRemotePlaybackProjection();
+  const effectiveLoopState = isRemoteQueue
+    ? remoteProjection.loopState
+    : loopState;
+  const effectiveShuffleActive = isRemoteQueue
+    ? remoteProjection.isShuffleActive
+    : isShuffleActive;
   const [activeItem, setActiveItem] = useState<ISong | null>(null);
 
   const playHistorySong = useCallback(
@@ -265,7 +295,7 @@ function UnifiedQueueView({
   const [dragOverlayBg, setDragOverlayBg] = useState<string>("");
 
   const sensors = useQueueDndSensors();
-  const queueScrollKey = `${currentSong?.id}:${currentSongIndex}:${contextSongs.length + userQueueSongs.length}:${loopState}`;
+  const queueScrollKey = `${currentSong?.id}:${currentSongIndex}:${contextSongs.length + userQueueSongs.length}:${effectiveLoopState}`;
 
   const userSortableItems = useMemo(
     () =>
@@ -375,7 +405,9 @@ function UnifiedQueueView({
     if (fromLocal === -1 || toLocal === -1) return;
     const fromGlobal = userQueueStart + fromLocal;
     const toGlobal = userQueueStart + toLocal;
-    reorderQueue(fromGlobal, toGlobal);
+    if (!isRemoteQueue) {
+      reorderQueue(fromGlobal, toGlobal);
+    }
   }
 
   function handleUpcomingDragStart(event: DragStartEvent) {
@@ -398,11 +430,33 @@ function UnifiedQueueView({
     if (fromLocal === -1 || toLocal === -1) return;
     const fromGlobal = contextPlayedCount + userQueueSongs.length + fromLocal;
     const toGlobal = contextPlayedCount + userQueueSongs.length + toLocal;
-    reorderQueue(fromGlobal, toGlobal);
+    if (!isRemoteQueue) {
+      reorderQueue(fromGlobal, toGlobal);
+    }
   }
 
-  const isRepeatOne = loopState === LoopState.One;
-  const isRepeatAll = loopState === LoopState.All;
+  const playUserQueueSong = useCallback(
+    (userQueueIndex: number) => {
+      if (isRemoteQueue) {
+        playFromQueue(
+          [...contextSongs, ...userQueueSongs],
+          contextSongs.length + userQueueIndex,
+        );
+        return;
+      }
+      playFromUserQueue(userQueueIndex);
+    },
+    [
+      contextSongs,
+      isRemoteQueue,
+      playFromQueue,
+      playFromUserQueue,
+      userQueueSongs,
+    ],
+  );
+
+  const isRepeatOne = effectiveLoopState === LoopState.One;
+  const isRepeatAll = effectiveLoopState === LoopState.All;
   const hasNoUpcoming =
     upcomingContext.length === 0 && userQueueSongs.length === 0;
 
@@ -423,8 +477,9 @@ function UnifiedQueueView({
         hideRepeatIndicator={hideRepeatIndicator}
         isRepeatOne={isRepeatOne}
         isRepeatAll={isRepeatAll}
-        isShuffleActive={isShuffleActive}
+        isShuffleActive={effectiveShuffleActive}
         hasNoUpcoming={hasNoUpcoming}
+        sourceName={remoteSourceName}
         scrollAreaClassName={scrollAreaClassName}
         thumbClassName={thumbClassName}
         sensors={sensors}
@@ -438,7 +493,7 @@ function UnifiedQueueView({
         onUpcomingDragEnd={handleUpcomingDragEnd}
         playHistorySong={playHistorySong}
         playFromQueue={playFromQueue}
-        playFromUserQueue={playFromUserQueue}
+        playFromUserQueue={playUserQueueSong}
         clearPlayHistory={clearPlayHistory}
         clearUserQueue={clearUserQueue}
         onCurrentSongClick={onCurrentSongClick}
@@ -532,7 +587,7 @@ function UnifiedQueueView({
               clearUserQueue={clearUserQueue}
               activeItem={activeItem}
               dragOverlayBg={dragOverlayBg}
-              onPlaySong={(userQueueIndex) => playFromUserQueue(userQueueIndex)}
+              onPlaySong={playUserQueueSong}
               t={t}
               sticky
               queueItemProps={queueItemProps}
@@ -573,7 +628,7 @@ function UnifiedQueueView({
                   {t("fullscreen.queueContinue")}
                 </h3>
               </div>
-              <QueueSourceLabel />
+              <QueueSourceLabel sourceName={remoteSourceName} />
             </div>
 
             <DndContext
@@ -659,6 +714,7 @@ function VirtualizedQueueView({
   isRepeatAll,
   isShuffleActive,
   hasNoUpcoming,
+  sourceName,
   scrollAreaClassName,
   thumbClassName,
   sensors,
@@ -696,6 +752,7 @@ function VirtualizedQueueView({
   isRepeatAll: boolean;
   isShuffleActive: boolean;
   hasNoUpcoming: boolean;
+  sourceName: string | null;
   scrollAreaClassName?: string;
   thumbClassName?: string;
   sensors: ReturnType<typeof useQueueDndSensors>;
@@ -1061,7 +1118,7 @@ function VirtualizedQueueView({
                                 {t("fullscreen.queueContinue")}
                               </h3>
                             </div>
-                            <QueueSourceLabel />
+                            <QueueSourceLabel sourceName={sourceName} />
                           </div>
                         )}
 

@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { CachedImage } from "@/app/components/cover-image/cached-image";
 import { LikeButton } from "@/app/components/fullscreen/like-button";
 import RepeatOne from "@/app/components/icons/repeat-one";
+import { useRemotePlaybackProjection } from "@/app/components/remote-control/use-remote-playback-projection";
 import { Button } from "@/app/components/ui/button";
 import {
   DropdownMenu,
@@ -31,29 +32,31 @@ export const QueueCurrentSong = memo(function QueueCurrentSong({
     (state) => state.songlist.currentSong,
     (a, b) => a?.id === b?.id,
   );
+  const remoteProjection = useRemotePlaybackProjection();
+  const displaySong = remoteProjection.song ?? currentSong;
   const { hoverBg10 } = useFullscreenContrast();
   const { open, setOpen, triggerProps } = useTouchMenuGuard();
 
-  if (!currentSong) return null;
+  if (!displaySong) return null;
 
   return (
     <div className={clsx("pt-2 pb-0.5 px-2 rounded-lg")} onClick={onClick}>
       <div className="flex items-center gap-3">
         <div className="w-12 h-12 rounded overflow-hidden shrink-0 bg-accent">
           <CachedImage
-            coverArtId={currentSong.coverArt}
+            coverArtId={displaySong.coverArt}
             coverArtType="song"
-            albumId={currentSong.albumId}
+            albumId={displaySong.albumId}
             className="w-12 h-12 object-cover"
-            alt={`${currentSong.title} - ${currentSong.artist}`}
+            alt={`${displaySong.title} - ${displaySong.artist}`}
           />
         </div>
         <div className="flex flex-col min-w-0 flex-1">
           <span className="font-semibold text-sm truncate">
-            {currentSong.title}
+            {displaySong.title}
           </span>
           <span className="text-xs text-foreground/70 truncate">
-            {currentSong.artist}
+            {displaySong.artist}
           </span>
         </div>
         <div
@@ -85,7 +88,7 @@ export const QueueCurrentSong = memo(function QueueCurrentSong({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <CurrentSongMenuOptions song={currentSong} />
+              <CurrentSongMenuOptions song={displaySong} />
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -97,11 +100,18 @@ export const QueueCurrentSong = memo(function QueueCurrentSong({
 export const QueueModeButtons = memo(function QueueModeButtons() {
   const isShuffleActive = usePlayerShuffle();
   const loopState = usePlayerLoop();
+  const remoteProjection = useRemotePlaybackProjection();
   const { toggleShuffle, toggleLoop } = usePlayerActions();
   const { t } = useTranslation();
   const { isBackdropDark } = useFullscreenContrast();
 
-  const isRepeatActive = loopState !== LoopState.Off;
+  const effectiveShuffleActive = remoteProjection.active
+    ? remoteProjection.isShuffleActive
+    : isShuffleActive;
+  const effectiveLoopState = remoteProjection.active
+    ? remoteProjection.loopState
+    : loopState;
+  const isRepeatActive = effectiveLoopState !== LoopState.Off;
 
   const activeBtn = clsx(
     "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium",
@@ -122,11 +132,11 @@ export const QueueModeButtons = memo(function QueueModeButtons() {
       <button
         type="button"
         onClick={toggleShuffle}
-        aria-pressed={isShuffleActive}
-        className={isShuffleActive ? activeBtn : inactiveBtn}
+        aria-pressed={effectiveShuffleActive}
+        className={effectiveShuffleActive ? activeBtn : inactiveBtn}
       >
         <Shuffle className="w-3 h-3" />
-        {isShuffleActive
+        {effectiveShuffleActive
           ? t("player.tooltips.shuffle.disable")
           : t("player.tooltips.shuffle.enable")}
       </button>
@@ -136,14 +146,14 @@ export const QueueModeButtons = memo(function QueueModeButtons() {
         aria-pressed={isRepeatActive}
         className={isRepeatActive ? activeBtn : inactiveBtn}
       >
-        {loopState === LoopState.One ? (
+        {effectiveLoopState === LoopState.One ? (
           <RepeatOne size={12} />
         ) : (
           <Repeat className="w-3 h-3" />
         )}
         {isRepeatActive
           ? t("player.tooltips.repeat.disable")
-          : loopState === LoopState.One
+          : effectiveLoopState === LoopState.One
             ? t("player.tooltips.repeat.enableOne")
             : t("player.tooltips.repeat.enable")}
       </button>
