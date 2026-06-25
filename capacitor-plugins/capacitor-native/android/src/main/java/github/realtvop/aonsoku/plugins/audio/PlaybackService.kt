@@ -81,9 +81,11 @@ class PlaybackService : MediaSessionService() {
     var isQueueEngineActive = false
     var savedRestoreTime: Double? = null
     var currentSongMetadata: MediaMetadata? = null
+    private var localPlaybackMediaItem: MediaItem? = null
     var isRemotePlaybackProjectionActive = false
         private set
     private var remotePlaybackMetadata: MediaMetadata? = null
+    private var remotePlaybackMediaItem: MediaItem? = null
     private var remotePlaybackIsPlaying = false
     private var remotePlaybackPositionSeconds = 0.0
     private var remotePlaybackDurationSeconds = 0.0
@@ -340,6 +342,39 @@ class PlaybackService : MediaSessionService() {
                 return remotePlaybackMetadata
                     ?: currentSongMetadata
                     ?: super.getMediaMetadata()
+            }
+
+            override fun getCurrentMediaItem(): MediaItem? {
+                return remotePlaybackMediaItem ?: super.getCurrentMediaItem()
+            }
+
+            override fun getCurrentPosition(): Long {
+                if (isRemotePlaybackProjectionActive) {
+                    return (remotePlaybackPositionSeconds * 1000).toLong()
+                }
+                return super.getCurrentPosition()
+            }
+
+            override fun getDuration(): Long {
+                if (isRemotePlaybackProjectionActive) {
+                    return (remotePlaybackDurationSeconds * 1000).toLong()
+                }
+                return super.getDuration()
+            }
+
+            override fun isPlaying(): Boolean {
+                if (isRemotePlaybackProjectionActive) return remotePlaybackIsPlaying
+                return super.isPlaying()
+            }
+
+            override fun getPlayWhenReady(): Boolean {
+                if (isRemotePlaybackProjectionActive) return remotePlaybackIsPlaying
+                return super.getPlayWhenReady()
+            }
+
+            override fun getPlaybackState(): Int {
+                if (isRemotePlaybackProjectionActive) return Player.STATE_READY
+                return super.getPlaybackState()
             }
         }
 
@@ -1012,6 +1047,7 @@ class PlaybackService : MediaSessionService() {
             .setUri(Uri.parse(url))
             .setMediaMetadata(customMeta)
             .build()
+        localPlaybackMediaItem = mediaItem
 
         cachedArtworkBitmap = null
 
@@ -1192,6 +1228,10 @@ class PlaybackService : MediaSessionService() {
     ) {
         isRemotePlaybackProjectionActive = true
         remotePlaybackMetadata = metadata
+        remotePlaybackMediaItem = MediaItem.Builder()
+            .setMediaId("aonsoku-remote-playback")
+            .setMediaMetadata(metadata)
+            .build()
         remotePlaybackIsPlaying = isPlaying
         remotePlaybackPositionSeconds = position.coerceAtLeast(0.0)
         remotePlaybackDurationSeconds = duration.coerceAtLeast(0.0)
@@ -1199,14 +1239,46 @@ class PlaybackService : MediaSessionService() {
         remotePlaybackRepeatMode = repeatMode
         remotePlaybackVolume = volume
         currentSongMetadata = metadata
+        projectRemoteMediaItemToPlayer()
         updateNotification()
         mediaSession?.setCustomLayout(getCustomLayoutButtons())
+    }
+
+    private fun projectRemoteMediaItemToPlayer() {
+        val currentPlayer = player ?: return
+        val remoteItem = remotePlaybackMediaItem ?: return
+        if (currentPlayer.mediaItemCount > 0) {
+            val currentIndex = currentPlayer.currentMediaItemIndex
+                .coerceIn(0, currentPlayer.mediaItemCount - 1)
+            val currentItem = currentPlayer.getMediaItemAt(currentIndex)
+            currentPlayer.replaceMediaItem(
+                currentIndex,
+                currentItem.buildUpon()
+                    .setMediaMetadata(remoteItem.mediaMetadata)
+                    .build()
+            )
+        } else {
+            currentPlayer.setMediaItem(remoteItem)
+        }
+    }
+
+    private fun restoreLocalMediaItemProjection() {
+        val currentPlayer = player ?: return
+        val localItem = localPlaybackMediaItem
+        if (localItem != null && currentPlayer.mediaItemCount > 0) {
+            val currentIndex = currentPlayer.currentMediaItemIndex
+                .coerceIn(0, currentPlayer.mediaItemCount - 1)
+            currentPlayer.replaceMediaItem(currentIndex, localItem)
+        } else if (localItem == null && currentPlayer.mediaItemCount > 0) {
+            currentPlayer.clearMediaItems()
+        }
     }
 
     fun clearRemotePlaybackProjection() {
         if (!isRemotePlaybackProjectionActive) return
         isRemotePlaybackProjectionActive = false
         remotePlaybackMetadata = null
+        remotePlaybackMediaItem = null
         remotePlaybackIsPlaying = false
         remotePlaybackPositionSeconds = 0.0
         remotePlaybackDurationSeconds = 0.0
@@ -1214,6 +1286,7 @@ class PlaybackService : MediaSessionService() {
         remotePlaybackRepeatMode = "off"
         remotePlaybackVolume = null
         currentSongMetadata = null
+        restoreLocalMediaItemProjection()
         if (player?.isPlaying == true || isQueueEngineActive) {
             updateNotification()
             return
