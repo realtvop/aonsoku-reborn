@@ -75,6 +75,49 @@ export function isNativeCoordinationAvailable(): boolean {
   return getNativeCoordinationAvailability().available;
 }
 
+function normalizeHeaders(
+  headers: HeadersInit | undefined,
+): Record<string, string> {
+  if (!headers) return {};
+  if (headers instanceof Headers) {
+    return Object.fromEntries(headers.entries());
+  }
+  if (Array.isArray(headers)) {
+    return Object.fromEntries(headers);
+  }
+  return headers;
+}
+
+function normalizeBody(body: BodyInit | null | undefined): string | undefined {
+  if (body === null || body === undefined) return undefined;
+  if (typeof body === "string") return body;
+  throw new Error("coordination: native HTTP only supports string bodies");
+}
+
+export function createNativeCoordinationFetch(
+  plugin: AonsokuNativeCoordinationPlugin,
+): typeof fetch {
+  return async (input, init) => {
+    if (typeof input !== "string") {
+      throw new Error("coordination: native HTTP requires a URL string");
+    }
+    const response = await plugin.request({
+      url: input,
+      method: init?.method,
+      headers: normalizeHeaders(init?.headers),
+      body: normalizeBody(init?.body),
+    });
+    const emptyBodyStatus = [204, 205, 304].includes(response.status);
+    return new Response(emptyBodyStatus ? null : response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+  };
+}
+
 /// Token/config store backed by the native plugin (Keychain/Keystore +
 /// preferences). Implements the same interface as the TS
 /// `tokenStore.ts` functions so the manager can swap in the native-backed
@@ -697,5 +740,7 @@ export type {
   CoordinationHandoffOptions,
   CoordinationTokenOptions,
   CoordinationConfigOptions,
+  CoordinationHttpRequestOptions,
+  CoordinationHttpResponse,
   CoordinationAckEvent,
 } from "@aonsoku/capacitor-native/coordination";

@@ -79,6 +79,19 @@ export interface CoordinationConfigOptions {
   identityUrl: string;
 }
 
+export interface CoordinationHttpRequestOptions {
+  url: string;
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+}
+
+export interface CoordinationHttpResponse {
+  status: number;
+  statusText: string;
+  body: string;
+}
+
 /// Native coordination plugin — maintains a WebSocket connection in the
 /// background on iOS/Android, bridging remote commands and handoff events to
 /// the native queue controller and playback backend (design §8, §9, §10, §11).
@@ -103,6 +116,11 @@ export interface AonsokuNativeCoordinationPlugin extends Plugin {
 
   /// Load coordination config.
   loadConfig(): Promise<CoordinationConfigOptions | null>;
+
+  /// Perform a coordination HTTP request through the native networking stack.
+  request(
+    options: CoordinationHttpRequestOptions,
+  ): Promise<CoordinationHttpResponse>;
 
   /// Open a background WebSocket connection to the coordination server.
   connect(options: CoordinationConnectOptions): Promise<void>;

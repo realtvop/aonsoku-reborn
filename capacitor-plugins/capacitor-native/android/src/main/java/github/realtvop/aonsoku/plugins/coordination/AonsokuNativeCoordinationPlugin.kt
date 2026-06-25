@@ -8,8 +8,10 @@ import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -324,6 +326,60 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         ret.put("serverUrl", serverUrl)
         ret.put("identityUrl", identityUrl)
         call.resolve(ret)
+    }
+
+    @PluginMethod
+    fun request(call: PluginCall) {
+        val url = call.getString("url") ?: return call.reject("missing url")
+        val method = call.getString("method", "GET") ?: "GET"
+        val body = call.getString("body")
+        val headers = call.getObject("headers")
+
+        Thread {
+            try {
+                val builder = Request.Builder().url(url)
+                headers?.let {
+                    val keys = it.keys()
+                    while (keys.hasNext()) {
+                        val key = keys.next()
+                        val value = it.opt(key)
+                        if (value != null && value != JSONObject.NULL) {
+                            builder.header(key, value.toString())
+                        }
+                    }
+                }
+
+                val requestBody = body?.toRequestBody(
+                    "application/json; charset=utf-8".toMediaType(),
+                )
+                val request = when (method.uppercase()) {
+                    "GET" -> builder.get().build()
+                    "HEAD" -> builder.head().build()
+                    "DELETE" -> if (requestBody != null) {
+                        builder.delete(requestBody).build()
+                    } else {
+                        builder.delete().build()
+                    }
+                    "POST", "PUT", "PATCH" -> builder
+                        .method(
+                            method.uppercase(),
+                            requestBody ?: ByteArray(0).toRequestBody(),
+                        )
+                        .build()
+                    else -> builder.method(method.uppercase(), requestBody).build()
+                }
+
+                OkHttpClient().newCall(request).execute().use { response ->
+                    val ret = JSObject()
+                    ret.put("status", response.code)
+                    ret.put("statusText", response.message)
+                    ret.put("body", response.body?.string() ?: "")
+                    call.resolve(ret)
+                }
+            } catch (e: Exception) {
+                call.reject("native coordination request failed: ${e.message}")
+            }
+        }.start()
     }
 
     @PluginMethod

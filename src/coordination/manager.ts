@@ -34,6 +34,7 @@ import {
   getNativeCoordinationAvailability,
   isNativeCoordinationAvailable,
   NativeCoordinationTokenStore,
+  createNativeCoordinationFetch,
 } from "@/native/coordination";
 import type {
   CommandResult,
@@ -140,6 +141,7 @@ export class CoordinationManager {
   /// available, IndexedDB/localStorage otherwise. Only one is active at a time
   /// (design §6.3).
   private tokenStore: CoordinationTokenStore = tsTokenStore;
+  private fetchImpl: typeof fetch = fetch.bind(globalThis);
 
   constructor(
     private readonly callbacks: CoordinationManagerCallbacks,
@@ -170,16 +172,18 @@ export class CoordinationManager {
       const availability = getNativeCoordinationAvailability();
       if (availability.available) {
         this.tokenStore = new NativeCoordinationTokenStore(availability.plugin);
+        this.fetchImpl = createNativeCoordinationFetch(availability.plugin);
       }
     } else {
       this.tokenStore = tsTokenStore;
+      this.fetchImpl = fetch.bind(globalThis);
     }
     this.config = await this.tokenStore.loadConfig();
     this.tokens = await this.tokenStore.loadTokens();
     if (this.config && this.tokens) {
       this.httpClient = new CoordinationHttpClient(
         this.config.serverUrl,
-        fetch.bind(globalThis),
+        this.fetchImpl,
         async (tokens) => {
           this.tokens = tokens;
           await this.tokenStore.saveTokens(tokens);
@@ -226,7 +230,7 @@ export class CoordinationManager {
       throw new Error("coordination: server URL not configured");
     this.httpClient = new CoordinationHttpClient(
       this.config.serverUrl,
-      fetch.bind(globalThis),
+      this.fetchImpl,
       async (tokens) => {
         this.tokens = tokens;
         await this.tokenStore.saveTokens(tokens);

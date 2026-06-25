@@ -5,6 +5,7 @@ import {
   isNativeCoordinationAvailable,
   NativeCoordinationClient,
   NativeCoordinationTokenStore,
+  createNativeCoordinationFetch,
 } from "./facade";
 import type { PluginListenerHandle } from "@capacitor/core";
 import type { AonsokuNativeCoordinationPlugin } from "@aonsoku/capacitor-native/coordination";
@@ -18,6 +19,7 @@ const mocks = vi.hoisted(() => {
     clearTokens: vi.fn(),
     storeConfig: vi.fn(),
     loadConfig: vi.fn(),
+    request: vi.fn(),
     connect: vi.fn(),
     disconnect: vi.fn(),
     getState: vi.fn(),
@@ -244,6 +246,52 @@ describe("NativeCoordinationTokenStore", () => {
       serverUrl: "https://coord.example",
       identityUrl: "https://id.example",
     });
+  });
+});
+
+describe("createNativeCoordinationFetch", () => {
+  beforeEach(() => {
+    vi.mocked(mockPlugin.request).mockReset();
+  });
+
+  it("delegates HTTP requests to the native coordination plugin", async () => {
+    vi.mocked(mockPlugin.request).mockResolvedValue({
+      status: 201,
+      statusText: "Created",
+      body: JSON.stringify({ ok: true }),
+    });
+
+    const nativeFetch = createNativeCoordinationFetch(mockPlugin);
+    const resp = await nativeFetch("https://coord.example/v1/auth/register", {
+      method: "POST",
+      headers: { Authorization: "Bearer token" },
+      body: JSON.stringify({ deviceName: "Android" }),
+    });
+
+    expect(mockPlugin.request).toHaveBeenCalledWith({
+      url: "https://coord.example/v1/auth/register",
+      method: "POST",
+      headers: { Authorization: "Bearer token" },
+      body: JSON.stringify({ deviceName: "Android" }),
+    });
+    expect(resp.status).toBe(201);
+    await expect(resp.json()).resolves.toEqual({ ok: true });
+  });
+
+  it("returns empty-body HTTP statuses without constructing a body", async () => {
+    vi.mocked(mockPlugin.request).mockResolvedValue({
+      status: 204,
+      statusText: "No Content",
+      body: "",
+    });
+
+    const nativeFetch = createNativeCoordinationFetch(mockPlugin);
+    const resp = await nativeFetch("https://coord.example/v1/devices/dev-1", {
+      method: "DELETE",
+    });
+
+    expect(resp.status).toBe(204);
+    await expect(resp.text()).resolves.toBe("");
   });
 });
 

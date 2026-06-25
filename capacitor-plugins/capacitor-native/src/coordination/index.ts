@@ -21,5 +21,7 @@ export type {
   CoordinationHandoffOptions,
   CoordinationTokenOptions,
   CoordinationConfigOptions,
+  CoordinationHttpRequestOptions,
+  CoordinationHttpResponse,
   CoordinationAckEvent,
 };

@@ -147,6 +147,44 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         call.resolve(["serverUrl": serverUrl, "identityUrl": identityUrl])
     }
 
+    @objc func request(_ call: CAPPluginCall) {
+        guard let rawUrl = call.getString("url"),
+              let url = URL(string: rawUrl) else {
+            call.reject("missing or invalid url")
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = call.getString("method") ?? "GET"
+        if let headers = call.getObject("headers") {
+            for (key, value) in headers {
+                request.setValue("\(value)", forHTTPHeaderField: key)
+            }
+        }
+        if let body = call.getString("body") {
+            request.httpBody = body.data(using: .utf8)
+        }
+
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                call.reject("native coordination request failed: \(error.localizedDescription)")
+                return
+            }
+            guard let httpResponse = response as? HTTPURLResponse else {
+                call.reject("native coordination request failed: no HTTP response")
+                return
+            }
+            let body = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+            call.resolve([
+                "status": httpResponse.statusCode,
+                "statusText": HTTPURLResponse.localizedString(
+                    forStatusCode: httpResponse.statusCode
+                ),
+                "body": body,
+            ])
+        }.resume()
+    }
+
     // MARK: - WebSocket Connection
 
     @objc func connect(_ call: CAPPluginCall) {
