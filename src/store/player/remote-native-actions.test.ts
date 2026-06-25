@@ -4,6 +4,16 @@ import { LoopState } from "@/types/playerContext";
 import { createPlaybackActions } from "./playback-actions";
 import { createQueueActions } from "./queue-actions";
 
+function makeSong(id: string) {
+  return {
+    id,
+    title: id,
+    album: "album",
+    artist: "artist",
+    duration: 120,
+  };
+}
+
 const mocks = vi.hoisted(() => ({
   nativeController: {
     playNext: vi.fn(),
@@ -90,5 +100,51 @@ describe("remote control actions on native runtimes", () => {
 
     expect(remoteSend).toHaveBeenCalledWith(LanControlMessageType.NEXT);
     expect(mocks.nativeController.playNext).not.toHaveBeenCalled();
+  });
+
+  it("does not mutate the local queue when sending a remote song list", () => {
+    const state = makeState();
+    const localSong = makeSong("local-song");
+    state.songlist.contextQueue.songs = [localSong];
+    state.songlist.contextQueue.sourceName = "Local Album";
+    state.songlist.isShuffleActive = false;
+    const remoteSend = vi.fn(() => true);
+    const actions = createQueueActions({
+      set: (fn) => fn(state as never),
+      get: () => state as never,
+      isRemoteActive: () => true,
+      remoteSend,
+      clearSonglistState: vi.fn(),
+    });
+
+    actions.setSongList?.([makeSong("remote-song")], 0, true, undefined);
+
+    expect(remoteSend).toHaveBeenCalledWith(
+      LanControlMessageType.CLEAR_QUEUE,
+    );
+    expect(state.songlist.contextQueue.songs).toEqual([localSong]);
+    expect(state.songlist.contextQueue.sourceName).toBe("Local Album");
+    expect(state.songlist.isShuffleActive).toBe(false);
+    expect(state.playerState.isPlaying).toBe(true);
+  });
+
+  it("does not rebuild the local queue when toggling remote repeat", () => {
+    const state = makeState();
+    const localSong = makeSong("local-song");
+    state.songlist.contextQueue.songs = [localSong];
+    state.playerState.loopState = LoopState.Off;
+    const remoteSend = vi.fn(() => true);
+    const actions = createPlaybackActions({
+      set: (fn) => fn(state as never),
+      get: () => state as never,
+      isRemoteActive: () => true,
+      remoteSend,
+    });
+
+    actions.toggleLoop?.();
+
+    expect(remoteSend).toHaveBeenCalledWith(LanControlMessageType.TOGGLE_REPEAT);
+    expect(state.songlist.contextQueue.songs).toEqual([localSong]);
+    expect(state.playerState.loopState).toBe(LoopState.Off);
   });
 });

@@ -783,7 +783,9 @@ export function CoordinationObserver() {
     };
   }, [isConnected, manager, playerActions, t]);
 
-  // Sync controlled device snapshot state to local player store
+  // Reflect controlled-device transport state without adopting its queue.
+  // Remote control is observation/control, not handoff: the local queue must
+  // remain intact so returning to local playback resumes the user's queue.
   useEffect(() => {
     if (!controlledDeviceId || !controlledSnapshot) return;
     const { snapshot } = controlledSnapshot;
@@ -795,132 +797,10 @@ export function CoordinationObserver() {
       if (!state.playerProgress.isScrubbing) {
         state.playerProgress.progress = projectedProgress;
       }
-      state.songlist.isShuffleActive = snapshot.shuffle;
-      state.playerState.loopState = mapRepeatModeToLoopState(snapshot.repeat);
       if (snapshot.volume !== null) {
         state.playerState.volume = Math.round(snapshot.volume * 100);
       }
     });
-
-    const currentLocalSong = usePlayerStore.getState().songlist.currentSong;
-    const localQueueIds = usePlayerStore
-      .getState()
-      .songlist.contextQueue.songs.map((s) => s.id);
-    const remoteQueueIds = snapshot.contextQueue;
-    const remoteUserQueueIds = snapshot.userQueue;
-    const queueChanged =
-      remoteQueueIds.length !== localQueueIds.length ||
-      remoteQueueIds.some((id, i) => id !== localQueueIds[i]) ||
-      remoteUserQueueIds.length !==
-        usePlayerStore.getState().songlist.userQueue.songs.length;
-
-    if (snapshot.songId && currentLocalSong?.id !== snapshot.songId) {
-      import("@/service/subsonic").then(({ subsonic }) => {
-        const idsToFetch = Array.from(
-          new Set([snapshot.songId, ...remoteQueueIds, ...remoteUserQueueIds]),
-        );
-        Promise.all(idsToFetch.map((id) => subsonic.songs.getSong(id)))
-          .then((fetched) => {
-            const songMap = new Map<
-              string,
-              NonNullable<(typeof fetched)[number]>
-            >();
-            for (const s of fetched) {
-              if (s) songMap.set(s.id, s);
-            }
-            const current = songMap.get(snapshot.songId);
-            if (!current) return;
-            usePlayerStore.setState((state) => {
-              const contextSongs = remoteQueueIds
-                .map((id) => songMap.get(id))
-                .filter((s): s is NonNullable<typeof s> => !!s);
-              const userSongs = remoteUserQueueIds
-                .map((id) => songMap.get(id))
-                .filter((s): s is NonNullable<typeof s> => !!s);
-              const decodedSourceId = decodeSourceId(snapshot.sourceId);
-              state.songlist.currentSong = current;
-              state.songlist.contextQueue = {
-                songs: contextSongs.length > 0 ? contextSongs : [current],
-                currentIndex: Math.max(
-                  0,
-                  Math.min(
-                    snapshot.contextIndex ?? 0,
-                    Math.max(0, contextSongs.length - 1),
-                  ),
-                ),
-                sourceId: decodedSourceId,
-                sourceName: snapshot.sourceName ?? null,
-              };
-              state.songlist.userQueue = { songs: userSongs };
-              state.songlist.isInUserQueue = snapshot.inUserQueue;
-              state.playerState.mediaType = "song";
-            });
-          })
-          .catch((err) => {
-            logger.error(
-              "[CoordinationObserver] Failed to fetch remote queue:",
-              err,
-            );
-            usePlayerStore.setState((state) => {
-              state.songlist.currentSong = current;
-              state.songlist.contextQueue = {
-                songs: [current],
-                currentIndex: 0,
-                sourceId: decodeSourceId(snapshot.sourceId),
-                sourceName: snapshot.sourceName ?? null,
-              };
-              state.songlist.userQueue = { songs: [] };
-              state.playerState.mediaType = "song";
-            });
-          });
-      });
-    } else if (snapshot.songId && queueChanged) {
-      import("@/service/subsonic").then(({ subsonic }) => {
-        const idsToFetch = Array.from(
-          new Set([...remoteQueueIds, ...remoteUserQueueIds]),
-        );
-        Promise.all(idsToFetch.map((id) => subsonic.songs.getSong(id)))
-          .then((fetched) => {
-            const songMap = new Map<
-              string,
-              NonNullable<(typeof fetched)[number]>
-            >();
-            for (const s of fetched) {
-              if (s) songMap.set(s.id, s);
-            }
-            usePlayerStore.setState((state) => {
-              const contextSongs = remoteQueueIds
-                .map((id) => songMap.get(id))
-                .filter((s): s is NonNullable<typeof s> => !!s);
-              const userSongs = remoteUserQueueIds
-                .map((id) => songMap.get(id))
-                .filter((s): s is NonNullable<typeof s> => !!s);
-              if (contextSongs.length > 0) {
-                state.songlist.contextQueue = {
-                  songs: contextSongs,
-                  currentIndex: Math.max(
-                    0,
-                    Math.min(
-                      snapshot.contextIndex ?? 0,
-                      contextSongs.length - 1,
-                    ),
-                  ),
-                  sourceId: decodeSourceId(snapshot.sourceId),
-                  sourceName: snapshot.sourceName ?? null,
-                };
-              }
-              state.songlist.userQueue = { songs: userSongs };
-              state.songlist.isInUserQueue = snapshot.inUserQueue;
-            });
-          })
-          .catch((err) =>
-            logger.error(
-              "[CoordinationObserver] Failed to sync remote queue:",
-              err,
-            ),
-          );
-      });
-    }
   }, [controlledDeviceId, controlledSnapshot]);
 
   // Interpolate controlled device progress between snapshots.

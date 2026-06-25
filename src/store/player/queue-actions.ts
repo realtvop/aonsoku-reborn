@@ -166,11 +166,6 @@ export function createQueueActions(shared: SharedDeps) {
         );
         set((state) => {
           state.playerState.isPlaying = true;
-          state.songlist.isShuffleActive = Boolean(shuffle);
-          state.songlist.contextQueue.sourceName =
-            sourceName !== undefined
-              ? sourceName || null
-              : state.songlist.contextQueue.sourceName;
         });
         return;
       }
@@ -669,9 +664,6 @@ export function createQueueActions(shared: SharedDeps) {
     toggleShuffle: () => {
       if (isRemoteActive()) {
         remoteSend(LanControlMessageType.TOGGLE_SHUFFLE);
-        set((state) => {
-          state.songlist.isShuffleActive = !state.songlist.isShuffleActive;
-        });
         return;
       }
 

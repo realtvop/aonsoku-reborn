@@ -28,6 +28,17 @@ interface PlayerCommandState {
   loopState: number;
 }
 
+function repeatModeToLoopState(mode: string | undefined): number {
+  switch (mode) {
+    case "all":
+      return 1;
+    case "one":
+      return 2;
+    default:
+      return 0;
+  }
+}
+
 export interface DevicePlaybackActions {
   enterRemoteControl: (model: DevicePlaybackModel) => void;
   exitRemoteControl: () => void;
@@ -320,19 +331,27 @@ export function useDevicePlaybackActions(): DevicePlaybackActions {
             version: model.device.clientVersion ?? "",
           },
           sendCommand: (type, data) => {
+            const coordinationState = useCoordinationStore.getState();
+            const snapshotData =
+              coordinationState.deviceSnapshots[model.device.id];
             const command = mapLanControlToRemoteCommand(type, data, () => {
-              const state = usePlayerStore.getState();
+              const snapshot = snapshotData?.snapshot;
+              if (snapshot) {
+                return {
+                  isShuffleActive: snapshot.shuffle,
+                  loopState: repeatModeToLoopState(snapshot.repeat),
+                };
+              }
+              const playerState = usePlayerStore.getState();
               return {
-                isShuffleActive: state.songlist.isShuffleActive,
-                loopState: state.playerState.loopState,
+                isShuffleActive: playerState.songlist.isShuffleActive,
+                loopState: playerState.playerState.loopState,
               };
             });
             if (!command) return;
 
-            const state = useCoordinationStore.getState();
-            const snapshotData = state.deviceSnapshots[model.device.id];
             if (!snapshotData) return;
-            state.manager.sendCommand(
+            coordinationState.manager.sendCommand(
               model.device.id,
               snapshotData.generation,
               command,

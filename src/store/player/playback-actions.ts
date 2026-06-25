@@ -74,17 +74,7 @@ export function createPlaybackActions(shared: SharedDeps) {
 
     toggleLoop: () => {
       if (isRemoteActive()) {
-        const { loopState } = get().playerState;
-        const newState = (loopState + 1) % (2 + 1);
-
         remoteSend(LanControlMessageType.TOGGLE_REPEAT);
-        set((state) => {
-          state.playerState.loopState = newState as 0 | 1 | 2;
-          rebuildContextQueueForLoopState(
-            state.songlist,
-            state.playerState.loopState,
-          );
-        });
         return;
       }
 
