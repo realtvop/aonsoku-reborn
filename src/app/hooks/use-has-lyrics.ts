@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { useRemotePlaybackProjection } from "@/app/components/remote-control/use-remote-playback-projection";
 import {
   getCustomLyricsSongKey,
   getSelectedCustomLyrics,
@@ -13,7 +14,9 @@ import { queryKeys } from "@/utils/queryKeys";
 const STALE_TIME = 5 * 60 * 1000;
 
 export function useHasLyrics() {
-  const { currentSong } = usePlayerSonglist();
+  const { currentSong: localCurrentSong } = usePlayerSonglist();
+  const remoteProjection = useRemotePlaybackProjection();
+  const currentSong = remoteProjection.song ?? localCurrentSong;
   const {
     sourcePriority,
     customServerEnabled,

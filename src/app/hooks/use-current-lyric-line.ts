@@ -1,6 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  useRemotePlaybackProjection,
+  useSmoothRemoteProgress,
+} from "@/app/components/remote-control/use-remote-playback-projection";
+import {
   getCustomLyricsSongKey,
   getSelectedCustomLyrics,
 } from "@/service/lyrics";
@@ -78,11 +82,22 @@ function findCurrentLine(
 }
 
 export function useCurrentLyricLine() {
-  const currentSong = usePlayerCurrentSong();
+  const localCurrentSong = usePlayerCurrentSong();
+  const remoteProjection = useRemotePlaybackProjection();
+  const smoothRemoteProgress = useSmoothRemoteProgress({
+    active: remoteProjection.active,
+    isPlaying: remoteProjection.isPlaying,
+    progress: remoteProjection.progress,
+    duration: remoteProjection.duration,
+  });
+  const currentSong = remoteProjection.song ?? localCurrentSong;
   const playerRef = usePlayerRef();
   const isOnline = useIsOnline();
-  const isPlaying = usePlayerIsPlaying();
+  const localIsPlaying = usePlayerIsPlaying();
   const isRemoteControlActive = useIsRemoteControlActive();
+  const isPlaying = remoteProjection.active
+    ? remoteProjection.isPlaying
+    : localIsPlaying;
   const {
     sourcePriority,
     customServerEnabled,
@@ -187,6 +202,12 @@ export function useCurrentLyricLine() {
     );
   }, []);
 
+  useEffect(() => {
+    if (!remoteProjection.active) return;
+    lastProgressRef.current = smoothRemoteProgress * 1000;
+    lastProgressTimeRef.current = performance.now();
+  }, [remoteProjection.active, smoothRemoteProgress]);
+
   const tick = useCallback(() => {
     if (!playerRef && !isRemoteControlActive) return;
 
@@ -202,14 +223,7 @@ export function useCurrentLyricLine() {
     let timeMs = 0;
     if (isRemoteControlActive) {
       if (isPlaying) {
-        const elapsed = performance.now() - lastProgressTimeRef.current;
-        // Clamp to 500ms so a long gap (tab was hidden, rAF paused, and the
-        // progress-store subscription hasn't fired yet) doesn't make lyrics
-        // jump far ahead. The store subscription will refresh lastProgressRef
-        // shortly after, correcting any small residual error.
-        timeMs = Math.floor(
-          lastProgressRef.current + Math.min(elapsed, 500),
-        );
+        timeMs = Math.floor(lastProgressRef.current);
       } else {
         timeMs = Math.floor(lastProgressRef.current);
       }

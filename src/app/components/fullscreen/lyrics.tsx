@@ -2,6 +2,10 @@ import type { LyricLine } from "@applemusic-like-lyrics/core";
 import type { LyricPlayerRef } from "@applemusic-like-lyrics/react";
 import { lazy, Suspense } from "react";
 import "@applemusic-like-lyrics/core/style.css";
+import {
+  useRemotePlaybackProjection,
+  useSmoothRemoteProgress,
+} from "@/app/components/remote-control/use-remote-playback-projection";
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
@@ -153,7 +157,9 @@ function pickStructuredTracks(structured: IStructuredLyric[]): {
 }
 
 export function LyricsTab() {
-  const { currentSong } = usePlayerSonglist();
+  const { currentSong: localCurrentSong } = usePlayerSonglist();
+  const remoteProjection = useRemotePlaybackProjection();
+  const currentSong = remoteProjection.song ?? localCurrentSong;
   const { t } = useTranslation();
   const {
     showTranslation,
@@ -320,10 +326,20 @@ interface SyncedLyricsProps {
 
 function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
   const playerRef = usePlayerRef();
-  const isPlaying = usePlayerIsPlaying();
+  const localIsPlaying = usePlayerIsPlaying();
   const isScrubbing = usePlayerIsScrubbing();
   const { setAreLyricsAligned, setProgress } = usePlayerActions();
   const isRemoteControlActive = useIsRemoteControlActive();
+  const remoteProjection = useRemotePlaybackProjection();
+  const smoothRemoteProgress = useSmoothRemoteProgress({
+    active: remoteProjection.active,
+    isPlaying: remoteProjection.isPlaying,
+    progress: remoteProjection.progress,
+    duration: remoteProjection.duration,
+  });
+  const isPlaying = remoteProjection.active
+    ? remoteProjection.isPlaying
+    : localIsPlaying;
   const [currentTime, setCurrentTime] = useState(0);
   const currentTimeRef = useRef(0);
   const [isTouchScrolling, setIsTouchScrolling] = useState(false);
@@ -359,6 +375,12 @@ function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
       },
     );
   }, []);
+
+  useEffect(() => {
+    if (!remoteProjection.active) return;
+    lastProgressRef.current = smoothRemoteProgress * 1000;
+    lastProgressTimeRef.current = performance.now();
+  }, [remoteProjection.active, smoothRemoteProgress]);
 
   useEffect(() => {
     isScrubbingRef.current = isScrubbing;
@@ -555,18 +577,7 @@ function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
 
       let timeMs = 0;
       if (useStoreTime) {
-        if (isPlaying) {
-          const elapsed = performance.now() - lastProgressTimeRef.current;
-          // Clamp to 500ms so a long gap (tab was hidden, rAF paused, and the
-          // progress-store subscription hasn't fired yet) doesn't make lyrics
-          // jump far ahead. The store subscription will refresh
-          // lastProgressRef shortly after, correcting any small residual.
-          timeMs = Math.floor(
-            lastProgressRef.current + Math.min(elapsed, 500),
-          );
-        } else {
-          timeMs = Math.floor(lastProgressRef.current);
-        }
+        timeMs = Math.floor(lastProgressRef.current);
       } else {
         timeMs = Math.floor((playerRef?.currentTime || 0) * 1000);
       }
@@ -600,7 +611,7 @@ function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
       clearTimeout(seekingTimerRef.current);
       clearTouchScrollBlurTimer();
     };
-  }, [clearTouchScrollBlurTimer, playerRef, isPlaying, isRemoteControlActive]);
+  }, [clearTouchScrollBlurTimer, playerRef, isRemoteControlActive]);
 
   return (
     <div
