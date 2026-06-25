@@ -37,6 +37,9 @@ export interface NativeRemotePlaybackStateOptions {
   isPlaying: boolean;
   position: number;
   duration: number;
+  isShuffleActive?: boolean;
+  repeatMode?: "off" | "one" | "all";
+  volume?: number;
 }
 
 export interface NativeAudioLoadOptions {

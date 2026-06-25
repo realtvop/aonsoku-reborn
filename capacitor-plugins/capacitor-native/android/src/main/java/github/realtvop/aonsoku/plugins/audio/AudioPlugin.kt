@@ -1029,6 +1029,9 @@ class AudioPlugin : Plugin() {
         val duration = call.getDouble("duration") ?: metadataObject?.optDouble("duration", 0.0) ?: 0.0
         val position = call.getDouble("position") ?: 0.0
         val isPlaying = call.getBoolean("isPlaying") ?: false
+        val isShuffleActive = call.getBoolean("isShuffleActive") ?: false
+        val repeatMode = call.getString("repeatMode") ?: "off"
+        val volume = call.getDouble("volume")
 
         pluginScope.launch {
             try {
@@ -1049,6 +1052,9 @@ class AudioPlugin : Plugin() {
                         isPlaying,
                         position,
                         duration,
+                        isShuffleActive,
+                        repeatMode,
+                        volume,
                     )
                     call.resolve()
                 }

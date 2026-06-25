@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { useCoordinationStore } from "@/coordination/store";
-import { projectPlaybackProgress } from "@/coordination/progress";
+import { useRemotePlaybackProjection } from "@/app/components/remote-control/use-remote-playback-projection";
 import { useBackgroundPlayback } from "@/app/hooks/use-background-playback";
 import { getNativeAudioPluginAvailability } from "@/native/audio/facade";
-import { subsonic } from "@/service/subsonic";
+import { playbackRepeatModeFromLoopState } from "@/player/playback/types";
 import {
   usePlayerCurrentSong,
   usePlayerCurrentSongIndex,
@@ -22,18 +20,6 @@ import { clampProgress, isValidDuration } from "@/utils/duration";
 import { logger } from "@/utils/logger";
 import { manageMediaSession } from "@/utils/setMediaSession";
 
-function useRemoteSongInfo(songId: string | undefined) {
-  return useQuery({
-    queryKey: ["song-info", songId],
-    queryFn: async () => {
-      if (!songId) return null;
-      return subsonic.songs.getSong(songId);
-    },
-    enabled: !!songId,
-    staleTime: Infinity,
-  });
-}
-
 export function MediaSessionObserver() {
   const { t } = useTranslation();
   useBackgroundPlayback();
@@ -46,34 +32,16 @@ export function MediaSessionObserver() {
   const progress = usePlayerProgress();
   const currentDuration = usePlayerDuration();
   const radioLabel = t("radios.label");
-  const isRemoteActive = usePlayerStore((s) => s.remoteControl.active);
-  const controlledDeviceId = useCoordinationStore(
-    (s) => s.controlledDeviceId,
-  );
-  const remoteSnapshotData = useCoordinationStore((s) =>
-    controlledDeviceId ? s.deviceSnapshots[controlledDeviceId] : undefined,
-  );
-  const remoteSnapshot = remoteSnapshotData?.snapshot ?? null;
-  const { data: remoteSong } = useRemoteSongInfo(remoteSnapshot?.songId);
+  const remoteProjection = useRemotePlaybackProjection();
+  const isRemoteActive = remoteProjection.active;
 
   const lastMetadataRef = useRef<string>("");
 
-  const song =
-    isRemoteActive && remoteSnapshot?.songId
-      ? {
-          id: remoteSnapshot.songId,
-          title: remoteSong?.title ?? remoteSnapshot.songId,
-          artist: remoteSong?.artist ?? "",
-          album: remoteSong?.album ?? "",
-          coverArt: remoteSong?.coverArt,
-          albumId: remoteSong?.albumId,
-          duration: remoteSnapshot.durationSeconds,
-        }
-      : storeCurrentSong;
+  const song = isRemoteActive ? remoteProjection.song : storeCurrentSong;
   const radio = radioList[currentSongIndex] ?? null;
 
   const hasNothingPlaying = isRemoteActive
-    ? !remoteSnapshot || !remoteSnapshot.songId
+    ? !remoteProjection.song?.id
     : !storeCurrentSong && radioList.length === 0;
   const nativeRemoteProjectionActiveRef = useRef(false);
 
@@ -94,7 +62,7 @@ export function MediaSessionObserver() {
     );
 
     const effectiveIsPlaying = isRemoteActive
-      ? (remoteSnapshot?.isPlaying ?? false)
+      ? remoteProjection.isPlaying
       : isPlaying;
 
     if (isTransitioning) {
@@ -120,7 +88,7 @@ export function MediaSessionObserver() {
     let title = "";
     let metadataKey = "";
 
-    if (isRadio && radio) {
+    if (!isRemoteActive && isRadio && radio) {
       title = `${radioLabel} - ${radio.name} | Aonsoku`;
       metadataKey = `radio:${radio.name}`;
 
@@ -167,7 +135,7 @@ export function MediaSessionObserver() {
     isRemoteActive,
     radio,
     radioLabel,
-    remoteSnapshot,
+    remoteProjection.isPlaying,
     song,
     resetAppTitle,
   ]);
@@ -181,28 +149,24 @@ export function MediaSessionObserver() {
 
   useEffect(() => {
     const effectiveIsPlaying = isRemoteActive
-      ? (remoteSnapshot?.isPlaying ?? false)
+      ? remoteProjection.isPlaying
       : isPlaying;
 
     if (hasNothingPlaying || !song) {
       return;
     }
 
-    const duration = isRemoteActive ? (song.duration ?? 0) : currentDuration;
+    const duration = isRemoteActive
+      ? (remoteProjection.duration || song.duration || 0)
+      : currentDuration;
 
     if (!isValidDuration(duration)) {
       return;
     }
 
-    const effectiveProgress =
-      isRemoteActive && remoteSnapshotData
-        ? projectPlaybackProgress({
-            snapshot: remoteSnapshotData.snapshot,
-            serverTime: remoteSnapshotData.serverTime,
-            lastConfirmedAt: remoteSnapshotData.lastConfirmedAt,
-            receivedAtPerformance: remoteSnapshotData.receivedAtPerformance,
-          })
-        : progress;
+    const effectiveProgress = isRemoteActive
+      ? remoteProjection.progress
+      : progress;
 
     const songId =
       (song as { id?: string })?.id || (song as { title: string }).title;
@@ -247,8 +211,9 @@ export function MediaSessionObserver() {
     hasNothingPlaying,
     song,
     currentDuration,
-    remoteSnapshot,
-    remoteSnapshotData,
+    remoteProjection.duration,
+    remoteProjection.isPlaying,
+    remoteProjection.progress,
   ]);
 
   useEffect(() => {
@@ -256,7 +221,7 @@ export function MediaSessionObserver() {
     if (!availability.available) return;
 
     const plugin = availability.plugin;
-    if (!isRemoteActive || hasNothingPlaying || !song || !remoteSnapshotData) {
+    if (!isRemoteActive || hasNothingPlaying || !song) {
       if (nativeRemoteProjectionActiveRef.current) {
         nativeRemoteProjectionActiveRef.current = false;
         plugin.clearRemotePlaybackState().catch((error) => {
@@ -266,13 +231,8 @@ export function MediaSessionObserver() {
       return;
     }
 
-    const duration = song.duration ?? remoteSnapshotData.snapshot.durationSeconds;
-    const position = projectPlaybackProgress({
-      snapshot: remoteSnapshotData.snapshot,
-      serverTime: remoteSnapshotData.serverTime,
-      lastConfirmedAt: remoteSnapshotData.lastConfirmedAt,
-      receivedAtPerformance: remoteSnapshotData.receivedAtPerformance,
-    });
+    const duration = remoteProjection.duration || song.duration || 0;
+    const position = remoteProjection.progress;
     const artworkUrl =
       song.coverArt || song.albumId
         ? getCoverArtUrlFromSongPreference({
@@ -293,14 +253,32 @@ export function MediaSessionObserver() {
           duration,
           artworkUrl,
         },
-        isPlaying: remoteSnapshotData.snapshot.isPlaying,
+        isPlaying: remoteProjection.isPlaying,
         position,
         duration,
+        isShuffleActive: remoteProjection.isShuffleActive,
+        repeatMode: playbackRepeatModeFromLoopState(
+          remoteProjection.loopState,
+        ),
+        volume:
+          typeof remoteProjection.volume === "number"
+            ? remoteProjection.volume / 100
+            : undefined,
       })
       .catch((error) => {
         logger.info("[MediaSessionObserver.nativeRemoteUpdate] failed", error);
       });
-  }, [hasNothingPlaying, isRemoteActive, remoteSnapshotData, song]);
+  }, [
+    hasNothingPlaying,
+    isRemoteActive,
+    remoteProjection.duration,
+    remoteProjection.isPlaying,
+    remoteProjection.isShuffleActive,
+    remoteProjection.loopState,
+    remoteProjection.progress,
+    remoteProjection.volume,
+    song,
+  ]);
 
   return null;
 }

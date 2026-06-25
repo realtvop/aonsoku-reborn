@@ -422,7 +422,10 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
                 metadata: metadata,
                 isPlaying: call.getBool("isPlaying") ?? false,
                 position: position,
-                duration: duration
+                duration: duration,
+                isShuffleActive: call.getBool("isShuffleActive") ?? false,
+                repeatMode: call.getString("repeatMode") ?? "off",
+                volume: self.numberValue(call.getValue("volume"))
             )
             self.currentMetadata = metadata
             self.updateNowPlayingInfo()
@@ -3109,6 +3112,9 @@ private struct NativeRemotePlaybackProjection {
     var isPlaying: Bool
     var position: Double
     var duration: Double
+    var isShuffleActive: Bool
+    var repeatMode: String
+    var volume: Double?
 }
 
 private struct NativeCachedAudioFile {

@@ -87,6 +87,9 @@ class PlaybackService : MediaSessionService() {
     private var remotePlaybackIsPlaying = false
     private var remotePlaybackPositionSeconds = 0.0
     private var remotePlaybackDurationSeconds = 0.0
+    private var remotePlaybackIsShuffleActive = false
+    private var remotePlaybackRepeatMode = "off"
+    private var remotePlaybackVolume: Double? = null
 
     private val httpClient = SubsonicHttpClient()
     private val credentialStore by lazy {
@@ -119,7 +122,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun getCustomLayoutButtons(): List<CommandButton> {
-        val shuffleIconName = if (queueEngine.isShuffleActive) "ic_shuffle_on" else "ic_shuffle"
+        val shuffleIconName = if (effectiveShuffleActive()) "ic_shuffle_on" else "ic_shuffle"
         val shuffleIconResId = resources.getIdentifier(shuffleIconName, "drawable", packageName)
         val shuffleIcon = if (shuffleIconResId != 0) shuffleIconResId else android.R.drawable.ic_menu_share
 
@@ -143,6 +146,13 @@ class PlaybackService : MediaSessionService() {
 
         return listOf(shuffleButton, likeButton)
     }
+
+    private fun effectiveShuffleActive(): Boolean =
+        if (isRemotePlaybackProjectionActive) {
+            remotePlaybackIsShuffleActive
+        } else {
+            queueEngine.isShuffleActive
+        }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val preferencesStore by lazy { NativePreferencesStore(this) }
@@ -686,7 +696,7 @@ class PlaybackService : MediaSessionService() {
         val playPauseIcon = if (effectiveIsPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
         val playPauseLabel = if (effectiveIsPlaying) "Pause" else "Play"
 
-        val shuffleIconName = if (queueEngine.isShuffleActive) "ic_shuffle_on" else "ic_shuffle"
+        val shuffleIconName = if (effectiveShuffleActive()) "ic_shuffle_on" else "ic_shuffle"
         val shuffleIconResId = resources.getIdentifier(shuffleIconName, "drawable", packageName)
         val shuffleIcon = if (shuffleIconResId != 0) shuffleIconResId else android.R.drawable.ic_menu_share
 
@@ -1175,15 +1185,22 @@ class PlaybackService : MediaSessionService() {
         metadata: MediaMetadata,
         isPlaying: Boolean,
         position: Double,
-        duration: Double
+        duration: Double,
+        isShuffleActive: Boolean,
+        repeatMode: String,
+        volume: Double?
     ) {
         isRemotePlaybackProjectionActive = true
         remotePlaybackMetadata = metadata
         remotePlaybackIsPlaying = isPlaying
         remotePlaybackPositionSeconds = position.coerceAtLeast(0.0)
         remotePlaybackDurationSeconds = duration.coerceAtLeast(0.0)
+        remotePlaybackIsShuffleActive = isShuffleActive
+        remotePlaybackRepeatMode = repeatMode
+        remotePlaybackVolume = volume
         currentSongMetadata = metadata
         updateNotification()
+        mediaSession?.setCustomLayout(getCustomLayoutButtons())
     }
 
     fun clearRemotePlaybackProjection() {
@@ -1193,6 +1210,9 @@ class PlaybackService : MediaSessionService() {
         remotePlaybackIsPlaying = false
         remotePlaybackPositionSeconds = 0.0
         remotePlaybackDurationSeconds = 0.0
+        remotePlaybackIsShuffleActive = false
+        remotePlaybackRepeatMode = "off"
+        remotePlaybackVolume = null
         currentSongMetadata = null
         if (player?.isPlaying == true || isQueueEngineActive) {
             updateNotification()
