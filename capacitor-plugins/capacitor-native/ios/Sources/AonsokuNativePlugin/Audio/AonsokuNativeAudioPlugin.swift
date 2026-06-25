@@ -1471,7 +1471,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             commandCenter.playCommand,
             commandCenter.playCommand.addTarget { [weak self] _ in
                 guard let self = self else { return .commandFailed }
-                if self.isQueueEngineActive {
+                if self.remotePlaybackProjection == nil && self.isQueueEngineActive {
                     try? self.activateAudioSession()
                     if self.isPlayerAtEnd {
                         self.seekToStartAndPlay()
@@ -1494,7 +1494,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             commandCenter.pauseCommand,
             commandCenter.pauseCommand.addTarget { [weak self] _ in
                 guard let self = self else { return .commandFailed }
-                if self.isQueueEngineActive {
+                if self.remotePlaybackProjection == nil && self.isQueueEngineActive {
                     self.recoveryController.reportUserPause()
                     self.player?.pause()
                 } else {
@@ -1509,7 +1509,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             commandCenter.togglePlayPauseCommand,
             commandCenter.togglePlayPauseCommand.addTarget { [weak self] _ in
                 guard let self = self else { return .commandFailed }
-                if self.isQueueEngineActive {
+                if self.remotePlaybackProjection == nil && self.isQueueEngineActive {
                     if self.player?.timeControlStatus == .playing {
                         self.recoveryController.reportUserPause()
                         self.player?.pause()
@@ -1537,7 +1537,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             commandCenter.nextTrackCommand,
             commandCenter.nextTrackCommand.addTarget { [weak self] _ in
                 guard let self = self else { return .commandFailed }
-                if self.isQueueEngineActive {
+                if self.remotePlaybackProjection == nil && self.isQueueEngineActive {
                     DispatchQueue.main.async { self.isQueueTransitioning = true }
                     self.stateQueue.async {
                         self.queueEngine.skipToNext()
@@ -1554,7 +1554,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             commandCenter.previousTrackCommand,
             commandCenter.previousTrackCommand.addTarget { [weak self] _ in
                 guard let self = self else { return .commandFailed }
-                if self.isQueueEngineActive {
+                if self.remotePlaybackProjection == nil && self.isQueueEngineActive {
                     DispatchQueue.main.async { self.isQueueTransitioning = true }
                     let currentTime = self.player?.currentTime().seconds ?? 0
                     self.stateQueue.async {
@@ -1575,7 +1575,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
                     return .commandFailed
                 }
                 guard let self = self else { return .commandFailed }
-                if self.isQueueEngineActive {
+                if self.remotePlaybackProjection == nil && self.isQueueEngineActive {
                     self.isSeeking = true
                     self.player?.seek(to: self.makeTime(event.positionTime)) { [weak self] _ in
                         self?.isSeeking = false

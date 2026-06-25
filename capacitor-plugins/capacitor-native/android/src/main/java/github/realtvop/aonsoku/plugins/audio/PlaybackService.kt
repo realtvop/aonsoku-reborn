@@ -376,6 +376,78 @@ class PlaybackService : MediaSessionService() {
                 if (isRemotePlaybackProjectionActive) return Player.STATE_READY
                 return super.getPlaybackState()
             }
+
+            override fun play() {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemoteCommand("play")
+                    return
+                }
+                super.play()
+            }
+
+            override fun pause() {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemoteCommand("pause")
+                    return
+                }
+                super.pause()
+            }
+
+            override fun seekTo(positionMs: Long) {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemoteCommand("seek", positionMs.coerceAtLeast(0L) / 1000.0)
+                    return
+                }
+                super.seekTo(positionMs)
+            }
+
+            override fun seekTo(mediaItemIndex: Int, positionMs: Long) {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemoteCommand("seek", positionMs.coerceAtLeast(0L) / 1000.0)
+                    return
+                }
+                super.seekTo(mediaItemIndex, positionMs)
+            }
+
+            override fun seekToNext() {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemoteCommand("next")
+                    return
+                }
+                super.seekToNext()
+            }
+
+            override fun seekToNextMediaItem() {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemoteCommand("next")
+                    return
+                }
+                super.seekToNextMediaItem()
+            }
+
+            override fun seekToPrevious() {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemoteCommand("previous")
+                    return
+                }
+                super.seekToPrevious()
+            }
+
+            override fun seekToPreviousMediaItem() {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemoteCommand("previous")
+                    return
+                }
+                super.seekToPreviousMediaItem()
+            }
+
+            override fun setShuffleModeEnabled(shuffleModeEnabled: Boolean) {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemoteCommand("shuffle")
+                    return
+                }
+                super.setShuffleModeEnabled(shuffleModeEnabled)
+            }
         }
 
         persistence = PlaybackStatePersistence(preferencesStore, serviceScope).apply {
@@ -562,6 +634,10 @@ class PlaybackService : MediaSessionService() {
             ): Int {
                 when (playerCommand) {
                     Player.COMMAND_SEEK_TO_NEXT, Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> {
+                        if (isRemotePlaybackProjectionActive) {
+                            emitRemoteCommand("next")
+                            return SessionResult.RESULT_INFO_SKIPPED
+                        }
                         if (isQueueEngineActive) {
                             queueEngine.skipToNext()
                             return SessionResult.RESULT_INFO_SKIPPED
@@ -570,6 +646,10 @@ class PlaybackService : MediaSessionService() {
                         return SessionResult.RESULT_INFO_SKIPPED
                     }
                     Player.COMMAND_SEEK_TO_PREVIOUS, Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> {
+                        if (isRemotePlaybackProjectionActive) {
+                            emitRemoteCommand("previous")
+                            return SessionResult.RESULT_INFO_SKIPPED
+                        }
                         if (isQueueEngineActive) {
                             val currentTime = (player?.currentPosition ?: 0L) / 1000.0
                             queueEngine.skipToPrevious(currentTime)
@@ -579,7 +659,7 @@ class PlaybackService : MediaSessionService() {
                         return SessionResult.RESULT_INFO_SKIPPED
                     }
                     else -> {
-                        if (!isQueueEngineActive) {
+                        if (isRemotePlaybackProjectionActive || !isQueueEngineActive) {
                             val commandName = when (playerCommand) {
                                 Player.COMMAND_PLAY_PAUSE -> "togglePlayPause"
                                 Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM -> "seek"
@@ -916,7 +996,9 @@ class PlaybackService : MediaSessionService() {
                 updateNotification()
             }
             ACTION_SKIP_NEXT -> {
-                if (isQueueEngineActive) {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemoteCommand("next")
+                } else if (isQueueEngineActive) {
                     queueEngine.skipToNext()
                 } else {
                     emitRemoteCommand("next")
@@ -924,7 +1006,9 @@ class PlaybackService : MediaSessionService() {
                 updateNotification()
             }
             ACTION_SKIP_PREV -> {
-                if (isQueueEngineActive) {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemoteCommand("previous")
+                } else if (isQueueEngineActive) {
                     val currentTime = (player?.currentPosition ?: 0L) / 1000.0
                     queueEngine.skipToPrevious(currentTime)
                 } else {
