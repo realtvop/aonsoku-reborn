@@ -74,6 +74,25 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             return env
         }
 
+        internal fun buildHelloEnvelope(
+            protocolVersion: Int,
+            capabilities: Int,
+            deviceId: String,
+            ticket: String,
+            lastSeq: Long,
+        ): JSONObject {
+            val env = JSONObject()
+            env.put("version", protocolVersion)
+            env.put("messageId", java.util.UUID.randomUUID().toString())
+            env.put("type", "hello")
+            env.put("protocolVersion", protocolVersion)
+            env.put("capabilities", capabilities)
+            env.put("deviceId", deviceId)
+            env.put("ticket", ticket)
+            env.put("lastSeq", lastSeq)
+            return env
+        }
+
         internal fun buildTargetReadyEnvelope(
             protocolVersion: Int,
             transactionId: String,
@@ -423,6 +442,15 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 isConnecting = false
                 reconnectAttempts = 0
+                sendEnvelope(
+                    buildHelloEnvelope(
+                        protocolVersion = protocolVersion,
+                        capabilities = capabilities,
+                        deviceId = devId,
+                        ticket = ticket,
+                        lastSeq = lastSeqValue,
+                    ),
+                )
                 startHeartbeat()
                 // If the foreground service is running, attach now so the
                 // fresh socket is associated with it for background survival.

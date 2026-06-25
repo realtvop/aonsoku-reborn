@@ -38,6 +38,28 @@ class AonsokuNativeCoordinationPluginTest {
         assertNotEqualsUuid(a, b)
     }
 
+    // --- buildHelloEnvelope ----------------------------------------------------
+
+    @Test
+    fun helloEnvelopeIncludesHandshakeFields() {
+        val env = AonsokuNativeCoordinationPlugin.buildHelloEnvelope(
+            protocolVersion = 1,
+            capabilities = 15,
+            deviceId = "dev-1",
+            ticket = "ticket-1",
+            lastSeq = 42,
+        )
+
+        assertEquals(1, env.getInt("version"))
+        assertEquals("hello", env.getString("type"))
+        assertFalse(env.getString("messageId").isBlank())
+        assertEquals(1, env.getInt("protocolVersion"))
+        assertEquals(15, env.getInt("capabilities"))
+        assertEquals("dev-1", env.getString("deviceId"))
+        assertEquals("ticket-1", env.getString("ticket"))
+        assertEquals(42L, env.getLong("lastSeq"))
+    }
+
     // --- buildTargetReadyEnvelope ---------------------------------------------
 
     @Test

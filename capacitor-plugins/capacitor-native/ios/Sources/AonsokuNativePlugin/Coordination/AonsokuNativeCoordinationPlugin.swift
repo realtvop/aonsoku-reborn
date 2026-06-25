@@ -45,6 +45,8 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     private var deviceId: String?
     private var capabilities: Int = 0
     private var protocolVersion: Int = 1
+    private var currentTicket: String?
+    private var connectLastSeq: Int = 0
     private var heartbeatTimer: Timer?
     private var reconnectWorkItem: DispatchWorkItem?
     private var keychainService = "aonsoku-coordination"
@@ -194,15 +196,12 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
             call.reject("missing connect fields")
             return
         }
-        self.deviceId = deviceId
-        self.capabilities = call.getInt("capabilities") ?? 0
-        self.protocolVersion = call.getInt("protocolVersion") ?? 1
+        let capabilities = call.getInt("capabilities") ?? 0
+        let protocolVersion = call.getInt("protocolVersion") ?? 1
         // §9.2: the client submits the highest seq it has processed so the
         // server can skip already-delivered messages. When the caller omits
         // lastSeq (first-ever connect), default to 0.
         let lastSeqValue = call.getInt("lastSeq") ?? 0
-        self.seqTracker = CoordinationSeqTracker()
-        self.seqTracker.observe(Int64(lastSeqValue))
 
         // Lifecycle correctness (§2.1.8): if the socket is already open, do
         // not create a second one when the app returns to the foreground or
@@ -221,6 +220,13 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
 
         self.manualDisconnect = false
         self.disconnectInternal()
+        self.deviceId = deviceId
+        self.currentTicket = ticket
+        self.capabilities = capabilities
+        self.protocolVersion = protocolVersion
+        self.connectLastSeq = lastSeqValue
+        self.seqTracker = CoordinationSeqTracker()
+        self.seqTracker.observe(Int64(lastSeqValue))
         // The dedup cache is per-connection; clear it so a reconnect does
         // not falsely skip messages from the new connection.
         self.dedupCache.clear()
@@ -372,6 +378,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     public func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenProtocolWithProtocol protocol: String?) {
         self.isConnecting = false
         self.reconnectAttempts = 0
+        self.sendHello()
         self.startHeartbeat()
         self.notifyState("connected")
         self.receiveMessage()
@@ -540,6 +547,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         self.session?.invalidateAndCancel()
         self.session = nil
         self.isConnecting = false
+        self.currentTicket = nil
         // §9.1/§9.2: clear the dedup cache and reset the seq tracker so a
         // reconnect starts clean. The next `connect()` call supplies the
         // lastSeq option again.
@@ -557,6 +565,24 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
             ]
             self.sendEnvelope(env)
         }
+    }
+
+    private func sendHello() {
+        guard let deviceId = self.deviceId,
+              let ticket = self.currentTicket else {
+            return
+        }
+        let env: [String: Any] = [
+            "version": self.protocolVersion,
+            "messageId": UUID().uuidString,
+            "type": "hello",
+            "protocolVersion": self.protocolVersion,
+            "capabilities": self.capabilities,
+            "deviceId": deviceId,
+            "ticket": ticket,
+            "lastSeq": self.connectLastSeq,
+        ]
+        self.sendEnvelope(env)
     }
 
     private func receiveMessage() {
