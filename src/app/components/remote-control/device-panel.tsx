@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { cn } from "@/lib/utils";
 import { MonitorSpeaker, Settings, WifiOff } from "lucide-react";
 import {
   Popover,
@@ -74,7 +75,11 @@ export function DevicePanel({
       >
         <DrawerTrigger asChild>{trigger}</DrawerTrigger>
         <DrawerContent className="h-[calc(100dvh-env(safe-area-inset-top)-12px)] rounded-t-[24px]">
-          <DevicePanelContent onOpenChange={onOpenChange} actions={actions} />
+          <DevicePanelContent
+            onOpenChange={onOpenChange}
+            actions={actions}
+            activeSnapPoint={activeSnapPoint}
+          />
         </DrawerContent>
       </Drawer>
     );
@@ -98,11 +103,13 @@ export function DevicePanel({
 interface DevicePanelContentProps {
   onOpenChange: (open: boolean) => void;
   actions: DevicePlaybackActions;
+  activeSnapPoint?: string | number;
 }
 
 function DevicePanelContent({
   onOpenChange,
   actions,
+  activeSnapPoint,
 }: DevicePanelContentProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -112,6 +119,36 @@ function DevicePanelContent({
   const isConnected = useCoordinationStore((state) => state.isConnected);
   const deviceId = useCoordinationStore((state) => state.deviceId);
   const models = useDevicePlaybackModels();
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [hasOverflow, setHasOverflow] = useState(false);
+
+  useEffect(() => {
+    if (!isMobile || activeSnapPoint !== 1) {
+      setHasOverflow(false);
+      return;
+    }
+
+    const checkOverflow = () => {
+      if (scrollRef.current) {
+        const { scrollHeight, clientHeight } = scrollRef.current;
+        setHasOverflow(scrollHeight > clientHeight + 5);
+      }
+    };
+
+    checkOverflow();
+    window.addEventListener("resize", checkOverflow);
+
+    const observer = new MutationObserver(checkOverflow);
+    if (scrollRef.current) {
+      observer.observe(scrollRef.current, { childList: true, subtree: true });
+    }
+
+    return () => {
+      window.removeEventListener("resize", checkOverflow);
+      observer.disconnect();
+    };
+  }, [isMobile, activeSnapPoint]);
 
   const sectionsContent = (
     <div className="flex flex-col gap-5 p-5">
@@ -242,7 +279,15 @@ function DevicePanelContent({
             </Button>
           </div>
         ) : isMobile ? (
-          <div className="h-full overflow-y-auto">{sectionsContent}</div>
+          <div
+            ref={scrollRef}
+            className={cn(
+              "h-full",
+              hasOverflow ? "overflow-y-auto" : "overflow-hidden",
+            )}
+          >
+            {sectionsContent}
+          </div>
         ) : (
           <ScrollArea className="h-full">{sectionsContent}</ScrollArea>
         )}

@@ -630,9 +630,7 @@ export class CoordinationManager {
   /// or `null` if unknown. Fed by `onDeviceSnapshot` projections (design §9.2).
   /// Used by the source_changed retry path (§11.2) to refresh the handoff
   /// candidate request before resending.
-  getLatestDeviceSnapshot(
-    deviceId: DeviceId,
-  ): {
+  getLatestDeviceSnapshot(deviceId: DeviceId): {
     generation: SessionGeneration;
     snapshotRevision: SnapshotRevision;
   } | null {
