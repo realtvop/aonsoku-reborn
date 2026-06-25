@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useRemotePlaybackProjection } from "@/app/components/remote-control/use-remote-playback-projection";
 import { ProgressSlider } from "@/app/components/ui/slider";
@@ -13,6 +13,43 @@ import {
   usePlayerRef,
 } from "@/store/player.store";
 import { convertSecondsToTime } from "@/utils/convertSecondsToTime";
+import { clampProgress } from "@/utils/duration";
+
+function useSmoothRemoteProgress({
+  active,
+  isPlaying,
+  progress,
+  duration,
+}: {
+  active: boolean;
+  isPlaying: boolean;
+  progress: number;
+  duration: number;
+}) {
+  const [displayProgress, setDisplayProgress] = useState(progress);
+
+  useEffect(() => {
+    setDisplayProgress(progress);
+  }, [progress]);
+
+  useEffect(() => {
+    if (!active || !isPlaying) return;
+
+    let lastTick = performance.now();
+    const interval = window.setInterval(() => {
+      const now = performance.now();
+      const elapsedSeconds = (now - lastTick) / 1000;
+      lastTick = now;
+      setDisplayProgress((current) =>
+        clampProgress(current + elapsedSeconds, duration),
+      );
+    }, 250);
+
+    return () => window.clearInterval(interval);
+  }, [active, duration, isPlaying]);
+
+  return displayProgress;
+}
 
 export function FullscreenProgress({
   thin = false,
@@ -42,8 +79,15 @@ export function FullscreenProgress({
     handleSeeked,
   } = useAudioSeeking({ audioRef });
 
+  const smoothRemoteProgress = useSmoothRemoteProgress({
+    active: remoteProjection.active,
+    isPlaying: remoteProjection.isPlaying,
+    progress: remoteProjection.progress,
+    duration: remoteProjection.duration,
+  });
+
   const effectiveProgress = remoteProjection.active
-    ? remoteProjection.progress
+    ? smoothRemoteProgress
     : progress;
   const effectiveDuration = remoteProjection.active
     ? remoteProjection.duration
