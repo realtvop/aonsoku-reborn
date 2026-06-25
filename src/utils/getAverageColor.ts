@@ -5,7 +5,7 @@ export async function getAverageColor(img: HTMLImageElement | null) {
 
   return await fac.getColorAsync(img, {
     mode: "precision",
-    algorithm: "dominant",
+    algorithm: "sqrt",
     defaultColor: [16, 183, 127, 1],
   });
 }
