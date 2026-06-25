@@ -205,6 +205,7 @@ export default function MobileSearch() {
             <SearchIcon className="absolute left-3 w-4 h-4 text-muted-foreground pointer-events-none" />
             <Input
               ref={inputRef}
+              data-scroll-dismiss-keyboard="true"
               autoFocus
               defaultValue={query}
               placeholder={t("command.inputPlaceholder")}

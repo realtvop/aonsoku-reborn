@@ -87,6 +87,7 @@ export function MobileSearchBar({
             <SearchIcon className="absolute left-3 w-4 h-4 text-muted-foreground pointer-events-none" />
             <Input
               ref={inputRef}
+              data-scroll-dismiss-keyboard="true"
               value={inputValue}
               placeholder={placeholder}
               className="pl-9 pr-9 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-primary"
