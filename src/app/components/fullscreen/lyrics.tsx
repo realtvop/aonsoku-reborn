@@ -660,7 +660,9 @@ interface UnsyncedLyricsProps {
 }
 
 function UnsyncedLyrics({ lines, translationLines }: UnsyncedLyricsProps) {
-  const { currentSong } = usePlayerSonglist();
+  const { currentSong: localCurrentSong } = usePlayerSonglist();
+  const remoteProjection = useRemotePlaybackProjection();
+  const currentSong = remoteProjection.song ?? localCurrentSong;
   const { setAreLyricsAligned } = usePlayerActions();
   const lyricsBoxRef = useRef<HTMLDivElement>(null);
 
