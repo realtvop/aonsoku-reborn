@@ -367,7 +367,7 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
                       (result.activeServerType as ActiveServerType) ||
                       "primary";
                     state.data.username = username;
-                    state.data.password = "";
+                    state.data.password = result.password || "";
                     state.data.authType =
                       result.authType === "token"
                         ? AuthType.TOKEN

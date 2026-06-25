@@ -337,6 +337,7 @@ class BridgePlugin : Plugin() {
     private fun ServerCredentials.toPublicJsObject(): JSObject = JSObject().apply {
         put("serverUrl", serverUrl)
         put("username", username)
+        put("password", password)
         put("authType", authType)
         put("protocolVersion", protocolVersion)
         put("serverType", serverType)
@@ -406,4 +407,3 @@ class BridgePlugin : Plugin() {
         }
     }
 }
-

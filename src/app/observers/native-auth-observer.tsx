@@ -45,7 +45,7 @@ export function NativeAuthObserver() {
           state.data.fallbackUrl = credentials.fallbackUrl ?? "";
           state.data.activeServerType = "primary";
           state.data.username = credentials.username;
-          state.data.password = "";
+          state.data.password = credentials.password ?? "";
           state.data.authType =
             credentials.authType === "token"
               ? AuthType.TOKEN
