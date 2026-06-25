@@ -331,6 +331,7 @@ export function transitionHandleSongEnded(
   if (hasNext) {
     if (
       loopState === LoopState.All &&
+      !songlist.isInUserQueue &&
       userQueueRemaining === 0 &&
       songlist.contextQueue.songs.length <= 1
     ) {

@@ -642,6 +642,16 @@ describe("transitionHandleSongEnded", () => {
     const result = transitionHandleSongEnded(songlist, LoopState.One);
     expect(result).toEqual({ action: "seekToStart" });
   });
+
+  it("returns playNext when loop all is on, we are playing the last user queue song, and context queue has only one song", () => {
+    const songlist = makeSonglist({
+      contextQueue: makeContextQueue([makeSong("a")], 0),
+      userQueue: { songs: [makeSong("u1")] },
+      isInUserQueue: true,
+    });
+    const result = transitionHandleSongEnded(songlist, LoopState.All);
+    expect(result).toEqual({ action: "playNext" });
+  });
 });
 
 describe("transitionUpdatePrevNextFlags", () => {
