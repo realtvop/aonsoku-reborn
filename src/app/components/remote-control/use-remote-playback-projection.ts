@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { projectPlaybackProgress } from "@/coordination/progress";
 import { useCoordinationStore } from "@/coordination/store";
 import type { PlaybackSnapshot } from "@/coordination/types";
@@ -7,6 +7,7 @@ import { subsonic } from "@/service/subsonic";
 import { usePlayerStore } from "@/store/player.store";
 import { LoopState } from "@/types/playerContext";
 import type { ISong } from "@/types/responses/song";
+import { clampProgress } from "@/utils/duration";
 
 function repeatModeToLoopState(mode: PlaybackSnapshot["repeat"]): LoopState {
   switch (mode) {
@@ -181,4 +182,40 @@ export function useRemotePlaybackProjection() {
       sourceName: snapshot.sourceName,
     };
   }, [isRemoteActive, remoteQueueSongs, remoteSong, snapshot, snapshotData]);
+}
+
+export function useSmoothRemoteProgress({
+  active,
+  isPlaying,
+  progress,
+  duration,
+}: {
+  active: boolean;
+  isPlaying: boolean;
+  progress: number;
+  duration: number;
+}) {
+  const [displayProgress, setDisplayProgress] = useState(progress);
+
+  useEffect(() => {
+    setDisplayProgress(progress);
+  }, [progress]);
+
+  useEffect(() => {
+    if (!active || !isPlaying) return;
+
+    let lastTick = performance.now();
+    const interval = window.setInterval(() => {
+      const now = performance.now();
+      const elapsedSeconds = (now - lastTick) / 1000;
+      lastTick = now;
+      setDisplayProgress((current) =>
+        clampProgress(current + elapsedSeconds, duration),
+      );
+    }, 250);
+
+    return () => window.clearInterval(interval);
+  }, [active, duration, isPlaying]);
+
+  return displayProgress;
 }
