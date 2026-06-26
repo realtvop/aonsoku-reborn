@@ -179,10 +179,19 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
              "set_shuffle",
              "set_repeat",
              "set_volume",
+             "play_song",
              "play_at_index":
             break
         default:
             return false
+        }
+
+        if type == "play_song" {
+            guard let id = command["song_id"] as? String, !id.isEmpty else {
+                return false
+            }
+            playSongById(id)
+            return true
         }
 
         if type == "play_at_index" {
@@ -310,6 +319,10 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         return true
+    }
+
+    private func playSongById(_ id: String) {
+        playSongIdsAtIndex(ids: [id], index: 0)
     }
 
     private func playSongIdsAtIndex(ids: [String], index: Int) {

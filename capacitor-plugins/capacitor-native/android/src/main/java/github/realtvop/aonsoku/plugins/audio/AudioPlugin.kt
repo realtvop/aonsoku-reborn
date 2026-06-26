@@ -319,6 +319,7 @@ class AudioPlugin : Plugin() {
             type != "set_shuffle" &&
             type != "set_repeat" &&
             type != "set_volume" &&
+            type != "play_song" &&
             type != "play_at_index"
         ) {
             return false
@@ -326,6 +327,13 @@ class AudioPlugin : Plugin() {
 
         val seekPosition = command.optDouble("seconds", Double.NaN)
         val volume = command.optDouble("volume", Double.NaN)
+        if (type == "play_song") {
+            val id = command.optString("song_id", "")
+            if (id.isEmpty()) return false
+            playSongById(id)
+            return true
+        }
+
         if (type == "play_at_index") {
             val songIds = command.optJSONArray("song_ids") ?: return false
             val ids = mutableListOf<String>()
@@ -407,6 +415,10 @@ class AudioPlugin : Plugin() {
             }
         }
         return true
+    }
+
+    private fun playSongById(id: String) {
+        playSongIdsAtIndex(listOf(id), 0)
     }
 
     private fun playSongIdsAtIndex(ids: List<String>, index: Int) {
