@@ -178,10 +178,21 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
              "seek",
              "set_shuffle",
              "set_repeat",
-             "set_volume":
+             "set_volume",
+             "play_at_index":
             break
         default:
             return false
+        }
+
+        if type == "play_at_index" {
+            let ids = command["song_ids"] as? [String] ?? []
+            guard !ids.isEmpty else {
+                return false
+            }
+            let index = command["index"] as? Int ?? 0
+            playSongIdsAtIndex(ids: ids, index: index)
+            return true
         }
 
         DispatchQueue.main.async {
@@ -299,6 +310,39 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         return true
+    }
+
+    private func playSongIdsAtIndex(ids: [String], index: Int) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let repo = SongRepository(db: DatabaseManager.shared.dbPool)
+                let records = try repo.getByIds(ids: ids)
+                let byId = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0) })
+                let songs = ids.compactMap { byId[$0]?.toQueueSong() }
+                guard !songs.isEmpty else {
+                    return
+                }
+                let clampedIndex = max(0, min(index, songs.count - 1))
+
+                self.stateQueue.async {
+                    self.isQueueEngineActive = true
+                    self.queueEngine.setContextQueue(
+                        songs: songs,
+                        currentIndex: clampedIndex,
+                        autoplay: true,
+                        startTime: nil,
+                        sourceId: nil,
+                        sourceName: nil
+                    )
+                    self.persistence.markStateDirty()
+                }
+            } catch {
+                NativeLogger.shared.warn(
+                    "Failed to execute native play_at_index: \(error.localizedDescription)",
+                    source: "Audio"
+                )
+            }
+        }
     }
 
     private func setSystemVolumeValue(_ value: Double) {
@@ -3384,6 +3428,30 @@ private struct NativeRemotePlaybackProjection {
     var volume: Double?
     var targetDeviceId: String?
     var expectedGeneration: Int?
+}
+
+private extension SongRecord {
+    func toQueueSong() -> QueueSong {
+        QueueSong(from: [
+            "id": id,
+            "title": title,
+            "artist": artist ?? "",
+            "artistId": artistId as Any,
+            "album": album ?? "",
+            "albumId": albumId as Any,
+            "duration": Double(duration),
+            "coverArtId": (coverArt ?? albumId) as Any,
+            "streamUrl": nativeStreamUrl,
+        ])
+    }
+
+    var nativeStreamUrl: String {
+        var components = URLComponents()
+        components.scheme = "aonsoku-media"
+        components.host = "stream"
+        components.queryItems = [URLQueryItem(name: "id", value: id)]
+        return components.string ?? "aonsoku-media://stream?id=\(id)"
+    }
 }
 
 private struct NativeCachedAudioFile {

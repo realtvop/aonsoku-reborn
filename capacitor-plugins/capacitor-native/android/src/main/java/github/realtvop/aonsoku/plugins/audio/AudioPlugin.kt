@@ -25,6 +25,7 @@ import github.realtvop.aonsoku.plugins.bridge.AndroidCredentialStore
 import github.realtvop.aonsoku.plugins.bridge.SubsonicHttpClient
 import github.realtvop.aonsoku.plugins.coordination.AonsokuNativeCoordinationPlugin
 import github.realtvop.aonsoku.plugins.data.db.AonsokuDatabase
+import github.realtvop.aonsoku.plugins.data.db.entity.SongEntity
 import github.realtvop.aonsoku.plugins.data.db.toJSObject
 import github.realtvop.aonsoku.plugins.debug.NativeLogger
 import github.realtvop.aonsoku.plugins.error.AonsokuNativeError
@@ -317,13 +318,26 @@ class AudioPlugin : Plugin() {
             type != "seek" &&
             type != "set_shuffle" &&
             type != "set_repeat" &&
-            type != "set_volume"
+            type != "set_volume" &&
+            type != "play_at_index"
         ) {
             return false
         }
 
         val seekPosition = command.optDouble("seconds", Double.NaN)
         val volume = command.optDouble("volume", Double.NaN)
+        if (type == "play_at_index") {
+            val songIds = command.optJSONArray("song_ids") ?: return false
+            val ids = mutableListOf<String>()
+            for (i in 0 until songIds.length()) {
+                val id = songIds.optString(i, "")
+                if (id.isNotEmpty()) ids.add(id)
+            }
+            if (ids.isEmpty()) return false
+            playSongIdsAtIndex(ids, command.optInt("index", 0))
+            return true
+        }
+
         pluginScope.launch {
             try {
                 val service = awaitService()
@@ -393,6 +407,58 @@ class AudioPlugin : Plugin() {
             }
         }
         return true
+    }
+
+    private fun playSongIdsAtIndex(ids: List<String>, index: Int) {
+        pluginScope.launch {
+            try {
+                val records = withContext(Dispatchers.IO) {
+                    db.songDao().getByIds(ids)
+                }
+                val byId = records.associateBy { it.id }
+                val songs = ids.mapNotNull { byId[it]?.toQueueSong() }
+                if (songs.isEmpty()) return@launch
+                val clampedIndex = index.coerceIn(0, songs.size - 1)
+
+                mainHandler.post {
+                    val service = playbackService ?: return@post
+                    service.setContextQueue(
+                        songs,
+                        clampedIndex,
+                        sourceId = null,
+                        sourceName = null,
+                        autoplay = true,
+                        startTime = null,
+                    )
+                }
+            } catch (error: Throwable) {
+                NativeLogger.warn(
+                    "Failed to execute native play_at_index: ${error.message}",
+                    "audio-plugin",
+                )
+            }
+        }
+    }
+
+    private fun SongEntity.toQueueSong(): QueueSong {
+        val coverArtId = coverArt ?: albumId
+        return QueueSong(
+            id = id,
+            title = title,
+            artist = artist ?: "",
+            artistId = artistId,
+            album = album ?: "",
+            albumId = albumId,
+            duration = duration.toDouble(),
+            coverArtId = coverArtId,
+            streamUrl = Uri.Builder()
+                .scheme("aonsoku-media")
+                .authority("stream")
+                .appendQueryParameter("id", id)
+                .build()
+                .toString(),
+            cachedFileUri = null,
+        )
     }
 
     private fun setSystemVolumeValue(value: Double) {
