@@ -23,6 +23,7 @@ import com.getcapacitor.annotation.Permission
 import com.getcapacitor.annotation.PermissionCallback
 import github.realtvop.aonsoku.plugins.bridge.AndroidCredentialStore
 import github.realtvop.aonsoku.plugins.bridge.SubsonicHttpClient
+import github.realtvop.aonsoku.plugins.coordination.AonsokuNativeCoordinationPlugin
 import github.realtvop.aonsoku.plugins.data.db.AonsokuDatabase
 import github.realtvop.aonsoku.plugins.data.db.toJSObject
 import github.realtvop.aonsoku.plugins.debug.NativeLogger
@@ -693,6 +694,14 @@ class AudioPlugin : Plugin() {
         targetDeviceId: String?,
         expectedGeneration: Int?
     ) {
+        val handledNatively =
+            targetDeviceId != null &&
+                expectedGeneration != null &&
+                AonsokuNativeCoordinationPlugin.sendCommandFromActive(
+                    targetDeviceId,
+                    expectedGeneration,
+                    command,
+                )
         val data = JSObject().apply {
             put("command", command)
             if (targetDeviceId != null) {
@@ -701,6 +710,7 @@ class AudioPlugin : Plugin() {
             if (expectedGeneration != null) {
                 put("expectedGeneration", expectedGeneration)
             }
+            put("handledNatively", handledNatively)
             put("requestId", currentRequestId ?: JSONObject.NULL)
         }
         notifyListeners("remoteControlCommand", data)

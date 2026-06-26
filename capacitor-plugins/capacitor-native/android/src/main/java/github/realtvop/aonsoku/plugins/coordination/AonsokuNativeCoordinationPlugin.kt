@@ -181,6 +181,17 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         fun detachActiveForegroundService() {
             activeInstance?.detachFromForegroundService()
         }
+
+        @JvmStatic
+        fun sendCommandFromActive(
+            targetDeviceId: String,
+            expectedGeneration: Int,
+            command: JSONObject
+        ): Boolean {
+            return activeInstance
+                ?.sendCommandFromNative(targetDeviceId, expectedGeneration, command)
+                ?: false
+        }
     }
 
     /// Holds the live coordination socket plus its heartbeat scheduling and
@@ -707,6 +718,24 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
 
     private fun sendEnvelope(env: JSONObject) {
         webSocket?.send(env.toString())
+    }
+
+    private fun sendCommandFromNative(
+        targetDeviceId: String,
+        expectedGeneration: Int,
+        command: JSONObject
+    ): Boolean {
+        if (webSocket == null) return false
+
+        val env = JSONObject()
+        env.put("version", protocolVersion)
+        env.put("messageId", java.util.UUID.randomUUID().toString())
+        env.put("type", "command")
+        env.put("targetDeviceId", targetDeviceId)
+        env.put("expectedGeneration", expectedGeneration)
+        env.put("command", command)
+        sendEnvelope(env)
+        return true
     }
 
     private fun dispatchEnvelope(json: String) {

@@ -285,6 +285,7 @@ export interface NativeRemoteControlCommandEvent {
   requestId?: string;
   targetDeviceId?: string;
   expectedGeneration?: number;
+  handledNatively?: boolean;
   command: Record<string, unknown> & { type: string };
 }
 

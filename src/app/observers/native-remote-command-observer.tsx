@@ -84,6 +84,11 @@ export function NativeRemoteCommandObserver() {
       .addListener("remoteControlCommand", (event) => {
         if (disposed) return;
 
+        if (event.handledNatively) {
+          lastNativeRemoteControlCommandAt = Date.now();
+          return;
+        }
+
         const command = event.command as RemoteCommand;
         if (
           forwardNativeRemoteControlCommand(

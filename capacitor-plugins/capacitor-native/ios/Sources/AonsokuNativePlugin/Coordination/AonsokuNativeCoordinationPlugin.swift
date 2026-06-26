@@ -34,6 +34,22 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     /// Background URLSession identifier used to relaunch the app and to
     /// re-enqueue events when iOS finishes background work (design §2.1.8).
     private static let backgroundSessionIdentifier = "com.aonsoku.coordination"
+    private static weak var activeInstance: AonsokuNativeCoordinationPlugin?
+
+    internal static func sendCommandFromActive(
+        targetDeviceId: String,
+        expectedGeneration: Int,
+        command: [String: Any]
+    ) -> Bool {
+        guard let instance = activeInstance else {
+            return false
+        }
+        return instance.sendCommandFromNative(
+            targetDeviceId: targetDeviceId,
+            expectedGeneration: expectedGeneration,
+            command: command
+        )
+    }
 
     private var webSocketTask: URLSessionWebSocketTask?
     private var session: URLSession?
@@ -74,10 +90,14 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
 
     public override func load() {
         super.load()
+        Self.activeInstance = self
         registerAudioSessionObservers()
     }
 
     deinit {
+        if Self.activeInstance === self {
+            Self.activeInstance = nil
+        }
         removeAudioSessionObservers()
     }
 
@@ -668,6 +688,27 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         guard let data = try? JSONSerialization.data(withJSONObject: env),
               let string = String(data: data, encoding: .utf8) else { return }
         self.webSocketTask?.send(.string(string)) { _ in }
+    }
+
+    private func sendCommandFromNative(
+        targetDeviceId: String,
+        expectedGeneration: Int,
+        command: [String: Any]
+    ) -> Bool {
+        guard self.webSocketTask != nil else {
+            return false
+        }
+
+        let env: [String: Any] = [
+            "version": self.protocolVersion,
+            "messageId": UUID().uuidString,
+            "type": "command",
+            "targetDeviceId": targetDeviceId,
+            "expectedGeneration": expectedGeneration,
+            "command": command,
+        ]
+        sendEnvelope(env)
+        return true
     }
 
     private func scheduleReconnect() {
