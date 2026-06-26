@@ -314,12 +314,16 @@ class AudioPlugin : Plugin() {
             type != "toggle_play_pause" &&
             type != "previous" &&
             type != "next" &&
-            type != "seek"
+            type != "seek" &&
+            type != "set_shuffle" &&
+            type != "set_repeat" &&
+            type != "set_volume"
         ) {
             return false
         }
 
         val seekPosition = command.optDouble("seconds", Double.NaN)
+        val volume = command.optDouble("volume", Double.NaN)
         pluginScope.launch {
             try {
                 val service = awaitService()
@@ -367,6 +371,18 @@ class AudioPlugin : Plugin() {
                                 service.persistence.flushNow()
                             }
                         }
+                        "set_shuffle" -> {
+                            service.setShuffle(command.optBoolean("enabled", false))
+                        }
+                        "set_repeat" -> {
+                            val mode = command.optString("mode", "off")
+                            service.setRepeatMode(mode)
+                        }
+                        "set_volume" -> {
+                            if (!volume.isNaN()) {
+                                setSystemVolumeValue(volume.coerceIn(0.0, 1.0))
+                            }
+                        }
                     }
                 }
             } catch (error: Throwable) {
@@ -377,6 +393,16 @@ class AudioPlugin : Plugin() {
             }
         }
         return true
+    }
+
+    private fun setSystemVolumeValue(value: Double) {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val targetVolume = (value * max).toInt()
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVolume, 0)
+        notifyListeners("systemVolumeChanged", JSObject().apply {
+            put("volume", getSystemVolumePercentage())
+        })
     }
 
     private fun bindPlaybackService() {
@@ -1825,10 +1851,7 @@ class AudioPlugin : Plugin() {
             call.reject("Missing value parameter")
             return
         }
-        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-        val targetVolume = (value * max).toInt()
-        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVolume, 0)
+        setSystemVolumeValue(value)
 
         val actualVolume = getSystemVolumePercentage()
         call.resolve(JSObject().apply {

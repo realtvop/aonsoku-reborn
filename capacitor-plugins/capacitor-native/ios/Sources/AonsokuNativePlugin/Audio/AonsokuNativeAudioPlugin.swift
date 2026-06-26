@@ -170,7 +170,15 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         switch type {
-        case "play", "pause", "toggle_play_pause", "previous", "next", "seek":
+        case "play",
+             "pause",
+             "toggle_play_pause",
+             "previous",
+             "next",
+             "seek",
+             "set_shuffle",
+             "set_repeat",
+             "set_volume":
             break
         default:
             return false
@@ -263,12 +271,60 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
                     self?.persistence.updateProgress(seconds)
                     self?.persistence.flushNow()
                 }
+            case "set_shuffle":
+                let enabled = command["enabled"] as? Bool ?? false
+                self.stateQueue.async {
+                    self.shuffleEnabled = enabled
+                    if self.isQueueEngineActive {
+                        self.queueEngine.setShuffleActive(enabled)
+                        self.persistence.markStateDirty()
+                    }
+                }
+            case "set_repeat":
+                let mode = command["mode"] as? String ?? "off"
+                self.stateQueue.async {
+                    self.repeatMode = mode
+                    if self.isQueueEngineActive,
+                       let loopState = LoopState(rawValue: mode) {
+                        self.queueEngine.setLoopState(loopState)
+                        self.persistence.markStateDirty()
+                    }
+                }
+            case "set_volume":
+                let volume = self.numberValue(command["volume"]) ?? 0.5
+                self.setSystemVolumeValue(volume)
             default:
                 break
             }
         }
 
         return true
+    }
+
+    private func setSystemVolumeValue(_ value: Double) {
+        let clampedValue = Float(min(max(value, 0.0), 1.0))
+        try? activateAudioSession()
+
+        resolveVolumeSlider { [weak self] slider in
+            guard let self else { return }
+            guard let slider else {
+                self.emitError(
+                    code: "volume_control_unavailable",
+                    message: "System volume control is unavailable."
+                )
+                return
+            }
+
+            slider.setValue(clampedValue, animated: false)
+            slider.sendActions(for: .touchUpInside)
+            slider.sendActions(for: .valueChanged)
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                guard let self else { return }
+                let volume = self.audioSession.outputVolume
+                self.notifyListeners("systemVolumeChanged", data: ["volume": volume])
+            }
+        }
     }
 
     @objc func load(_ call: CAPPluginCall) {
