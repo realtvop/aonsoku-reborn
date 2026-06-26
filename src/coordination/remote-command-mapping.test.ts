@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { LanControlMessageType } from "@/types/lanControl";
-import { mapLanControlToRemoteCommand } from "./use-device-playback-actions";
+import { mapLanControlToRemoteCommand } from "./remote-command-mapping";
 
 function playerState(
   overrides: { isShuffleActive?: boolean; loopState?: number } = {},
