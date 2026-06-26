@@ -41,6 +41,8 @@ export interface NativeRemotePlaybackStateOptions {
   isShuffleActive?: boolean;
   repeatMode?: "off" | "one" | "all";
   volume?: number;
+  targetDeviceId?: string;
+  expectedGeneration?: number;
 }
 
 export interface NativeAudioLoadOptions {
@@ -281,6 +283,8 @@ export interface NativeAudioRemoteCommandEvent {
 
 export interface NativeRemoteControlCommandEvent {
   requestId?: string;
+  targetDeviceId?: string;
+  expectedGeneration?: number;
   command: Record<string, unknown> & { type: string };
 }
 

@@ -12,15 +12,21 @@ import { logger } from "@/utils/logger";
 
 const LEGACY_REMOTE_COMMAND_SUPPRESS_MS = 500;
 
-function forwardNativeRemoteControlCommand(command: RemoteCommand) {
+function forwardNativeRemoteControlCommand(
+  command: RemoteCommand,
+  targetDeviceId?: string,
+  expectedGeneration?: number,
+) {
   const { controlledDeviceId, deviceSnapshots, manager } =
     useCoordinationStore.getState();
-  if (!controlledDeviceId) return false;
+  const resolvedTargetDeviceId = targetDeviceId ?? controlledDeviceId;
+  if (!resolvedTargetDeviceId) return false;
 
-  const snapshot = deviceSnapshots[controlledDeviceId];
-  if (!snapshot) return false;
+  const snapshot = deviceSnapshots[resolvedTargetDeviceId];
+  const generation = expectedGeneration ?? snapshot?.generation;
+  if (typeof generation !== "number") return false;
 
-  manager.sendCommand(controlledDeviceId, snapshot.generation, command);
+  manager.sendCommand(resolvedTargetDeviceId, generation, command);
   return true;
 }
 
@@ -79,7 +85,13 @@ export function NativeRemoteCommandObserver() {
         if (disposed) return;
 
         const command = event.command as RemoteCommand;
-        if (forwardNativeRemoteControlCommand(command)) {
+        if (
+          forwardNativeRemoteControlCommand(
+            command,
+            event.targetDeviceId,
+            event.expectedGeneration,
+          )
+        ) {
           lastNativeRemoteControlCommandAt = Date.now();
         }
       })

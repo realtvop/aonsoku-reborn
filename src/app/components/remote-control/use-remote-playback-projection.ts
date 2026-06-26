@@ -136,6 +136,8 @@ export function useRemotePlaybackProjection() {
         contextIndex: 0,
         userQueueSongs: [] as ISong[],
         sourceName: null as string | null,
+        targetDeviceId: null as string | null,
+        expectedGeneration: null as number | null,
       };
     }
 
@@ -178,8 +180,17 @@ export function useRemotePlaybackProjection() {
       contextIndex,
       userQueueSongs,
       sourceName: snapshot.sourceName,
+      targetDeviceId: controlledDeviceId,
+      expectedGeneration: snapshotData.generation,
     };
-  }, [isRemoteActive, remoteQueueSongs, remoteSong, snapshot, snapshotData]);
+  }, [
+    controlledDeviceId,
+    isRemoteActive,
+    remoteQueueSongs,
+    remoteSong,
+    snapshot,
+    snapshotData,
+  ]);
 }
 
 export function useSmoothRemoteProgress({

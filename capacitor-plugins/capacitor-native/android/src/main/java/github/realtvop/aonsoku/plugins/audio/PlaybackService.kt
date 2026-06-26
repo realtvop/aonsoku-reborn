@@ -94,6 +94,8 @@ class PlaybackService : MediaSessionService() {
     private var remotePlaybackRepeatMode = "off"
     private var remotePlaybackVolume: Double? = null
     private var remotePlaybackArtworkKey: String? = null
+    private var remoteControlTargetDeviceId: String? = null
+    private var remoteControlExpectedGeneration: Int? = null
 
     private val httpClient = SubsonicHttpClient()
     private val credentialStore by lazy {
@@ -213,7 +215,7 @@ class PlaybackService : MediaSessionService() {
 
     interface Listener {
         fun onRemoteCommand(command: String, position: Double?)
-        fun onRemoteControlCommand(command: JSONObject)
+        fun onRemoteControlCommand(command: JSONObject, targetDeviceId: String?, expectedGeneration: Int?)
         fun onQueueStateChanged(currentIndex: Int, songId: String, reason: String, isInUserQueue: Boolean)
         fun onQueueContentsChanged(reason: String)
         fun onPlaybackStateChanged(state: String)
@@ -236,7 +238,13 @@ class PlaybackService : MediaSessionService() {
 
     private fun emitRemoteCommand(command: String, position: Double? = null) {
         buildRemoteControlCommand(command, position)?.let { remoteCommand ->
-            listeners.forEach { it.onRemoteControlCommand(remoteCommand) }
+            listeners.forEach {
+                it.onRemoteControlCommand(
+                    remoteCommand,
+                    remoteControlTargetDeviceId,
+                    remoteControlExpectedGeneration,
+                )
+            }
         }
         listeners.forEach { it.onRemoteCommand(command, position) }
     }
@@ -1352,7 +1360,9 @@ class PlaybackService : MediaSessionService() {
         repeatMode: String,
         volume: Double?,
         artworkUrl: String?,
-        coverArtId: String?
+        coverArtId: String?,
+        targetDeviceId: String?,
+        expectedGeneration: Int?
     ) {
         isRemotePlaybackProjectionActive = true
         remotePlaybackMetadata = metadata
@@ -1366,6 +1376,8 @@ class PlaybackService : MediaSessionService() {
         remotePlaybackIsShuffleActive = isShuffleActive
         remotePlaybackRepeatMode = repeatMode
         remotePlaybackVolume = volume
+        remoteControlTargetDeviceId = targetDeviceId
+        remoteControlExpectedGeneration = expectedGeneration
         currentSongMetadata = metadata
         projectRemoteMediaItemToPlayer()
         val artworkKey = listOfNotNull(coverArtId, artworkUrl).joinToString("|")
@@ -1426,6 +1438,8 @@ class PlaybackService : MediaSessionService() {
         remotePlaybackRepeatMode = "off"
         remotePlaybackVolume = null
         remotePlaybackArtworkKey = null
+        remoteControlTargetDeviceId = null
+        remoteControlExpectedGeneration = null
         currentSongMetadata = null
         restoreLocalMediaItemProjection()
         if (player?.isPlaying == true || isQueueEngineActive) {

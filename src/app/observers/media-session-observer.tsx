@@ -275,6 +275,8 @@ export function MediaSessionObserver() {
           typeof remoteProjection.volume === "number"
             ? remoteProjection.volume / 100
             : undefined,
+        targetDeviceId: remoteProjection.targetDeviceId ?? undefined,
+        expectedGeneration: remoteProjection.expectedGeneration ?? undefined,
       })
       .catch((error) => {
         logger.info("[MediaSessionObserver.nativeRemoteUpdate] failed", error);
@@ -287,6 +289,8 @@ export function MediaSessionObserver() {
     remoteProjection.isShuffleActive,
     remoteProjection.loopState,
     remoteProjection.progress,
+    remoteProjection.targetDeviceId,
+    remoteProjection.expectedGeneration,
     remoteProjection.volume,
     song,
   ]);

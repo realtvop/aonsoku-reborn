@@ -156,8 +156,12 @@ class AudioPlugin : Plugin() {
             emitRemoteCommand(command, position)
         }
 
-        override fun onRemoteControlCommand(command: JSONObject) {
-            emitRemoteControlCommand(command)
+        override fun onRemoteControlCommand(
+            command: JSONObject,
+            targetDeviceId: String?,
+            expectedGeneration: Int?
+        ) {
+            emitRemoteControlCommand(command, targetDeviceId, expectedGeneration)
         }
 
         override fun onQueueStateChanged(currentIndex: Int, songId: String, reason: String, isInUserQueue: Boolean) {
@@ -684,9 +688,19 @@ class AudioPlugin : Plugin() {
         notifyListeners("remoteCommand", data)
     }
 
-    private fun emitRemoteControlCommand(command: JSONObject) {
+    private fun emitRemoteControlCommand(
+        command: JSONObject,
+        targetDeviceId: String?,
+        expectedGeneration: Int?
+    ) {
         val data = JSObject().apply {
             put("command", command)
+            if (targetDeviceId != null) {
+                put("targetDeviceId", targetDeviceId)
+            }
+            if (expectedGeneration != null) {
+                put("expectedGeneration", expectedGeneration)
+            }
             put("requestId", currentRequestId ?: JSONObject.NULL)
         }
         notifyListeners("remoteControlCommand", data)
@@ -1045,6 +1059,8 @@ class AudioPlugin : Plugin() {
         val isShuffleActive = call.getBoolean("isShuffleActive") ?: false
         val repeatMode = call.getString("repeatMode") ?: "off"
         val volume = call.getDouble("volume")
+        val targetDeviceId = call.getString("targetDeviceId")
+        val expectedGeneration = call.getInt("expectedGeneration")
 
         pluginScope.launch {
             try {
@@ -1070,6 +1086,8 @@ class AudioPlugin : Plugin() {
                         volume,
                         artworkUrl,
                         coverArtId,
+                        targetDeviceId,
+                        expectedGeneration,
                     )
                     call.resolve()
                 }

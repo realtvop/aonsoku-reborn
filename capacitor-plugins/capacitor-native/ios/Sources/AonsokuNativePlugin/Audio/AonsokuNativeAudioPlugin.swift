@@ -425,7 +425,9 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
                 duration: duration,
                 isShuffleActive: call.getBool("isShuffleActive") ?? false,
                 repeatMode: call.getString("repeatMode") ?? "off",
-                volume: self.numberValue(call.getValue("volume"))
+                volume: self.numberValue(call.getValue("volume")),
+                targetDeviceId: call.getString("targetDeviceId"),
+                expectedGeneration: call.getInt("expectedGeneration")
             )
             self.currentMetadata = metadata
             self.updateNowPlayingInfo()
@@ -2847,9 +2849,16 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         if let remoteControlCommand = buildRemoteControlCommand(command, position: position) {
-            notifyListeners("remoteControlCommand", data: eventData([
+            var event: JSObject = [
                 "command": remoteControlCommand,
-            ]))
+            ]
+            if let targetDeviceId = remotePlaybackProjection?.targetDeviceId {
+                event["targetDeviceId"] = targetDeviceId
+            }
+            if let expectedGeneration = remotePlaybackProjection?.expectedGeneration {
+                event["expectedGeneration"] = expectedGeneration
+            }
+            notifyListeners("remoteControlCommand", data: eventData(event))
         }
 
         notifyListeners("remoteCommand", data: data)
@@ -3188,6 +3197,8 @@ private struct NativeRemotePlaybackProjection {
     var isShuffleActive: Bool
     var repeatMode: String
     var volume: Double?
+    var targetDeviceId: String?
+    var expectedGeneration: Int?
 }
 
 private struct NativeCachedAudioFile {
