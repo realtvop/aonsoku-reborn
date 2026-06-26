@@ -15,6 +15,30 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         return instance.executeRemoteControlCommand(command)
     }
 
+    internal static func isSupportedRemoteControlCommand(_ type: String) -> Bool {
+        [
+            "play",
+            "pause",
+            "toggle_play_pause",
+            "previous",
+            "next",
+            "seek",
+            "set_shuffle",
+            "set_repeat",
+            "set_volume",
+            "play_song",
+            "play_album",
+            "play_playlist",
+            "play_at_index",
+            "add_to_queue_next",
+            "add_to_queue_last",
+            "remove_from_queue",
+            "reorder_queue",
+            "clear_queue",
+            "toggle_like",
+        ].contains(type)
+    }
+
     public let identifier = "AonsokuNativeAudioPlugin"
     public let jsName = "AonsokuNativeAudio"
     public let pluginMethods: [CAPPluginMethod] = [
@@ -169,22 +193,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             return false
         }
 
-        switch type {
-        case "play",
-             "pause",
-             "toggle_play_pause",
-             "previous",
-             "next",
-             "seek",
-             "set_shuffle",
-             "set_repeat",
-             "set_volume",
-             "play_song",
-             "play_at_index",
-             "add_to_queue_next",
-             "add_to_queue_last":
-            break
-        default:
+        if !Self.isSupportedRemoteControlCommand(type) {
             return false
         }
 
@@ -193,6 +202,30 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
                 return false
             }
             playSongById(id)
+            return true
+        }
+
+        if type == "play_album" {
+            guard let id = command["album_id"] as? String, !id.isEmpty else {
+                return false
+            }
+            playAlbumById(
+                id,
+                index: command["index"] as? Int ?? 0,
+                shuffle: command["shuffle"] as? Bool ?? false
+            )
+            return true
+        }
+
+        if type == "play_playlist" {
+            guard let id = command["playlist_id"] as? String, !id.isEmpty else {
+                return false
+            }
+            playPlaylistById(
+                id,
+                index: command["index"] as? Int ?? 0,
+                shuffle: command["shuffle"] as? Bool ?? false
+            )
             return true
         }
 
@@ -324,6 +357,30 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             case "set_volume":
                 let volume = self.numberValue(command["volume"]) ?? 0.5
                 self.setSystemVolumeValue(volume)
+            case "clear_queue":
+                self.stateQueue.async {
+                    self.queueEngine.clearUserQueue()
+                    self.persistence.markStateDirty()
+                }
+            case "remove_from_queue":
+                let ids = Set(self.stringArray(command["song_ids"]))
+                guard !ids.isEmpty else { return }
+                self.stateQueue.async {
+                    let indices = self.queueEngine.userQueue.enumerated().compactMap { item in
+                        ids.contains(item.element.id) ? item.offset : nil
+                    }
+                    self.queueEngine.removeFromUserQueue(indices: indices)
+                    self.persistence.markStateDirty()
+                }
+            case "reorder_queue":
+                let from = command["from"] as? Int ?? -1
+                let to = command["to"] as? Int ?? -1
+                self.stateQueue.async {
+                    self.queueEngine.reorderContextQueue(fromIndex: from, toIndex: to)
+                    self.persistence.markStateDirty()
+                }
+            case "toggle_like":
+                self.toggleLikeForCurrentSong()
             default:
                 break
             }
@@ -334,6 +391,56 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private func playSongById(_ id: String) {
         playSongIdsAtIndex(ids: [id], index: 0)
+    }
+
+    private func playAlbumById(_ id: String, index: Int, shuffle: Bool) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let repo = AlbumRepository(db: DatabaseManager.shared.dbPool)
+                guard let result = try repo.getWithSongs(id), !result.songs.isEmpty else {
+                    return
+                }
+                self.playQueueSongsAtIndex(
+                    songs: result.songs.map { $0.toQueueSong() },
+                    index: index,
+                    shuffle: shuffle,
+                    sourceId: QueueSourceId(type: "album", id: id),
+                    sourceName: result.album.name
+                )
+            } catch {
+                NativeLogger.shared.warn(
+                    "Failed to execute native play_album: \(error.localizedDescription)",
+                    source: "Audio"
+                )
+            }
+        }
+    }
+
+    private func playPlaylistById(_ id: String, index: Int, shuffle: Bool) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let repo = PlaylistRepository(db: DatabaseManager.shared.dbPool)
+                guard let detail = try repo.getDetailById(id) else {
+                    return
+                }
+                let songs = try self.loadQueueSongs(ids: self.playlistEntrySongIds(detail.entriesJson))
+                guard !songs.isEmpty else {
+                    return
+                }
+                self.playQueueSongsAtIndex(
+                    songs: songs,
+                    index: index,
+                    shuffle: shuffle,
+                    sourceId: QueueSourceId(type: "playlist", id: id),
+                    sourceName: detail.name
+                )
+            } catch {
+                NativeLogger.shared.warn(
+                    "Failed to execute native play_playlist: \(error.localizedDescription)",
+                    source: "Audio"
+                )
+            }
+        }
     }
 
     private func addSongIdsToQueue(ids: [String], position: String) {
@@ -367,23 +474,63 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
                 guard !songs.isEmpty else {
                     return
                 }
-                let clampedIndex = max(0, min(index, songs.count - 1))
-
-                self.stateQueue.async {
-                    self.isQueueEngineActive = true
-                    self.queueEngine.setContextQueue(
-                        songs: songs,
-                        currentIndex: clampedIndex,
-                        autoplay: true,
-                        startTime: nil,
-                        sourceId: nil,
-                        sourceName: nil
-                    )
-                    self.persistence.markStateDirty()
-                }
+                self.playQueueSongsAtIndex(
+                    songs: songs,
+                    index: index,
+                    shuffle: false,
+                    sourceId: nil,
+                    sourceName: nil
+                )
             } catch {
                 NativeLogger.shared.warn(
                     "Failed to execute native play_at_index: \(error.localizedDescription)",
+                    source: "Audio"
+                )
+            }
+        }
+    }
+
+    private func playQueueSongsAtIndex(
+        songs: [QueueSong],
+        index: Int,
+        shuffle: Bool,
+        sourceId: QueueSourceId?,
+        sourceName: String?
+    ) {
+        let clampedIndex = max(0, min(index, songs.count - 1))
+        self.stateQueue.async {
+            self.isQueueEngineActive = true
+            self.queueEngine.setContextQueue(
+                songs: songs,
+                currentIndex: clampedIndex,
+                autoplay: true,
+                startTime: nil,
+                sourceId: sourceId,
+                sourceName: sourceName
+            )
+            if shuffle {
+                self.queueEngine.setShuffleActive(true)
+            }
+            self.persistence.markStateDirty()
+        }
+    }
+
+    private func toggleLikeForCurrentSong() {
+        stateQueue.async {
+            guard let current = self.queueEngine.currentSong else {
+                return
+            }
+            let repo = SongRepository(db: DatabaseManager.shared.dbPool)
+            do {
+                let song = try repo.getById(current.id)
+                let nextStarredAt = song?.starredAt == nil ? Int(Date().timeIntervalSince1970) : nil
+                try repo.updateStarred(ids: [current.id], starred: nextStarredAt.map(String.init), starredAt: nextStarredAt)
+                DispatchQueue.main.async {
+                    MPRemoteCommandCenter.shared().likeCommand.isActive = nextStarredAt != nil
+                }
+            } catch {
+                NativeLogger.shared.warn(
+                    "Failed to execute native toggle_like: \(error.localizedDescription)",
                     source: "Audio"
                 )
             }
@@ -399,6 +546,17 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private func stringArray(_ value: Any?) -> [String] {
         (value as? [String] ?? []).filter { !$0.isEmpty }
+    }
+
+    private func playlistEntrySongIds(_ entriesJson: String) -> [String] {
+        guard let data = entriesJson.data(using: .utf8),
+              let entries = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            return []
+        }
+        return entries.compactMap { entry in
+            let id = entry["id"] as? String
+            return id?.isEmpty == false ? id : nil
+        }
     }
 
     private func setSystemVolumeValue(_ value: Double) {

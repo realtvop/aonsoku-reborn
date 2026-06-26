@@ -68,6 +68,28 @@ class AudioPlugin : Plugin() {
         fun executeRemoteControlCommandFromActive(command: JSONObject): Boolean {
             return activeInstance?.executeRemoteControlCommand(command) ?: false
         }
+
+        internal fun isSupportedRemoteControlCommand(type: String): Boolean {
+            return type == "play" ||
+                type == "pause" ||
+                type == "toggle_play_pause" ||
+                type == "previous" ||
+                type == "next" ||
+                type == "seek" ||
+                type == "set_shuffle" ||
+                type == "set_repeat" ||
+                type == "set_volume" ||
+                type == "play_song" ||
+                type == "play_album" ||
+                type == "play_playlist" ||
+                type == "play_at_index" ||
+                type == "add_to_queue_next" ||
+                type == "add_to_queue_last" ||
+                type == "remove_from_queue" ||
+                type == "reorder_queue" ||
+                type == "clear_queue" ||
+                type == "toggle_like"
+        }
     }
 
     private val pluginName = "AudioPlugin"
@@ -309,23 +331,7 @@ class AudioPlugin : Plugin() {
 
     private fun executeRemoteControlCommand(command: JSONObject): Boolean {
         val type = command.optString("type", "")
-        if (
-            type != "play" &&
-            type != "pause" &&
-            type != "toggle_play_pause" &&
-            type != "previous" &&
-            type != "next" &&
-            type != "seek" &&
-            type != "set_shuffle" &&
-            type != "set_repeat" &&
-            type != "set_volume" &&
-            type != "play_song" &&
-            type != "play_at_index" &&
-            type != "add_to_queue_next" &&
-            type != "add_to_queue_last"
-        ) {
-            return false
-        }
+        if (!isSupportedRemoteControlCommand(type)) return false
 
         val seekPosition = command.optDouble("seconds", Double.NaN)
         val volume = command.optDouble("volume", Double.NaN)
@@ -333,6 +339,20 @@ class AudioPlugin : Plugin() {
             val id = command.optString("song_id", "")
             if (id.isEmpty()) return false
             playSongById(id)
+            return true
+        }
+
+        if (type == "play_album") {
+            val id = command.optString("album_id", "")
+            if (id.isEmpty()) return false
+            playAlbumById(id, command.optInt("index", 0), command.optBoolean("shuffle", false))
+            return true
+        }
+
+        if (type == "play_playlist") {
+            val id = command.optString("playlist_id", "")
+            if (id.isEmpty()) return false
+            playPlaylistById(id, command.optInt("index", 0), command.optBoolean("shuffle", false))
             return true
         }
 
@@ -406,6 +426,29 @@ class AudioPlugin : Plugin() {
                                 setSystemVolumeValue(volume.coerceIn(0.0, 1.0))
                             }
                         }
+                        "clear_queue" -> {
+                            service.clearUserQueue()
+                        }
+                        "remove_from_queue" -> {
+                            val ids = command.optStringArray("song_ids").toSet()
+                            if (ids.isNotEmpty()) {
+                                val indices = service.queueEngine.userQueue
+                                    .mapIndexedNotNull { index, song ->
+                                        if (song.id in ids) index else null
+                                    }
+                                service.queueEngine.removeFromUserQueue(indices)
+                            }
+                        }
+                        "reorder_queue" -> {
+                            service.queueEngine.reorderContextQueue(
+                                command.optInt("from", -1),
+                                command.optInt("to", -1),
+                            )
+                        }
+                        "toggle_like" -> {
+                            val currentId = service.queueEngine.currentSong?.id
+                            if (currentId != null) toggleLikeForSong(currentId)
+                        }
                     }
                 }
             } catch (error: Throwable) {
@@ -418,8 +461,86 @@ class AudioPlugin : Plugin() {
         return true
     }
 
+    private fun toggleLikeForSong(songId: String) {
+        pluginScope.launch {
+            try {
+                val nextActive = withContext(Dispatchers.IO) {
+                    val song = db.songDao().getById(songId)
+                    val nextStarred = if (song?.starredAt == null) {
+                        System.currentTimeMillis() / 1000
+                    } else {
+                        null
+                    }
+                    db.songDao().updateStarred(
+                        listOf(songId),
+                        nextStarred?.toString(),
+                        nextStarred,
+                    )
+                    nextStarred != null
+                }
+                val service = playbackService ?: return@launch
+                mainHandler.post {
+                    service.isLikeActive = nextActive
+                }
+            } catch (error: Throwable) {
+                NativeLogger.warn(
+                    "Failed to execute native toggle_like: ${error.message}",
+                    "audio-plugin",
+                )
+            }
+        }
+    }
+
     private fun playSongById(id: String) {
         playSongIdsAtIndex(listOf(id), 0)
+    }
+
+    private fun playAlbumById(id: String, index: Int, shuffle: Boolean) {
+        pluginScope.launch {
+            try {
+                val songs = withContext(Dispatchers.IO) {
+                    db.songDao().getByAlbumId(id).map { it.toQueueSong() }
+                }
+                if (songs.isEmpty()) return@launch
+                playQueueSongsAtIndex(
+                    songs,
+                    index,
+                    shuffle,
+                    QueueSourceId("album", id),
+                    songs.firstOrNull()?.album,
+                )
+            } catch (error: Throwable) {
+                NativeLogger.warn(
+                    "Failed to execute native play_album: ${error.message}",
+                    "audio-plugin",
+                )
+            }
+        }
+    }
+
+    private fun playPlaylistById(id: String, index: Int, shuffle: Boolean) {
+        pluginScope.launch {
+            try {
+                val songs = withContext(Dispatchers.IO) {
+                    val detail = db.playlistDao().getDetailById(id) ?: return@withContext emptyList()
+                    val ids = parsePlaylistEntrySongIds(detail.entriesJson)
+                    loadQueueSongs(ids)
+                }
+                if (songs.isEmpty()) return@launch
+                playQueueSongsAtIndex(
+                    songs,
+                    index,
+                    shuffle,
+                    QueueSourceId("playlist", id),
+                    null,
+                )
+            } catch (error: Throwable) {
+                NativeLogger.warn(
+                    "Failed to execute native play_playlist: ${error.message}",
+                    "audio-plugin",
+                )
+            }
+        }
     }
 
     private fun addSongIdsToQueue(ids: List<String>, position: String) {
@@ -446,25 +567,35 @@ class AudioPlugin : Plugin() {
             try {
                 val songs = loadQueueSongs(ids)
                 if (songs.isEmpty()) return@launch
-                val clampedIndex = index.coerceIn(0, songs.size - 1)
-
-                mainHandler.post {
-                    val service = playbackService ?: return@post
-                    service.setContextQueue(
-                        songs,
-                        clampedIndex,
-                        sourceId = null,
-                        sourceName = null,
-                        autoplay = true,
-                        startTime = null,
-                    )
-                }
+                playQueueSongsAtIndex(songs, index, shuffle = false, sourceId = null, sourceName = null)
             } catch (error: Throwable) {
                 NativeLogger.warn(
                     "Failed to execute native play_at_index: ${error.message}",
                     "audio-plugin",
                 )
             }
+        }
+    }
+
+    private fun playQueueSongsAtIndex(
+        songs: List<QueueSong>,
+        index: Int,
+        shuffle: Boolean,
+        sourceId: QueueSourceId?,
+        sourceName: String?,
+    ) {
+        val clampedIndex = index.coerceIn(0, songs.size - 1)
+        mainHandler.post {
+            val service = playbackService ?: return@post
+            service.setContextQueue(
+                songs,
+                clampedIndex,
+                sourceId = sourceId,
+                sourceName = sourceName,
+                autoplay = true,
+                startTime = null,
+            )
+            if (shuffle) service.setShuffle(true)
         }
     }
 
@@ -484,6 +615,20 @@ class AudioPlugin : Plugin() {
             if (id.isNotEmpty()) values.add(id)
         }
         return values
+    }
+
+    private fun parsePlaylistEntrySongIds(entriesJson: String): List<String> {
+        val entries = try {
+            JSONArray(entriesJson)
+        } catch (_: Throwable) {
+            return emptyList()
+        }
+        val ids = mutableListOf<String>()
+        for (i in 0 until entries.length()) {
+            val id = entries.optJSONObject(i)?.optString("id", "") ?: ""
+            if (id.isNotEmpty()) ids.add(id)
+        }
+        return ids
     }
 
     private fun SongEntity.toQueueSong(): QueueSong {
