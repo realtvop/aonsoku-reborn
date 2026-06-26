@@ -148,6 +148,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     private var nativeGeneration = 1
     private var nativeSnapshotRevision = 0
     private var heartbeatTimer: Timer?
+    private var snapshotHeartbeatTimer: Timer?
     private var reconnectWorkItem: DispatchWorkItem?
     private var keychainService = "aonsoku-coordination"
     /// §9.1 dedup cache for incoming envelopes.
@@ -484,6 +485,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         self.reconnectAttempts = 0
         self.sendHello()
         self.startHeartbeat()
+        self.startSnapshotHeartbeat()
         self.notifyState("connected")
         self.receiveMessage()
     }
@@ -492,6 +494,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         self.isConnecting = false
         self.heartbeatTimer?.invalidate()
         self.heartbeatTimer = nil
+        self.stopSnapshotHeartbeat()
         self.notifyState("disconnected")
         // §2.1.8 / §6.3: only schedule a reconnect for OS-initiated closes,
         // not for an explicit user disconnect.
@@ -622,12 +625,14 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
             // cannot continue; the foreground observer re-arms a reconnect.
             self.heartbeatTimer?.invalidate()
             self.heartbeatTimer = nil
+            self.stopSnapshotHeartbeat()
             self.notifyState("interrupted")
         case .ended:
             // The audio session resumed. If we still have a socket, restart
             // the heartbeat; otherwise emit a reconnect request.
             if self.webSocketTask?.state == .running {
                 self.startHeartbeat()
+                self.startSnapshotHeartbeat()
                 self.notifyState("connected")
             } else if !self.manualDisconnect {
                 self.notifyState("disconnected")
@@ -643,6 +648,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     private func disconnectInternal() {
         self.heartbeatTimer?.invalidate()
         self.heartbeatTimer = nil
+        self.stopSnapshotHeartbeat()
         self.reconnectWorkItem?.cancel()
         self.reconnectWorkItem = nil
         self.reconnectAttempts = 0
@@ -669,6 +675,18 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
             ]
             self.sendEnvelope(env)
         }
+    }
+
+    private func startSnapshotHeartbeat() {
+        self.stopSnapshotHeartbeat()
+        self.snapshotHeartbeatTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { [weak self] _ in
+            self?.publishNativePlaybackSnapshot(onlyWhenPlaying: true)
+        }
+    }
+
+    private func stopSnapshotHeartbeat() {
+        self.snapshotHeartbeatTimer?.invalidate()
+        self.snapshotHeartbeatTimer = nil
     }
 
     private func sendHello() {
@@ -709,6 +727,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
                 self.isConnecting = false
                 self.heartbeatTimer?.invalidate()
                 self.heartbeatTimer = nil
+                self.stopSnapshotHeartbeat()
                 self.notifyState("error")
                 if !self.manualDisconnect { self.scheduleReconnect() }
             }
@@ -780,7 +799,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         self.webSocketTask?.send(.string(string)) { _ in }
     }
 
-    private func publishNativePlaybackSnapshot() -> Bool {
+    private func publishNativePlaybackSnapshot(onlyWhenPlaying: Bool = false) -> Bool {
         guard self.webSocketTask != nil,
               let audioState = AonsokuNativeAudioPlugin.getFullStateFromActive(),
               let snapshot = Self.buildPlaybackSnapshot(
@@ -788,6 +807,10 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
                 audioState: audioState,
                 sampledAtSeconds: Date().timeIntervalSince1970
               ) else {
+            return false
+        }
+
+        if onlyWhenPlaying && (audioState["isPlaying"] as? Bool != true) {
             return false
         }
 

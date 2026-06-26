@@ -58,6 +58,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         internal const val KEY_IDENTITY_URL = "identity_url"
         /// Design §9.2: client sends heartbeat every 15 seconds.
         internal const val HEARTBEAT_INTERVAL_SECONDS = 15L
+        internal const val SNAPSHOT_HEARTBEAT_MS = 10_000L
         /// OkHttp keep-alive ping to detect dead connections faster.
         internal const val PING_INTERVAL_SECONDS = 15L
         /// §13: exponential backoff. Base 1s, doubled per attempt, capped at 30s.
@@ -325,6 +326,12 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         reconnectAttempts += 1
         notifyReconnectNeeded(reconnectAttempts)
     }
+    private val snapshotHeartbeatRunnable = object : Runnable {
+        override fun run() {
+            publishNativePlaybackSnapshot(onlyWhenPlaying = true)
+            mainHandler?.postDelayed(this, SNAPSHOT_HEARTBEAT_MS)
+        }
+    }
 
     /// Reference held while the PlaybackService foreground service is
     /// active. Null means the plugin owns the socket itself (no service).
@@ -533,6 +540,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
                     ),
                 )
                 startHeartbeat()
+                startSnapshotHeartbeat()
                 // If the foreground service is running, attach now so the
                 // fresh socket is associated with it for background survival.
                 if (foregroundServiceActive) attachToForegroundService()
@@ -546,6 +554,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 isConnecting = false
                 stopHeartbeat()
+                stopSnapshotHeartbeat()
                 foregroundServiceConnection = null
                 notifyState("disconnected")
                 if (!manualDisconnect) scheduleReconnect()
@@ -555,6 +564,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
                 Log.e(TAG, "WS failure", t)
                 isConnecting = false
                 stopHeartbeat()
+                stopSnapshotHeartbeat()
                 foregroundServiceConnection = null
                 notifyState("error")
                 if (!manualDisconnect) scheduleReconnect()
@@ -678,6 +688,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
 
     private fun disconnectInternal() {
         stopHeartbeat()
+        stopSnapshotHeartbeat()
         mainHandler?.removeCallbacks(reconnectRunnable)
         reconnectAttempts = 0
         webSocket?.close(1000, "disconnect")
@@ -786,13 +797,26 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         mainHandler?.removeCallbacks(heartbeatRunnable)
     }
 
+    private fun startSnapshotHeartbeat() {
+        val handler = mainHandler ?: return
+        handler.removeCallbacks(snapshotHeartbeatRunnable)
+        handler.postDelayed(snapshotHeartbeatRunnable, SNAPSHOT_HEARTBEAT_MS)
+    }
+
+    private fun stopSnapshotHeartbeat() {
+        mainHandler?.removeCallbacks(snapshotHeartbeatRunnable)
+    }
+
     private fun sendEnvelope(env: JSONObject) {
         webSocket?.send(env.toString())
     }
 
-    private fun publishNativePlaybackSnapshot(): Boolean {
+    private fun publishNativePlaybackSnapshot(onlyWhenPlaying: Boolean = false): Boolean {
         if (webSocket == null) return false
         val audioState = AudioPlugin.getFullStateFromActive() ?: return false
+        if (onlyWhenPlaying && !audioState.optBoolean("isPlaying", false)) {
+            return false
+        }
         val snapshot = buildPlaybackSnapshot(
             sessionId = nativeSessionId,
             audioState = audioState,
