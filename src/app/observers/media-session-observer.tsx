@@ -23,6 +23,8 @@ import { clampProgress, isValidDuration } from "@/utils/duration";
 import { logger } from "@/utils/logger";
 import { manageMediaSession } from "@/utils/setMediaSession";
 
+const NATIVE_REMOTE_COVER_SIZE = "800";
+
 export function MediaSessionObserver() {
   const { t } = useTranslation();
   useBackgroundPlayback();
@@ -242,7 +244,7 @@ export function MediaSessionObserver() {
             coverArt: song.coverArt,
             coverArtType: "song",
             albumId: song.albumId,
-            size: "300",
+            size: NATIVE_REMOTE_COVER_SIZE,
           })
         : undefined;
     const coverArtId =

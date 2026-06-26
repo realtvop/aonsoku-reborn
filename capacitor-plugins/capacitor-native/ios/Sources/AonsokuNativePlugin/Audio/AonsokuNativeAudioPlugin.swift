@@ -1859,8 +1859,19 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
 
             guard let url = URL(string: urlString) else { return }
 
-            let task = URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+            let task = URLSession.shared.dataTask(with: url) { [weak self] data, response, _ in
                 guard let self, let data, let image = UIImage(data: data) else { return }
+                if let coverArtId, !coverArtId.isEmpty {
+                    let contentType = (response as? HTTPURLResponse)?
+                        .value(forHTTPHeaderField: "Content-Type") ?? "image/jpeg"
+                    _ = try? ImageCacheManager(db: DatabaseManager.shared.dbPool)
+                        .storeCoverImage(
+                            coverArtId: coverArtId,
+                            data: data,
+                            contentType: contentType,
+                            coverSize: "800"
+                        )
+                }
                 let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
                 DispatchQueue.main.async {
                     guard self.nowPlayingRevision == revision else { return }
