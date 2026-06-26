@@ -51,6 +51,83 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         )
     }
 
+    internal static func buildPlaybackSnapshot(
+        sessionId: String,
+        audioState: [String: Any],
+        sampledAtSeconds: Double,
+        volume: Double? = nil
+    ) -> [String: Any]? {
+        guard let songId = audioState["currentSongId"] as? String, !songId.isEmpty else {
+            return nil
+        }
+
+        let contextQueue = audioState["contextQueue"] as? [String: Any] ?? [:]
+        return [
+            "sessionId": sessionId,
+            "logicalPlaybackSessionId": sessionId,
+            "mediaKind": "song",
+            "songId": songId,
+            "progressSeconds": max(number(audioState["currentTime"]) ?? 0, 0),
+            "durationSeconds": max(number(audioState["duration"]) ?? 0, 0),
+            "isPlaying": audioState["isPlaying"] as? Bool ?? false,
+            "sampledAt": sampledAtSeconds,
+            "contextQueue": songIds(contextQueue["songs"]),
+            "contextIndex": max(int(contextQueue["currentIndex"]) ?? 0, 0),
+            "sourceId": encodeSourceId(contextQueue["sourceId"]),
+            "sourceName": stringOrNull(contextQueue["sourceName"]),
+            "userQueue": songIds(audioState["userQueue"]),
+            "inUserQueue": audioState["isInUserQueue"] as? Bool ?? false,
+            "restorePrevious": songIds(audioState["playedUserQueueHistory"]),
+            "shuffle": audioState["isShuffleActive"] as? Bool ?? false,
+            "repeat": audioState["loopState"] as? String ?? "off",
+            "volume": volume ?? NSNull(),
+            "accumulatedPlaySeconds": 0.0,
+            "historyWritten": false,
+            "nowPlayingSent": false,
+            "scrobbleSent": false,
+        ]
+    }
+
+    private static func songIds(_ value: Any?) -> [String] {
+        let songs = value as? [[String: Any]] ?? []
+        return songs.compactMap { song in
+            let id = song["id"] as? String
+            return id?.isEmpty == false ? id : nil
+        }
+    }
+
+    private static func encodeSourceId(_ value: Any?) -> Any {
+        guard let sourceId = value as? [String: Any],
+              let type = sourceId["type"] as? String,
+              let id = sourceId["id"] as? String,
+              !type.isEmpty,
+              !id.isEmpty else {
+            return NSNull()
+        }
+        return "\(type):\(id)"
+    }
+
+    private static func stringOrNull(_ value: Any?) -> Any {
+        guard let value = value as? String, !value.isEmpty else {
+            return NSNull()
+        }
+        return value
+    }
+
+    private static func number(_ value: Any?) -> Double? {
+        if let value = value as? Double { return value }
+        if let value = value as? Float { return Double(value) }
+        if let value = value as? Int { return Double(value) }
+        if let value = value as? NSNumber { return value.doubleValue }
+        return nil
+    }
+
+    private static func int(_ value: Any?) -> Int? {
+        if let value = value as? Int { return value }
+        if let value = value as? NSNumber { return value.intValue }
+        return nil
+    }
+
     private var webSocketTask: URLSessionWebSocketTask?
     private var session: URLSession?
     private var reconnectAttempts = 0

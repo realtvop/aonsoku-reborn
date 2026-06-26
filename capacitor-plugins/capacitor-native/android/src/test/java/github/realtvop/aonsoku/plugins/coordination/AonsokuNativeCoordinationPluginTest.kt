@@ -83,6 +83,74 @@ class AonsokuNativeCoordinationPluginTest {
         assertEquals("sess-1", env.getString("sessionId"))
     }
 
+    // --- buildPlaybackSnapshot ------------------------------------------------
+
+    @Test
+    fun playbackSnapshotMapsNativeAudioStateToProtocolShape() {
+        val audioState = JSONObject(
+            """
+            {
+              "currentSongId": "song-2",
+              "currentTime": 42.5,
+              "duration": 180,
+              "isPlaying": true,
+              "contextQueue": {
+                "songs": [{"id": "song-1"}, {"id": "song-2"}],
+                "currentIndex": 1,
+                "sourceId": {"type": "album", "id": "album-1"},
+                "sourceName": "Album One"
+              },
+              "userQueue": [{"id": "song-3"}],
+              "isInUserQueue": false,
+              "playedUserQueueHistory": [{"id": "song-0"}],
+              "isShuffleActive": true,
+              "loopState": "all"
+            }
+            """.trimIndent(),
+        )
+
+        val snapshot = AonsokuNativeCoordinationPlugin.buildPlaybackSnapshot(
+            sessionId = "session-1",
+            audioState = audioState,
+            sampledAtSeconds = 123.0,
+            volume = 0.75,
+        )
+
+        assertNotNull(snapshot)
+        snapshot!!
+        assertEquals("session-1", snapshot.getString("sessionId"))
+        assertEquals("session-1", snapshot.getString("logicalPlaybackSessionId"))
+        assertEquals("song-2", snapshot.getString("songId"))
+        assertEquals(42.5, snapshot.getDouble("progressSeconds"), 0.001)
+        assertEquals(180.0, snapshot.getDouble("durationSeconds"), 0.001)
+        assertTrue(snapshot.getBoolean("isPlaying"))
+        assertEquals(123.0, snapshot.getDouble("sampledAt"), 0.001)
+        assertEquals("song-1", snapshot.getJSONArray("contextQueue").getString(0))
+        assertEquals("song-2", snapshot.getJSONArray("contextQueue").getString(1))
+        assertEquals(1, snapshot.getInt("contextIndex"))
+        assertEquals("album:album-1", snapshot.getString("sourceId"))
+        assertEquals("Album One", snapshot.getString("sourceName"))
+        assertEquals("song-3", snapshot.getJSONArray("userQueue").getString(0))
+        assertEquals("song-0", snapshot.getJSONArray("restorePrevious").getString(0))
+        assertTrue(snapshot.getBoolean("shuffle"))
+        assertEquals("all", snapshot.getString("repeat"))
+        assertEquals(0.75, snapshot.getDouble("volume"), 0.001)
+        assertFalse(snapshot.getBoolean("historyWritten"))
+        assertFalse(snapshot.getBoolean("nowPlayingSent"))
+        assertFalse(snapshot.getBoolean("scrobbleSent"))
+    }
+
+    @Test
+    fun playbackSnapshotReturnsNullWhenThereIsNoCurrentSong() {
+        val snapshot = AonsokuNativeCoordinationPlugin.buildPlaybackSnapshot(
+            sessionId = "session-1",
+            audioState = JSONObject("""{"isPlaying":false}"""),
+            sampledAtSeconds = 123.0,
+        )
+
+        assertNull(snapshot)
+    }
+
     // --- parseJsonObject -------------------------------------------------------
 
     @Test

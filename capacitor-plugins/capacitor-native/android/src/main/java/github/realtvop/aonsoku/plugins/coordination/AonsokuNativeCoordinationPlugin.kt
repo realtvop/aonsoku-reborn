@@ -16,6 +16,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import org.json.JSONArray
 import org.json.JSONObject
 import java.security.KeyStore
 import java.util.concurrent.TimeUnit
@@ -112,6 +113,66 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             env.put("sourceDeviceId", sourceDeviceId)
             env.put("sessionId", sessionId)
             return env
+        }
+
+        internal fun buildPlaybackSnapshot(
+            sessionId: String,
+            audioState: JSONObject,
+            sampledAtSeconds: Double,
+            volume: Double? = null,
+        ): JSONObject? {
+            val songId = audioState.optString("currentSongId", "")
+            if (songId.isEmpty()) return null
+
+            val contextQueue = audioState.optJSONObject("contextQueue") ?: JSONObject()
+            val snapshot = JSONObject()
+            snapshot.put("sessionId", sessionId)
+            snapshot.put("logicalPlaybackSessionId", sessionId)
+            snapshot.put("mediaKind", "song")
+            snapshot.put("songId", songId)
+            snapshot.put("progressSeconds", audioState.optDouble("currentTime", 0.0).coerceAtLeast(0.0))
+            snapshot.put("durationSeconds", audioState.optDouble("duration", 0.0).coerceAtLeast(0.0))
+            snapshot.put("isPlaying", audioState.optBoolean("isPlaying", false))
+            snapshot.put("sampledAt", sampledAtSeconds)
+            snapshot.put("contextQueue", songIds(contextQueue.optJSONArray("songs")))
+            snapshot.put("contextIndex", contextQueue.optInt("currentIndex", 0).coerceAtLeast(0))
+            snapshot.put("sourceId", encodeSourceId(contextQueue.optJSONObject("sourceId")))
+            snapshot.put("sourceName", contextQueue.optStringOrNull("sourceName"))
+            snapshot.put("userQueue", songIds(audioState.optJSONArray("userQueue")))
+            snapshot.put("inUserQueue", audioState.optBoolean("isInUserQueue", false))
+            snapshot.put("restorePrevious", songIds(audioState.optJSONArray("playedUserQueueHistory")))
+            snapshot.put("shuffle", audioState.optBoolean("isShuffleActive", false))
+            snapshot.put("repeat", audioState.optString("loopState", "off"))
+            snapshot.put("volume", volume ?: JSONObject.NULL)
+            snapshot.put("accumulatedPlaySeconds", 0.0)
+            snapshot.put("historyWritten", false)
+            snapshot.put("nowPlayingSent", false)
+            snapshot.put("scrobbleSent", false)
+            return snapshot
+        }
+
+        private fun songIds(songs: JSONArray?): JSONArray {
+            val ids = JSONArray()
+            if (songs == null) return ids
+            for (i in 0 until songs.length()) {
+                val id = songs.optJSONObject(i)?.optString("id", "") ?: ""
+                if (id.isNotEmpty()) ids.put(id)
+            }
+            return ids
+        }
+
+        private fun encodeSourceId(sourceId: JSONObject?): Any {
+            if (sourceId == null) return JSONObject.NULL
+            val type = sourceId.optString("type", "")
+            val id = sourceId.optString("id", "")
+            if (type.isEmpty() || id.isEmpty()) return JSONObject.NULL
+            return "$type:$id"
+        }
+
+        private fun JSONObject.optStringOrNull(name: String): Any {
+            if (isNull(name)) return JSONObject.NULL
+            val value = optString(name, "")
+            return if (value.isEmpty()) JSONObject.NULL else value
         }
 
         /// Parse a JSON object string, returning null on failure so callers
