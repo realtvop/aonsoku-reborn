@@ -8,6 +8,7 @@ import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
+import github.realtvop.aonsoku.plugins.audio.AudioPlugin
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -767,6 +768,15 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
                 ret.put("messageId", messageId)
                 ret.put("resultJson", result)
                 notifyListeners("coordinationAck", ret)
+            }
+            if (type == "command") {
+                val command = parsed.optJSONObject("command")
+                if (
+                    command != null &&
+                    AudioPlugin.executeRemoteControlCommandFromActive(command)
+                ) {
+                    return
+                }
             }
         }
         notifyListeners("coordinationEvent", JSObject().put("envelopeJson", json))

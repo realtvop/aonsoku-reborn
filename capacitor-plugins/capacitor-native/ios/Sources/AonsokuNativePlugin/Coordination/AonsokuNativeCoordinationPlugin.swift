@@ -678,6 +678,12 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
                     )
                 }
             }
+            if let type = dict["type"] as? String,
+               type == "command",
+               let command = dict["command"] as? [String: Any],
+               AonsokuNativeAudioPlugin.executeRemoteControlCommandFromActive(command) {
+                return
+            }
         }
         DispatchQueue.main.async {
             self.notifyListeners("coordinationEvent", data: ["envelopeJson": json])

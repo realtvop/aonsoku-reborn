@@ -56,6 +56,19 @@ import java.io.File
     ]
 )
 class AudioPlugin : Plugin() {
+    companion object {
+        @JvmStatic
+        var isVolumeHUDDisabled: Boolean = false
+
+        @Volatile
+        private var activeInstance: AudioPlugin? = null
+
+        @JvmStatic
+        fun executeRemoteControlCommandFromActive(command: JSONObject): Boolean {
+            return activeInstance?.executeRemoteControlCommand(command) ?: false
+        }
+    }
+
     private val pluginName = "AudioPlugin"
     private val mainHandler = Handler(Looper.getMainLooper())
     private var playbackService: PlaybackService? = null
@@ -235,6 +248,7 @@ class AudioPlugin : Plugin() {
 
     override fun load() {
         super.load()
+        activeInstance = this
         NativeLogger.info("AudioPlugin loaded, binding PlaybackService", "audio-plugin")
         bindPlaybackService()
         registerAudioFocusListener()
@@ -273,6 +287,9 @@ class AudioPlugin : Plugin() {
     }
 
     override fun handleOnDestroy() {
+        if (activeInstance === this) {
+            activeInstance = null
+        }
         playbackService?.removeListener(serviceListener)
         playbackService?.removeDownloadListener(downloadListener)
         if (isBound) {
@@ -287,6 +304,79 @@ class AudioPlugin : Plugin() {
         unregisterAudioDeviceCallback()
         pluginScope.cancel()
         super.handleOnDestroy()
+    }
+
+    private fun executeRemoteControlCommand(command: JSONObject): Boolean {
+        val type = command.optString("type", "")
+        if (
+            type != "play" &&
+            type != "pause" &&
+            type != "toggle_play_pause" &&
+            type != "previous" &&
+            type != "next" &&
+            type != "seek"
+        ) {
+            return false
+        }
+
+        val seekPosition = command.optDouble("seconds", Double.NaN)
+        pluginScope.launch {
+            try {
+                val service = awaitService()
+                mainHandler.post {
+                    val player = service.getPlayer()
+                    when (type) {
+                        "play" -> {
+                            service.savedRestoreTime = null
+                            service.queueEngine.clearRestoredFlag()
+                            requestAudioFocus()
+                            player?.play()
+                        }
+                        "pause" -> {
+                            player?.pause()
+                            service.persistence.flushNow()
+                        }
+                        "toggle_play_pause" -> {
+                            if (player?.isPlaying == true) {
+                                player.pause()
+                                service.persistence.flushNow()
+                            } else {
+                                service.savedRestoreTime = null
+                                service.queueEngine.clearRestoredFlag()
+                                requestAudioFocus()
+                                player?.play()
+                            }
+                        }
+                        "previous" -> {
+                            if (service.isQueueEngineActive) {
+                                val currentTime =
+                                    player?.currentPosition?.div(1000.0) ?: 0.0
+                                service.queueEngine.skipToPrevious(currentTime)
+                            }
+                        }
+                        "next" -> {
+                            if (service.isQueueEngineActive) {
+                                service.queueEngine.skipToNext()
+                            }
+                        }
+                        "seek" -> {
+                            if (!seekPosition.isNaN()) {
+                                val position = seekPosition.coerceAtLeast(0.0)
+                                player?.seekTo((position * 1000).toLong())
+                                service.persistence.updateProgress(position)
+                                service.persistence.flushNow()
+                            }
+                        }
+                    }
+                }
+            } catch (error: Throwable) {
+                NativeLogger.warn(
+                    "Failed to execute native remote command: ${error.message}",
+                    "audio-plugin",
+                )
+            }
+        }
+        return true
     }
 
     private fun bindPlaybackService() {
@@ -1800,10 +1890,5 @@ class AudioPlugin : Plugin() {
                 call.reject("Playback service is not ready (timeout)")
             }
         }
-    }
-
-    companion object {
-        @JvmStatic
-        var isVolumeHUDDisabled: Boolean = false
     }
 }

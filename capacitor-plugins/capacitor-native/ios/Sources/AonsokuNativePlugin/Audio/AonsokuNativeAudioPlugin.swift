@@ -6,6 +6,15 @@ import UIKit
 
 @objc(AonsokuNativeAudioPlugin)
 public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
+    private static weak var activeInstance: AonsokuNativeAudioPlugin?
+
+    internal static func executeRemoteControlCommandFromActive(_ command: [String: Any]) -> Bool {
+        guard let instance = activeInstance else {
+            return false
+        }
+        return instance.executeRemoteControlCommand(command)
+    }
+
     public let identifier = "AonsokuNativeAudioPlugin"
     public let jsName = "AonsokuNativeAudio"
     public let pluginMethods: [CAPPluginMethod] = [
@@ -126,6 +135,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
 
     public override func load() {
         super.load()
+        Self.activeInstance = self
         queueEngine.delegate = self
         downloadManager.delegate = self
         recoveryController.delegate = self
@@ -144,11 +154,121 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     deinit {
+        if Self.activeInstance === self {
+            Self.activeInstance = nil
+        }
         unregisterRemoteCommands()
         removeLifecycleObservers()
         clearPlayer(sendIdleEvent: false, deactivateSession: true)
         volumeObservation?.invalidate()
         volumeSliderView?.removeFromSuperview()
+    }
+
+    private func executeRemoteControlCommand(_ command: [String: Any]) -> Bool {
+        guard let type = command["type"] as? String else {
+            return false
+        }
+
+        switch type {
+        case "play", "pause", "toggle_play_pause", "previous", "next", "seek":
+            break
+        default:
+            return false
+        }
+
+        DispatchQueue.main.async {
+            switch type {
+            case "play":
+                do {
+                    try self.activateAudioSession()
+                    if self.player == nil,
+                       self.isQueueEngineActive,
+                       let song = self.queueEngine.currentSong {
+                        let startTime = self.savedRestoreTime
+                        self.savedRestoreTime = nil
+                        self.queueEngine.clearRestoredFlag()
+                        self.stateQueue.async {
+                            self.queueEngine.delegate?.queueEngine(
+                                self.queueEngine,
+                                loadSong: song,
+                                autoplay: true,
+                                startTime: startTime
+                            )
+                        }
+                    } else if self.isPlayerAtEnd {
+                        self.seekToStartAndPlay()
+                    } else {
+                        self.player?.play()
+                    }
+                    self.recoveryController.startProgressMonitoring(
+                        generation: self.playbackGeneration,
+                        sourceKind: self.recoverySourceKind()
+                    )
+                } catch {
+                    self.emitError(
+                        code: "remote_command_failed",
+                        message: error.localizedDescription
+                    )
+                }
+            case "pause":
+                self.recoveryController.reportUserPause()
+                self.player?.pause()
+                self.persistence.flushNow()
+            case "toggle_play_pause":
+                if self.player?.timeControlStatus == .playing {
+                    self.recoveryController.reportUserPause()
+                    self.player?.pause()
+                    self.persistence.flushNow()
+                } else {
+                    do {
+                        try self.activateAudioSession()
+                        if self.isPlayerAtEnd {
+                            self.seekToStartAndPlay()
+                        } else {
+                            self.player?.play()
+                        }
+                    } catch {
+                        self.emitError(
+                            code: "remote_command_failed",
+                            message: error.localizedDescription
+                        )
+                    }
+                }
+            case "previous":
+                if self.isQueueEngineActive {
+                    self.isQueueTransitioning = true
+                    let currentTime = self.player?.currentTime().seconds ?? 0
+                    self.stateQueue.async {
+                        self.queueEngine.skipToPrevious(currentTime: currentTime)
+                    }
+                }
+            case "next":
+                if self.isQueueEngineActive {
+                    self.isQueueTransitioning = true
+                    self.stateQueue.async {
+                        self.queueEngine.skipToNext()
+                    }
+                }
+            case "seek":
+                let seconds = max(0, self.numberValue(command["seconds"]) ?? 0)
+                self.isSeeking = true
+                self.player?.seek(
+                    to: self.makeTime(seconds),
+                    toleranceBefore: .zero,
+                    toleranceAfter: .zero
+                ) { [weak self] _ in
+                    self?.isSeeking = false
+                    self?.emitProgress()
+                    self?.updateNowPlayingPlaybackInfo()
+                    self?.persistence.updateProgress(seconds)
+                    self?.persistence.flushNow()
+                }
+            default:
+                break
+            }
+        }
+
+        return true
     }
 
     @objc func load(_ call: CAPPluginCall) {
