@@ -28,13 +28,12 @@ export const FullscreenSongArtwork = memo(function FullscreenSongArtwork({
   return (
     <div
       className={clsx(
-        "relative aspect-square shrink bg-foreground/5 rounded-md overflow-hidden flex items-center justify-center transition-all duration-300 ease-in-out",
+        "relative aspect-square h-auto flex-none bg-foreground/5 rounded-md overflow-hidden flex items-center justify-center transition-all duration-300 ease-in-out",
         compact
-          ? "h-[min(260px,42svh,calc(100vw-2rem))]"
+          ? "w-[min(260px,42svh,calc(100vw-2rem),100%)]"
           : large
-            ? "h-[min(480px,85vw,60svh)]"
-            : "h-[clamp(280px,85vw,480px)]",
-        "w-auto max-w-full max-h-full",
+            ? "w-[min(480px,85vw,60svh,100%)]"
+            : "w-[min(clamp(280px,85vw,480px),100%)]",
       )}
     >
       {showTouchDragSurface && (
