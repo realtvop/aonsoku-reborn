@@ -180,7 +180,9 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
              "set_repeat",
              "set_volume",
              "play_song",
-             "play_at_index":
+             "play_at_index",
+             "add_to_queue_next",
+             "add_to_queue_last":
             break
         default:
             return false
@@ -194,10 +196,19 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             return true
         }
 
-        if type == "play_at_index" {
-            let ids = command["song_ids"] as? [String] ?? []
+        if type == "play_at_index" ||
+            type == "add_to_queue_next" ||
+            type == "add_to_queue_last" {
+            let ids = stringArray(command["song_ids"])
             guard !ids.isEmpty else {
                 return false
+            }
+            if type == "add_to_queue_next" || type == "add_to_queue_last" {
+                addSongIdsToQueue(
+                    ids: ids,
+                    position: type == "add_to_queue_next" ? "next" : "last"
+                )
+                return true
             }
             let index = command["index"] as? Int ?? 0
             playSongIdsAtIndex(ids: ids, index: index)
@@ -325,13 +336,34 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         playSongIdsAtIndex(ids: [id], index: 0)
     }
 
+    private func addSongIdsToQueue(ids: [String], position: String) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let songs = try self.loadQueueSongs(ids: ids)
+                guard !songs.isEmpty else {
+                    return
+                }
+
+                self.stateQueue.async {
+                    self.queueEngine.addToUserQueue(
+                        songs: songs,
+                        position: position
+                    )
+                    self.persistence.markStateDirty()
+                }
+            } catch {
+                NativeLogger.shared.warn(
+                    "Failed to execute native add_to_queue: \(error.localizedDescription)",
+                    source: "Audio"
+                )
+            }
+        }
+    }
+
     private func playSongIdsAtIndex(ids: [String], index: Int) {
         DispatchQueue.global(qos: .userInitiated).async {
             do {
-                let repo = SongRepository(db: DatabaseManager.shared.dbPool)
-                let records = try repo.getByIds(ids: ids)
-                let byId = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0) })
-                let songs = ids.compactMap { byId[$0]?.toQueueSong() }
+                let songs = try self.loadQueueSongs(ids: ids)
                 guard !songs.isEmpty else {
                     return
                 }
@@ -356,6 +388,17 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
                 )
             }
         }
+    }
+
+    private func loadQueueSongs(ids: [String]) throws -> [QueueSong] {
+        let repo = SongRepository(db: DatabaseManager.shared.dbPool)
+        let records = try repo.getByIds(ids: ids)
+        let byId = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0) })
+        return ids.compactMap { byId[$0]?.toQueueSong() }
+    }
+
+    private func stringArray(_ value: Any?) -> [String] {
+        (value as? [String] ?? []).filter { !$0.isEmpty }
     }
 
     private func setSystemVolumeValue(_ value: Double) {

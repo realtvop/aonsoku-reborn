@@ -320,7 +320,9 @@ class AudioPlugin : Plugin() {
             type != "set_repeat" &&
             type != "set_volume" &&
             type != "play_song" &&
-            type != "play_at_index"
+            type != "play_at_index" &&
+            type != "add_to_queue_next" &&
+            type != "add_to_queue_last"
         ) {
             return false
         }
@@ -334,14 +336,13 @@ class AudioPlugin : Plugin() {
             return true
         }
 
-        if (type == "play_at_index") {
-            val songIds = command.optJSONArray("song_ids") ?: return false
-            val ids = mutableListOf<String>()
-            for (i in 0 until songIds.length()) {
-                val id = songIds.optString(i, "")
-                if (id.isNotEmpty()) ids.add(id)
-            }
+        if (type == "play_at_index" || type == "add_to_queue_next" || type == "add_to_queue_last") {
+            val ids = command.optStringArray("song_ids")
             if (ids.isEmpty()) return false
+            if (type == "add_to_queue_next" || type == "add_to_queue_last") {
+                addSongIdsToQueue(ids, if (type == "add_to_queue_next") "next" else "last")
+                return true
+            }
             playSongIdsAtIndex(ids, command.optInt("index", 0))
             return true
         }
@@ -421,14 +422,29 @@ class AudioPlugin : Plugin() {
         playSongIdsAtIndex(listOf(id), 0)
     }
 
+    private fun addSongIdsToQueue(ids: List<String>, position: String) {
+        pluginScope.launch {
+            try {
+                val songs = loadQueueSongs(ids)
+                if (songs.isEmpty()) return@launch
+
+                mainHandler.post {
+                    val service = playbackService ?: return@post
+                    service.addToUserQueue(songs, position)
+                }
+            } catch (error: Throwable) {
+                NativeLogger.warn(
+                    "Failed to execute native add_to_queue: ${error.message}",
+                    "audio-plugin",
+                )
+            }
+        }
+    }
+
     private fun playSongIdsAtIndex(ids: List<String>, index: Int) {
         pluginScope.launch {
             try {
-                val records = withContext(Dispatchers.IO) {
-                    db.songDao().getByIds(ids)
-                }
-                val byId = records.associateBy { it.id }
-                val songs = ids.mapNotNull { byId[it]?.toQueueSong() }
+                val songs = loadQueueSongs(ids)
                 if (songs.isEmpty()) return@launch
                 val clampedIndex = index.coerceIn(0, songs.size - 1)
 
@@ -450,6 +466,24 @@ class AudioPlugin : Plugin() {
                 )
             }
         }
+    }
+
+    private suspend fun loadQueueSongs(ids: List<String>): List<QueueSong> {
+        val records = withContext(Dispatchers.IO) {
+            db.songDao().getByIds(ids)
+        }
+        val byId = records.associateBy { it.id }
+        return ids.mapNotNull { byId[it]?.toQueueSong() }
+    }
+
+    private fun JSONObject.optStringArray(name: String): List<String> {
+        val array = optJSONArray(name) ?: return emptyList()
+        val values = mutableListOf<String>()
+        for (i in 0 until array.length()) {
+            val id = array.optString(i, "")
+            if (id.isNotEmpty()) values.add(id)
+        }
+        return values
     }
 
     private fun SongEntity.toQueueSong(): QueueSong {
