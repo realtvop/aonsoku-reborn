@@ -182,8 +182,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
              "play_song",
              "play_at_index",
              "add_to_queue_next",
-             "add_to_queue_last",
-             "clear_queue":
+             "add_to_queue_last":
             break
         default:
             return false
@@ -213,11 +212,6 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             }
             let index = command["index"] as? Int ?? 0
             playSongIdsAtIndex(ids: ids, index: index)
-            return true
-        }
-
-        if type == "clear_queue" {
-            clearRemoteUserQueue()
             return true
         }
 
@@ -336,13 +330,6 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         return true
-    }
-
-    private func clearRemoteUserQueue() {
-        stateQueue.async {
-            self.queueEngine.clearUserQueue()
-            self.persistence.markStateDirty()
-        }
     }
 
     private func playSongById(_ id: String) {

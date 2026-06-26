@@ -322,8 +322,7 @@ class AudioPlugin : Plugin() {
             type != "play_song" &&
             type != "play_at_index" &&
             type != "add_to_queue_next" &&
-            type != "add_to_queue_last" &&
-            type != "clear_queue"
+            type != "add_to_queue_last"
         ) {
             return false
         }
@@ -345,11 +344,6 @@ class AudioPlugin : Plugin() {
                 return true
             }
             playSongIdsAtIndex(ids, command.optInt("index", 0))
-            return true
-        }
-
-        if (type == "clear_queue") {
-            clearRemoteUserQueue()
             return true
         }
 
@@ -422,22 +416,6 @@ class AudioPlugin : Plugin() {
             }
         }
         return true
-    }
-
-    private fun clearRemoteUserQueue() {
-        pluginScope.launch {
-            try {
-                val service = awaitService()
-                mainHandler.post {
-                    service.clearUserQueue()
-                }
-            } catch (error: Throwable) {
-                NativeLogger.warn(
-                    "Failed to execute native clear_queue: ${error.message}",
-                    "audio-plugin",
-                )
-            }
-        }
     }
 
     private fun playSongById(id: String) {
