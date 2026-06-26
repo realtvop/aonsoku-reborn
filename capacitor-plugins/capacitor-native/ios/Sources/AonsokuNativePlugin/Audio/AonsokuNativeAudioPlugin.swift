@@ -15,6 +15,10 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         return instance.executeRemoteControlCommand(command)
     }
 
+    internal static func getFullStateFromActive() -> [String: Any]? {
+        activeInstance?.currentFullState()
+    }
+
     internal static func isSupportedRemoteControlCommand(_ type: String) -> Bool {
         [
             "play",
@@ -1188,17 +1192,20 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func getFullState(_ call: CAPPluginCall) {
         stateQueue.async {
-            let currentTime = self.seconds(from: self.player?.currentTime() ?? .zero)
-            let duration = self.durationSeconds()
-            let isPlaying = self.player?.timeControlStatus == .playing
-
-            let state = self.queueEngine.getFullState(
-                currentTime: currentTime,
-                duration: duration,
-                isPlaying: isPlaying
-            )
-            call.resolve(state)
+            call.resolve(self.currentFullState() ?? [:])
         }
+    }
+
+    private func currentFullState() -> [String: Any]? {
+        let currentTime = self.seconds(from: self.player?.currentTime() ?? .zero)
+        let duration = self.durationSeconds()
+        let isPlaying = self.player?.timeControlStatus == .playing
+
+        return self.queueEngine.getFullState(
+            currentTime: currentTime,
+            duration: duration,
+            isPlaying: isPlaying
+        )
     }
 
     @objc func resolveSongs(_ call: CAPPluginCall) {
@@ -3150,6 +3157,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             "state": state,
         ], requestId: requestId))
         updateNowPlayingPlaybackInfo()
+        AonsokuNativeCoordinationPlugin.publishSnapshotFromActiveAudioState()
     }
 
     private func emitProgress(requestId: String? = nil) {
@@ -3815,6 +3823,7 @@ extension AonsokuNativeAudioPlugin: NativeQueueEngineDelegate {
             "reason": reason.rawValue,
             "isInUserQueue": engine.isInUserQueue,
         ])
+        AonsokuNativeCoordinationPlugin.publishSnapshotFromActiveAudioState()
     }
 
     func queueEngine(_ engine: NativeQueueEngine, didChangeContents reason: String) {
@@ -3822,6 +3831,7 @@ extension AonsokuNativeAudioPlugin: NativeQueueEngineDelegate {
         notifyListeners("queueContentsChanged", data: [
             "reason": reason,
         ])
+        AonsokuNativeCoordinationPlugin.publishSnapshotFromActiveAudioState()
     }
 
     func queueEngineDidExhaustQueue(_ engine: NativeQueueEngine) {

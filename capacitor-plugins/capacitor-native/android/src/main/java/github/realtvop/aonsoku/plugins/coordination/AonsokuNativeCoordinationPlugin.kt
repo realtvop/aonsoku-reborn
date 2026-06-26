@@ -254,6 +254,11 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
                 ?.sendCommandFromNative(targetDeviceId, expectedGeneration, command)
                 ?: false
         }
+
+        @JvmStatic
+        fun publishSnapshotFromActiveAudioState(): Boolean {
+            return activeInstance?.publishNativePlaybackSnapshot() ?: false
+        }
     }
 
     /// Holds the live coordination socket plus its heartbeat scheduling and
@@ -276,6 +281,9 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     private var protocolVersion: Int = 1
     private var isConnecting: Boolean = false
     private var reconnectAttempts: Int = 0
+    private var nativeSessionId: String = java.util.UUID.randomUUID().toString()
+    private var nativeGeneration: Int = 1
+    private var nativeSnapshotRevision: Int = 0
     /// §9.1 dedup cache for incoming envelopes.
     internal var dedupCache: CoordinationDedup = CoordinationDedup(DEDUP_CACHE_MAX)
         private set
@@ -780,6 +788,28 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
 
     private fun sendEnvelope(env: JSONObject) {
         webSocket?.send(env.toString())
+    }
+
+    private fun publishNativePlaybackSnapshot(): Boolean {
+        if (webSocket == null) return false
+        val audioState = AudioPlugin.getFullStateFromActive() ?: return false
+        val snapshot = buildPlaybackSnapshot(
+            sessionId = nativeSessionId,
+            audioState = audioState,
+            sampledAtSeconds = System.currentTimeMillis() / 1000.0,
+        ) ?: return false
+
+        nativeSnapshotRevision += 1
+        val env = JSONObject()
+        env.put("version", protocolVersion)
+        env.put("messageId", java.util.UUID.randomUUID().toString())
+        env.put("type", "snapshot")
+        env.put("sessionId", nativeSessionId)
+        env.put("generation", nativeGeneration)
+        env.put("snapshotRevision", nativeSnapshotRevision)
+        env.put("snapshot", snapshot)
+        sendEnvelope(env)
+        return true
     }
 
     private fun sendCommandFromNative(

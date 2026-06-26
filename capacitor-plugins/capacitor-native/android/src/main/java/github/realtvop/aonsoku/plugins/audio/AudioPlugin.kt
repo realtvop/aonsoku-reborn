@@ -69,6 +69,11 @@ class AudioPlugin : Plugin() {
             return activeInstance?.executeRemoteControlCommand(command) ?: false
         }
 
+        @JvmStatic
+        fun getFullStateFromActive(): JSONObject? {
+            return activeInstance?.getCurrentFullState()
+        }
+
         internal fun isSupportedRemoteControlCommand(type: String): Boolean {
             return type == "play" ||
                 type == "pause" ||
@@ -209,6 +214,7 @@ class AudioPlugin : Plugin() {
                 put("isInUserQueue", isInUserQueue)
             }
             notifyListeners("queueStateChanged", data)
+            AonsokuNativeCoordinationPlugin.publishSnapshotFromActiveAudioState()
         }
 
         override fun onQueueContentsChanged(reason: String) {
@@ -216,6 +222,7 @@ class AudioPlugin : Plugin() {
                 put("reason", reason)
             }
             notifyListeners("queueContentsChanged", data)
+            AonsokuNativeCoordinationPlugin.publishSnapshotFromActiveAudioState()
         }
 
         override fun onPlaybackStateChanged(state: String) {
@@ -459,6 +466,19 @@ class AudioPlugin : Plugin() {
             }
         }
         return true
+    }
+
+    private fun getCurrentFullState(): JSONObject? {
+        val service = playbackService ?: return null
+        val player = service.getPlayer()
+        val currentTime = player?.currentPosition?.div(1000.0) ?: 0.0
+        val duration = if (player != null && player.duration != C.TIME_UNSET) {
+            player.duration / 1000.0
+        } else {
+            0.0
+        }
+        val isPlaying = player?.isPlaying ?: false
+        return service.queueEngine.getFullState(currentTime, duration, isPlaying)
     }
 
     private fun toggleLikeForSong(songId: String) {
@@ -1049,6 +1069,7 @@ class AudioPlugin : Plugin() {
             put("requestId", requestId ?: JSONObject.NULL)
         }
         notifyListeners("playbackStateChanged", data)
+        AonsokuNativeCoordinationPlugin.publishSnapshotFromActiveAudioState()
     }
 
     private fun emitRemoteCommand(command: String, position: Double? = null) {

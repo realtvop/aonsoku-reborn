@@ -51,6 +51,10 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         )
     }
 
+    internal static func publishSnapshotFromActiveAudioState() -> Bool {
+        activeInstance?.publishNativePlaybackSnapshot() ?? false
+    }
+
     internal static func buildPlaybackSnapshot(
         sessionId: String,
         audioState: [String: Any],
@@ -140,6 +144,9 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     private var protocolVersion: Int = 1
     private var currentTicket: String?
     private var connectLastSeq: Int = 0
+    private var nativeSessionId = UUID().uuidString
+    private var nativeGeneration = 1
+    private var nativeSnapshotRevision = 0
     private var heartbeatTimer: Timer?
     private var reconnectWorkItem: DispatchWorkItem?
     private var keychainService = "aonsoku-coordination"
@@ -771,6 +778,30 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         guard let data = try? JSONSerialization.data(withJSONObject: env),
               let string = String(data: data, encoding: .utf8) else { return }
         self.webSocketTask?.send(.string(string)) { _ in }
+    }
+
+    private func publishNativePlaybackSnapshot() -> Bool {
+        guard self.webSocketTask != nil,
+              let audioState = AonsokuNativeAudioPlugin.getFullStateFromActive(),
+              let snapshot = Self.buildPlaybackSnapshot(
+                sessionId: nativeSessionId,
+                audioState: audioState,
+                sampledAtSeconds: Date().timeIntervalSince1970
+              ) else {
+            return false
+        }
+
+        nativeSnapshotRevision += 1
+        sendEnvelope([
+            "version": protocolVersion,
+            "messageId": UUID().uuidString,
+            "type": "snapshot",
+            "sessionId": nativeSessionId,
+            "generation": nativeGeneration,
+            "snapshotRevision": nativeSnapshotRevision,
+            "snapshot": snapshot,
+        ])
+        return true
     }
 
     private func sendCommandFromNative(
