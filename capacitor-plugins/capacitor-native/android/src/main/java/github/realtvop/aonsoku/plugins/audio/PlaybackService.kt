@@ -213,6 +213,7 @@ class PlaybackService : MediaSessionService() {
 
     interface Listener {
         fun onRemoteCommand(command: String, position: Double?)
+        fun onRemoteControlCommand(command: JSONObject)
         fun onQueueStateChanged(currentIndex: Int, songId: String, reason: String, isInUserQueue: Boolean)
         fun onQueueContentsChanged(reason: String)
         fun onPlaybackStateChanged(state: String)
@@ -234,7 +235,33 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun emitRemoteCommand(command: String, position: Double? = null) {
+        buildRemoteControlCommand(command, position)?.let { remoteCommand ->
+            listeners.forEach { it.onRemoteControlCommand(remoteCommand) }
+        }
         listeners.forEach { it.onRemoteCommand(command, position) }
+    }
+
+    private fun buildRemoteControlCommand(command: String, position: Double?): JSONObject? {
+        if (!isRemotePlaybackProjectionActive) return null
+
+        return when (command) {
+            "play" -> JSONObject().put("type", "play")
+            "pause" -> JSONObject().put("type", "pause")
+            "togglePlayPause" -> JSONObject().put("type", "toggle_play_pause")
+            "next" -> JSONObject().put("type", "next")
+            "previous" -> JSONObject().put("type", "previous")
+            "seek" -> {
+                val seconds = position ?: return null
+                JSONObject()
+                    .put("type", "seek")
+                    .put("seconds", seconds.coerceAtLeast(0.0))
+            }
+            "shuffle" -> JSONObject()
+                .put("type", "set_shuffle")
+                .put("enabled", !remotePlaybackIsShuffleActive)
+            "like" -> JSONObject().put("type", "toggle_like")
+            else -> null
+        }
     }
 
     private fun emitQueueStateChanged(currentIndex: Int, songId: String, reason: String, isInUserQueue: Boolean) {

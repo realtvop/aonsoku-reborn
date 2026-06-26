@@ -2846,7 +2846,49 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             data["position"] = position
         }
 
+        if let remoteControlCommand = buildRemoteControlCommand(command, position: position) {
+            notifyListeners("remoteControlCommand", data: eventData([
+                "command": remoteControlCommand,
+            ]))
+        }
+
         notifyListeners("remoteCommand", data: data)
+    }
+
+    private func buildRemoteControlCommand(_ command: String, position: Double?) -> JSObject? {
+        guard let projection = remotePlaybackProjection else {
+            return nil
+        }
+
+        switch command {
+        case "play":
+            return ["type": "play"]
+        case "pause":
+            return ["type": "pause"]
+        case "togglePlayPause":
+            return ["type": "toggle_play_pause"]
+        case "next":
+            return ["type": "next"]
+        case "previous":
+            return ["type": "previous"]
+        case "seek":
+            guard let position else {
+                return nil
+            }
+            return [
+                "type": "seek",
+                "seconds": max(0, position),
+            ]
+        case "shuffle":
+            return [
+                "type": "set_shuffle",
+                "enabled": !projection.isShuffleActive,
+            ]
+        case "like":
+            return ["type": "toggle_like"]
+        default:
+            return nil
+        }
     }
 
     private func eventData(_ data: JSObject, requestId: String? = nil) -> JSObject {

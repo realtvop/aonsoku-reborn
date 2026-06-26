@@ -156,6 +156,10 @@ class AudioPlugin : Plugin() {
             emitRemoteCommand(command, position)
         }
 
+        override fun onRemoteControlCommand(command: JSONObject) {
+            emitRemoteControlCommand(command)
+        }
+
         override fun onQueueStateChanged(currentIndex: Int, songId: String, reason: String, isInUserQueue: Boolean) {
             val data = JSObject().apply {
                 put("currentIndex", currentIndex)
@@ -678,6 +682,14 @@ class AudioPlugin : Plugin() {
             put("requestId", currentRequestId ?: JSONObject.NULL)
         }
         notifyListeners("remoteCommand", data)
+    }
+
+    private fun emitRemoteControlCommand(command: JSONObject) {
+        val data = JSObject().apply {
+            put("command", command)
+            put("requestId", currentRequestId ?: JSONObject.NULL)
+        }
+        notifyListeners("remoteControlCommand", data)
     }
 
     private fun checkAndRequestNotificationPermission(call: PluginCall, onDone: () -> Unit) {

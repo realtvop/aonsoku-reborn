@@ -279,6 +279,11 @@ export interface NativeAudioRemoteCommandEvent {
   position?: number;
 }
 
+export interface NativeRemoteControlCommandEvent {
+  requestId?: string;
+  command: Record<string, unknown> & { type: string };
+}
+
 export interface NativeAudioInterruptionChangedEvent {
   requestId?: string;
   type: "began" | "ended";
@@ -358,6 +363,7 @@ export interface NativeAudioEvents {
   ended: NativeAudioEndedEvent;
   error: NativeAudioErrorEvent;
   remoteCommand: NativeAudioRemoteCommandEvent;
+  remoteControlCommand: NativeRemoteControlCommandEvent;
   interruptionChanged: NativeAudioInterruptionChangedEvent;
   routeChanged: NativeAudioRouteChangedEvent;
   queueStateChanged: NativeAudioQueueStateChangedEvent;
