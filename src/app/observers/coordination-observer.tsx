@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import { projectPlaybackProgress } from "@/coordination/progress";
 import { useCoordinationStore } from "@/coordination/store";
 import type { PlaybackSnapshot, RemoteCommand } from "@/coordination/types";
+import { isNativeCoordinationAvailable } from "@/native/coordination";
 import { seekPlaybackTarget } from "@/player/playback/backend-registry";
 import { getNativeQueueController } from "@/player/queue-controller";
 import {
@@ -286,6 +287,7 @@ async function prepareNativeHandoffPlayback(
 }
 
 export function CoordinationObserver() {
+  const nativeCoordinationAvailable = isNativeCoordinationAvailable();
   const isConnected = useCoordinationStore((state) => state.isConnected);
   const loadState = useCoordinationStore((state) => state.loadState);
   const manager = useCoordinationStore((state) => state.manager);
@@ -311,6 +313,7 @@ export function CoordinationObserver() {
   const snapshotRevisionRef = useRef<number>(0);
 
   const publishCurrentSnapshot = useCallback(() => {
+    if (nativeCoordinationAvailable) return;
     if (!isConnected || !currentSong) return;
     if (usePlayerStore.getState().remoteControl.active) return;
 
@@ -343,6 +346,7 @@ export function CoordinationObserver() {
     volume,
     manager,
     setLocalDeviceSnapshot,
+    nativeCoordinationAvailable,
   ]);
 
   // Load coordination state and auto-connect on mount
@@ -393,6 +397,7 @@ export function CoordinationObserver() {
 
   // Handle remote commands from other devices (design §10).
   useEffect(() => {
+    if (nativeCoordinationAvailable) return;
     if (!isConnected) return;
     const original = manager.callbacks.onRemoteCommand;
     manager.callbacks.onRemoteCommand = (
@@ -606,7 +611,13 @@ export function CoordinationObserver() {
     return () => {
       manager.callbacks.onRemoteCommand = original;
     };
-  }, [isConnected, manager, playerActions, shuffleEnabled]);
+  }, [
+    isConnected,
+    manager,
+    nativeCoordinationAvailable,
+    playerActions,
+    shuffleEnabled,
+  ]);
 
   // Handle prepare_relinquish: pause the local player (design §11.1 step 4-5).
   useEffect(() => {
