@@ -455,16 +455,22 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         }
         // §9.1: the caller may supply a messageId to match the command to a
         // pending-ack promise. Fall back to a generated UUID.
-        let messageId = call.getString("messageId") ?? UUID().uuidString
-        let env: [String: Any] = [
-            "version": self.protocolVersion,
-            "messageId": messageId,
-            "type": "command",
-            "targetDeviceId": targetDeviceId,
-            "expectedGeneration": call.getInt("expectedGeneration") ?? 0,
-            "command": JSONUtilities.parse(commandJson) ?? [:],
-        ]
-        sendEnvelope(env)
+        let suppliedMessageId = call.getString("messageId")
+        let messageId = suppliedMessageId ?? UUID().uuidString
+        let command = JSONUtilities.parse(commandJson) ?? [:]
+        if suppliedMessageId == nil {
+            pendingNativeCommands[messageId] = PendingNativeCommand(
+                targetDeviceId: targetDeviceId,
+                command: command,
+                attemptedStaleRetry: false
+            )
+        }
+        sendCommandEnvelope(
+            messageId: messageId,
+            targetDeviceId: targetDeviceId,
+            expectedGeneration: call.getInt("expectedGeneration") ?? 0,
+            command: command
+        )
         call.resolve()
     }
 

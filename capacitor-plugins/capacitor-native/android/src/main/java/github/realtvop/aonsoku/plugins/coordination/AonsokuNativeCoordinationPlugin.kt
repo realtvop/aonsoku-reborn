@@ -652,15 +652,21 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         val parsed = parseJsonObject(commandJson) ?: return call.reject("invalid commandJson")
         // §9.1: the caller may supply a messageId to match the command to a
         // pending-ack promise. Fall back to a generated UUID.
-        val messageId = call.getString("messageId") ?: java.util.UUID.randomUUID().toString()
-        val env = JSONObject()
-        env.put("version", protocolVersion)
-        env.put("messageId", messageId)
-        env.put("type", "command")
-        env.put("targetDeviceId", targetDeviceId)
-        env.put("expectedGeneration", call.getInt("expectedGeneration", 0) ?: 0)
-        env.put("command", parsed)
-        sendEnvelope(env)
+        val suppliedMessageId = call.getString("messageId")
+        val messageId = suppliedMessageId ?: java.util.UUID.randomUUID().toString()
+        if (suppliedMessageId == null) {
+            pendingNativeCommands[messageId] = PendingNativeCommand(
+                targetDeviceId,
+                parsed.toString(),
+                attemptedStaleRetry = false,
+            )
+        }
+        sendCommandEnvelope(
+            messageId,
+            targetDeviceId,
+            call.getInt("expectedGeneration", 0) ?: 0,
+            parsed,
+        )
         call.resolve()
     }
 
