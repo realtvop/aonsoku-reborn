@@ -2,7 +2,6 @@
 // Handles connection lifecycle, reconnection with exponential backoff,
 // heartbeat, snapshot publish/subscribe, and remote command routing.
 
-import { COORDINATION_PROTOCOL_VERSION, CoordinationCapability } from "./types";
 import type {
   CommandResult,
   ConnectionId,
@@ -17,6 +16,7 @@ import type {
   SessionId,
   SnapshotRevision,
 } from "./types";
+import { COORDINATION_PROTOCOL_VERSION, CoordinationCapability } from "./types";
 
 export type ConnectionState =
   | "disconnected"
@@ -89,6 +89,7 @@ export interface CoordinationClient {
     command: RemoteCommand,
     options: SendCommandOptions,
   ): Promise<CommandResult>;
+  sendActiveControlCommand?(command: RemoteCommand): void;
   requestHandoffCandidate(
     sourceDeviceId: DeviceId,
     expectedGeneration: SessionGeneration,
@@ -126,6 +127,7 @@ export interface CoordinationClient {
     expectedGeneration: SessionGeneration,
     command: RemoteCommand,
   ): void;
+  sendActiveControlCommand?(command: RemoteCommand): void;
   requestHandoffCandidate(
     sourceDeviceId: DeviceId,
     expectedGeneration: SessionGeneration,

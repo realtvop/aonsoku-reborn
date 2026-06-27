@@ -11,6 +11,7 @@ import type {
   DeviceId,
   HandoffPhase,
 } from "@/coordination/types";
+import { isNativeCoordinationAvailable } from "@/native/coordination";
 import { usePlayerActions, usePlayerStore } from "@/store/player.store";
 import { getHandoffErrorMessage } from "./handoff-error-message";
 import type { DevicePlaybackModel } from "./types";
@@ -232,6 +233,11 @@ export function useDevicePlaybackActions(): DevicePlaybackActions {
               };
             });
             if (!command) return;
+
+            if (isNativeCoordinationAvailable()) {
+              coordinationState.manager.sendActiveControlCommand(command);
+              return;
+            }
 
             if (!snapshotData) return;
             coordinationState.manager.sendCommand(

@@ -673,6 +673,17 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun sendActiveControlCommand(call: PluginCall) {
+        val commandJson = call.getString("commandJson") ?: return call.reject("missing commandJson")
+        val targetDeviceId = activeRemoteControlTargetDeviceId ?: return call.reject("missing active target")
+        val parsed = parseJsonObject(commandJson) ?: return call.reject("invalid commandJson")
+        if (!sendCommandFromActive(targetDeviceId, deviceGenerations[targetDeviceId], parsed)) {
+            return call.reject("native coordination is not connected")
+        }
+        call.resolve()
+    }
+
+    @PluginMethod
     fun sendControlSessionBegin(call: PluginCall) {
         val targetDeviceId = call.getString("targetDeviceId") ?: return call.reject("missing targetDeviceId")
         activeRemoteControlTargetDeviceId = targetDeviceId

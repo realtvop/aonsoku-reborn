@@ -1,16 +1,16 @@
+import type { AonsokuNativeCoordinationPlugin } from "@aonsoku/capacitor-native/coordination";
+import type { PluginListenerHandle } from "@capacitor/core";
 import { Capacitor } from "@capacitor/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Envelope, PlaybackSnapshot } from "@/coordination/types";
+import type { ConnectionCallbacks } from "@/coordination/wsClient";
 import {
+  createNativeCoordinationFetch,
   getNativeCoordinationAvailability,
   isNativeCoordinationAvailable,
   NativeCoordinationClient,
   NativeCoordinationTokenStore,
-  createNativeCoordinationFetch,
 } from "./facade";
-import type { PluginListenerHandle } from "@capacitor/core";
-import type { AonsokuNativeCoordinationPlugin } from "@aonsoku/capacitor-native/coordination";
-import type { ConnectionCallbacks } from "@/coordination/wsClient";
-import type { Envelope, PlaybackSnapshot } from "@/coordination/types";
 
 const mocks = vi.hoisted(() => {
   const mockPlugin = {
@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => {
     getState: vi.fn(),
     publishSnapshot: vi.fn(),
     sendCommand: vi.fn(),
+    sendActiveControlCommand: vi.fn(),
     requestHandoffCandidate: vi.fn(),
     sendTargetReady: vi.fn(),
     sendRelinquishAck: vi.fn(),
@@ -321,6 +322,7 @@ describe("NativeCoordinationClient", () => {
     // All send methods return resolved promises so `.catch()` chains work.
     vi.mocked(mockPlugin.publishSnapshot).mockResolvedValue(undefined);
     vi.mocked(mockPlugin.sendCommand).mockResolvedValue(undefined);
+    vi.mocked(mockPlugin.sendActiveControlCommand).mockResolvedValue(undefined);
     vi.mocked(mockPlugin.requestHandoffCandidate).mockResolvedValue(undefined);
     vi.mocked(mockPlugin.sendTargetReady).mockResolvedValue(undefined);
     vi.mocked(mockPlugin.sendRelinquishAck).mockResolvedValue(undefined);
@@ -373,6 +375,25 @@ describe("NativeCoordinationClient", () => {
     });
     const call = vi.mocked(mockPlugin.sendCommand).mock.calls[0][0];
     expect(JSON.parse(call.commandJson)).toEqual({ type: "play" });
+  });
+
+  it("routes active control commands through the native target cache", async () => {
+    const client = new NativeCoordinationClient(
+      mockPlugin,
+      () => "wss://coord.example/v1/realtime",
+      async () => "ticket-1",
+      "dev-1",
+      15,
+      makeCallbacks(),
+    );
+    await client.connect();
+    client.sendActiveControlCommand({ type: "next" });
+    expect(mockPlugin.sendActiveControlCommand).toHaveBeenCalledWith({
+      commandJson: expect.any(String),
+    });
+    const call = vi.mocked(mockPlugin.sendActiveControlCommand).mock
+      .calls[0][0];
+    expect(JSON.parse(call.commandJson)).toEqual({ type: "next" });
   });
 
   it("routes requestHandoffCandidate, sendTargetReady, sendRelinquishAck", async () => {

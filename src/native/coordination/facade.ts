@@ -489,6 +489,14 @@ export class NativeCoordinationClient implements CoordinationClient {
       .catch(() => {});
   }
 
+  sendActiveControlCommand(command: RemoteCommand): void {
+    this.plugin
+      .sendActiveControlCommand({
+        commandJson: JSON.stringify(command),
+      })
+      .catch(() => {});
+  }
+
   requestHandoffCandidate(
     sourceDeviceId: DeviceId,
     expectedGeneration: SessionGeneration,

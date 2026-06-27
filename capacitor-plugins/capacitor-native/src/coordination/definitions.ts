@@ -60,6 +60,11 @@ export interface CoordinationCommandOptions {
   messageId?: string;
 }
 
+export interface CoordinationActiveCommandOptions {
+  /** JSON-serialized RemoteCommand for the currently controlled target. */
+  commandJson: string;
+}
+
 export interface CoordinationHandoffOptions {
   transactionId: string;
   /** JSON-serialized PlaybackSnapshot for relinquish_ack. */
@@ -140,6 +145,12 @@ export interface AonsokuNativeCoordinationPlugin extends Plugin {
 
   /// Send a remote control command to a target device (design §10).
   sendCommand(options: CoordinationCommandOptions): Promise<void>;
+
+  /// Send a command to the active native control target using the native
+  /// generation cache. Used by mobile UI controls after control_session_begin.
+  sendActiveControlCommand(
+    options: CoordinationActiveCommandOptions,
+  ): Promise<void>;
 
   /// Request a handoff candidate from a source device (design §11.1 step 1).
   requestHandoffCandidate(

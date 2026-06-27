@@ -476,6 +476,27 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         call.resolve()
     }
 
+    @objc func sendActiveControlCommand(_ call: CAPPluginCall) {
+        guard let commandJson = call.getString("commandJson") else {
+            call.reject("missing commandJson")
+            return
+        }
+        guard let targetDeviceId = activeRemoteControlTargetDeviceId else {
+            call.reject("missing active target")
+            return
+        }
+        let command = JSONUtilities.parse(commandJson) ?? [:]
+        guard Self.sendCommandFromActive(
+            targetDeviceId: targetDeviceId,
+            expectedGeneration: deviceGenerations[targetDeviceId],
+            command: command
+        ) else {
+            call.reject("native coordination is not connected")
+            return
+        }
+        call.resolve()
+    }
+
     @objc func sendControlSessionBegin(_ call: CAPPluginCall) {
         guard let targetDeviceId = call.getString("targetDeviceId") else {
             call.reject("missing targetDeviceId")

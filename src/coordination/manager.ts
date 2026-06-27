@@ -5,37 +5,29 @@
 // components and the player store.
 
 import {
-  CoordinationHttpClient,
+  type CoordinationTokenStore,
+  createNativeCoordinationFetch,
+  getNativeCoordinationAvailability,
+  isNativeCoordinationAvailable,
+  NativeCoordinationClient,
+  NativeCoordinationTokenStore,
+} from "@/native/coordination";
+import {
   buildSubsonicProof,
   type CoordinationCredentials,
+  CoordinationHttpClient,
   type CoordinationRecoveryProvider,
   type StoredDeviceTokens,
 } from "./httpClient";
-import {
-  CoordinationWsClient,
-  type CoordinationClient,
-  type ConnectionState,
-  type ConnectionCallbacks,
-  type SendCommandOptions,
-} from "./wsClient";
 import { HistoryOutbox } from "./outbox";
 import {
+  type CoordinationConfig,
   clearTokens as tsClearTokens,
   loadConfig as tsLoadConfig,
   loadTokens as tsLoadTokens,
   saveConfig as tsSaveConfig,
   saveTokens as tsSaveTokens,
-  type CoordinationConfig,
 } from "./tokenStore";
-import { COORDINATION_PROTOCOL_VERSION, CoordinationCapability } from "./types";
-import {
-  NativeCoordinationClient,
-  type CoordinationTokenStore,
-  getNativeCoordinationAvailability,
-  isNativeCoordinationAvailable,
-  NativeCoordinationTokenStore,
-  createNativeCoordinationFetch,
-} from "@/native/coordination";
 import type {
   CommandResult,
   DeviceDto,
@@ -47,6 +39,14 @@ import type {
   SessionGeneration,
   SnapshotRevision,
 } from "./types";
+import { COORDINATION_PROTOCOL_VERSION, CoordinationCapability } from "./types";
+import {
+  type ConnectionCallbacks,
+  type ConnectionState,
+  type CoordinationClient,
+  CoordinationWsClient,
+  type SendCommandOptions,
+} from "./wsClient";
 
 /// TS (web/Electron) token/config store adapter — wraps the `tokenStore.ts`
 /// functions behind the `CoordinationTokenStore` interface so the manager can
@@ -604,6 +604,10 @@ export class CoordinationManager {
       expectedGeneration,
       expectedSnapshotRevision,
     );
+  }
+
+  sendActiveControlCommand(command: RemoteCommand): void {
+    this.coordClient?.sendActiveControlCommand?.(command);
   }
 
   /// Request a fresh snapshot broadcast from the server (§9.2 bootstrap
