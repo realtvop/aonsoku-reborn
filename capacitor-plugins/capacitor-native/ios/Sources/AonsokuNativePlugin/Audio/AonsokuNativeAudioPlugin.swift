@@ -191,6 +191,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
     private var isRecoveryReload = false
     private var bufferMismatchFirstSeen: Date?
     private var isInForeground = true
+    private var nextSnapshotProgressSeconds: Double?
     private let persistence = PlaybackStatePersistence(
         repository: PlaybackStateRepository(db: DatabaseManager.shared.dbPool)
     )
@@ -1009,13 +1010,33 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         targetDeviceId: String,
         expectedGeneration: Int
     ) {
-        DispatchQueue.main.async {
-            let songId = snapshot["songId"] as? String ?? ""
-            let duration = max(
-                0,
-                self.numberValue(snapshot["durationSeconds"]) ?? 0
-            )
-            let metadata = NativeAudioMetadata(
+        let songId = snapshot["songId"] as? String ?? ""
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let song = await self?.loadRemotePlaybackSong(songId: songId)
+            await MainActor.run { [weak self] in
+                self?.applyRemotePlaybackProjection(
+                    snapshot: snapshot,
+                    targetDeviceId: targetDeviceId,
+                    expectedGeneration: expectedGeneration,
+                    song: song
+                )
+            }
+        }
+    }
+
+    private func applyRemotePlaybackProjection(
+        snapshot: [String: Any],
+        targetDeviceId: String,
+        expectedGeneration: Int,
+        song: SongRecord?
+    ) {
+        let songId = snapshot["songId"] as? String ?? ""
+        let duration = max(
+            0,
+            self.numberValue(snapshot["durationSeconds"]) ?? 0
+        )
+        let metadata = song?.remotePlaybackMetadata()
+            ?? NativeAudioMetadata(
                 title: songId.isEmpty ? "Remote playback" : songId,
                 artist: snapshot["sourceName"] as? String,
                 album: nil,
@@ -1023,23 +1044,22 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
                 artworkUrl: nil,
                 coverArtId: nil
             )
-            self.remotePlaybackProjection = NativeRemotePlaybackProjection(
-                metadata: metadata,
-                isPlaying: snapshot["isPlaying"] as? Bool ?? false,
-                position: max(
-                    0,
-                    self.numberValue(snapshot["progressSeconds"]) ?? 0
-                ),
-                duration: duration,
-                isShuffleActive: snapshot["shuffle"] as? Bool ?? false,
-                repeatMode: snapshot["repeat"] as? String ?? "off",
-                volume: self.numberValue(snapshot["volume"]),
-                targetDeviceId: targetDeviceId,
-                expectedGeneration: expectedGeneration
-            )
-            self.currentMetadata = metadata
-            self.updateNowPlayingInfo()
-        }
+        self.remotePlaybackProjection = NativeRemotePlaybackProjection(
+            metadata: metadata,
+            isPlaying: snapshot["isPlaying"] as? Bool ?? false,
+            position: max(
+                0,
+                self.numberValue(snapshot["progressSeconds"]) ?? 0
+            ),
+            duration: duration,
+            isShuffleActive: snapshot["shuffle"] as? Bool ?? false,
+            repeatMode: snapshot["repeat"] as? String ?? "off",
+            volume: self.numberValue(snapshot["volume"]),
+            targetDeviceId: targetDeviceId,
+            expectedGeneration: expectedGeneration
+        )
+        self.currentMetadata = metadata
+        self.updateNowPlayingInfo()
     }
 
     private func clearRemotePlaybackProjection() {
@@ -1365,7 +1385,10 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private func currentFullState() -> [String: Any]? {
-        let currentTime = self.seconds(from: self.player?.currentTime() ?? .zero)
+        let playerCurrentTime = self.seconds(from: self.player?.currentTime() ?? .zero)
+        let currentTime = self.consumeSnapshotProgressSeconds(
+            fallback: playerCurrentTime
+        )
         let duration = self.durationSeconds()
         let isPlaying = self.player?.timeControlStatus == .playing
 
@@ -2139,7 +2162,9 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             commandCenter.togglePlayPauseCommand,
             commandCenter.togglePlayPauseCommand.addTarget { [weak self] _ in
                 guard let self = self else { return .commandFailed }
-                if self.remotePlaybackProjection == nil && self.isQueueEngineActive {
+                if let projection = self.remotePlaybackProjection {
+                    self.emitRemoteCommand(projection.isPlaying ? "pause" : "play")
+                } else if self.isQueueEngineActive {
                     if self.player?.timeControlStatus == .playing {
                         self.recoveryController.reportUserPause()
                         self.player?.pause()
@@ -2156,7 +2181,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
                         )
                     }
                 } else {
-                    self.emitRemoteCommand("togglePlayPause")
+                    self.emitRemoteCommand("play")
                 }
                 return .success
             }
@@ -2363,6 +2388,66 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         default:
             return nil
         }
+    }
+
+    private func intValue(_ value: Any?) -> Int? {
+        switch value {
+        case let value as Int:
+            return value
+        case let value as Double:
+            return Int(value)
+        case let value as NSNumber:
+            return value.intValue
+        case let value as String:
+            return Int(value)
+        default:
+            return nil
+        }
+    }
+
+    private func stringValue(_ value: Any?) -> String? {
+        guard let value else { return nil }
+        if value is NSNull {
+            return nil
+        }
+        if let value = value as? String {
+            return value.isEmpty ? nil : value
+        }
+        return "\(value)"
+    }
+
+    private func jsonString(_ value: Any?) -> String? {
+        guard let value, JSONSerialization.isValidJSONObject(value),
+              let data = try? JSONSerialization.data(withJSONObject: value) else {
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private func epochMilliseconds(_ iso: String?) -> Int? {
+        guard let iso, !iso.isEmpty else { return nil }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: iso) {
+            return Int(date.timeIntervalSince1970 * 1000)
+        }
+        formatter.formatOptions = [.withInternetDateTime]
+        if let date = formatter.date(from: iso) {
+            return Int(date.timeIntervalSince1970 * 1000)
+        }
+        return nil
+    }
+
+    private func consumeSnapshotProgressSeconds(fallback: Double) -> Double {
+        guard let value = nextSnapshotProgressSeconds else {
+            return fallback
+        }
+        nextSnapshotProgressSeconds = nil
+        return value
+    }
+
+    private func forceNextSnapshotProgress(_ seconds: Double) {
+        nextSnapshotProgressSeconds = max(0, seconds)
     }
 
     private func positiveDuration(_ duration: Double?) -> Double? {
@@ -3750,6 +3835,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             guard let self else { return }
             self.isSeeking = false
             self.player?.play()
+            self.forceNextSnapshotProgress(0)
             self.emitProgress()
             self.updateNowPlayingPlaybackInfo()
         }
@@ -3767,7 +3853,89 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             coverArtId = id
         }
         guard let id = coverArtId else { return nil }
-        return "aonsoku-media://getCoverArt?id=\(id)&size=300"
+        return "aonsoku-media://getCoverArt?id=\(id)&size=800"
+    }
+
+    private func loadRemotePlaybackSong(songId: String) async -> SongRecord? {
+        guard !songId.isEmpty else { return nil }
+
+        let repository = SongRepository(db: DatabaseManager.shared.dbPool)
+        if let song = try? repository.getById(songId) {
+            return song
+        }
+
+        guard let song = await fetchRemotePlaybackSong(songId: songId) else {
+            return nil
+        }
+
+        try? repository.upsert(song)
+        return song
+    }
+
+    private func fetchRemotePlaybackSong(songId: String) async -> SongRecord? {
+        guard let credentials = KeychainManager.retrieve() else {
+            return nil
+        }
+
+        do {
+            let response = try await SubsonicHTTPClient().request(
+                baseUrl: credentials.serverUrl,
+                path: "getSong.view",
+                credentials: credentials,
+                extraQuery: ["id": songId]
+            )
+            guard let item = response.data["song"] as? [String: Any] else {
+                return nil
+            }
+            return parseRemotePlaybackSong(item)
+        } catch {
+            NativeLogger.shared.warn(
+                "Failed to fetch remote playback song metadata: \(error.localizedDescription)",
+                source: "Audio"
+            )
+            return nil
+        }
+    }
+
+    private func parseRemotePlaybackSong(_ item: [String: Any]) -> SongRecord? {
+        guard let id = item["id"] as? String,
+              let title = item["title"] as? String else {
+            return nil
+        }
+
+        return SongRecord(
+            id: id,
+            parent: stringValue(item["parent"]),
+            title: title,
+            album: stringValue(item["album"]),
+            artist: stringValue(item["artist"]),
+            track: intValue(item["track"]),
+            year: intValue(item["year"]),
+            genre: stringValue(item["genre"]),
+            coverArt: stringValue(item["coverArt"]),
+            size: intValue(item["size"]),
+            contentType: stringValue(item["contentType"]),
+            suffix: stringValue(item["suffix"]),
+            duration: intValue(item["duration"]) ?? 0,
+            bitRate: intValue(item["bitRate"]),
+            path: stringValue(item["path"]),
+            playCount: intValue(item["playCount"]),
+            discNumber: intValue(item["discNumber"]),
+            created: stringValue(item["created"]),
+            albumId: stringValue(item["albumId"]),
+            artistId: stringValue(item["artistId"]),
+            played: stringValue(item["played"]),
+            starred: stringValue(item["starred"]),
+            starredAt: epochMilliseconds(stringValue(item["starred"])),
+            playedAt: epochMilliseconds(stringValue(item["played"])),
+            bpm: intValue(item["bpm"]),
+            comment: stringValue(item["comment"]),
+            sortName: stringValue(item["sortName"]),
+            mediaType: stringValue(item["mediaType"]),
+            musicBrainzId: stringValue(item["musicBrainzId"]),
+            genresJson: jsonString(item["genres"]),
+            replayGainJson: jsonString(item["replayGain"])
+        )
     }
 
     private func routeChangeReason(from notification: Notification) -> String {
@@ -3848,6 +4016,37 @@ private extension SongRecord {
             "coverArtId": (coverArt ?? albumId) as Any,
             "streamUrl": nativeStreamUrl,
         ])
+    }
+
+    func remotePlaybackMetadata() -> NativeAudioMetadata {
+        let coverArtId = remotePlaybackCoverArtId()
+        return NativeAudioMetadata(
+            title: title,
+            artist: artist,
+            album: album,
+            duration: Double(duration),
+            artworkUrl: coverArtId.map {
+                "aonsoku-media://getCoverArt?id=\($0)&size=800"
+            },
+            coverArtId: coverArtId
+        )
+    }
+
+    func remotePlaybackCoverArtId() -> String? {
+        let useAlbumCover = PreferencesManager.shared.getNestedBool(
+            store: "player_store",
+            path: ["settings", "coverArt", "useAlbumCoverForSongs"]
+        ) ?? false
+        if useAlbumCover, let albumId, !albumId.isEmpty {
+            return albumId
+        }
+        if let coverArt, !coverArt.isEmpty {
+            return coverArt
+        }
+        if let albumId, !albumId.isEmpty {
+            return albumId
+        }
+        return nil
     }
 
     var nativeStreamUrl: String {
@@ -4000,6 +4199,7 @@ extension AonsokuNativeAudioPlugin: NativeQueueEngineDelegate {
 
     func queueEngine(_ engine: NativeQueueEngine, didAdvanceTo index: Int, songId: String, reason: QueueAdvanceReason) {
         persistence.markStateDirty()
+        forceNextSnapshotProgress(0)
         notifyListeners("queueStateChanged", data: [
             "currentIndex": index,
             "songId": songId,
@@ -4024,6 +4224,7 @@ extension AonsokuNativeAudioPlugin: NativeQueueEngineDelegate {
                 songDurationSeconds: entry.timestamp
             )
         }
+        forceNextSnapshotProgress(0)
         DispatchQueue.main.async {
             self.isSeeking = true
             self.player?.pause()
@@ -4050,6 +4251,8 @@ extension AonsokuNativeAudioPlugin: NativeQueueEngineDelegate {
                 self.isSeeking = false
                 guard finished else { return }
                 player.play()
+                self.forceNextSnapshotProgress(0)
+                self.emitPlaybackState("playing")
                 self.stateQueue.async {
                     if let entry = self.scrobbleBuffer.stopTracking() {
                         self.scrobbleSubmitter.submitIfEligible(
