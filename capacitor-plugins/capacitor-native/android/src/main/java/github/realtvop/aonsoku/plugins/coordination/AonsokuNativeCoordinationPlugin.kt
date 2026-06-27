@@ -988,6 +988,15 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
                     return
                 }
             }
+            if (type == "session_superseded") {
+                nativeSessionId = java.util.UUID.randomUUID().toString()
+                nativeGeneration = 1
+                nativeSnapshotRevision = 0
+                AudioPlugin.executeRemoteControlCommandFromActive(
+                    JSONObject().put("type", "pause"),
+                )
+                return
+            }
         }
         notifyListeners("coordinationEvent", JSObject().put("envelopeJson", json))
     }

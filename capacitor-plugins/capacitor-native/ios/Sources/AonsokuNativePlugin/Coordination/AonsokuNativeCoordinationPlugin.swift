@@ -894,6 +894,14 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
                ) {
                 return
             }
+            if let type = dict["type"] as? String,
+               type == "session_superseded" {
+                nativeSessionId = UUID().uuidString
+                nativeGeneration = 1
+                nativeSnapshotRevision = 0
+                _ = AonsokuNativeAudioPlugin.executeRemoteControlCommandFromActive(["type": "pause"])
+                return
+            }
         }
         DispatchQueue.main.async {
             self.notifyListeners("coordinationEvent", data: ["envelopeJson": json])
