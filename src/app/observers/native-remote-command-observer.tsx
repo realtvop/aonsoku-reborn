@@ -8,8 +8,6 @@ import { usePlayerActions, usePlayerStore } from "@/store/player.store";
 import { LanControlMessageType } from "@/types/lanControl";
 import { logger } from "@/utils/logger";
 
-const LEGACY_REMOTE_COMMAND_SUPPRESS_MS = 500;
-
 function forwardRemoteCommand(event: PlaybackRemoteCommandEvent) {
   const remoteControl = usePlayerStore.getState().remoteControl;
   if (!remoteControl.active || !remoteControl.sendCommand) return false;
@@ -59,37 +57,9 @@ export function NativeRemoteCommandObserver() {
     if (!availability.available) return;
 
     let disposed = false;
-    let lastNativeRemoteControlCommandAt = 0;
-    const remoteControlCommandPromise = availability.plugin
-      .addListener("remoteControlCommand", (event) => {
-        if (disposed) return;
-
-        lastNativeRemoteControlCommandAt = Date.now();
-        if (!event.handledNatively) {
-          logger.info(
-            "[NativeRemoteCommandObserver] native remote control command was not handled",
-            event,
-          );
-        }
-      })
-      .catch((error) => {
-        logger.info(
-          "[NativeRemoteCommandObserver] remote control listener failed",
-          error,
-        );
-        return null;
-      });
-
     const handlePromise = availability.plugin
       .addListener("remoteCommand", (event) => {
         if (disposed) return;
-
-        if (
-          Date.now() - lastNativeRemoteControlCommandAt <
-          LEGACY_REMOTE_COMMAND_SUPPRESS_MS
-        ) {
-          return;
-        }
 
         const command: PlaybackRemoteCommandEvent = event;
 
@@ -112,14 +82,6 @@ export function NativeRemoteCommandObserver() {
 
     return () => {
       disposed = true;
-      remoteControlCommandPromise
-        .then((handle) => handle?.remove())
-        .catch((error) => {
-          logger.info(
-            "[NativeRemoteCommandObserver] remote control cleanup failed",
-            error,
-          );
-        });
       handlePromise
         .then((handle) => handle?.remove())
         .catch((error) => {
