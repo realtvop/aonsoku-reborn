@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useRemotePlaybackProjection } from "@/app/components/remote-control/use-remote-playback-projection";
 import { useBackgroundPlayback } from "@/app/hooks/use-background-playback";
 import { getNativeAudioPluginAvailability } from "@/native/audio/facade";
+import { isNativeCoordinationAvailable } from "@/native/coordination";
 import { playbackRepeatModeFromLoopState } from "@/player/playback/types";
 import {
   usePlayerCurrentSong,
@@ -222,6 +223,8 @@ export function MediaSessionObserver() {
   ]);
 
   useEffect(() => {
+    if (isNativeCoordinationAvailable()) return;
+
     const availability = getNativeAudioPluginAvailability();
     if (!availability.available) return;
 
