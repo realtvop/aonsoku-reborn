@@ -38,7 +38,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
 
     internal static func sendCommandFromActive(
         targetDeviceId: String,
-        expectedGeneration: Int,
+        expectedGeneration: Int?,
         command: [String: Any]
     ) -> Bool {
         guard let instance = activeInstance else {
@@ -194,6 +194,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     private var nativeSessionId = UUID().uuidString
     private var nativeGeneration = 1
     private var nativeSnapshotRevision = 0
+    private var deviceGenerations: [String: Int] = [:]
     private var heartbeatTimer: Timer?
     private var snapshotHeartbeatTimer: Timer?
     private var reconnectWorkItem: DispatchWorkItem?
@@ -795,6 +796,14 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
             }
             // §9.1: dedup command/snapshot_projection envelopes by messageId.
             if let type = dict["type"] as? String,
+               type == "snapshot_projection",
+               let deviceId = dict["deviceId"] as? String,
+               !deviceId.isEmpty,
+               let generation = dict["generation"] as? Int,
+               generation > 0 {
+                self.deviceGenerations[deviceId] = generation
+            }
+            if let type = dict["type"] as? String,
                type == "command" || type == "snapshot_projection",
                let id = dict["messageId"] as? String {
                 if self.dedupCache.has(id) {
@@ -944,10 +953,13 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
 
     private func sendCommandFromNative(
         targetDeviceId: String,
-        expectedGeneration: Int,
+        expectedGeneration: Int?,
         command: [String: Any]
     ) -> Bool {
         guard self.webSocketTask != nil else {
+            return false
+        }
+        guard let generation = expectedGeneration ?? deviceGenerations[targetDeviceId] else {
             return false
         }
 
@@ -956,7 +968,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
             "messageId": UUID().uuidString,
             "type": "command",
             "targetDeviceId": targetDeviceId,
-            "expectedGeneration": expectedGeneration,
+            "expectedGeneration": generation,
             "command": command,
         ]
         sendEnvelope(env)

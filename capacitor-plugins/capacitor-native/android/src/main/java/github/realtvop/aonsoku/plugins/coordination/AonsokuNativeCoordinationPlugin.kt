@@ -275,7 +275,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         @JvmStatic
         fun sendCommandFromActive(
             targetDeviceId: String,
-            expectedGeneration: Int,
+            expectedGeneration: Int?,
             command: JSONObject
         ): Boolean {
             return activeInstance
@@ -312,6 +312,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     private var nativeSessionId: String = java.util.UUID.randomUUID().toString()
     private var nativeGeneration: Int = 1
     private var nativeSnapshotRevision: Int = 0
+    private val deviceGenerations = mutableMapOf<String, Int>()
     /// §9.1 dedup cache for incoming envelopes.
     internal var dedupCache: CoordinationDedup = CoordinationDedup(DEDUP_CACHE_MAX)
         private set
@@ -865,17 +866,18 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
 
     private fun sendCommandFromNative(
         targetDeviceId: String,
-        expectedGeneration: Int,
+        expectedGeneration: Int?,
         command: JSONObject
     ): Boolean {
         if (webSocket == null) return false
+        val generation = expectedGeneration ?: deviceGenerations[targetDeviceId] ?: return false
 
         val env = JSONObject()
         env.put("version", protocolVersion)
         env.put("messageId", java.util.UUID.randomUUID().toString())
         env.put("type", "command")
         env.put("targetDeviceId", targetDeviceId)
-        env.put("expectedGeneration", expectedGeneration)
+        env.put("expectedGeneration", generation)
         env.put("command", command)
         sendEnvelope(env)
         return true
@@ -890,6 +892,13 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             seqTracker.observe(extractSeq(parsed))
             // §9.1: dedup command/snapshot_projection envelopes by messageId.
             val type = extractType(parsed)
+            if (type == "snapshot_projection") {
+                val snapshotDeviceId = parsed.optString("deviceId", "")
+                val generation = parsed.optInt("generation", 0)
+                if (snapshotDeviceId.isNotEmpty() && generation > 0) {
+                    deviceGenerations[snapshotDeviceId] = generation
+                }
+            }
             if (type == "command" || type == "snapshot_projection") {
                 val id = extractMessageId(parsed)
                 if (id != null) {
