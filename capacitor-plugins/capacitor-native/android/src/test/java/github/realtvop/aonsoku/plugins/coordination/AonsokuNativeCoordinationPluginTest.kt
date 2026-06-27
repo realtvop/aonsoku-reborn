@@ -116,6 +116,21 @@ class AonsokuNativeCoordinationPluginTest {
         assertEquals("song-1", env.getJSONObject("snapshot").getString("songId"))
     }
 
+    @Test
+    fun handoffFailedEnvelopeIncludesTransactionAndCode() {
+        val env = AonsokuNativeCoordinationPlugin.buildHandoffFailedEnvelope(
+            protocolVersion = 1,
+            transactionId = "tx-1",
+            code = "source_pause_timeout",
+        )
+
+        assertEquals(1, env.getInt("version"))
+        assertEquals("handoff_failed", env.getString("type"))
+        assertFalse(env.getString("messageId").isBlank())
+        assertEquals("tx-1", env.getString("transactionId"))
+        assertEquals("source_pause_timeout", env.getString("code"))
+    }
+
     // --- buildPlaybackSnapshot ------------------------------------------------
 
     @Test

@@ -143,6 +143,20 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             return env
         }
 
+        internal fun buildHandoffFailedEnvelope(
+            protocolVersion: Int,
+            transactionId: String,
+            code: String,
+        ): JSONObject {
+            val env = JSONObject()
+            env.put("version", protocolVersion)
+            env.put("messageId", java.util.UUID.randomUUID().toString())
+            env.put("type", "handoff_failed")
+            env.put("transactionId", transactionId)
+            env.put("code", code)
+            return env
+        }
+
         internal fun buildPlaybackSnapshot(
             sessionId: String,
             audioState: JSONObject,
@@ -1112,6 +1126,16 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
                             protocolVersion,
                             transactionId,
                             snapshot,
+                        ),
+                    )
+                    return
+                }
+                if (transactionId.isNotEmpty()) {
+                    sendEnvelope(
+                        buildHandoffFailedEnvelope(
+                            protocolVersion,
+                            transactionId,
+                            "source_pause_timeout",
                         ),
                     )
                     return

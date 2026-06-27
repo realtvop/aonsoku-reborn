@@ -88,6 +88,20 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         ]
     }
 
+    internal static func buildHandoffFailedEnvelope(
+        protocolVersion: Int,
+        transactionId: String,
+        code: String
+    ) -> [String: Any] {
+        [
+            "version": protocolVersion,
+            "messageId": UUID().uuidString,
+            "type": "handoff_failed",
+            "transactionId": transactionId,
+            "code": code,
+        ]
+    }
+
     internal static func buildTargetReadyEnvelope(
         protocolVersion: Int,
         transactionId: String,
@@ -989,18 +1003,25 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
             if let type = dict["type"] as? String,
                type == "prepare_relinquish",
                let transactionId = dict["transactionId"] as? String,
-               !transactionId.isEmpty,
-               let audioState = AonsokuNativeAudioPlugin.pauseAndGetFullStateFromActive(),
-               let snapshot = Self.buildPlaybackSnapshot(
-                   sessionId: nativeSessionId,
-                   audioState: audioState,
-                   sampledAtSeconds: Date().timeIntervalSince1970
-               ) {
-                self.sendEnvelope(Self.buildRelinquishAckEnvelope(
-                    protocolVersion: self.protocolVersion,
-                    transactionId: transactionId,
-                    snapshot: snapshot
-                ))
+               !transactionId.isEmpty {
+                if let audioState = AonsokuNativeAudioPlugin.pauseAndGetFullStateFromActive(),
+                   let snapshot = Self.buildPlaybackSnapshot(
+                       sessionId: nativeSessionId,
+                       audioState: audioState,
+                       sampledAtSeconds: Date().timeIntervalSince1970
+                   ) {
+                    self.sendEnvelope(Self.buildRelinquishAckEnvelope(
+                        protocolVersion: self.protocolVersion,
+                        transactionId: transactionId,
+                        snapshot: snapshot
+                    ))
+                } else {
+                    self.sendEnvelope(Self.buildHandoffFailedEnvelope(
+                        protocolVersion: self.protocolVersion,
+                        transactionId: transactionId,
+                        code: "source_pause_timeout"
+                    ))
+                }
                 return
             }
             if let type = dict["type"] as? String,
