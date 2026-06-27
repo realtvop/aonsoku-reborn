@@ -3,6 +3,12 @@ import AVFoundation
 import Capacitor
 import UIKit
 
+private struct PendingNativeCommand {
+    let targetDeviceId: String
+    let command: [String: Any]
+    let attemptedStaleRetry: Bool
+}
+
 /// Native coordination plugin for iOS — maintains a background WebSocket
 /// connection to the coordination server, bridging remote commands and
 /// handoff events to the native queue controller (design §8, §9, §10, §11).
@@ -195,6 +201,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     private var nativeGeneration = 1
     private var nativeSnapshotRevision = 0
     private var deviceGenerations: [String: Int] = [:]
+    private var pendingNativeCommands: [String: PendingNativeCommand] = [:]
     private var heartbeatTimer: Timer?
     private var snapshotHeartbeatTimer: Timer?
     private var reconnectWorkItem: DispatchWorkItem?
@@ -815,6 +822,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
             // §9.1: emit `coordinationAck` when a command_ack arrives so the
             // WebView facade can resolve the pending sendCommand() promise.
             if let type = dict["type"] as? String, type == "command_ack" {
+                self.handleNativeCommandAck(dict)
                 let messageId = dict["messageId"] as? String ?? ""
                 let result: String
                 if let r = dict["result"] {
@@ -963,16 +971,63 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
             return false
         }
 
+        let messageId = UUID().uuidString
+        pendingNativeCommands[messageId] = PendingNativeCommand(
+            targetDeviceId: targetDeviceId,
+            command: command,
+            attemptedStaleRetry: false
+        )
+        sendCommandEnvelope(
+            messageId: messageId,
+            targetDeviceId: targetDeviceId,
+            expectedGeneration: generation,
+            command: command
+        )
+        return true
+    }
+
+    private func sendCommandEnvelope(
+        messageId: String,
+        targetDeviceId: String,
+        expectedGeneration: Int,
+        command: [String: Any]
+    ) {
         let env: [String: Any] = [
             "version": self.protocolVersion,
-            "messageId": UUID().uuidString,
+            "messageId": messageId,
             "type": "command",
             "targetDeviceId": targetDeviceId,
-            "expectedGeneration": generation,
+            "expectedGeneration": expectedGeneration,
             "command": command,
         ]
         sendEnvelope(env)
-        return true
+    }
+
+    private func handleNativeCommandAck(_ env: [String: Any]) {
+        guard let messageId = env["messageId"] as? String,
+              let pending = pendingNativeCommands.removeValue(forKey: messageId) else {
+            return
+        }
+        let result = env["result"] as? [String: Any]
+        let isStaleEpoch = result?["status"] as? String == "error" &&
+            result?["code"] as? String == "stale_epoch"
+        guard isStaleEpoch, !pending.attemptedStaleRetry,
+              let generation = deviceGenerations[pending.targetDeviceId] else {
+            return
+        }
+
+        let retryMessageId = UUID().uuidString
+        pendingNativeCommands[retryMessageId] = PendingNativeCommand(
+            targetDeviceId: pending.targetDeviceId,
+            command: pending.command,
+            attemptedStaleRetry: true
+        )
+        sendCommandEnvelope(
+            messageId: retryMessageId,
+            targetDeviceId: pending.targetDeviceId,
+            expectedGeneration: generation,
+            command: pending.command
+        )
     }
 
     private func scheduleReconnect() {

@@ -313,6 +313,12 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     private var nativeGeneration: Int = 1
     private var nativeSnapshotRevision: Int = 0
     private val deviceGenerations = mutableMapOf<String, Int>()
+    private data class PendingNativeCommand(
+        val targetDeviceId: String,
+        val commandJson: String,
+        val attemptedStaleRetry: Boolean,
+    )
+    private val pendingNativeCommands = mutableMapOf<String, PendingNativeCommand>()
     /// §9.1 dedup cache for incoming envelopes.
     internal var dedupCache: CoordinationDedup = CoordinationDedup(DEDUP_CACHE_MAX)
         private set
@@ -872,15 +878,54 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         if (webSocket == null) return false
         val generation = expectedGeneration ?: deviceGenerations[targetDeviceId] ?: return false
 
+        val messageId = java.util.UUID.randomUUID().toString()
+        pendingNativeCommands[messageId] = PendingNativeCommand(
+            targetDeviceId,
+            command.toString(),
+            attemptedStaleRetry = false,
+        )
+        sendCommandEnvelope(messageId, targetDeviceId, generation, command)
+        return true
+    }
+
+    private fun sendCommandEnvelope(
+        messageId: String,
+        targetDeviceId: String,
+        expectedGeneration: Int,
+        command: JSONObject,
+    ) {
         val env = JSONObject()
         env.put("version", protocolVersion)
-        env.put("messageId", java.util.UUID.randomUUID().toString())
+        env.put("messageId", messageId)
         env.put("type", "command")
         env.put("targetDeviceId", targetDeviceId)
-        env.put("expectedGeneration", generation)
+        env.put("expectedGeneration", expectedGeneration)
         env.put("command", command)
         sendEnvelope(env)
-        return true
+    }
+
+    private fun handleNativeCommandAck(env: JSONObject) {
+        val messageId = extractMessageId(env) ?: return
+        val pending = pendingNativeCommands[messageId] ?: return
+        val result = env.optJSONObject("result")
+        val isStaleEpoch =
+            result?.optString("status") == "error" &&
+                result.optString("code") == "stale_epoch"
+        pendingNativeCommands.remove(messageId)
+        if (!isStaleEpoch || pending.attemptedStaleRetry) return
+
+        val generation = deviceGenerations[pending.targetDeviceId] ?: return
+        val command = parseJsonObject(pending.commandJson) ?: return
+        val retryMessageId = java.util.UUID.randomUUID().toString()
+        pendingNativeCommands[retryMessageId] = pending.copy(
+            attemptedStaleRetry = true,
+        )
+        sendCommandEnvelope(
+            retryMessageId,
+            pending.targetDeviceId,
+            generation,
+            command,
+        )
     }
 
     private fun dispatchEnvelope(json: String) {
@@ -913,6 +958,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             // §9.1: emit `coordinationAck` when a command_ack arrives so the
             // WebView facade can resolve the pending sendCommand() promise.
             if (type == "command_ack") {
+                handleNativeCommandAck(parsed)
                 val messageId = extractMessageId(parsed) ?: ""
                 val result = parsed.opt("result")?.toString() ?: "{}"
                 val ret = JSObject()
