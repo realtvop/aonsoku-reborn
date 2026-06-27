@@ -5,13 +5,18 @@
 //! on the same account. On server restart, the registry is rebuilt from
 //! SQLite presence records.
 
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 use parking_lot::RwLock;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-use crate::protocol::{ConnectionId, ConnectionSeq, DeviceId, Envelope};
+use crate::protocol::{ConnectionId, ConnectionSeq, DeviceId, Envelope, MessageId};
+
+const COMMAND_ACK_ROUTE_TTL: Duration = Duration::from_secs(30);
 
 /// A live device connection with its outbound channel.
 pub struct DeviceConnection {
@@ -33,6 +38,15 @@ pub struct ConnectionRegistry {
     /// device id (A). While B is in this map, other devices may not remote
     /// control or handoff-take B.
     controller_of: RwLock<HashMap<DeviceId, DeviceId>>,
+    /// Routes target-device command acknowledgements back to the device that
+    /// originally sent the command. Key = command message id.
+    command_ack_routes: RwLock<HashMap<MessageId, CommandAckRoute>>,
+}
+
+struct CommandAckRoute {
+    source_device_id: DeviceId,
+    target_device_id: DeviceId,
+    expires_at: Instant,
 }
 
 impl ConnectionRegistry {
@@ -66,6 +80,9 @@ impl ConnectionRegistry {
         // Clear any active-control marker so a disconnecting controller does
         // not keep another device locked out (design §10 exclusivity).
         self.controller_of.write().remove(&device_id);
+        self.command_ack_routes.write().retain(|_, route| {
+            route.source_device_id != device_id && route.target_device_id != device_id
+        });
     }
 
     /// Send an envelope to a device if online.
@@ -121,6 +138,39 @@ impl ConnectionRegistry {
     /// Whether `device` is currently acting as a remote controller.
     pub fn is_controlling(&self, device: DeviceId) -> bool {
         self.controller_of.read().contains_key(&device)
+    }
+
+    /// Remember where the ack for a forwarded command should be sent.
+    pub fn remember_command_ack_route(
+        &self,
+        message_id: MessageId,
+        source_device_id: DeviceId,
+        target_device_id: DeviceId,
+    ) {
+        let mut routes = self.command_ack_routes.write();
+        Self::prune_expired_command_ack_routes(&mut routes);
+        routes.insert(
+            message_id,
+            CommandAckRoute {
+                source_device_id,
+                target_device_id,
+                expires_at: Instant::now() + COMMAND_ACK_ROUTE_TTL,
+            },
+        );
+    }
+
+    /// Resolve and remove the ack route for a forwarded command.
+    pub fn take_command_ack_route(&self, message_id: MessageId) -> Option<DeviceId> {
+        let mut routes = self.command_ack_routes.write();
+        Self::prune_expired_command_ack_routes(&mut routes);
+        routes
+            .remove(&message_id)
+            .map(|route| route.source_device_id)
+    }
+
+    fn prune_expired_command_ack_routes(routes: &mut HashMap<MessageId, CommandAckRoute>) {
+        let now = Instant::now();
+        routes.retain(|_, route| route.expires_at > now);
     }
 }
 
@@ -233,5 +283,51 @@ mod tests {
         // After the controller disconnects the exclusivity marker is cleared
         // so other devices can again control/handoff-take it.
         assert!(!reg.is_controlling(controller));
+    }
+
+    #[tokio::test]
+    async fn command_ack_routes_are_one_shot_and_cleared_on_unregister() {
+        let reg = ConnectionRegistry::new();
+        let source = Uuid::new_v4();
+        let target = Uuid::new_v4();
+        let message_id = Uuid::new_v4();
+        let acc = Uuid::new_v4();
+        let (tx, _rx) = mpsc::unbounded_channel();
+        reg.register(DeviceConnection {
+            connection_id: Uuid::new_v4(),
+            device_id: source,
+            account_id: acc,
+            tx,
+            last_seq: 0,
+        });
+
+        reg.remember_command_ack_route(message_id, source, target);
+        assert_eq!(reg.take_command_ack_route(message_id), Some(source));
+        assert_eq!(reg.take_command_ack_route(message_id), None);
+
+        reg.remember_command_ack_route(message_id, source, target);
+        reg.unregister(source);
+        assert_eq!(reg.take_command_ack_route(message_id), None);
+    }
+
+    #[tokio::test]
+    async fn command_ack_routes_are_cleared_when_target_unregisters() {
+        let reg = ConnectionRegistry::new();
+        let source = Uuid::new_v4();
+        let target = Uuid::new_v4();
+        let message_id = Uuid::new_v4();
+        let acc = Uuid::new_v4();
+        let (tx, _rx) = mpsc::unbounded_channel();
+        reg.register(DeviceConnection {
+            connection_id: Uuid::new_v4(),
+            device_id: target,
+            account_id: acc,
+            tx,
+            last_seq: 0,
+        });
+
+        reg.remember_command_ack_route(message_id, source, target);
+        reg.unregister(target);
+        assert_eq!(reg.take_command_ack_route(message_id), None);
     }
 }

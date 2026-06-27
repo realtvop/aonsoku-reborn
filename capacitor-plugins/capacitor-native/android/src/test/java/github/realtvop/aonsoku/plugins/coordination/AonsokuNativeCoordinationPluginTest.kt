@@ -83,6 +83,21 @@ class AonsokuNativeCoordinationPluginTest {
         assertEquals("sess-1", env.getString("sessionId"))
     }
 
+    // --- buildCommandAckEnvelope ---------------------------------------------
+
+    @Test
+    fun commandAckEnvelopeUsesOriginalMessageIdAndOkResult() {
+        val env = AonsokuNativeCoordinationPlugin.buildCommandAckEnvelope(
+            protocolVersion = 1,
+            messageId = "msg-1",
+        )
+
+        assertEquals(1, env.getInt("version"))
+        assertEquals("msg-1", env.getString("messageId"))
+        assertEquals("command_ack", env.getString("type"))
+        assertEquals("ok", env.getJSONObject("result").getString("status"))
+    }
+
     // --- buildPlaybackSnapshot ------------------------------------------------
 
     @Test

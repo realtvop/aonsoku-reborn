@@ -116,6 +116,19 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             return env
         }
 
+        internal fun buildCommandAckEnvelope(
+            protocolVersion: Int,
+            messageId: String,
+            result: JSONObject = JSONObject().put("status", "ok"),
+        ): JSONObject {
+            val env = JSONObject()
+            env.put("version", protocolVersion)
+            env.put("messageId", messageId)
+            env.put("type", "command_ack")
+            env.put("result", result)
+            return env
+        }
+
         internal fun buildPlaybackSnapshot(
             sessionId: String,
             audioState: JSONObject,
@@ -886,10 +899,14 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             }
             if (type == "command") {
                 val command = parsed.optJSONObject("command")
+                val messageId = extractMessageId(parsed)
                 if (
                     command != null &&
                     AudioPlugin.executeRemoteControlCommandFromActive(command)
                 ) {
+                    if (messageId != null) {
+                        sendEnvelope(buildCommandAckEnvelope(protocolVersion, messageId))
+                    }
                     return
                 }
             }

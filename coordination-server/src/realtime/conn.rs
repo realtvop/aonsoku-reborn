@@ -601,6 +601,11 @@ async fn handle_inbound(
             };
             match registry.send(*target_device_id, forwarded) {
                 Ok(()) => {
+                    registry.remember_command_ack_route(
+                        env.message_id,
+                        device_id,
+                        *target_device_id,
+                    );
                     tracing::info!(
                         target: "coordination::ws",
                         target = %target_device_id,
@@ -615,6 +620,39 @@ async fn handle_inbound(
                         "failed to send forwarded command"
                     );
                 }
+            }
+        }
+        Payload::CommandAck { message_id, result } => {
+            if let Some(source_device_id) = registry.take_command_ack_route(*message_id) {
+                let ack = Envelope {
+                    version: PROTOCOL_VERSION,
+                    message_id: *message_id,
+                    connection_id: Some(connection_id),
+                    source_device_id: Some(device_id),
+                    target_device_id: Some(source_device_id),
+                    session_id: None,
+                    expected_generation: None,
+                    seq: None,
+                    server_time: Some(server_time),
+                    payload: Payload::CommandAck {
+                        message_id: *message_id,
+                        result: result.clone(),
+                    },
+                };
+                if let Err(e) = registry.send(source_device_id, ack) {
+                    tracing::warn!(
+                        target: "coordination::ws",
+                        source = %source_device_id,
+                        error = ?e,
+                        "failed to forward command ack"
+                    );
+                }
+            } else {
+                tracing::debug!(
+                    target: "coordination::ws",
+                    message_id = %message_id,
+                    "dropping command ack with no pending route"
+                );
             }
         }
         Payload::HandoffCandidateRequest {

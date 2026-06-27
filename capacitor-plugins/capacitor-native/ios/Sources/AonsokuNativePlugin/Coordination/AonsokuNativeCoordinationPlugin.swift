@@ -55,6 +55,19 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         activeInstance?.publishNativePlaybackSnapshot() ?? false
     }
 
+    internal static func buildCommandAckEnvelope(
+        protocolVersion: Int,
+        messageId: String,
+        result: [String: Any] = ["status": "ok"]
+    ) -> [String: Any] {
+        [
+            "version": protocolVersion,
+            "messageId": messageId,
+            "type": "command_ack",
+            "result": result,
+        ]
+    }
+
     internal static func buildPlaybackSnapshot(
         sessionId: String,
         audioState: [String: Any],
@@ -785,6 +798,12 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
                type == "command",
                let command = dict["command"] as? [String: Any],
                AonsokuNativeAudioPlugin.executeRemoteControlCommandFromActive(command) {
+                if let messageId = dict["messageId"] as? String {
+                    self.sendEnvelope(Self.buildCommandAckEnvelope(
+                        protocolVersion: self.protocolVersion,
+                        messageId: messageId
+                    ))
+                }
                 return
             }
         }
