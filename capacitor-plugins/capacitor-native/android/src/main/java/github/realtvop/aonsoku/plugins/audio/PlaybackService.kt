@@ -79,6 +79,7 @@ class PlaybackService : MediaSessionService() {
     private var artworkLoadRevision = 0
     private var isBoundToActivity = false
     private var snapshotProgressOverride: SnapshotProgressOverride? = null
+    private var remoteProjectionProgressOverride: SnapshotProgressOverride? = null
 
     val queueEngine = NativeQueueEngine()
     var isQueueEngineActive = false
@@ -92,6 +93,7 @@ class PlaybackService : MediaSessionService() {
     private var remotePlaybackIsPlaying = false
     private var remotePlaybackPositionSeconds = 0.0
     private var remotePlaybackDurationSeconds = 0.0
+    private var remotePlaybackSongId: String? = null
     private var remotePlaybackIsShuffleActive = false
     private var remotePlaybackRepeatMode = "off"
     private var remotePlaybackVolume: Double? = null
@@ -305,6 +307,26 @@ class PlaybackService : MediaSessionService() {
 
     private fun forceSnapshotProgress(songId: String?, seconds: Double) {
         snapshotProgressOverride = SnapshotProgressOverride(
+            songId,
+            seconds.coerceAtLeast(0.0),
+            SystemClock.elapsedRealtime(),
+        )
+    }
+
+    private fun remoteProjectionProgressSeconds(songId: String?, fallback: Double): Double {
+        val override = remoteProjectionProgressOverride ?: return fallback
+        if (override.songId != null && override.songId != songId) {
+            return fallback
+        }
+        val ageMs = SystemClock.elapsedRealtime() - override.createdAtMs
+        if (fallback <= 0.25 || ageMs >= 2_000L) {
+            remoteProjectionProgressOverride = null
+        }
+        return override.seconds
+    }
+
+    private fun forceRemoteProjectionProgress(songId: String?, seconds: Double) {
+        remoteProjectionProgressOverride = SnapshotProgressOverride(
             songId,
             seconds.coerceAtLeast(0.0),
             SystemClock.elapsedRealtime(),
@@ -1399,9 +1421,20 @@ class PlaybackService : MediaSessionService() {
         volume: Double?,
         artworkUrl: String?,
         coverArtId: String?,
+        songId: String?,
         targetDeviceId: String?,
         expectedGeneration: Int?
     ) {
+        val normalizedSongId = songId?.takeIf { it.isNotEmpty() }
+        val previousSongId = remotePlaybackSongId
+        if (
+            previousSongId != null &&
+            normalizedSongId != null &&
+            previousSongId != normalizedSongId
+        ) {
+            forceRemoteProjectionProgress(normalizedSongId, 0.0)
+        }
+
         isRemotePlaybackProjectionActive = true
         remotePlaybackMetadata = metadata
         remotePlaybackMediaItem = MediaItem.Builder()
@@ -1409,7 +1442,11 @@ class PlaybackService : MediaSessionService() {
             .setMediaMetadata(metadata)
             .build()
         remotePlaybackIsPlaying = isPlaying
-        remotePlaybackPositionSeconds = position.coerceAtLeast(0.0)
+        remotePlaybackSongId = normalizedSongId ?: remotePlaybackSongId
+        remotePlaybackPositionSeconds = remoteProjectionProgressSeconds(
+            normalizedSongId,
+            position.coerceAtLeast(0.0),
+        )
         remotePlaybackDurationSeconds = duration.coerceAtLeast(0.0)
         remotePlaybackIsShuffleActive = isShuffleActive
         remotePlaybackRepeatMode = repeatMode
@@ -1472,6 +1509,8 @@ class PlaybackService : MediaSessionService() {
         remotePlaybackIsPlaying = false
         remotePlaybackPositionSeconds = 0.0
         remotePlaybackDurationSeconds = 0.0
+        remotePlaybackSongId = null
+        remoteProjectionProgressOverride = null
         remotePlaybackIsShuffleActive = false
         remotePlaybackRepeatMode = "off"
         remotePlaybackVolume = null

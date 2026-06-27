@@ -1727,6 +1727,7 @@ class AudioPlugin : Plugin() {
                         volume,
                         artworkUrl,
                         coverArtId,
+                        null,
                         targetDeviceId,
                         expectedGeneration,
                     )
@@ -1797,6 +1798,7 @@ class AudioPlugin : Plugin() {
                     volume,
                     artworkUrl,
                     coverArtId,
+                    songId,
                     targetDeviceId,
                     expectedGeneration,
                 )
