@@ -1,6 +1,4 @@
 import { useEffect } from "react";
-import { useCoordinationStore } from "@/coordination/store";
-import type { RemoteCommand } from "@/coordination/types";
 import { getNativeAudioPluginAvailability } from "@/native/audio/facade";
 import {
   handlePlaybackRemoteCommand,
@@ -11,24 +9,6 @@ import { LanControlMessageType } from "@/types/lanControl";
 import { logger } from "@/utils/logger";
 
 const LEGACY_REMOTE_COMMAND_SUPPRESS_MS = 500;
-
-function forwardNativeRemoteControlCommand(
-  command: RemoteCommand,
-  targetDeviceId?: string,
-  expectedGeneration?: number,
-) {
-  const { controlledDeviceId, deviceSnapshots, manager } =
-    useCoordinationStore.getState();
-  const resolvedTargetDeviceId = targetDeviceId ?? controlledDeviceId;
-  if (!resolvedTargetDeviceId) return false;
-
-  const snapshot = deviceSnapshots[resolvedTargetDeviceId];
-  const generation = expectedGeneration ?? snapshot?.generation;
-  if (typeof generation !== "number") return false;
-
-  manager.sendCommand(resolvedTargetDeviceId, generation, command);
-  return true;
-}
 
 function forwardRemoteCommand(event: PlaybackRemoteCommandEvent) {
   const remoteControl = usePlayerStore.getState().remoteControl;
@@ -84,20 +64,12 @@ export function NativeRemoteCommandObserver() {
       .addListener("remoteControlCommand", (event) => {
         if (disposed) return;
 
-        if (event.handledNatively) {
-          lastNativeRemoteControlCommandAt = Date.now();
-          return;
-        }
-
-        const command = event.command as RemoteCommand;
-        if (
-          forwardNativeRemoteControlCommand(
-            command,
-            event.targetDeviceId,
-            event.expectedGeneration,
-          )
-        ) {
-          lastNativeRemoteControlCommandAt = Date.now();
+        lastNativeRemoteControlCommandAt = Date.now();
+        if (!event.handledNatively) {
+          logger.info(
+            "[NativeRemoteCommandObserver] native remote control command was not handled",
+            event,
+          );
         }
       })
       .catch((error) => {
