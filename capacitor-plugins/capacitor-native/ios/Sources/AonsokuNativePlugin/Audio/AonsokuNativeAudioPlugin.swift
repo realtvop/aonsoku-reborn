@@ -3495,6 +3495,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             }
             event["handledNatively"] = handledNatively
             notifyListeners("remoteControlCommand", data: eventData(event))
+            return
         }
 
         notifyListeners("remoteCommand", data: data)

@@ -245,6 +245,7 @@ class PlaybackService : MediaSessionService() {
                     remoteControlExpectedGeneration,
                 )
             }
+            return
         }
         listeners.forEach { it.onRemoteCommand(command, position) }
     }
