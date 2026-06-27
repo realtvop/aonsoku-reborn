@@ -688,6 +688,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     @PluginMethod
     fun sendControlSessionEnd(call: PluginCall) {
         activeRemoteControlTargetDeviceId = null
+        AudioPlugin.clearRemotePlaybackProjectionFromActive()
         val env = JSONObject()
         env.put("version", protocolVersion)
         env.put("messageId", java.util.UUID.randomUUID().toString())
@@ -974,6 +975,18 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
                 val generation = parsed.optInt("generation", 0)
                 if (snapshotDeviceId.isNotEmpty() && generation > 0) {
                     deviceGenerations[snapshotDeviceId] = generation
+                }
+                if (snapshotDeviceId == activeRemoteControlTargetDeviceId) {
+                    val snapshot = parsed.optJSONObject("snapshot")
+                    if (snapshot == null || !parsed.optBoolean("isOnline", true)) {
+                        AudioPlugin.clearRemotePlaybackProjectionFromActive()
+                    } else {
+                        AudioPlugin.updateRemotePlaybackProjectionFromActive(
+                            snapshot,
+                            snapshotDeviceId,
+                            generation,
+                        )
+                    }
                 }
             }
             if (type == "command" || type == "snapshot_projection") {

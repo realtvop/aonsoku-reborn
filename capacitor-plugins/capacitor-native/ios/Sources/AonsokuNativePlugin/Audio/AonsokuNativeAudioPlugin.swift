@@ -23,6 +23,30 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         activeInstance?.pauseAndGetCurrentFullState()
     }
 
+    internal static func updateRemotePlaybackProjectionFromActive(
+        snapshot: [String: Any],
+        targetDeviceId: String,
+        expectedGeneration: Int
+    ) -> Bool {
+        guard let instance = activeInstance else {
+            return false
+        }
+        instance.updateRemotePlaybackProjection(
+            snapshot: snapshot,
+            targetDeviceId: targetDeviceId,
+            expectedGeneration: expectedGeneration
+        )
+        return true
+    }
+
+    internal static func clearRemotePlaybackProjectionFromActive() -> Bool {
+        guard let instance = activeInstance else {
+            return false
+        }
+        instance.clearRemotePlaybackProjection()
+        return true
+    }
+
     internal static func prepareHandoffPlaybackFromActive(
         snapshot: [String: Any],
         autoplay: Bool,
@@ -977,6 +1001,55 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
                 self.clearNowPlayingInfo()
             }
             call.resolve()
+        }
+    }
+
+    private func updateRemotePlaybackProjection(
+        snapshot: [String: Any],
+        targetDeviceId: String,
+        expectedGeneration: Int
+    ) {
+        DispatchQueue.main.async {
+            let songId = snapshot["songId"] as? String ?? ""
+            let duration = max(
+                0,
+                self.numberValue(snapshot["durationSeconds"]) ?? 0
+            )
+            let metadata = NativeAudioMetadata(
+                title: songId.isEmpty ? "Remote playback" : songId,
+                artist: snapshot["sourceName"] as? String,
+                album: nil,
+                duration: duration,
+                artworkUrl: nil,
+                coverArtId: nil
+            )
+            self.remotePlaybackProjection = NativeRemotePlaybackProjection(
+                metadata: metadata,
+                isPlaying: snapshot["isPlaying"] as? Bool ?? false,
+                position: max(
+                    0,
+                    self.numberValue(snapshot["progressSeconds"]) ?? 0
+                ),
+                duration: duration,
+                isShuffleActive: snapshot["shuffle"] as? Bool ?? false,
+                repeatMode: snapshot["repeat"] as? String ?? "off",
+                volume: self.numberValue(snapshot["volume"]),
+                targetDeviceId: targetDeviceId,
+                expectedGeneration: expectedGeneration
+            )
+            self.currentMetadata = metadata
+            self.updateNowPlayingInfo()
+        }
+    }
+
+    private func clearRemotePlaybackProjection() {
+        DispatchQueue.main.async {
+            self.remotePlaybackProjection = nil
+            if self.player != nil || self.isQueueEngineActive {
+                self.updateNowPlayingInfo()
+            } else {
+                self.clearNowPlayingInfo()
+            }
         }
     }
 

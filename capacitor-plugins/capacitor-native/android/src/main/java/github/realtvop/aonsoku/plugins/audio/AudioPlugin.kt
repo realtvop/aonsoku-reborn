@@ -82,6 +82,28 @@ class AudioPlugin : Plugin() {
         }
 
         @JvmStatic
+        fun updateRemotePlaybackProjectionFromActive(
+            snapshot: JSONObject,
+            targetDeviceId: String,
+            expectedGeneration: Int,
+        ): Boolean {
+            val instance = activeInstance ?: return false
+            instance.updateRemotePlaybackProjectionFromSnapshot(
+                snapshot,
+                targetDeviceId,
+                expectedGeneration,
+            )
+            return true
+        }
+
+        @JvmStatic
+        fun clearRemotePlaybackProjectionFromActive(): Boolean {
+            val instance = activeInstance ?: return false
+            instance.clearRemotePlaybackProjection()
+            return true
+        }
+
+        @JvmStatic
         fun prepareHandoffPlaybackFromActive(
             snapshot: JSONObject,
             autoplay: Boolean,
@@ -1638,6 +1660,60 @@ class AudioPlugin : Plugin() {
                 }
             } catch (_: TimeoutCancellationException) {
                 call.reject("Playback service is not ready (timeout)")
+            }
+        }
+    }
+
+    private fun updateRemotePlaybackProjectionFromSnapshot(
+        snapshot: JSONObject,
+        targetDeviceId: String,
+        expectedGeneration: Int,
+    ) {
+        pluginScope.launch {
+            val service = try {
+                awaitService()
+            } catch (_: TimeoutCancellationException) {
+                return@launch
+            }
+            mainHandler.post {
+                val songId = snapshot.optString("songId", "")
+                val duration = snapshot.optDouble("durationSeconds", 0.0)
+                val metadata = MediaMetadata.Builder()
+                    .setTitle(songId.ifEmpty { "Remote playback" })
+                    .setArtist(snapshot.optString("sourceName", ""))
+                    .setDurationMs((duration.coerceAtLeast(0.0) * 1000).toLong())
+                    .build()
+                val volume = if (snapshot.has("volume") && !snapshot.isNull("volume")) {
+                    snapshot.optDouble("volume")
+                } else {
+                    null
+                }
+                service.updateRemotePlaybackProjection(
+                    metadata,
+                    snapshot.optBoolean("isPlaying", false),
+                    snapshot.optDouble("progressSeconds", 0.0),
+                    duration,
+                    snapshot.optBoolean("shuffle", false),
+                    snapshot.optString("repeat", "off"),
+                    volume,
+                    artworkUrl = null,
+                    coverArtId = null,
+                    targetDeviceId,
+                    expectedGeneration,
+                )
+            }
+        }
+    }
+
+    private fun clearRemotePlaybackProjection() {
+        pluginScope.launch {
+            val service = try {
+                awaitService()
+            } catch (_: TimeoutCancellationException) {
+                return@launch
+            }
+            mainHandler.post {
+                service.clearRemotePlaybackProjection()
             }
         }
     }

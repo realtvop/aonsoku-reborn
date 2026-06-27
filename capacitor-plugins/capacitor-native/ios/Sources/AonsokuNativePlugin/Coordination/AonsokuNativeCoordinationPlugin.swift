@@ -494,6 +494,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
 
     @objc func sendControlSessionEnd(_ call: CAPPluginCall) {
         activeRemoteControlTargetDeviceId = nil
+        AonsokuNativeAudioPlugin.clearRemotePlaybackProjectionFromActive()
         let env: [String: Any] = [
             "version": self.protocolVersion,
             "messageId": UUID().uuidString,
@@ -844,6 +845,17 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
                let generation = dict["generation"] as? Int,
                generation > 0 {
                 self.deviceGenerations[deviceId] = generation
+                if deviceId == self.activeRemoteControlTargetDeviceId {
+                    if dict["isOnline"] as? Bool == false {
+                        AonsokuNativeAudioPlugin.clearRemotePlaybackProjectionFromActive()
+                    } else if let snapshot = dict["snapshot"] as? [String: Any] {
+                        AonsokuNativeAudioPlugin.updateRemotePlaybackProjectionFromActive(
+                            snapshot: snapshot,
+                            targetDeviceId: deviceId,
+                            expectedGeneration: generation
+                        )
+                    }
+                }
             }
             if let type = dict["type"] as? String,
                type == "command" || type == "snapshot_projection",
