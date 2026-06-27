@@ -821,6 +821,28 @@ class AudioPlugin : Plugin() {
         )
     }
 
+    private fun SongEntity.toRemotePlaybackMetadata(): MediaMetadata {
+        val builder = MediaMetadata.Builder()
+            .setTitle(title)
+            .setArtist(artist)
+            .setAlbumTitle(album)
+        if (duration > 0) {
+            builder.setDurationMs(duration * 1000L)
+        }
+        remotePlaybackArtworkUrl()?.let { artworkUrl ->
+            builder.setArtworkUri(Uri.parse(artworkUrl))
+        }
+        return builder.build()
+    }
+
+    private fun SongEntity.remotePlaybackCoverArtId(): String? =
+        coverArt ?: albumId
+
+    private fun SongEntity.remotePlaybackArtworkUrl(): String? {
+        val coverArtId = remotePlaybackCoverArtId() ?: return null
+        return NativeSourceResolver(context).resolveCoverArtUrl(coverArtId, 800)
+    }
+
     private fun setSystemVolumeValue(value: Double) {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
@@ -1664,24 +1686,36 @@ class AudioPlugin : Plugin() {
         expectedGeneration: Int,
     ) {
         pluginScope.launch {
+            val songId = snapshot.optString("songId", "")
+            val song = if (songId.isNotEmpty()) {
+                withContext(Dispatchers.IO) {
+                    db.songDao().getById(songId)
+                }
+            } else {
+                null
+            }
             val service = try {
                 awaitService()
             } catch (_: TimeoutCancellationException) {
                 return@launch
             }
             mainHandler.post {
-                val songId = snapshot.optString("songId", "")
                 val duration = snapshot.optDouble("durationSeconds", 0.0)
-                val metadata = MediaMetadata.Builder()
-                    .setTitle(songId.ifEmpty { "Remote playback" })
-                    .setArtist(snapshot.optString("sourceName", ""))
-                    .setDurationMs((duration.coerceAtLeast(0.0) * 1000).toLong())
-                    .build()
+                val metadata = song?.toRemotePlaybackMetadata()
+                    ?: MediaMetadata.Builder()
+                        .setTitle(songId.ifEmpty { "Remote playback" })
+                        .setArtist(snapshot.optString("sourceName", ""))
+                        .setDurationMs(
+                            (duration.coerceAtLeast(0.0) * 1000).toLong(),
+                        )
+                        .build()
                 val volume = if (snapshot.has("volume") && !snapshot.isNull("volume")) {
                     snapshot.optDouble("volume")
                 } else {
                     null
                 }
+                val artworkUrl = song?.remotePlaybackArtworkUrl()
+                val coverArtId = song?.remotePlaybackCoverArtId()
                 service.updateRemotePlaybackProjection(
                     metadata,
                     snapshot.optBoolean("isPlaying", false),
@@ -1690,8 +1724,8 @@ class AudioPlugin : Plugin() {
                     snapshot.optBoolean("shuffle", false),
                     snapshot.optString("repeat", "off"),
                     volume,
-                    artworkUrl = null,
-                    coverArtId = null,
+                    artworkUrl,
+                    coverArtId,
                     targetDeviceId,
                     expectedGeneration,
                 )
