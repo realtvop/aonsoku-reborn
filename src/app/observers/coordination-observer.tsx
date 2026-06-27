@@ -787,10 +787,12 @@ export function CoordinationObserver() {
       _supersededGeneration: number,
       transferredToDevice: string | null,
     ) => {
-      playerActions.setPlayingState(false);
-      sessionIdRef.current = crypto.randomUUID();
-      generationRef.current = 1;
-      snapshotRevisionRef.current = 0;
+      if (!nativeCoordinationAvailable) {
+        playerActions.setPlayingState(false);
+        sessionIdRef.current = crypto.randomUUID();
+        generationRef.current = 1;
+        snapshotRevisionRef.current = 0;
+      }
       const deviceName =
         useCoordinationStore
           .getState()
@@ -807,7 +809,7 @@ export function CoordinationObserver() {
     return () => {
       manager.callbacks.onSessionSuperseded = original;
     };
-  }, [isConnected, manager, playerActions, t]);
+  }, [isConnected, manager, nativeCoordinationAvailable, playerActions, t]);
 
   // Reflect controlled-device transport state without adopting its queue.
   // Remote control is observation/control, not handoff: the local queue must
