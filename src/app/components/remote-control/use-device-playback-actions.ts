@@ -327,6 +327,7 @@ export function useDevicePlaybackActions(): DevicePlaybackActions {
 
       if (
         code === "source_changed" &&
+        !isNativeCoordinationAvailable() &&
         sourceChangedRetriesRef.current < SOURCE_CHANGED_MAX_RETRIES
       ) {
         sourceChangedRetriesRef.current += 1;

@@ -315,6 +315,9 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     private val deviceGenerations = mutableMapOf<String, Int>()
     private val deviceSnapshotRevisions = mutableMapOf<String, Int>()
     private var activeRemoteControlTargetDeviceId: String? = null
+    private var pendingNativeHandoffSourceDeviceId: String? = null
+    private var pendingNativeHandoffRetryWaitingForSnapshot: Boolean = false
+    private var pendingNativeHandoffRetryCount: Int = 0
     private data class PendingNativeCommand(
         val targetDeviceId: String,
         val commandJson: String,
@@ -726,17 +729,12 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     @PluginMethod
     fun requestHandoffCandidateFromCache(call: PluginCall) {
         val sourceDeviceId = call.getString("sourceDeviceId") ?: return call.reject("missing sourceDeviceId")
-        val generation = deviceGenerations[sourceDeviceId] ?: return call.reject("missing cached generation")
-        val snapshotRevision = deviceSnapshotRevisions[sourceDeviceId]
-            ?: return call.reject("missing cached snapshotRevision")
-        val env = JSONObject()
-        env.put("version", protocolVersion)
-        env.put("messageId", java.util.UUID.randomUUID().toString())
-        env.put("type", "handoff_candidate_request")
-        env.put("sourceDeviceId", sourceDeviceId)
-        env.put("expectedGeneration", generation)
-        env.put("expectedSnapshotRevision", snapshotRevision)
-        sendEnvelope(env)
+        if (!sendHandoffCandidateRequestFromCache(sourceDeviceId)) {
+            return call.reject("missing cached handoff snapshot")
+        }
+        pendingNativeHandoffSourceDeviceId = sourceDeviceId
+        pendingNativeHandoffRetryWaitingForSnapshot = false
+        pendingNativeHandoffRetryCount = 0
         call.resolve()
     }
 
@@ -774,12 +772,30 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
 
     @PluginMethod
     fun requestSnapshots(call: PluginCall) {
+        requestSnapshots()
+        call.resolve()
+    }
+
+    private fun requestSnapshots() {
         val env = JSONObject()
         env.put("version", protocolVersion)
         env.put("messageId", java.util.UUID.randomUUID().toString())
         env.put("type", "request_snapshots")
         sendEnvelope(env)
-        call.resolve()
+    }
+
+    private fun sendHandoffCandidateRequestFromCache(sourceDeviceId: String): Boolean {
+        val generation = deviceGenerations[sourceDeviceId] ?: return false
+        val snapshotRevision = deviceSnapshotRevisions[sourceDeviceId] ?: return false
+        val env = JSONObject()
+        env.put("version", protocolVersion)
+        env.put("messageId", java.util.UUID.randomUUID().toString())
+        env.put("type", "handoff_candidate_request")
+        env.put("sourceDeviceId", sourceDeviceId)
+        env.put("expectedGeneration", generation)
+        env.put("expectedSnapshotRevision", snapshotRevision)
+        sendEnvelope(env)
+        return true
     }
 
     private fun disconnectInternal() {
@@ -1010,6 +1026,13 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
                 if (snapshotDeviceId.isNotEmpty() && snapshotRevision > 0) {
                     deviceSnapshotRevisions[snapshotDeviceId] = snapshotRevision
                 }
+                if (
+                    pendingNativeHandoffRetryWaitingForSnapshot &&
+                    snapshotDeviceId == pendingNativeHandoffSourceDeviceId &&
+                    sendHandoffCandidateRequestFromCache(snapshotDeviceId)
+                ) {
+                    pendingNativeHandoffRetryWaitingForSnapshot = false
+                }
                 if (snapshotDeviceId == activeRemoteControlTargetDeviceId) {
                     val snapshot = parsed.optJSONObject("snapshot")
                     if (snapshot == null || !parsed.optBoolean("isOnline", true)) {
@@ -1059,6 +1082,17 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
                     }
                     return
                 }
+            }
+            if (
+                type == "error" &&
+                parsed.optString("code", "") == "source_changed" &&
+                pendingNativeHandoffSourceDeviceId != null &&
+                pendingNativeHandoffRetryCount < 2
+            ) {
+                pendingNativeHandoffRetryCount += 1
+                pendingNativeHandoffRetryWaitingForSnapshot = true
+                requestSnapshots()
+                return
             }
             if (type == "prepare_relinquish") {
                 val transactionId = parsed.optString("transactionId", "")
@@ -1114,6 +1148,9 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
                 }
             }
             if (type == "handoff_committed") {
+                pendingNativeHandoffSourceDeviceId = null
+                pendingNativeHandoffRetryWaitingForSnapshot = false
+                pendingNativeHandoffRetryCount = 0
                 val snapshot = parsed.optJSONObject("snapshot")
                 val accepted = snapshot != null &&
                     AudioPlugin.prepareHandoffPlaybackFromActive(
@@ -1123,6 +1160,11 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
                 if (accepted) {
                     return
                 }
+            }
+            if (type == "handoff_failed") {
+                pendingNativeHandoffSourceDeviceId = null
+                pendingNativeHandoffRetryWaitingForSnapshot = false
+                pendingNativeHandoffRetryCount = 0
             }
             if (type == "session_superseded") {
                 nativeSessionId = java.util.UUID.randomUUID().toString()

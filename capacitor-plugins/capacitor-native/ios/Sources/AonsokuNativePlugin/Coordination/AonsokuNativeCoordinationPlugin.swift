@@ -203,6 +203,9 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     private var deviceGenerations: [String: Int] = [:]
     private var deviceSnapshotRevisions: [String: Int] = [:]
     private var activeRemoteControlTargetDeviceId: String?
+    private var pendingNativeHandoffSourceDeviceId: String?
+    private var pendingNativeHandoffRetryWaitingForSnapshot = false
+    private var pendingNativeHandoffRetryCount = 0
     private var pendingNativeCommands: [String: PendingNativeCommand] = [:]
     private var heartbeatTimer: Timer?
     private var snapshotHeartbeatTimer: Timer?
@@ -548,23 +551,13 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
             call.reject("missing sourceDeviceId")
             return
         }
-        guard let generation = deviceGenerations[sourceDeviceId] else {
-            call.reject("missing cached generation")
+        guard sendHandoffCandidateRequestFromCache(sourceDeviceId: sourceDeviceId) else {
+            call.reject("missing cached handoff snapshot")
             return
         }
-        guard let snapshotRevision = deviceSnapshotRevisions[sourceDeviceId] else {
-            call.reject("missing cached snapshotRevision")
-            return
-        }
-        let env: [String: Any] = [
-            "version": self.protocolVersion,
-            "messageId": UUID().uuidString,
-            "type": "handoff_candidate_request",
-            "sourceDeviceId": sourceDeviceId,
-            "expectedGeneration": generation,
-            "expectedSnapshotRevision": snapshotRevision,
-        ]
-        sendEnvelope(env)
+        pendingNativeHandoffSourceDeviceId = sourceDeviceId
+        pendingNativeHandoffRetryWaitingForSnapshot = false
+        pendingNativeHandoffRetryCount = 0
         call.resolve()
     }
 
@@ -607,13 +600,34 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     }
 
     @objc func requestSnapshots(_ call: CAPPluginCall) {
+        requestSnapshots()
+        call.resolve()
+    }
+
+    private func requestSnapshots() {
         let env: [String: Any] = [
             "version": self.protocolVersion,
             "messageId": UUID().uuidString,
             "type": "request_snapshots",
         ]
         sendEnvelope(env)
-        call.resolve()
+    }
+
+    private func sendHandoffCandidateRequestFromCache(sourceDeviceId: String) -> Bool {
+        guard let generation = deviceGenerations[sourceDeviceId],
+              let snapshotRevision = deviceSnapshotRevisions[sourceDeviceId] else {
+            return false
+        }
+        let env: [String: Any] = [
+            "version": self.protocolVersion,
+            "messageId": UUID().uuidString,
+            "type": "handoff_candidate_request",
+            "sourceDeviceId": sourceDeviceId,
+            "expectedGeneration": generation,
+            "expectedSnapshotRevision": snapshotRevision,
+        ]
+        sendEnvelope(env)
+        return true
     }
 
     // MARK: - WebSocket Delegate
@@ -896,6 +910,11 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
                    snapshotRevision > 0 {
                     self.deviceSnapshotRevisions[deviceId] = snapshotRevision
                 }
+                if pendingNativeHandoffRetryWaitingForSnapshot,
+                   deviceId == pendingNativeHandoffSourceDeviceId,
+                   sendHandoffCandidateRequestFromCache(sourceDeviceId: deviceId) {
+                    pendingNativeHandoffRetryWaitingForSnapshot = false
+                }
                 if deviceId == self.activeRemoteControlTargetDeviceId {
                     if dict["isOnline"] as? Bool == false {
                         AonsokuNativeAudioPlugin.clearRemotePlaybackProjectionFromActive()
@@ -958,6 +977,16 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
                 return
             }
             if let type = dict["type"] as? String,
+               type == "error",
+               dict["code"] as? String == "source_changed",
+               pendingNativeHandoffSourceDeviceId != nil,
+               pendingNativeHandoffRetryCount < 2 {
+                pendingNativeHandoffRetryCount += 1
+                pendingNativeHandoffRetryWaitingForSnapshot = true
+                requestSnapshots()
+                return
+            }
+            if let type = dict["type"] as? String,
                type == "prepare_relinquish",
                let transactionId = dict["transactionId"] as? String,
                !transactionId.isEmpty,
@@ -1009,7 +1038,15 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
                    autoplay: true,
                    completion: { _ in }
                ) {
+                pendingNativeHandoffSourceDeviceId = nil
+                pendingNativeHandoffRetryWaitingForSnapshot = false
+                pendingNativeHandoffRetryCount = 0
                 return
+            }
+            if let type = dict["type"] as? String, type == "handoff_failed" {
+                pendingNativeHandoffSourceDeviceId = nil
+                pendingNativeHandoffRetryWaitingForSnapshot = false
+                pendingNativeHandoffRetryCount = 0
             }
             if let type = dict["type"] as? String,
                type == "session_superseded" {
