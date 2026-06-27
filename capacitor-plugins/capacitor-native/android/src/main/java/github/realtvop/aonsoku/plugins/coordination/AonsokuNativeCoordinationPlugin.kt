@@ -1146,10 +1146,12 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
                 val transactionId = parsed.optString("transactionId", "")
                 val sourceDeviceId = parsed.optString("sourceDeviceId", "")
                 val sessionId = parsed.optString("sessionId", "")
-                val accepted = snapshot != null &&
+                val accepted = if (
+                    snapshot != null &&
                     transactionId.isNotEmpty() &&
                     sourceDeviceId.isNotEmpty() &&
-                    sessionId.isNotEmpty() &&
+                    sessionId.isNotEmpty()
+                ) {
                     AudioPlugin.prepareHandoffPlaybackFromActive(
                         snapshot,
                         autoplay = false,
@@ -1165,11 +1167,29 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
                                     sessionId,
                                 ),
                             )
+                        } else {
+                            sendEnvelope(
+                                buildHandoffFailedEnvelope(
+                                    protocolVersion,
+                                    transactionId,
+                                    "unsupported_media",
+                                ),
+                            )
                         }
                     }
-                if (accepted) {
-                    return
+                } else {
+                    false
                 }
+                if (!accepted && transactionId.isNotEmpty()) {
+                    sendEnvelope(
+                        buildHandoffFailedEnvelope(
+                            protocolVersion,
+                            transactionId,
+                            "unsupported_media",
+                        ),
+                    )
+                }
+                return
             }
             if (type == "handoff_committed") {
                 pendingNativeHandoffSourceDeviceId = null

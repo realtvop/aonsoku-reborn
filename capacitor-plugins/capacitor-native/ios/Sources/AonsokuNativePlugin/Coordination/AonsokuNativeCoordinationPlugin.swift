@@ -1025,30 +1025,44 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
                 return
             }
             if let type = dict["type"] as? String,
-               type == "handoff_candidate",
-               let snapshot = dict["snapshot"] as? [String: Any],
-               let transactionId = dict["transactionId"] as? String,
-               !transactionId.isEmpty,
-               let sourceDeviceId = dict["sourceDeviceId"] as? String,
-               !sourceDeviceId.isEmpty,
-               let sessionId = dict["sessionId"] as? String,
-               !sessionId.isEmpty,
-               AonsokuNativeAudioPlugin.prepareHandoffPlaybackFromActive(
-                   snapshot: snapshot,
-                   autoplay: false,
-                   completion: { prepared in
-                       if prepared {
-                           self.sendEnvelope(Self.buildTargetReadyEnvelope(
-                               protocolVersion: self.protocolVersion,
-                               transactionId: transactionId,
-                               generation: dict["generation"] as? Int ?? 0,
-                               snapshotRevision: dict["snapshotRevision"] as? Int ?? 0,
-                               sourceDeviceId: sourceDeviceId,
-                               sessionId: sessionId
-                           ))
-                       }
-                   }
-               ) {
+               type == "handoff_candidate" {
+                let snapshot = dict["snapshot"] as? [String: Any]
+                let transactionId = dict["transactionId"] as? String ?? ""
+                let sourceDeviceId = dict["sourceDeviceId"] as? String ?? ""
+                let sessionId = dict["sessionId"] as? String ?? ""
+                let canPrepare = snapshot != nil &&
+                    !transactionId.isEmpty &&
+                    !sourceDeviceId.isEmpty &&
+                    !sessionId.isEmpty
+                let accepted = canPrepare && AonsokuNativeAudioPlugin.prepareHandoffPlaybackFromActive(
+                    snapshot: snapshot ?? [:],
+                    autoplay: false,
+                    completion: { prepared in
+                        if prepared {
+                            self.sendEnvelope(Self.buildTargetReadyEnvelope(
+                                protocolVersion: self.protocolVersion,
+                                transactionId: transactionId,
+                                generation: dict["generation"] as? Int ?? 0,
+                                snapshotRevision: dict["snapshotRevision"] as? Int ?? 0,
+                                sourceDeviceId: sourceDeviceId,
+                                sessionId: sessionId
+                            ))
+                        } else {
+                            self.sendEnvelope(Self.buildHandoffFailedEnvelope(
+                                protocolVersion: self.protocolVersion,
+                                transactionId: transactionId,
+                                code: "unsupported_media"
+                            ))
+                        }
+                    }
+                )
+                if !accepted && !transactionId.isEmpty {
+                    self.sendEnvelope(Self.buildHandoffFailedEnvelope(
+                        protocolVersion: self.protocolVersion,
+                        transactionId: transactionId,
+                        code: "unsupported_media"
+                    ))
+                }
                 return
             }
             if let type = dict["type"] as? String,
