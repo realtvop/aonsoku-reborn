@@ -3411,13 +3411,11 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             var handledNatively = false
             if let targetDeviceId = remotePlaybackProjection?.targetDeviceId {
                 event["targetDeviceId"] = targetDeviceId
-                if let expectedGeneration = remotePlaybackProjection?.expectedGeneration {
-                    handledNatively = AonsokuNativeCoordinationPlugin.sendCommandFromActive(
-                        targetDeviceId: targetDeviceId,
-                        expectedGeneration: expectedGeneration,
-                        command: remoteControlCommand
-                    )
-                }
+                handledNatively = AonsokuNativeCoordinationPlugin.sendCommandFromActive(
+                    targetDeviceId: targetDeviceId,
+                    expectedGeneration: remotePlaybackProjection?.expectedGeneration,
+                    command: remoteControlCommand
+                )
             }
             if let expectedGeneration = remotePlaybackProjection?.expectedGeneration {
                 event["expectedGeneration"] = expectedGeneration

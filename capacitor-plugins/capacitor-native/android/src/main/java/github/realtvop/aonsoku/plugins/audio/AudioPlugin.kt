@@ -1217,7 +1217,6 @@ class AudioPlugin : Plugin() {
     ) {
         val handledNatively =
             targetDeviceId != null &&
-                expectedGeneration != null &&
                 AonsokuNativeCoordinationPlugin.sendCommandFromActive(
                     targetDeviceId,
                     expectedGeneration,
