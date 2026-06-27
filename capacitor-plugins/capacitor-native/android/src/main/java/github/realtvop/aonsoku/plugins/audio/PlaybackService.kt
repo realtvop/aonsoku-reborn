@@ -15,6 +15,7 @@ import android.Manifest
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
 import androidx.annotation.OptIn
 import androidx.core.app.NotificationCompat
 import androidx.media.app.NotificationCompat.MediaStyle
@@ -77,7 +78,7 @@ class PlaybackService : MediaSessionService() {
     private var cachedArtworkBitmap: Bitmap? = null
     private var artworkLoadRevision = 0
     private var isBoundToActivity = false
-    private var nextSnapshotProgressSeconds: Double? = null
+    private var snapshotProgressOverride: SnapshotProgressOverride? = null
 
     val queueEngine = NativeQueueEngine()
     var isQueueEngineActive = false
@@ -290,14 +291,24 @@ class PlaybackService : MediaSessionService() {
         listeners.forEach { it.onPlaybackStateChanged(state) }
     }
 
-    fun consumeSnapshotProgressSeconds(fallback: Double): Double {
-        val override = nextSnapshotProgressSeconds
-        nextSnapshotProgressSeconds = null
-        return override ?: fallback
+    fun snapshotProgressSeconds(songId: String?, fallback: Double): Double {
+        val override = snapshotProgressOverride ?: return fallback
+        if (override.songId != null && override.songId != songId) {
+            return fallback
+        }
+        val ageMs = SystemClock.elapsedRealtime() - override.createdAtMs
+        if (fallback <= 0.25 || ageMs >= 2_000L) {
+            snapshotProgressOverride = null
+        }
+        return override.seconds
     }
 
-    private fun forceNextSnapshotProgress(seconds: Double) {
-        nextSnapshotProgressSeconds = seconds.coerceAtLeast(0.0)
+    private fun forceSnapshotProgress(songId: String?, seconds: Double) {
+        snapshotProgressOverride = SnapshotProgressOverride(
+            songId,
+            seconds.coerceAtLeast(0.0),
+            SystemClock.elapsedRealtime(),
+        )
     }
 
     private fun emitEnded(reason: String) {
@@ -521,7 +532,7 @@ class PlaybackService : MediaSessionService() {
                 handleScrobbleSongEnded()
                 val duration = engine.currentSong?.duration ?: 0.0
                 handleScrobbleSongStarted(songId, duration)
-                forceNextSnapshotProgress(0.0)
+                forceSnapshotProgress(songId, 0.0)
                 emitQueueStateChanged(index, songId, reason.value, engine.isInUserQueue)
             }
 
@@ -536,7 +547,7 @@ class PlaybackService : MediaSessionService() {
                     handleScrobbleSongEnded()
                     player?.pause()
                     player?.seekTo(0)
-                    forceNextSnapshotProgress(0.0)
+                    forceSnapshotProgress(engine.currentSong?.id, 0.0)
                     emitPlaybackState("ended")
                     emitEnded("finished")
                 }
@@ -549,7 +560,7 @@ class PlaybackService : MediaSessionService() {
                     handleScrobbleSongStarted(song.id, song.duration)
                     player?.seekTo(0)
                     player?.play()
-                    forceNextSnapshotProgress(0.0)
+                    forceSnapshotProgress(song.id, 0.0)
                     emitPlaybackState("playing")
                 }
             }
@@ -1490,3 +1501,9 @@ class PlaybackService : MediaSessionService() {
         }
     }
 }
+
+private data class SnapshotProgressOverride(
+    val songId: String?,
+    val seconds: Double,
+    val createdAtMs: Long,
+)
