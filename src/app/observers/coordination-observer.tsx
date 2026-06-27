@@ -621,6 +621,7 @@ export function CoordinationObserver() {
 
   // Handle prepare_relinquish: pause the local player (design §11.1 step 4-5).
   useEffect(() => {
+    if (nativeCoordinationAvailable) return;
     if (!isConnected) return;
     const original = manager.callbacks.onPrepareRelinquish;
     manager.callbacks.onPrepareRelinquish = (
@@ -651,11 +652,13 @@ export function CoordinationObserver() {
     shuffleEnabled,
     loopState,
     volume,
+    nativeCoordinationAvailable,
   ]);
 
   // Handle handoff_candidate: fetch metadata, preload the full queue paused,
   // seek to the snapshot progress, and send target_ready (design §11.1 step 2-3).
   useEffect(() => {
+    if (nativeCoordinationAvailable) return;
     if (!isConnected) return;
     const original = manager.callbacks.onHandoffCandidate;
     manager.callbacks.onHandoffCandidate = (
@@ -710,11 +713,12 @@ export function CoordinationObserver() {
     return () => {
       manager.callbacks.onHandoffCandidate = original;
     };
-  }, [isConnected, manager]);
+  }, [isConnected, manager, nativeCoordinationAvailable]);
 
   // Handle handoff_committed: apply the final snapshot (with A's last-second
   // state) and resume playback (design §11.1 step 7).
   useEffect(() => {
+    if (nativeCoordinationAvailable) return;
     if (!isConnected) return;
     const original = manager.callbacks.onHandoffCommitted;
     manager.callbacks.onHandoffCommitted = (
@@ -749,7 +753,7 @@ export function CoordinationObserver() {
     return () => {
       manager.callbacks.onHandoffCommitted = original;
     };
-  }, [isConnected, manager]);
+  }, [isConnected, manager, nativeCoordinationAvailable]);
 
   // Handle handoff_failed
   useEffect(() => {
