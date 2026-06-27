@@ -843,6 +843,74 @@ class AudioPlugin : Plugin() {
         return NativeSourceResolver(context).resolveCoverArtUrl(coverArtId, 800)
     }
 
+    private suspend fun loadRemotePlaybackSong(songId: String): SongEntity? =
+        withContext(Dispatchers.IO) {
+            db.songDao().getById(songId) ?: fetchRemotePlaybackSong(songId)
+        }
+
+    private suspend fun fetchRemotePlaybackSong(songId: String): SongEntity? {
+        val credentials = credentialStore.retrieve() ?: return null
+        return try {
+            val response = httpClient.request(
+                baseUrl = credentials.serverUrl,
+                path = "getSong.view",
+                credentials = credentials,
+                extraQuery = mapOf("id" to songId),
+            )
+            val song = parseRemotePlaybackSong(
+                response.data.optJSONObject("song"),
+            ) ?: return null
+            db.songDao().upsert(song)
+            song
+        } catch (error: Throwable) {
+            NativeLogger.warn(
+                "Failed to fetch remote playback song metadata: ${error.message}",
+                "audio-plugin",
+            )
+            null
+        }
+    }
+
+    private fun parseRemotePlaybackSong(item: JSONObject?): SongEntity? {
+        if (item == null) return null
+        val id = item.optNullableString("id") ?: return null
+        val title = item.optNullableString("title") ?: return null
+        return SongEntity(
+            id = id,
+            parent = item.optNullableString("parent"),
+            title = title,
+            album = item.optNullableString("album"),
+            artist = item.optNullableString("artist"),
+            track = if (item.has("track")) item.optInt("track") else null,
+            year = if (item.has("year")) item.optInt("year") else null,
+            genre = item.optNullableString("genre"),
+            coverArt = item.optNullableString("coverArt"),
+            size = if (item.has("size")) item.optLong("size") else null,
+            contentType = item.optNullableString("contentType"),
+            suffix = item.optNullableString("suffix"),
+            duration = item.optInt("duration", 0),
+            bitRate = if (item.has("bitRate")) item.optInt("bitRate") else null,
+            path = item.optNullableString("path"),
+            playCount = if (item.has("playCount")) item.optInt("playCount") else null,
+            discNumber = if (item.has("discNumber")) item.optInt("discNumber") else null,
+            created = item.optNullableString("created"),
+            albumId = item.optNullableString("albumId"),
+            artistId = item.optNullableString("artistId"),
+            played = item.optNullableString("played"),
+            starred = item.optNullableString("starred"),
+            bpm = if (item.has("bpm")) item.optInt("bpm") else null,
+            comment = item.optNullableString("comment"),
+            sortName = item.optNullableString("sortName"),
+            mediaType = item.optNullableString("type"),
+            musicBrainzId = item.optNullableString("musicBrainzId"),
+            genresJson = item.optJSONArray("genres")?.toString(),
+            replayGainJson = item.optJSONObject("replayGain")?.toString(),
+        )
+    }
+
+    private fun JSONObject.optNullableString(name: String): String? =
+        if (has(name) && !isNull(name)) optString(name).takeIf { it.isNotBlank() } else null
+
     private fun setSystemVolumeValue(value: Double) {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
@@ -1688,9 +1756,7 @@ class AudioPlugin : Plugin() {
         pluginScope.launch {
             val songId = snapshot.optString("songId", "")
             val song = if (songId.isNotEmpty()) {
-                withContext(Dispatchers.IO) {
-                    db.songDao().getById(songId)
-                }
+                loadRemotePlaybackSong(songId)
             } else {
                 null
             }
