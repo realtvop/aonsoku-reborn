@@ -409,16 +409,19 @@ export class CoordinationManager {
         this.wireRefreshGeneration(nativeClient);
         try {
           await nativeClient.connect();
-          return;
-        } catch {
-          // Fallback to the TS client if the native plugin fails to start
-          // (requirement §7 — never leave the manager with no active client).
+        } catch (err) {
           this.coordClient = null;
           this.callbacks.onConnectionStateChange("reconnecting");
+          this.callbacks.onError(
+            "native_transport_failed",
+            err instanceof Error ? err.message : String(err),
+          );
         }
+        return;
       }
     }
-    // TS WebSocket path (web/Electron, or native fallback).
+    // TS WebSocket path (web/Electron only). Mobile native runtimes must keep
+    // the realtime remote-control transport in the native plugin.
     const tsClient = new CoordinationWsClient(
       () => wsUrl,
       ticketFn,
