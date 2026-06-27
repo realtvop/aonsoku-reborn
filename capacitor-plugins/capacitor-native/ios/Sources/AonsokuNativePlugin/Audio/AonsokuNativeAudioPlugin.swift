@@ -23,6 +23,18 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         activeInstance?.pauseAndGetCurrentFullState()
     }
 
+    internal static func prepareHandoffPlaybackFromActive(
+        snapshot: [String: Any],
+        autoplay: Bool,
+        completion: @escaping (Bool) -> Void
+    ) -> Bool {
+        guard let instance = activeInstance else {
+            return false
+        }
+        instance.prepareHandoffPlayback(snapshot: snapshot, autoplay: autoplay, completion: completion)
+        return true
+    }
+
     internal static func isSupportedRemoteControlCommand(_ type: String) -> Bool {
         [
             "play",
@@ -552,8 +564,87 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         return ids.compactMap { byId[$0]?.toQueueSong() }
     }
 
+    private func prepareHandoffPlayback(
+        snapshot: [String: Any],
+        autoplay: Bool,
+        completion: @escaping (Bool) -> Void
+    ) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let songId = snapshot["songId"] as? String, !songId.isEmpty else {
+                completion(false)
+                return
+            }
+
+            do {
+                let contextIds = self.stringArray(snapshot["contextQueue"])
+                var songs = try self.loadQueueSongs(ids: contextIds.isEmpty ? [songId] : contextIds)
+                if songs.isEmpty {
+                    songs = try self.loadQueueSongs(ids: [songId])
+                }
+                guard !songs.isEmpty else {
+                    completion(false)
+                    return
+                }
+
+                let snapshotIndex = snapshot["contextIndex"] as? Int ?? -1
+                let resolvedIndex = snapshotIndex >= 0
+                    ? snapshotIndex
+                    : (songs.firstIndex { $0.id == songId } ?? 0)
+                let progressSeconds = max(0, self.numberValue(snapshot["progressSeconds"]) ?? 0)
+                let repeatMode = snapshot["repeat"] as? String ?? "off"
+                let shuffle = snapshot["shuffle"] as? Bool ?? false
+                let sourceId = self.parseSnapshotSourceId(snapshot["sourceId"] as? String)
+                let sourceName = snapshot["sourceName"] as? String
+                let volume = self.numberValue(snapshot["volume"])
+
+                self.stateQueue.async {
+                    self.isQueueEngineActive = true
+                    if let loopState = LoopState(rawValue: repeatMode) {
+                        self.queueEngine.setLoopState(loopState)
+                        self.repeatMode = repeatMode
+                    }
+                    self.queueEngine.setContextQueue(
+                        songs: songs,
+                        currentIndex: resolvedIndex,
+                        autoplay: autoplay,
+                        startTime: progressSeconds,
+                        sourceId: sourceId,
+                        sourceName: sourceName
+                    )
+                    self.shuffleEnabled = shuffle
+                    self.queueEngine.setShuffleActive(shuffle)
+                    self.persistence.markStateDirty()
+                    if let volume {
+                        self.setSystemVolumeValue(volume)
+                    }
+                    completion(true)
+                }
+            } catch {
+                NativeLogger.shared.warn(
+                    "Failed to prepare native handoff playback: \(error.localizedDescription)",
+                    source: "Audio"
+                )
+                completion(false)
+            }
+        }
+    }
+
     private func stringArray(_ value: Any?) -> [String] {
         (value as? [String] ?? []).filter { !$0.isEmpty }
+    }
+
+    private func parseSnapshotSourceId(_ raw: String?) -> QueueSourceId? {
+        guard let raw, !raw.isEmpty else { return nil }
+        let parts = raw.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else {
+            return nil
+        }
+        switch parts[0] {
+        case "album", "playlist", "artist", "genre", "radio":
+            return QueueSourceId(type: parts[0], id: parts[1])
+        default:
+            return nil
+        }
     }
 
     private func playlistEntrySongIds(_ entriesJson: String) -> [String] {

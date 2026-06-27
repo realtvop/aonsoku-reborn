@@ -81,6 +81,17 @@ class AudioPlugin : Plugin() {
             return activeInstance?.pauseAndGetCurrentFullState()
         }
 
+        @JvmStatic
+        fun prepareHandoffPlaybackFromActive(
+            snapshot: JSONObject,
+            autoplay: Boolean,
+            completion: (Boolean) -> Unit,
+        ): Boolean {
+            val instance = activeInstance ?: return false
+            instance.prepareHandoffPlayback(snapshot, autoplay, completion)
+            return true
+        }
+
         internal fun isSupportedRemoteControlCommand(type: String): Boolean {
             return type == "play" ||
                 type == "pause" ||
@@ -513,6 +524,78 @@ class AudioPlugin : Plugin() {
         return snapshot
     }
 
+    private fun prepareHandoffPlayback(
+        snapshot: JSONObject,
+        autoplay: Boolean,
+        completion: (Boolean) -> Unit,
+    ) {
+        pluginScope.launch {
+            try {
+                val songId = snapshot.optString("songId", "")
+                if (songId.isEmpty()) {
+                    completion(false)
+                    return@launch
+                }
+
+                val contextIds = snapshot.optStringArray("contextQueue")
+                    .ifEmpty { listOf(songId) }
+                val songs = loadQueueSongs(contextIds)
+                    .ifEmpty { loadQueueSongs(listOf(songId)) }
+                if (songs.isEmpty()) {
+                    completion(false)
+                    return@launch
+                }
+
+                val currentIndexFromSnapshot = snapshot.optInt("contextIndex", -1)
+                val currentIndex = if (currentIndexFromSnapshot >= 0) {
+                    currentIndexFromSnapshot
+                } else {
+                    songs.indexOfFirst { it.id == songId }
+                }.coerceAtLeast(0)
+                val progressSeconds = snapshot.optDouble("progressSeconds", 0.0)
+                    .takeIf { it.isFinite() }
+                    ?.coerceAtLeast(0.0)
+                    ?: 0.0
+                val repeatMode = snapshot.optString("repeat", "off")
+                val shuffle = snapshot.optBoolean("shuffle", false)
+                val sourceId = parseSnapshotSourceId(snapshot.optString("sourceId", ""))
+                val sourceName = snapshot.optString("sourceName")
+                    .takeIf { it.isNotEmpty() }
+
+                val service = awaitService()
+                mainHandler.post {
+                    try {
+                        service.setRepeatMode(repeatMode)
+                        service.setContextQueue(
+                            songs,
+                            currentIndex,
+                            autoplay,
+                            progressSeconds,
+                            sourceId,
+                            sourceName,
+                        )
+                        service.setShuffle(shuffle)
+                        val volume = snapshot.optDouble("volume", Double.NaN)
+                        if (!volume.isNaN()) setSystemVolumeValue(volume)
+                        completion(true)
+                    } catch (error: Throwable) {
+                        NativeLogger.warn(
+                            "Failed to apply native handoff snapshot: ${error.message}",
+                            "audio-plugin",
+                        )
+                        completion(false)
+                    }
+                }
+            } catch (error: Throwable) {
+                NativeLogger.warn(
+                    "Failed to prepare native handoff playback: ${error.message}",
+                    "audio-plugin",
+                )
+                completion(false)
+            }
+        }
+    }
+
     private fun toggleLikeForSong(songId: String) {
         pluginScope.launch {
             try {
@@ -667,6 +750,18 @@ class AudioPlugin : Plugin() {
             if (id.isNotEmpty()) values.add(id)
         }
         return values
+    }
+
+    private fun parseSnapshotSourceId(raw: String): QueueSourceId? {
+        if (raw.isEmpty()) return null
+        val separator = raw.indexOf(":")
+        if (separator <= 0 || separator >= raw.length - 1) return null
+        val type = raw.substring(0, separator)
+        val id = raw.substring(separator + 1)
+        return when (type) {
+            "album", "playlist", "artist", "genre", "radio" -> QueueSourceId(type, id)
+            else -> null
+        }
     }
 
     private fun parsePlaylistEntrySongIds(entriesJson: String): List<String> {

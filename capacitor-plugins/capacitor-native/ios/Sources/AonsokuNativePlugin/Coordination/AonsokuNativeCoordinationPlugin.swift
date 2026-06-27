@@ -82,6 +82,26 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         ]
     }
 
+    internal static func buildTargetReadyEnvelope(
+        protocolVersion: Int,
+        transactionId: String,
+        generation: Int,
+        snapshotRevision: Int,
+        sourceDeviceId: String,
+        sessionId: String
+    ) -> [String: Any] {
+        [
+            "version": protocolVersion,
+            "messageId": UUID().uuidString,
+            "type": "target_ready",
+            "transactionId": transactionId,
+            "generation": generation,
+            "snapshotRevision": snapshotRevision,
+            "sourceDeviceId": sourceDeviceId,
+            "sessionId": sessionId,
+        ]
+    }
+
     internal static func buildPlaybackSnapshot(
         sessionId: String,
         audioState: [String: Any],
@@ -835,6 +855,43 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
                     transactionId: transactionId,
                     snapshot: snapshot
                 ))
+                return
+            }
+            if let type = dict["type"] as? String,
+               type == "handoff_candidate",
+               let snapshot = dict["snapshot"] as? [String: Any],
+               let transactionId = dict["transactionId"] as? String,
+               !transactionId.isEmpty,
+               let sourceDeviceId = dict["sourceDeviceId"] as? String,
+               !sourceDeviceId.isEmpty,
+               let sessionId = dict["sessionId"] as? String,
+               !sessionId.isEmpty,
+               AonsokuNativeAudioPlugin.prepareHandoffPlaybackFromActive(
+                   snapshot: snapshot,
+                   autoplay: false,
+                   completion: { prepared in
+                       if prepared {
+                           self.sendEnvelope(Self.buildTargetReadyEnvelope(
+                               protocolVersion: self.protocolVersion,
+                               transactionId: transactionId,
+                               generation: dict["generation"] as? Int ?? 0,
+                               snapshotRevision: dict["snapshotRevision"] as? Int ?? 0,
+                               sourceDeviceId: sourceDeviceId,
+                               sessionId: sessionId
+                           ))
+                       }
+                   }
+               ) {
+                return
+            }
+            if let type = dict["type"] as? String,
+               type == "handoff_committed",
+               let snapshot = dict["snapshot"] as? [String: Any],
+               AonsokuNativeAudioPlugin.prepareHandoffPlaybackFromActive(
+                   snapshot: snapshot,
+                   autoplay: true,
+                   completion: { _ in }
+               ) {
                 return
             }
         }

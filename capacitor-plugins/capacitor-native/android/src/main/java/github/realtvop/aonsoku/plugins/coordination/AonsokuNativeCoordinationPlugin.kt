@@ -947,6 +947,47 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
                     return
                 }
             }
+            if (type == "handoff_candidate") {
+                val snapshot = parsed.optJSONObject("snapshot")
+                val transactionId = parsed.optString("transactionId", "")
+                val sourceDeviceId = parsed.optString("sourceDeviceId", "")
+                val sessionId = parsed.optString("sessionId", "")
+                val accepted = snapshot != null &&
+                    transactionId.isNotEmpty() &&
+                    sourceDeviceId.isNotEmpty() &&
+                    sessionId.isNotEmpty() &&
+                    AudioPlugin.prepareHandoffPlaybackFromActive(
+                        snapshot,
+                        autoplay = false,
+                    ) { prepared ->
+                        if (prepared) {
+                            sendEnvelope(
+                                buildTargetReadyEnvelope(
+                                    protocolVersion,
+                                    transactionId,
+                                    parsed.optInt("generation", 0),
+                                    parsed.optInt("snapshotRevision", 0),
+                                    sourceDeviceId,
+                                    sessionId,
+                                ),
+                            )
+                        }
+                    }
+                if (accepted) {
+                    return
+                }
+            }
+            if (type == "handoff_committed") {
+                val snapshot = parsed.optJSONObject("snapshot")
+                val accepted = snapshot != null &&
+                    AudioPlugin.prepareHandoffPlaybackFromActive(
+                        snapshot,
+                        autoplay = true,
+                    ) { }
+                if (accepted) {
+                    return
+                }
+            }
         }
         notifyListeners("coordinationEvent", JSObject().put("envelopeJson", json))
     }
