@@ -704,26 +704,27 @@ export class NativeCoordinationClient implements CoordinationClient {
         this.callbacks.onSnapshotProjection(env);
         break;
       case "command":
-        this.callbacks.onCommand(env);
+        // Playback control is native-owned on mobile. If an older native layer
+        // still bridges this envelope, do not reintroduce WebView execution.
         break;
       case "command_ack":
         // The native plugin emits `coordinationAck` separately; the envelope
         // is handled by the ack listener, not here.
         break;
       case "handoff_candidate":
-        this.callbacks.onHandoffCandidate(env);
+        // Handoff prepare is native-owned on mobile.
         break;
       case "prepare_relinquish":
-        this.callbacks.onPrepareRelinquish(env);
+        // Source relinquish is native-owned on mobile.
         break;
       case "handoff_committed":
-        this.callbacks.onHandoffCommitted(env);
+        // Final handoff apply is native-owned on mobile.
         break;
       case "handoff_failed":
         this.callbacks.onHandoffFailed(env);
         break;
       case "session_superseded":
-        this.callbacks.onSessionSuperseded(env);
+        // Playback teardown is native-owned on mobile.
         break;
       case "error":
         this.callbacks.onError(env.code, env.reason);

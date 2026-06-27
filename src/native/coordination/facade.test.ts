@@ -463,7 +463,7 @@ describe("NativeCoordinationClient", () => {
     expect(mockPlugin.requestSnapshots).toHaveBeenCalled();
   });
 
-  it("parses coordinationEvent envelopes and forwards through callbacks", async () => {
+  it("forwards UI envelopes but does not bridge native-owned control", async () => {
     const cb = makeCallbacks();
     const client = new NativeCoordinationClient(
       mockPlugin,
@@ -499,7 +499,64 @@ describe("NativeCoordinationClient", () => {
       command: { type: "play" },
     };
     emit("coordinationEvent", { envelopeJson: JSON.stringify(commandEnv) });
-    expect(cb.onCommand).toHaveBeenCalledWith(commandEnv);
+    expect(cb.onCommand).not.toHaveBeenCalled();
+
+    const handoffCandidateEnv: Envelope = {
+      version: 1,
+      messageId: "m-3",
+      type: "handoff_candidate",
+      transactionId: "tx-1",
+      snapshot: snapshot("sess-2"),
+      generation: 1,
+      snapshotRevision: 2,
+      deadline: 4567,
+    };
+    emit("coordinationEvent", {
+      envelopeJson: JSON.stringify(handoffCandidateEnv),
+    });
+    expect(cb.onHandoffCandidate).not.toHaveBeenCalled();
+
+    const prepareEnv: Envelope = {
+      version: 1,
+      messageId: "m-4",
+      type: "prepare_relinquish",
+      transactionId: "tx-1",
+      expectedSnapshotRevision: 2,
+      deadline: 4567,
+    };
+    emit("coordinationEvent", { envelopeJson: JSON.stringify(prepareEnv) });
+    expect(cb.onPrepareRelinquish).not.toHaveBeenCalled();
+
+    const committedEnv: Envelope = {
+      version: 1,
+      messageId: "m-5",
+      type: "handoff_committed",
+      transactionId: "tx-1",
+      newGeneration: 2,
+      snapshot: snapshot("sess-2"),
+    };
+    emit("coordinationEvent", { envelopeJson: JSON.stringify(committedEnv) });
+    expect(cb.onHandoffCommitted).not.toHaveBeenCalled();
+
+    const supersededEnv: Envelope = {
+      version: 1,
+      messageId: "m-6",
+      type: "session_superseded",
+      supersededGeneration: 2,
+      transferredToDevice: "dev-2",
+    };
+    emit("coordinationEvent", { envelopeJson: JSON.stringify(supersededEnv) });
+    expect(cb.onSessionSuperseded).not.toHaveBeenCalled();
+
+    const failedEnv: Envelope = {
+      version: 1,
+      messageId: "m-7",
+      type: "handoff_failed",
+      transactionId: "tx-1",
+      code: "unsupported_media",
+    };
+    emit("coordinationEvent", { envelopeJson: JSON.stringify(failedEnv) });
+    expect(cb.onHandoffFailed).toHaveBeenCalledWith(failedEnv);
   });
 
   it("ignores malformed coordinationEvent envelopes", async () => {
