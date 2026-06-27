@@ -5,42 +5,7 @@ import {
   type PlaybackRemoteCommandEvent,
 } from "@/player/playback";
 import { usePlayerActions, usePlayerStore } from "@/store/player.store";
-import { LanControlMessageType } from "@/types/lanControl";
 import { logger } from "@/utils/logger";
-
-function forwardRemoteCommand(event: PlaybackRemoteCommandEvent) {
-  const remoteControl = usePlayerStore.getState().remoteControl;
-  if (!remoteControl.active || !remoteControl.sendCommand) return false;
-
-  switch (event.command) {
-    case "play":
-      remoteControl.sendCommand(LanControlMessageType.PLAY);
-      return true;
-    case "pause":
-      remoteControl.sendCommand(LanControlMessageType.PAUSE);
-      return true;
-    case "togglePlayPause":
-      remoteControl.sendCommand(LanControlMessageType.PLAY_PAUSE);
-      return true;
-    case "next":
-      remoteControl.sendCommand(LanControlMessageType.NEXT);
-      return true;
-    case "previous":
-      remoteControl.sendCommand(LanControlMessageType.PREVIOUS);
-      return true;
-    case "seek":
-      remoteControl.sendCommand(LanControlMessageType.SEEK, {
-        seconds: Math.max(0, event.position ?? 0),
-      });
-      return true;
-    case "like":
-      remoteControl.sendCommand(LanControlMessageType.TOGGLE_LIKE);
-      return true;
-    case "shuffle":
-      remoteControl.sendCommand(LanControlMessageType.TOGGLE_SHUFFLE);
-      return true;
-  }
-}
 
 export function NativeRemoteCommandObserver() {
   const {
@@ -62,8 +27,6 @@ export function NativeRemoteCommandObserver() {
         if (disposed) return;
 
         const command: PlaybackRemoteCommandEvent = event;
-
-        if (forwardRemoteCommand(command)) return;
 
         handlePlaybackRemoteCommand(command, {
           isPlaying: () => usePlayerStore.getState().playerState.isPlaying,
