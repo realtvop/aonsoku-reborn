@@ -511,7 +511,8 @@ class AudioPlugin : Plugin() {
     private fun getCurrentFullState(): JSONObject? {
         val service = playbackService ?: return null
         val player = service.getPlayer()
-        val currentTime = player?.currentPosition?.div(1000.0) ?: 0.0
+        val playerCurrentTime = player?.currentPosition?.div(1000.0) ?: 0.0
+        val currentTime = service.consumeSnapshotProgressSeconds(playerCurrentTime)
         val duration = if (player != null && player.duration != C.TIME_UNSET) {
             player.duration / 1000.0
         } else {

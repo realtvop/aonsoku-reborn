@@ -77,6 +77,7 @@ class PlaybackService : MediaSessionService() {
     private var cachedArtworkBitmap: Bitmap? = null
     private var artworkLoadRevision = 0
     private var isBoundToActivity = false
+    private var nextSnapshotProgressSeconds: Double? = null
 
     val queueEngine = NativeQueueEngine()
     var isQueueEngineActive = false
@@ -287,6 +288,16 @@ class PlaybackService : MediaSessionService() {
 
     private fun emitPlaybackState(state: String) {
         listeners.forEach { it.onPlaybackStateChanged(state) }
+    }
+
+    fun consumeSnapshotProgressSeconds(fallback: Double): Double {
+        val override = nextSnapshotProgressSeconds
+        nextSnapshotProgressSeconds = null
+        return override ?: fallback
+    }
+
+    private fun forceNextSnapshotProgress(seconds: Double) {
+        nextSnapshotProgressSeconds = seconds.coerceAtLeast(0.0)
     }
 
     private fun emitEnded(reason: String) {
@@ -510,6 +521,7 @@ class PlaybackService : MediaSessionService() {
                 handleScrobbleSongEnded()
                 val duration = engine.currentSong?.duration ?: 0.0
                 handleScrobbleSongStarted(songId, duration)
+                forceNextSnapshotProgress(0.0)
                 emitQueueStateChanged(index, songId, reason.value, engine.isInUserQueue)
             }
 
@@ -524,6 +536,7 @@ class PlaybackService : MediaSessionService() {
                     handleScrobbleSongEnded()
                     player?.pause()
                     player?.seekTo(0)
+                    forceNextSnapshotProgress(0.0)
                     emitPlaybackState("ended")
                     emitEnded("finished")
                 }
@@ -536,6 +549,8 @@ class PlaybackService : MediaSessionService() {
                     handleScrobbleSongStarted(song.id, song.duration)
                     player?.seekTo(0)
                     player?.play()
+                    forceNextSnapshotProgress(0.0)
+                    emitPlaybackState("playing")
                 }
             }
         }
