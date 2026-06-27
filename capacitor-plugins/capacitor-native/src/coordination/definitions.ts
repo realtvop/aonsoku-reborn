@@ -66,6 +66,10 @@ export interface CoordinationHandoffOptions {
   snapshotJson: string;
 }
 
+export interface CoordinationControlSessionOptions {
+  targetDeviceId: string;
+}
+
 export interface CoordinationTokenOptions {
   accessToken: string;
   refreshToken: string;
@@ -157,7 +161,9 @@ export interface AonsokuNativeCoordinationPlugin extends Plugin {
   sendRelinquishAck(options: CoordinationHandoffOptions): Promise<void>;
 
   /// Mark the target currently controlled by this mobile client.
-  sendControlSessionBegin(targetDeviceId: string): Promise<void>;
+  sendControlSessionBegin(
+    options: CoordinationControlSessionOptions,
+  ): Promise<void>;
 
   /// Clear the currently controlled target for this mobile client.
   sendControlSessionEnd(): Promise<void>;

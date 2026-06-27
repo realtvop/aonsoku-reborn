@@ -532,7 +532,7 @@ export class NativeCoordinationClient implements CoordinationClient {
   }
 
   sendControlSessionBegin(targetDeviceId: DeviceId): void {
-    this.plugin.sendControlSessionBegin(targetDeviceId).catch(() => {});
+    this.plugin.sendControlSessionBegin({ targetDeviceId }).catch(() => {});
   }
 
   sendControlSessionEnd(): void {
