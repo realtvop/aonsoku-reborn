@@ -250,6 +250,10 @@ class PlaybackService : MediaSessionService() {
         listeners.forEach { it.onRemoteCommand(command, position) }
     }
 
+    private fun emitRemotePlayPauseCommand() {
+        emitRemoteCommand(if (remotePlaybackIsPlaying) "pause" else "play")
+    }
+
     private fun buildRemoteControlCommand(command: String, position: Double?): JSONObject? {
         if (!isRemotePlaybackProjectionActive) return null
 
@@ -697,7 +701,14 @@ class PlaybackService : MediaSessionService() {
                         return SessionResult.RESULT_INFO_SKIPPED
                     }
                     else -> {
-                        if (isRemotePlaybackProjectionActive || !isQueueEngineActive) {
+                        if (isRemotePlaybackProjectionActive) {
+                            return super.onPlayerCommandRequest(
+                                session,
+                                controller,
+                                playerCommand,
+                            )
+                        }
+                        if (!isQueueEngineActive) {
                             val commandName = when (playerCommand) {
                                 Player.COMMAND_PLAY_PAUSE -> "togglePlayPause"
                                 else -> null
@@ -1020,7 +1031,7 @@ class PlaybackService : MediaSessionService() {
         when (intent?.action) {
             ACTION_PLAY_PAUSE -> {
                 if (isRemotePlaybackProjectionActive) {
-                    emitRemoteCommand("togglePlayPause")
+                    emitRemotePlayPauseCommand()
                     updateNotification()
                     return START_STICKY
                 }
