@@ -1244,18 +1244,12 @@ class AudioPlugin : Plugin() {
                     expectedGeneration,
                     command,
                 )
-        val data = JSObject().apply {
-            put("command", command)
-            if (targetDeviceId != null) {
-                put("targetDeviceId", targetDeviceId)
-            }
-            if (expectedGeneration != null) {
-                put("expectedGeneration", expectedGeneration)
-            }
-            put("handledNatively", handledNatively)
-            put("requestId", currentRequestId ?: JSONObject.NULL)
+        if (!handledNatively) {
+            NativeLogger.warn(
+                "Remote control command was not sent natively: ${command.optString("type")}",
+                "audio-plugin",
+            )
         }
-        notifyListeners("remoteControlCommand", data)
     }
 
     private fun checkAndRequestNotificationPermission(call: PluginCall, onDone: () -> Unit) {

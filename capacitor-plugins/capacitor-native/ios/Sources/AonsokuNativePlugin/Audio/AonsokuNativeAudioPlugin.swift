@@ -3478,23 +3478,20 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         if let remoteControlCommand = buildRemoteControlCommand(command, position: position) {
-            var event: JSObject = [
-                "command": remoteControlCommand,
-            ]
             var handledNatively = false
             if let targetDeviceId = remotePlaybackProjection?.targetDeviceId {
-                event["targetDeviceId"] = targetDeviceId
                 handledNatively = AonsokuNativeCoordinationPlugin.sendCommandFromActive(
                     targetDeviceId: targetDeviceId,
                     expectedGeneration: remotePlaybackProjection?.expectedGeneration,
                     command: remoteControlCommand
                 )
             }
-            if let expectedGeneration = remotePlaybackProjection?.expectedGeneration {
-                event["expectedGeneration"] = expectedGeneration
+            if !handledNatively {
+                NativeLogger.shared.warn(
+                    "Remote control command was not sent natively: \(remoteControlCommand["type"] ?? "unknown")",
+                    source: "Audio"
+                )
             }
-            event["handledNatively"] = handledNatively
-            notifyListeners("remoteControlCommand", data: eventData(event))
             return
         }
 
