@@ -95,6 +95,7 @@ export interface CoordinationClient {
     expectedGeneration: SessionGeneration,
     expectedSnapshotRevision: SnapshotRevision,
   ): void;
+  requestHandoffCandidateFromCache?(sourceDeviceId: DeviceId): void;
   sendTargetReady(
     transactionId: string,
     generation: SessionGeneration,
@@ -133,6 +134,7 @@ export interface CoordinationClient {
     expectedGeneration: SessionGeneration,
     expectedSnapshotRevision: SnapshotRevision,
   ): void;
+  requestHandoffCandidateFromCache?(sourceDeviceId: DeviceId): void;
   sendTargetReady(
     transactionId: string,
     generation: SessionGeneration,

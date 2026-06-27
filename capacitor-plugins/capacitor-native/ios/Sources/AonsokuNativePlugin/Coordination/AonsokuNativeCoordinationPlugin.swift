@@ -201,6 +201,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     private var nativeGeneration = 1
     private var nativeSnapshotRevision = 0
     private var deviceGenerations: [String: Int] = [:]
+    private var deviceSnapshotRevisions: [String: Int] = [:]
     private var activeRemoteControlTargetDeviceId: String?
     private var pendingNativeCommands: [String: PendingNativeCommand] = [:]
     private var heartbeatTimer: Timer?
@@ -542,6 +543,31 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         call.resolve()
     }
 
+    @objc func requestHandoffCandidateFromCache(_ call: CAPPluginCall) {
+        guard let sourceDeviceId = call.getString("sourceDeviceId") else {
+            call.reject("missing sourceDeviceId")
+            return
+        }
+        guard let generation = deviceGenerations[sourceDeviceId] else {
+            call.reject("missing cached generation")
+            return
+        }
+        guard let snapshotRevision = deviceSnapshotRevisions[sourceDeviceId] else {
+            call.reject("missing cached snapshotRevision")
+            return
+        }
+        let env: [String: Any] = [
+            "version": self.protocolVersion,
+            "messageId": UUID().uuidString,
+            "type": "handoff_candidate_request",
+            "sourceDeviceId": sourceDeviceId,
+            "expectedGeneration": generation,
+            "expectedSnapshotRevision": snapshotRevision,
+        ]
+        sendEnvelope(env)
+        call.resolve()
+    }
+
     @objc func sendTargetReady(_ call: CAPPluginCall) {
         guard let transactionId = call.getString("transactionId"),
               let sourceDeviceId = call.getString("sourceDeviceId"),
@@ -866,6 +892,10 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
                let generation = dict["generation"] as? Int,
                generation > 0 {
                 self.deviceGenerations[deviceId] = generation
+                if let snapshotRevision = dict["snapshotRevision"] as? Int,
+                   snapshotRevision > 0 {
+                    self.deviceSnapshotRevisions[deviceId] = snapshotRevision
+                }
                 if deviceId == self.activeRemoteControlTargetDeviceId {
                     if dict["isOnline"] as? Bool == false {
                         AonsokuNativeAudioPlugin.clearRemotePlaybackProjectionFromActive()

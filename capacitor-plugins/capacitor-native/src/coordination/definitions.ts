@@ -65,6 +65,11 @@ export interface CoordinationActiveCommandOptions {
   commandJson: string;
 }
 
+export interface CoordinationHandoffCandidateCacheOptions {
+  /** Source device whose cached snapshot generation/revision should be used. */
+  sourceDeviceId: string;
+}
+
 export interface CoordinationHandoffOptions {
   transactionId: string;
   /** JSON-serialized PlaybackSnapshot for relinquish_ack. */
@@ -157,6 +162,11 @@ export interface AonsokuNativeCoordinationPlugin extends Plugin {
     sourceDeviceId: string,
     expectedGeneration: number,
     expectedSnapshotRevision: number,
+  ): Promise<void>;
+
+  /// Request a handoff candidate using native cached generation/revision.
+  requestHandoffCandidateFromCache(
+    options: CoordinationHandoffCandidateCacheOptions,
   ): Promise<void>;
 
   /// Signal target_ready (design §11.1 step 3).

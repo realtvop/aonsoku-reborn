@@ -313,6 +313,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     private var nativeGeneration: Int = 1
     private var nativeSnapshotRevision: Int = 0
     private val deviceGenerations = mutableMapOf<String, Int>()
+    private val deviceSnapshotRevisions = mutableMapOf<String, Int>()
     private var activeRemoteControlTargetDeviceId: String? = null
     private data class PendingNativeCommand(
         val targetDeviceId: String,
@@ -723,6 +724,23 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun requestHandoffCandidateFromCache(call: PluginCall) {
+        val sourceDeviceId = call.getString("sourceDeviceId") ?: return call.reject("missing sourceDeviceId")
+        val generation = deviceGenerations[sourceDeviceId] ?: return call.reject("missing cached generation")
+        val snapshotRevision = deviceSnapshotRevisions[sourceDeviceId]
+            ?: return call.reject("missing cached snapshotRevision")
+        val env = JSONObject()
+        env.put("version", protocolVersion)
+        env.put("messageId", java.util.UUID.randomUUID().toString())
+        env.put("type", "handoff_candidate_request")
+        env.put("sourceDeviceId", sourceDeviceId)
+        env.put("expectedGeneration", generation)
+        env.put("expectedSnapshotRevision", snapshotRevision)
+        sendEnvelope(env)
+        call.resolve()
+    }
+
+    @PluginMethod
     fun sendTargetReady(call: PluginCall) {
         val transactionId = call.getString("transactionId") ?: return call.reject("missing transactionId")
         val sourceDeviceId = call.getString("sourceDeviceId") ?: return call.reject("missing sourceDeviceId")
@@ -985,8 +1003,12 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             if (type == "snapshot_projection") {
                 val snapshotDeviceId = parsed.optString("deviceId", "")
                 val generation = parsed.optInt("generation", 0)
+                val snapshotRevision = parsed.optInt("snapshotRevision", 0)
                 if (snapshotDeviceId.isNotEmpty() && generation > 0) {
                     deviceGenerations[snapshotDeviceId] = generation
+                }
+                if (snapshotDeviceId.isNotEmpty() && snapshotRevision > 0) {
+                    deviceSnapshotRevisions[snapshotDeviceId] = snapshotRevision
                 }
                 if (snapshotDeviceId == activeRemoteControlTargetDeviceId) {
                     val snapshot = parsed.optJSONObject("snapshot")

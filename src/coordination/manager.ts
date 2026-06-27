@@ -606,6 +606,10 @@ export class CoordinationManager {
     );
   }
 
+  requestHandoffCandidateFromCache(sourceDeviceId: DeviceId): void {
+    this.coordClient?.requestHandoffCandidateFromCache?.(sourceDeviceId);
+  }
+
   sendActiveControlCommand(command: RemoteCommand): void {
     this.coordClient?.sendActiveControlCommand?.(command);
   }

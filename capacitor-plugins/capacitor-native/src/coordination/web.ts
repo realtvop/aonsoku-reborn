@@ -52,6 +52,9 @@ export class AonsokuNativeCoordinationWeb
   async requestHandoffCandidate(): Promise<void> {
     throw new Error("coordination: native plugin not available on web");
   }
+  async requestHandoffCandidateFromCache(): Promise<void> {
+    throw new Error("coordination: native plugin not available on web");
+  }
   async sendTargetReady(): Promise<void> {
     throw new Error("coordination: native plugin not available on web");
   }

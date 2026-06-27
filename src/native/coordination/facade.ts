@@ -511,6 +511,12 @@ export class NativeCoordinationClient implements CoordinationClient {
       .catch(() => {});
   }
 
+  requestHandoffCandidateFromCache(sourceDeviceId: DeviceId): void {
+    this.plugin
+      .requestHandoffCandidateFromCache({ sourceDeviceId })
+      .catch(() => {});
+  }
+
   sendTargetReady(
     transactionId: string,
     generation: SessionGeneration,

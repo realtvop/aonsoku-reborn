@@ -139,11 +139,15 @@ export function useDevicePlaybackActions(): DevicePlaybackActions {
       setHandoffError(null);
       setHandoffPhase("prepare");
 
-      manager.requestHandoffCandidate(
-        model.device.id,
-        snapshotData.generation,
-        snapshotData.snapshotRevision,
-      );
+      if (isNativeCoordinationAvailable()) {
+        manager.requestHandoffCandidateFromCache(model.device.id);
+      } else {
+        manager.requestHandoffCandidate(
+          model.device.id,
+          snapshotData.generation,
+          snapshotData.snapshotRevision,
+        );
+      }
       toast.info(
         t("settings.crossDevice.toast.preparingRelay", {
           defaultValue: "Preparing handoff...",
