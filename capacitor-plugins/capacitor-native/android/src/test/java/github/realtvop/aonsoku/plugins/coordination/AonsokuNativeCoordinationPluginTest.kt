@@ -98,6 +98,24 @@ class AonsokuNativeCoordinationPluginTest {
         assertEquals("ok", env.getJSONObject("result").getString("status"))
     }
 
+    // --- buildRelinquishAckEnvelope ------------------------------------------
+
+    @Test
+    fun relinquishAckEnvelopeIncludesTransactionAndSnapshot() {
+        val snapshot = JSONObject().put("songId", "song-1")
+        val env = AonsokuNativeCoordinationPlugin.buildRelinquishAckEnvelope(
+            protocolVersion = 1,
+            transactionId = "tx-1",
+            snapshot = snapshot,
+        )
+
+        assertEquals(1, env.getInt("version"))
+        assertEquals("relinquish_ack", env.getString("type"))
+        assertFalse(env.getString("messageId").isBlank())
+        assertEquals("tx-1", env.getString("transactionId"))
+        assertEquals("song-1", env.getJSONObject("snapshot").getString("songId"))
+    }
+
     // --- buildPlaybackSnapshot ------------------------------------------------
 
     @Test

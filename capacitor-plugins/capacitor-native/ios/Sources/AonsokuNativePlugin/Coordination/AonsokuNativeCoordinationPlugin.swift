@@ -68,6 +68,20 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         ]
     }
 
+    internal static func buildRelinquishAckEnvelope(
+        protocolVersion: Int,
+        transactionId: String,
+        snapshot: [String: Any]
+    ) -> [String: Any] {
+        [
+            "version": protocolVersion,
+            "messageId": UUID().uuidString,
+            "type": "relinquish_ack",
+            "transactionId": transactionId,
+            "snapshot": snapshot,
+        ]
+    }
+
     internal static func buildPlaybackSnapshot(
         sessionId: String,
         audioState: [String: Any],
@@ -804,6 +818,23 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
                         messageId: messageId
                     ))
                 }
+                return
+            }
+            if let type = dict["type"] as? String,
+               type == "prepare_relinquish",
+               let transactionId = dict["transactionId"] as? String,
+               !transactionId.isEmpty,
+               let audioState = AonsokuNativeAudioPlugin.pauseAndGetFullStateFromActive(),
+               let snapshot = Self.buildPlaybackSnapshot(
+                   sessionId: nativeSessionId,
+                   audioState: audioState,
+                   sampledAtSeconds: Date().timeIntervalSince1970
+               ) {
+                self.sendEnvelope(Self.buildRelinquishAckEnvelope(
+                    protocolVersion: self.protocolVersion,
+                    transactionId: transactionId,
+                    snapshot: snapshot
+                ))
                 return
             }
         }

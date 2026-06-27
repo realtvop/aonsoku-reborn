@@ -46,6 +46,8 @@ import kotlinx.coroutines.CompletableDeferred
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 @CapacitorPlugin(
     name = "AonsokuNativeAudio",
@@ -72,6 +74,11 @@ class AudioPlugin : Plugin() {
         @JvmStatic
         fun getFullStateFromActive(): JSONObject? {
             return activeInstance?.getCurrentFullState()
+        }
+
+        @JvmStatic
+        fun pauseAndGetFullStateFromActive(): JSONObject? {
+            return activeInstance?.pauseAndGetCurrentFullState()
         }
 
         internal fun isSupportedRemoteControlCommand(type: String): Boolean {
@@ -479,6 +486,31 @@ class AudioPlugin : Plugin() {
         }
         val isPlaying = player?.isPlaying ?: false
         return service.queueEngine.getFullState(currentTime, duration, isPlaying)
+    }
+
+    private fun pauseAndGetCurrentFullState(): JSONObject? {
+        var snapshot: JSONObject? = null
+        val capture = Runnable {
+            val service = playbackService ?: return@Runnable
+            service.getPlayer()?.pause()
+            service.persistence.flushNow()
+            snapshot = getCurrentFullState()
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            capture.run()
+            return snapshot
+        }
+
+        val latch = CountDownLatch(1)
+        mainHandler.post {
+            try {
+                capture.run()
+            } finally {
+                latch.countDown()
+            }
+        }
+        latch.await(500, TimeUnit.MILLISECONDS)
+        return snapshot
     }
 
     private fun toggleLikeForSong(songId: String) {

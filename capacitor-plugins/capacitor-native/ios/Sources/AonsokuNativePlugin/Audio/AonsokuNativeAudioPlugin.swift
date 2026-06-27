@@ -19,6 +19,10 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         activeInstance?.currentFullState()
     }
 
+    internal static func pauseAndGetFullStateFromActive() -> [String: Any]? {
+        activeInstance?.pauseAndGetCurrentFullState()
+    }
+
     internal static func isSupportedRemoteControlCommand(_ type: String) -> Bool {
         [
             "play",
@@ -1206,6 +1210,25 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             duration: duration,
             isPlaying: isPlaying
         )
+    }
+
+    private func pauseAndGetCurrentFullState() -> [String: Any]? {
+        if Thread.isMainThread {
+            self.player?.pause()
+            self.persistence.flushNow()
+            return self.currentFullState()
+        }
+
+        var snapshot: [String: Any]?
+        let semaphore = DispatchSemaphore(value: 0)
+        DispatchQueue.main.async {
+            self.player?.pause()
+            self.persistence.flushNow()
+            snapshot = self.currentFullState()
+            semaphore.signal()
+        }
+        _ = semaphore.wait(timeout: .now() + .milliseconds(500))
+        return snapshot
     }
 
     @objc func resolveSongs(_ call: CAPPluginCall) {

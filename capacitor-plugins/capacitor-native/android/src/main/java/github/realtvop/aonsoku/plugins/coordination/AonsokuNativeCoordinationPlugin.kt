@@ -129,6 +129,20 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             return env
         }
 
+        internal fun buildRelinquishAckEnvelope(
+            protocolVersion: Int,
+            transactionId: String,
+            snapshot: JSONObject,
+        ): JSONObject {
+            val env = JSONObject()
+            env.put("version", protocolVersion)
+            env.put("messageId", java.util.UUID.randomUUID().toString())
+            env.put("type", "relinquish_ack")
+            env.put("transactionId", transactionId)
+            env.put("snapshot", snapshot)
+            return env
+        }
+
         internal fun buildPlaybackSnapshot(
             sessionId: String,
             audioState: JSONObject,
@@ -907,6 +921,29 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
                     if (messageId != null) {
                         sendEnvelope(buildCommandAckEnvelope(protocolVersion, messageId))
                     }
+                    return
+                }
+            }
+            if (type == "prepare_relinquish") {
+                val transactionId = parsed.optString("transactionId", "")
+                val audioState = AudioPlugin.pauseAndGetFullStateFromActive()
+                val snapshot = if (audioState != null) {
+                    buildPlaybackSnapshot(
+                        sessionId = nativeSessionId,
+                        audioState = audioState,
+                        sampledAtSeconds = System.currentTimeMillis() / 1000.0,
+                    )
+                } else {
+                    null
+                }
+                if (transactionId.isNotEmpty() && snapshot != null) {
+                    sendEnvelope(
+                        buildRelinquishAckEnvelope(
+                            protocolVersion,
+                            transactionId,
+                            snapshot,
+                        ),
+                    )
                     return
                 }
             }
