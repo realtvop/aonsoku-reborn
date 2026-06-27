@@ -427,6 +427,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         try {
             val accessToken = call.getString("accessToken") ?: return call.reject("missing accessToken")
             val refreshToken = call.getString("refreshToken") ?: return call.reject("missing refreshToken")
+            val accessTokenExpiresAt = call.getDouble("accessTokenExpiresAt", 0.0)?.toLong() ?: 0L
             val deviceId = call.getString("deviceId") ?: return call.reject("missing deviceId")
             val accountId = call.getString("accountId") ?: return call.reject("missing accountId")
             val historyLimit = call.getInt("historyLimit", 100) ?: 100
@@ -436,6 +437,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
                 CoordinationTokenBundle(
                     accessToken = accessToken,
                     refreshToken = refreshToken,
+                    accessTokenExpiresAt = accessTokenExpiresAt,
                     deviceId = deviceId,
                     accountId = accountId,
                     historyLimit = historyLimit,
@@ -453,6 +455,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         val ret = JSObject()
         ret.put("accessToken", bundle.accessToken)
         ret.put("refreshToken", bundle.refreshToken)
+        ret.put("accessTokenExpiresAt", bundle.accessTokenExpiresAt)
         ret.put("deviceId", bundle.deviceId)
         ret.put("accountId", bundle.accountId)
         ret.put("historyLimit", bundle.historyLimit)

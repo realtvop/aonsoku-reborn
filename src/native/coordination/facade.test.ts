@@ -173,6 +173,7 @@ describe("NativeCoordinationTokenStore", () => {
     vi.mocked(mockPlugin.loadTokens).mockResolvedValue({
       accessToken: "at",
       refreshToken: "rt",
+      accessTokenExpiresAt: 1234,
       deviceId: "dev-1",
       accountId: "acc-1",
       historyLimit: 500,
@@ -184,9 +185,22 @@ describe("NativeCoordinationTokenStore", () => {
       accountId: "acc-1",
       accessToken: "at",
       refreshToken: "rt",
-      accessTokenExpiresAt: 0,
+      accessTokenExpiresAt: 1234,
       historyLimit: 500,
     });
+  });
+
+  it("treats legacy native tokens without expiry as expired", async () => {
+    vi.mocked(mockPlugin.loadTokens).mockResolvedValue({
+      accessToken: "at",
+      refreshToken: "rt",
+      deviceId: "dev-1",
+      accountId: "acc-1",
+      historyLimit: 500,
+    });
+    const store = new NativeCoordinationTokenStore(mockPlugin);
+    const tokens = await store.loadTokens();
+    expect(tokens?.accessTokenExpiresAt).toBe(0);
   });
 
   it("returns null when the native plugin has no tokens", async () => {
@@ -208,6 +222,7 @@ describe("NativeCoordinationTokenStore", () => {
     expect(mockPlugin.storeTokens).toHaveBeenCalledWith({
       accessToken: "at",
       refreshToken: "rt",
+      accessTokenExpiresAt: 1234,
       deviceId: "dev-1",
       accountId: "acc-1",
       historyLimit: 500,

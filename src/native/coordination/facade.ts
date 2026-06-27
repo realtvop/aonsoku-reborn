@@ -128,17 +128,12 @@ export class NativeCoordinationTokenStore {
   async loadTokens(): Promise<StoredDeviceTokens | null> {
     const stored = await this.plugin.loadTokens();
     if (!stored) return null;
-    // The native plugin persists the access/refresh token + deviceId +
-    // accountId + historyLimit. The access token expiry is recomputed from
-    // the server response at connect time; if the plugin has no expiry
-    // metadata we treat the stored access token as already-expired so the
-    // HTTP client refreshes on next use.
     return {
       deviceId: stored.deviceId,
       accountId: stored.accountId,
       accessToken: stored.accessToken,
       refreshToken: stored.refreshToken,
-      accessTokenExpiresAt: 0,
+      accessTokenExpiresAt: stored.accessTokenExpiresAt ?? 0,
       historyLimit: stored.historyLimit,
     };
   }
@@ -151,6 +146,7 @@ export class NativeCoordinationTokenStore {
     await this.plugin.storeTokens({
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
+      accessTokenExpiresAt: tokens.accessTokenExpiresAt,
       deviceId: tokens.deviceId,
       accountId: tokens.accountId,
       historyLimit: tokens.historyLimit,

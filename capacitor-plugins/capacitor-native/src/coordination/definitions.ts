@@ -83,6 +83,8 @@ export interface CoordinationControlSessionOptions {
 export interface CoordinationTokenOptions {
   accessToken: string;
   refreshToken: string;
+  /** Unix epoch milliseconds when the access token expires. */
+  accessTokenExpiresAt?: number;
   deviceId: string;
   accountId: string;
   historyLimit: number;

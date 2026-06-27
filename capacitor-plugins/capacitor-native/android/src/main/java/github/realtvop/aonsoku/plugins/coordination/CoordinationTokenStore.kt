@@ -22,6 +22,7 @@ import org.json.JSONObject
 internal data class CoordinationTokenBundle(
     val accessToken: String,
     val refreshToken: String,
+    val accessTokenExpiresAt: Long,
     val deviceId: String,
     val accountId: String,
     val historyLimit: Int,
@@ -35,6 +36,7 @@ internal class CoordinationTokenStore(context: Context) {
         val payload = JSONObject().apply {
             put("accessToken", bundle.accessToken)
             put("refreshToken", bundle.refreshToken)
+            put("accessTokenExpiresAt", bundle.accessTokenExpiresAt)
             put("deviceId", bundle.deviceId)
             put("accountId", bundle.accountId)
             put("historyLimit", bundle.historyLimit)
@@ -66,6 +68,7 @@ internal class CoordinationTokenStore(context: Context) {
             CoordinationTokenBundle(
                 accessToken = payload.getString("accessToken"),
                 refreshToken = payload.getString("refreshToken"),
+                accessTokenExpiresAt = payload.optLong("accessTokenExpiresAt", 0L),
                 deviceId = payload.getString("deviceId"),
                 accountId = payload.getString("accountId"),
                 historyLimit = payload.optInt("historyLimit", 100),

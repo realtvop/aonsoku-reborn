@@ -271,9 +271,15 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
             return
         }
         let historyLimit = call.getInt("historyLimit") ?? 100
+        let accessTokenExpiresAt = call.getDouble("accessTokenExpiresAt") ?? 0
 
         KeychainManager.set(accessToken, forKey: "coord_access_token", service: keychainService)
         KeychainManager.set(refreshToken, forKey: "coord_refresh_token", service: keychainService)
+        KeychainManager.set(
+            String(accessTokenExpiresAt),
+            forKey: "coord_access_token_expires_at",
+            service: keychainService
+        )
         KeychainManager.set(deviceId, forKey: "coord_device_id", service: keychainService)
         KeychainManager.set(accountId, forKey: "coord_account_id", service: keychainService)
         KeychainManager.set(String(historyLimit), forKey: "coord_history_limit", service: keychainService)
@@ -290,9 +296,14 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
             return
         }
         let historyLimitStr = KeychainManager.get("coord_history_limit", service: keychainService) ?? "100"
+        let accessTokenExpiresAtStr = KeychainManager.get(
+            "coord_access_token_expires_at",
+            service: keychainService
+        ) ?? "0"
         call.resolve([
             "accessToken": accessToken,
             "refreshToken": refreshToken,
+            "accessTokenExpiresAt": Double(accessTokenExpiresAtStr) ?? 0,
             "deviceId": deviceId,
             "accountId": accountId,
             "historyLimit": Int(historyLimitStr) ?? 100,
@@ -302,6 +313,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     @objc func clearTokens(_ call: CAPPluginCall) {
         KeychainManager.delete("coord_access_token", service: keychainService)
         KeychainManager.delete("coord_refresh_token", service: keychainService)
+        KeychainManager.delete("coord_access_token_expires_at", service: keychainService)
         KeychainManager.delete("coord_device_id", service: keychainService)
         KeychainManager.delete("coord_account_id", service: keychainService)
         KeychainManager.delete("coord_history_limit", service: keychainService)
