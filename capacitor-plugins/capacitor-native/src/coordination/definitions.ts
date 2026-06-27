@@ -156,6 +156,12 @@ export interface AonsokuNativeCoordinationPlugin extends Plugin {
   /// Send relinquish_ack with final snapshot (design §11.1 step 5).
   sendRelinquishAck(options: CoordinationHandoffOptions): Promise<void>;
 
+  /// Mark the target currently controlled by this mobile client.
+  sendControlSessionBegin(targetDeviceId: string): Promise<void>;
+
+  /// Clear the currently controlled target for this mobile client.
+  sendControlSessionEnd(): Promise<void>;
+
   /// Request current online peers' playback snapshots from the server
   /// (design §9.2 bootstrap). Fire-and-forget; the server replies with
   /// `snapshot_projection` envelopes via the `coordinationEvent` listener.

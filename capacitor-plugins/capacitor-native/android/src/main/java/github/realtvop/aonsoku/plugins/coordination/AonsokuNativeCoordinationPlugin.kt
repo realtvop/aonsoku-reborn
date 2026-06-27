@@ -313,6 +313,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     private var nativeGeneration: Int = 1
     private var nativeSnapshotRevision: Int = 0
     private val deviceGenerations = mutableMapOf<String, Int>()
+    private var activeRemoteControlTargetDeviceId: String? = null
     private data class PendingNativeCommand(
         val targetDeviceId: String,
         val commandJson: String,
@@ -650,6 +651,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         val commandJson = call.getString("commandJson") ?: return call.reject("missing commandJson")
         val targetDeviceId = call.getString("targetDeviceId") ?: return call.reject("missing targetDeviceId")
         val parsed = parseJsonObject(commandJson) ?: return call.reject("invalid commandJson")
+        activeRemoteControlTargetDeviceId = targetDeviceId
         // §9.1: the caller may supply a messageId to match the command to a
         // pending-ack promise. Fall back to a generated UUID.
         val suppliedMessageId = call.getString("messageId")
@@ -667,6 +669,30 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             call.getInt("expectedGeneration", 0) ?: 0,
             parsed,
         )
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun sendControlSessionBegin(call: PluginCall) {
+        val targetDeviceId = call.getString("targetDeviceId") ?: return call.reject("missing targetDeviceId")
+        activeRemoteControlTargetDeviceId = targetDeviceId
+        val env = JSONObject()
+        env.put("version", protocolVersion)
+        env.put("messageId", java.util.UUID.randomUUID().toString())
+        env.put("type", "control_session_begin")
+        env.put("targetDeviceId", targetDeviceId)
+        sendEnvelope(env)
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun sendControlSessionEnd(call: PluginCall) {
+        activeRemoteControlTargetDeviceId = null
+        val env = JSONObject()
+        env.put("version", protocolVersion)
+        env.put("messageId", java.util.UUID.randomUUID().toString())
+        env.put("type", "control_session_end")
+        sendEnvelope(env)
         call.resolve()
     }
 

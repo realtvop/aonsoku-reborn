@@ -55,6 +55,12 @@ export class AonsokuNativeCoordinationWeb
   async sendRelinquishAck(): Promise<void> {
     throw new Error("coordination: native plugin not available on web");
   }
+  async sendControlSessionBegin(): Promise<void> {
+    throw new Error("coordination: native plugin not available on web");
+  }
+  async sendControlSessionEnd(): Promise<void> {
+    throw new Error("coordination: native plugin not available on web");
+  }
   async requestSnapshots(): Promise<void> {
     throw new Error("coordination: native plugin not available on web");
   }

@@ -7,21 +7,18 @@
 // client. Mirrors the facade pattern in `src/native/audio/facade.ts` and
 // `src/native/bridge/facade.ts`.
 
-import { Capacitor } from "@capacitor/core";
-import type { PluginListenerHandle } from "@capacitor/core";
 import {
   AonsokuNativeCoordination,
-  COORDINATION_PLUGIN_NAME,
   type AonsokuNativeCoordinationPlugin,
+  COORDINATION_PLUGIN_NAME,
 } from "@aonsoku/capacitor-native/coordination";
-import type {
-  CoordinationClient,
-  ConnectionCallbacks,
-} from "@/coordination/wsClient";
-import type { ConnectionState } from "@/coordination/wsClient";
-import type { CoordinationConfig } from "@/coordination/tokenStore";
+import type { PluginListenerHandle } from "@capacitor/core";
+import { Capacitor } from "@capacitor/core";
 import type { StoredDeviceTokens } from "@/coordination/httpClient";
+import type { CoordinationConfig } from "@/coordination/tokenStore";
 import type {
+  CommandResult,
+  ConnectionSeq,
   DeviceId,
   Envelope,
   MessageId,
@@ -35,10 +32,12 @@ import {
   COORDINATION_PROTOCOL_VERSION,
   CoordinationCapability,
 } from "@/coordination/types";
-import type { CommandResult, ConnectionSeq } from "@/coordination/types";
 import type {
-  SendCommandOptions,
+  ConnectionCallbacks,
+  ConnectionState,
+  CoordinationClient,
   RefreshGenerationFn,
+  SendCommandOptions,
 } from "@/coordination/wsClient";
 
 export type NativeCoordinationAvailability =
@@ -532,6 +531,14 @@ export class NativeCoordinationClient implements CoordinationClient {
       .catch(() => {});
   }
 
+  sendControlSessionBegin(targetDeviceId: DeviceId): void {
+    this.plugin.sendControlSessionBegin(targetDeviceId).catch(() => {});
+  }
+
+  sendControlSessionEnd(): void {
+    this.plugin.sendControlSessionEnd().catch(() => {});
+  }
+
   requestSnapshots(): void {
     this.plugin.requestSnapshots().catch(() => {});
   }
@@ -727,20 +734,20 @@ export class NativeCoordinationClient implements CoordinationClient {
   }
 }
 
+export type {
+  AonsokuNativeCoordinationPlugin,
+  CoordinationAckEvent,
+  CoordinationCommandOptions,
+  CoordinationConfigOptions,
+  CoordinationConnectOptions,
+  CoordinationHandoffOptions,
+  CoordinationHttpRequestOptions,
+  CoordinationHttpResponse,
+  CoordinationSnapshotOptions,
+  CoordinationStateResult,
+  CoordinationTokenOptions,
+} from "@aonsoku/capacitor-native/coordination";
 export {
   AonsokuNativeCoordination,
   COORDINATION_PLUGIN_NAME,
-} from "@aonsoku/capacitor-native/coordination";
-export type {
-  AonsokuNativeCoordinationPlugin,
-  CoordinationConnectOptions,
-  CoordinationStateResult,
-  CoordinationSnapshotOptions,
-  CoordinationCommandOptions,
-  CoordinationHandoffOptions,
-  CoordinationTokenOptions,
-  CoordinationConfigOptions,
-  CoordinationHttpRequestOptions,
-  CoordinationHttpResponse,
-  CoordinationAckEvent,
 } from "@aonsoku/capacitor-native/coordination";

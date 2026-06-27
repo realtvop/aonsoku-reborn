@@ -201,6 +201,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     private var nativeGeneration = 1
     private var nativeSnapshotRevision = 0
     private var deviceGenerations: [String: Int] = [:]
+    private var activeRemoteControlTargetDeviceId: String?
     private var pendingNativeCommands: [String: PendingNativeCommand] = [:]
     private var heartbeatTimer: Timer?
     private var snapshotHeartbeatTimer: Timer?
@@ -455,6 +456,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         }
         // §9.1: the caller may supply a messageId to match the command to a
         // pending-ack promise. Fall back to a generated UUID.
+        activeRemoteControlTargetDeviceId = targetDeviceId
         let suppliedMessageId = call.getString("messageId")
         let messageId = suppliedMessageId ?? UUID().uuidString
         let command = JSONUtilities.parse(commandJson) ?? [:]
@@ -471,6 +473,33 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
             expectedGeneration: call.getInt("expectedGeneration") ?? 0,
             command: command
         )
+        call.resolve()
+    }
+
+    @objc func sendControlSessionBegin(_ call: CAPPluginCall) {
+        guard let targetDeviceId = call.getString("targetDeviceId") else {
+            call.reject("missing targetDeviceId")
+            return
+        }
+        activeRemoteControlTargetDeviceId = targetDeviceId
+        let env: [String: Any] = [
+            "version": self.protocolVersion,
+            "messageId": UUID().uuidString,
+            "type": "control_session_begin",
+            "targetDeviceId": targetDeviceId,
+        ]
+        sendEnvelope(env)
+        call.resolve()
+    }
+
+    @objc func sendControlSessionEnd(_ call: CAPPluginCall) {
+        activeRemoteControlTargetDeviceId = nil
+        let env: [String: Any] = [
+            "version": self.protocolVersion,
+            "messageId": UUID().uuidString,
+            "type": "control_session_end",
+        ]
+        sendEnvelope(env)
         call.resolve()
     }
 
