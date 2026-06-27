@@ -866,30 +866,32 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
                 }
                 self.dedupCache.mark(id)
             }
-            // §9.1: emit `coordinationAck` when a command_ack arrives so the
-            // WebView facade can resolve the pending sendCommand() promise.
+            // §9.1: native-origin commands consume their ack entirely in the
+            // native layer. Only JS-origin commands are bridged back so the
+            // WebView facade can resolve its pending sendCommand() promise.
             if let type = dict["type"] as? String, type == "command_ack" {
-                self.handleNativeCommandAck(dict)
-                let messageId = dict["messageId"] as? String ?? ""
-                let result: String
-                if let r = dict["result"] {
-                    if let data = try? JSONSerialization.data(withJSONObject: r),
-                       let str = String(data: data, encoding: .utf8) {
-                        result = str
+                if !self.handleNativeCommandAck(dict) {
+                    let messageId = dict["messageId"] as? String ?? ""
+                    let result: String
+                    if let r = dict["result"] {
+                        if let data = try? JSONSerialization.data(withJSONObject: r),
+                           let str = String(data: data, encoding: .utf8) {
+                            result = str
+                        } else {
+                            result = "{}"
+                        }
                     } else {
                         result = "{}"
                     }
-                } else {
-                    result = "{}"
-                }
-                DispatchQueue.main.async {
-                    self.notifyListeners(
-                        "coordinationAck",
-                        data: [
-                            "messageId": messageId,
-                            "resultJson": result,
-                        ]
-                    )
+                    DispatchQueue.main.async {
+                        self.notifyListeners(
+                            "coordinationAck",
+                            data: [
+                                "messageId": messageId,
+                                "resultJson": result,
+                            ]
+                        )
+                    }
                 }
             }
             if let type = dict["type"] as? String,
@@ -1050,17 +1052,19 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         sendEnvelope(env)
     }
 
-    private func handleNativeCommandAck(_ env: [String: Any]) {
+    private func handleNativeCommandAck(_ env: [String: Any]) -> Bool {
         guard let messageId = env["messageId"] as? String,
               let pending = pendingNativeCommands.removeValue(forKey: messageId) else {
-            return
+            return false
         }
         let result = env["result"] as? [String: Any]
         let isStaleEpoch = result?["status"] as? String == "error" &&
             result?["code"] as? String == "stale_epoch"
-        guard isStaleEpoch, !pending.attemptedStaleRetry,
-              let generation = deviceGenerations[pending.targetDeviceId] else {
-            return
+        guard isStaleEpoch, !pending.attemptedStaleRetry else {
+            return true
+        }
+        guard let generation = deviceGenerations[pending.targetDeviceId] else {
+            return true
         }
 
         let retryMessageId = UUID().uuidString
@@ -1075,6 +1079,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
             expectedGeneration: generation,
             command: pending.command
         )
+        return true
     }
 
     private func scheduleReconnect() {

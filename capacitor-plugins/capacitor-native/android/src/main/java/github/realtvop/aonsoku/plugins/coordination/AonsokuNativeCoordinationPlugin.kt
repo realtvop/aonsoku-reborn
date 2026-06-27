@@ -937,18 +937,18 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         sendEnvelope(env)
     }
 
-    private fun handleNativeCommandAck(env: JSONObject) {
-        val messageId = extractMessageId(env) ?: return
-        val pending = pendingNativeCommands[messageId] ?: return
+    private fun handleNativeCommandAck(env: JSONObject): Boolean {
+        val messageId = extractMessageId(env) ?: return false
+        val pending = pendingNativeCommands[messageId] ?: return false
         val result = env.optJSONObject("result")
         val isStaleEpoch =
             result?.optString("status") == "error" &&
                 result.optString("code") == "stale_epoch"
         pendingNativeCommands.remove(messageId)
-        if (!isStaleEpoch || pending.attemptedStaleRetry) return
+        if (!isStaleEpoch || pending.attemptedStaleRetry) return true
 
-        val generation = deviceGenerations[pending.targetDeviceId] ?: return
-        val command = parseJsonObject(pending.commandJson) ?: return
+        val generation = deviceGenerations[pending.targetDeviceId] ?: return true
+        val command = parseJsonObject(pending.commandJson) ?: return true
         val retryMessageId = java.util.UUID.randomUUID().toString()
         pendingNativeCommands[retryMessageId] = pending.copy(
             attemptedStaleRetry = true,
@@ -959,6 +959,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             generation,
             command,
         )
+        return true
     }
 
     private fun dispatchEnvelope(json: String) {
@@ -1000,16 +1001,18 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
                     dedupCache.mark(id)
                 }
             }
-            // §9.1: emit `coordinationAck` when a command_ack arrives so the
-            // WebView facade can resolve the pending sendCommand() promise.
+            // §9.1: native-origin commands consume their ack entirely in the
+            // native layer. Only JS-origin commands are bridged back so the
+            // WebView facade can resolve its pending sendCommand() promise.
             if (type == "command_ack") {
-                handleNativeCommandAck(parsed)
-                val messageId = extractMessageId(parsed) ?: ""
-                val result = parsed.opt("result")?.toString() ?: "{}"
-                val ret = JSObject()
-                ret.put("messageId", messageId)
-                ret.put("resultJson", result)
-                notifyListeners("coordinationAck", ret)
+                if (!handleNativeCommandAck(parsed)) {
+                    val messageId = extractMessageId(parsed) ?: ""
+                    val result = parsed.opt("result")?.toString() ?: "{}"
+                    val ret = JSObject()
+                    ret.put("messageId", messageId)
+                    ret.put("resultJson", result)
+                    notifyListeners("coordinationAck", ret)
+                }
             }
             if (type == "command") {
                 val command = parsed.optJSONObject("command")
