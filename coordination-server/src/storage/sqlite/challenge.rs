@@ -7,7 +7,7 @@ use sqlx::SqlitePool;
 use uuid::Uuid;
 
 use crate::errors::{CoordinationError, ErrorCode};
-use crate::storage::repository::ChallengeRepository;
+use crate::storage::repository::{ChallengeRepository, ConsumedChallenge};
 
 #[derive(Clone)]
 pub struct SqliteChallengeRepository {
@@ -43,40 +43,53 @@ impl ChallengeRepository for SqliteChallengeRepository {
         Ok(id)
     }
 
-    async fn consume(&self, id: Uuid) -> Result<bool, CoordinationError> {
+    async fn consume(&self, id: Uuid) -> Result<ConsumedChallenge, CoordinationError> {
         let now = Utc::now();
-        // Atomic: only consume if not yet consumed and not expired.
-        let res = sqlx::query("UPDATE auth_challenges SET consumed = 1 WHERE id = ? AND consumed = 0 AND expires_at > ?")
-            .bind(id.to_string())
-            .bind(now)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| CoordinationError::internal(e.to_string()))?;
-        if res.rows_affected() == 0 {
-            // Distinguish expired vs already consumed for clearer errors.
-            let row: Option<(i64, chrono::DateTime<Utc>)> =
-                sqlx::query_as("SELECT consumed, expires_at FROM auth_challenges WHERE id = ?")
-                    .bind(id.to_string())
-                    .fetch_optional(&self.pool)
-                    .await
-                    .map_err(|e| CoordinationError::internal(e.to_string()))?;
-            match row {
-                None => Err(CoordinationError::new(
-                    ErrorCode::NotFound,
-                    "challenge not found",
-                )),
-                Some((consumed, _expires)) if consumed != 0 => Err(CoordinationError::new(
-                    ErrorCode::ChallengeExpired,
-                    "challenge already consumed",
-                )),
-                Some((_, expires)) if expires <= now => Err(CoordinationError::new(
-                    ErrorCode::ChallengeExpired,
-                    "challenge expired",
-                )),
-                _ => Ok(false),
+        // Atomic: only consume if not yet consumed and not expired, returning
+        // the bound identity/username in the same statement so the caller can
+        // verify the register request matches the challenge that was issued.
+        let row: Option<(String, String)> = sqlx::query_as(
+            "UPDATE auth_challenges SET consumed = 1 \
+             WHERE id = ? AND consumed = 0 AND expires_at > ? \
+             RETURNING normalised_identity, username",
+        )
+        .bind(id.to_string())
+        .bind(now)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| CoordinationError::internal(e.to_string()))?;
+        match row {
+            Some((identity, username)) => Ok(ConsumedChallenge {
+                normalised_identity: identity,
+                normalised_username: username,
+            }),
+            None => {
+                // Distinguish expired vs already consumed vs not found.
+                let row: Option<(i64, chrono::DateTime<Utc>)> =
+                    sqlx::query_as("SELECT consumed, expires_at FROM auth_challenges WHERE id = ?")
+                        .bind(id.to_string())
+                        .fetch_optional(&self.pool)
+                        .await
+                        .map_err(|e| CoordinationError::internal(e.to_string()))?;
+                match row {
+                    None => Err(CoordinationError::new(
+                        ErrorCode::NotFound,
+                        "challenge not found",
+                    )),
+                    Some((consumed, _expires)) if consumed != 0 => Err(CoordinationError::new(
+                        ErrorCode::ChallengeExpired,
+                        "challenge already consumed",
+                    )),
+                    Some((_, expires)) if expires <= now => Err(CoordinationError::new(
+                        ErrorCode::ChallengeExpired,
+                        "challenge expired",
+                    )),
+                    _ => Err(CoordinationError::new(
+                        ErrorCode::ChallengeExpired,
+                        "challenge could not be consumed",
+                    )),
+                }
             }
-        } else {
-            Ok(true)
         }
     }
 }
@@ -98,7 +111,9 @@ mod tests {
             .issue("https://x", "u", chrono::Duration::seconds(60))
             .await
             .unwrap();
-        assert!(repo.consume(id).await.unwrap());
+        let consumed = repo.consume(id).await.unwrap();
+        assert_eq!(consumed.normalised_identity, "https://x");
+        assert_eq!(consumed.normalised_username, "u");
         // Second consume fails with challenge_expired.
         let err = repo.consume(id).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::ChallengeExpired);

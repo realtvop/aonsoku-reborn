@@ -54,30 +54,44 @@ pub async fn post_register(
     State(state): State<AppState>,
     Json(body): Json<RegisterRequest>,
 ) -> Result<(StatusCode, Json<RegisterResponse>), (StatusCode, Json<ApiError>)> {
-    // 1. Consume the one-time challenge.
+    // 1. Consume the one-time challenge. The challenge binds the
+    //    normalised identity URL and canonical username that were declared
+    //    when the challenge was issued; the register request must match
+    //    those values exactly (design §6.2). This prevents an attacker from
+    //    obtaining a challenge for one identity and then registering with a
+    //    different identity (e.g. to redirect the SSRF-sensitive verification
+    //    request to an internal address).
     let consumed = state
         .repos
         .challenges
         .consume(body.challenge_id)
         .await
         .map_err(map_err)?;
-    if !consumed {
+
+    // 2. Verify the request body matches the challenge binding.
+    let request_normalised =
+        normalise_identity_url(&body.identity_url, state.config.ssrf.allow_http).map_err(map_err)?;
+    let request_canonical = canonicalise_username(&body.username);
+    if request_normalised != consumed.normalised_identity {
         return Err(map_err(CoordinationError::new(
             ErrorCode::ChallengeExpired,
-            "challenge expired or already consumed",
+            "identity_url does not match the challenge",
+        )));
+    }
+    if request_canonical != consumed.normalised_username {
+        return Err(map_err(CoordinationError::new(
+            ErrorCode::ChallengeExpired,
+            "username does not match the challenge",
         )));
     }
 
-    // 2. Look up the challenge to recover normalised identity + username.
-    // We re-issue a lookup is not possible since challenges are consumed; we
-    // instead trust the client-supplied identity and username again, but
-    // require the challenge to have matched. For the first version we
-    // re-normalise the values from the request body.
-    let normalised = normalise_identity_url(&body.identity_url, state.config.ssrf.allow_http)
-        .map_err(map_err)?;
-    let canonical_user = canonicalise_username(&body.username);
-
-    // 3. Verify credentials against the identity URL.
+    // 3. Verify credentials against the identity URL. Use the challenge-bound
+    //    values (which now equal the request values) so account lookup is
+    //    anchored to the challenge, not the raw request body. The proof
+    //    username remains the original (un-canonicalised) form required by
+    //    Subsonic ping.
+    let normalised = consumed.normalised_identity;
+    let canonical_user = consumed.normalised_username;
     let proof = match body.auth_mode.as_str() {
         "token" => SubsonicProof::Token {
             username: body.username.clone(),
@@ -272,16 +286,28 @@ async fn recover_refresh_token(
         .consume(challenge_id)
         .await
         .map_err(map_err)?;
-    if !consumed {
+
+    // Verify the request body matches the challenge binding (design §6.2),
+    // mirroring post_register. The challenge-bound values anchor account
+    // lookup; the request body must agree.
+    let request_normalised =
+        normalise_identity_url(identity_url, state.config.ssrf.allow_http).map_err(map_err)?;
+    let request_canonical = canonicalise_username(username);
+    if request_normalised != consumed.normalised_identity {
         return Err(map_err(CoordinationError::new(
             ErrorCode::ChallengeExpired,
-            "challenge expired or already consumed",
+            "identity_url does not match the challenge",
+        )));
+    }
+    if request_canonical != consumed.normalised_username {
+        return Err(map_err(CoordinationError::new(
+            ErrorCode::ChallengeExpired,
+            "username does not match the challenge",
         )));
     }
 
-    let normalised =
-        normalise_identity_url(identity_url, state.config.ssrf.allow_http).map_err(map_err)?;
-    let canonical_user = canonicalise_username(username);
+    let normalised = consumed.normalised_identity;
+    let canonical_user = consumed.normalised_username;
     let proof = match auth_mode {
         "token" => SubsonicProof::Token {
             username: username.to_string(),

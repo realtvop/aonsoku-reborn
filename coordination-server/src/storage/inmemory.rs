@@ -13,7 +13,9 @@ use parking_lot::Mutex;
 use uuid::Uuid;
 
 use crate::errors::{CoordinationError, ErrorCode};
-use crate::storage::repository::{ChallengeRepository, TicketRepository};
+use crate::storage::repository::{
+    ChallengeRepository, ConsumedChallenge, TicketRepository,
+};
 use crate::storage::tokens::generate_ws_ticket;
 
 #[derive(Clone)]
@@ -72,7 +74,7 @@ impl ChallengeRepository for InMemoryChallengeRepository {
         Ok(id)
     }
 
-    async fn consume(&self, id: Uuid) -> Result<bool, CoordinationError> {
+    async fn consume(&self, id: Uuid) -> Result<ConsumedChallenge, CoordinationError> {
         let now = Utc::now();
         let mut map = self.challenges.lock();
         match map.get_mut(&id) {
@@ -90,7 +92,10 @@ impl ChallengeRepository for InMemoryChallengeRepository {
             )),
             Some(entry) => {
                 entry.consumed = true;
-                Ok(true)
+                Ok(ConsumedChallenge {
+                    normalised_identity: entry.normalised_identity.clone(),
+                    normalised_username: entry.username.clone(),
+                })
             }
         }
     }
@@ -164,7 +169,9 @@ mod tests {
             .issue("https://x", "u", chrono::Duration::seconds(60))
             .await
             .unwrap();
-        assert!(repo.consume(id).await.unwrap());
+        let consumed = repo.consume(id).await.unwrap();
+        assert_eq!(consumed.normalised_identity, "https://x");
+        assert_eq!(consumed.normalised_username, "u");
         let err = repo.consume(id).await.unwrap_err();
         assert_eq!(err.code, ErrorCode::ChallengeExpired);
     }

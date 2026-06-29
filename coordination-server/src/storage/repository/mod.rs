@@ -154,6 +154,15 @@ pub trait PresenceRepository: Send + Sync + 'static {
     ) -> Result<Vec<DevicePresence>, CoordinationError>;
 }
 
+/// Values bound to a one-time registration challenge, returned when the
+/// challenge is consumed so the caller can verify the register request
+/// matches the challenge that was issued (design §6.2).
+#[derive(Debug, Clone)]
+pub struct ConsumedChallenge {
+    pub normalised_identity: String,
+    pub normalised_username: String,
+}
+
 #[async_trait]
 pub trait ChallengeRepository: Send + Sync + 'static {
     async fn issue(
@@ -162,7 +171,7 @@ pub trait ChallengeRepository: Send + Sync + 'static {
         username: &str,
         ttl: chrono::Duration,
     ) -> Result<Uuid, CoordinationError>;
-    async fn consume(&self, id: Uuid) -> Result<bool, CoordinationError>;
+    async fn consume(&self, id: Uuid) -> Result<ConsumedChallenge, CoordinationError>;
 }
 
 #[async_trait]

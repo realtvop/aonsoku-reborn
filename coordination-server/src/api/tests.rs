@@ -329,3 +329,96 @@ async fn token_recovery_rejects_revoked_device() {
     let json = response_json(resp).await;
     assert_eq!(json["code"], "device_revoked");
 }
+
+#[tokio::test]
+async fn register_rejects_identity_mismatch_with_challenge() {
+    let (_dir, state) = setup().await;
+    // Challenge issued for one identity...
+    let challenge = state
+        .repos
+        .challenges
+        .issue(
+            "https://navidrome.example/",
+            "alice",
+            chrono::Duration::seconds(60),
+        )
+        .await
+        .unwrap();
+    // ...but register submitted with a different identity. Must be rejected
+    // before verification is attempted (prevents SSRF redirect via challenge
+    // swap, design §6.2).
+    let body = serde_json::json!({
+        "challengeId": challenge,
+        "identityUrl": "https://evil.example",
+        "username": "alice",
+        "authMode": "password",
+        "password": "enc:616c696365",
+        "deviceName": "Dev",
+        "platform": "web",
+    })
+    .to_string();
+    let resp = send(&state, "POST", "/v1/auth/register", Some(body)).await;
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    let json = response_json(resp).await;
+    assert_eq!(json["code"], "challenge_expired");
+}
+
+#[tokio::test]
+async fn register_rejects_username_mismatch_with_challenge() {
+    let (_dir, state) = setup().await;
+    let challenge = state
+        .repos
+        .challenges
+        .issue(
+            "https://navidrome.example/",
+            "alice",
+            chrono::Duration::seconds(60),
+        )
+        .await
+        .unwrap();
+    let body = serde_json::json!({
+        "challengeId": challenge,
+        "identityUrl": "https://navidrome.example",
+        "username": "bob",
+        "authMode": "password",
+        "password": "enc:626f62",
+        "deviceName": "Dev",
+        "platform": "web",
+    })
+    .to_string();
+    let resp = send(&state, "POST", "/v1/auth/register", Some(body)).await;
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    let json = response_json(resp).await;
+    assert_eq!(json["code"], "challenge_expired");
+}
+
+#[tokio::test]
+async fn token_recovery_rejects_identity_mismatch_with_challenge() {
+    let (_dir, state) = setup().await;
+    let (_account_id, device_id) =
+        seed_device(&state, "https://navidrome.example", "alice", "refresh-a").await;
+    let challenge = state
+        .repos
+        .challenges
+        .issue(
+            "https://navidrome.example/",
+            "alice",
+            chrono::Duration::seconds(60),
+        )
+        .await
+        .unwrap();
+    let body = serde_json::json!({
+        "deviceId": device_id,
+        "refreshToken": "wrong",
+        "challengeId": challenge,
+        "identityUrl": "https://evil.example",
+        "username": "alice",
+        "authMode": "password",
+        "password": "enc:616c696365",
+    })
+    .to_string();
+    let resp = send(&state, "POST", "/v1/auth/token", Some(body)).await;
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    let json = response_json(resp).await;
+    assert_eq!(json["code"], "challenge_expired");
+}
