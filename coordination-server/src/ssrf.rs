@@ -6,7 +6,7 @@
 //! Self-hosted administrators may opt into HTTP and private addresses via
 //! [`crate::config::DeploymentMode::SelfHosted`].
 
-use std::net::IpAddr;
+use std::net::{IpAddr, ToSocketAddrs};
 
 use crate::config::SsrfPolicy;
 use crate::errors::{CoordinationError, ErrorCode};
@@ -80,6 +80,34 @@ fn blocked(reason: &'static str) -> CoordinationError {
     CoordinationError::new(ErrorCode::SsrfBlocked, reason)
 }
 
+/// Resolve `host:port` and return the first IP that satisfies the SSRF
+/// policy (design §6.4). DNS is resolved via the standard library
+/// `ToSocketAddrs`; each candidate IP is checked with [`is_address_allowed`].
+/// Addresses that fail the policy are skipped; if every resolved address is
+/// blocked, an `SsrfBlocked` error is returned.
+///
+/// The caller must use the returned IP for the actual connection (IP pinning)
+/// so that DNS rebinding between resolution and connection cannot redirect
+/// the request to a blocked address.
+pub fn resolve_and_pin(
+    policy: &SsrfPolicy,
+    host: &str,
+    port: u16,
+) -> Result<IpAddr, CoordinationError> {
+    let addrs = (host, port)
+        .to_socket_addrs()
+        .map_err(|_| CoordinationError::new(ErrorCode::SsrfBlocked, "dns resolution failed"))?;
+    for ip in addrs.map(|sa| sa.ip()) {
+        if is_address_allowed(policy, ip).is_ok() {
+            return Ok(ip);
+        }
+    }
+    Err(CoordinationError::new(
+        ErrorCode::SsrfBlocked,
+        "all resolved addresses blocked by policy",
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -141,5 +169,33 @@ mod tests {
         assert!(is_address_allowed(&p, IpAddr::V4(Ipv4Addr::new(0, 0, 0, 1))).is_err());
         assert!(is_address_allowed(&p, IpAddr::V4(Ipv4Addr::new(240, 0, 0, 1))).is_err());
         let _ = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
+    }
+
+    #[test]
+    fn resolve_and_pin_rejects_loopback_under_strict() {
+        // localhost resolves to 127.0.0.1 (and possibly ::1), both blocked.
+        let p = strict();
+        let res = resolve_and_pin(&p, "localhost", 443);
+        assert!(res.is_err(), "strict policy must reject localhost");
+        let err = res.unwrap_err();
+        assert_eq!(err.code, ErrorCode::SsrfBlocked);
+    }
+
+    #[test]
+    fn resolve_and_pin_allows_loopback_under_permissive() {
+        let p = loose();
+        let res = resolve_and_pin(&p, "localhost", 443);
+        assert!(res.is_ok(), "permissive policy must allow localhost");
+        let ip = res.unwrap();
+        assert!(ip.is_loopback());
+    }
+
+    #[test]
+    fn resolve_and_pin_fails_on_unresolvable_host() {
+        // .invalid is a reserved TLD (RFC 2606) that must not resolve.
+        let p = loose();
+        let res = resolve_and_pin(&p, "coordination-ssrf-probe.invalid", 443);
+        assert!(res.is_err());
+        assert_eq!(res.unwrap_err().code, ErrorCode::SsrfBlocked);
     }
 }
