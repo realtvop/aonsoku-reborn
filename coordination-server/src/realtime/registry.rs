@@ -108,6 +108,14 @@ impl ConnectionRegistry {
         self.by_device.read().contains_key(&device_id)
     }
 
+    /// Return the account id of an online device, if connected. Used by the
+    /// realtime handler to enforce cross-account isolation: a command or
+    /// handoff request targeting a device on a different account must be
+    /// rejected (design §10 — control/handoff is same-account only).
+    pub fn account_of(&self, device_id: DeviceId) -> Option<Uuid> {
+        self.by_device.read().get(&device_id).map(|c| c.account_id)
+    }
+
     /// Get the connection id for a device, if online.
     pub fn connection_id_for(&self, device_id: DeviceId) -> Option<ConnectionId> {
         self.by_device

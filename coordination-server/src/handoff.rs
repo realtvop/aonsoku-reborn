@@ -56,6 +56,7 @@ impl HandoffCoordinator {
         expected_snapshot_revision: SnapshotRevision,
         target_device_id: Uuid,
         prepare_deadline_seconds: i64,
+        sender_account_id: Uuid,
     ) -> Result<HandoffState, CoordinationError> {
         // Check that no other active transaction targets the same source session.
         {
@@ -84,6 +85,16 @@ impl HandoffCoordinator {
             .ok_or_else(|| {
                 CoordinationError::new(ErrorCode::NotFound, "source session not found")
             })?;
+        // Defense in depth: the source session must belong to the sender's
+        // account. The realtime handler already checks this, but a direct
+        // caller of start_transaction must not be able to handoff across
+        // accounts (design §10).
+        if session.account_id != sender_account_id {
+            return Err(CoordinationError::new(
+                ErrorCode::Forbidden,
+                "source session does not belong to this account",
+            ));
+        }
         if session.generation != expected_generation {
             return Err(CoordinationError::new(
                 ErrorCode::StaleEpoch,
@@ -285,6 +296,7 @@ impl HandoffCoordinator {
 
     /// Handle offline handoff (design §11.3). B takes over A's frozen
     /// snapshot when A is offline and the snapshot is within the 8-hour window.
+    #[allow(clippy::too_many_arguments)]
     pub async fn offline_handoff(
         &self,
         session_repo: &impl SessionRepository,
@@ -293,6 +305,7 @@ impl HandoffCoordinator {
         source_session_id: Uuid,
         target_device_id: Uuid,
         offline_snapshot_ttl: chrono::Duration,
+        sender_account_id: Uuid,
     ) -> Result<SessionGeneration, CoordinationError> {
         // A must be offline.
         if registry.is_online(source_device_id) {
@@ -307,6 +320,14 @@ impl HandoffCoordinator {
             .ok_or_else(|| {
                 CoordinationError::new(ErrorCode::NotFound, "source session not found")
             })?;
+        // Defense in depth: the source session must belong to the sender's
+        // account (design §10). The realtime handler already checks this.
+        if session.account_id != sender_account_id {
+            return Err(CoordinationError::new(
+                ErrorCode::Forbidden,
+                "source session does not belong to this account",
+            ));
+        }
         if session.status != crate::storage::models::SessionStatus::Offline {
             return Err(CoordinationError::new(
                 ErrorCode::BadMessage,
@@ -377,7 +398,7 @@ mod tests {
     use crate::storage::sqlite::SqliteSessionRepository;
     use tokio::sync::mpsc;
 
-    async fn setup_session_repo() -> (tempfile::TempDir, SqliteSessionRepository, uuid::Uuid) {
+    async fn setup_session_repo() -> (tempfile::TempDir, SqliteSessionRepository, uuid::Uuid, uuid::Uuid) {
         let dir = tempfile::tempdir().unwrap();
         let url = format!("sqlite://{}/test.db", dir.path().display());
         let pool = crate::storage::open_pool(&url).await.unwrap();
@@ -406,7 +427,7 @@ mod tests {
             updated_at: Utc::now(),
         };
         session_repo.upsert_snapshot(&session, "{}").await.unwrap();
-        (dir, session_repo, session.id)
+        (dir, session_repo, session.id, acc.id)
     }
 
     fn sample_snapshot(session_id: Uuid) -> PlaybackSnapshot {
@@ -454,7 +475,7 @@ mod tests {
 
     #[tokio::test]
     async fn concurrent_handoff_conflict() {
-        let (_dir, session_repo, session_id) = setup_session_repo().await;
+        let (_dir, session_repo, session_id, acc_id) = setup_session_repo().await;
         let coord = HandoffCoordinator::new();
         let registry = Arc::new(ConnectionRegistry::new());
 
@@ -471,6 +492,7 @@ mod tests {
                 1,
                 Uuid::new_v4(),
                 15,
+                acc_id,
             )
             .await
             .unwrap();
@@ -488,6 +510,7 @@ mod tests {
                 1,
                 Uuid::new_v4(),
                 15,
+                acc_id,
             )
             .await
             .unwrap_err();
@@ -496,7 +519,7 @@ mod tests {
 
     #[tokio::test]
     async fn stale_epoch_rejected() {
-        let (_dir, session_repo, session_id) = setup_session_repo().await;
+        let (_dir, session_repo, session_id, acc_id) = setup_session_repo().await;
         let coord = HandoffCoordinator::new();
         let registry = Arc::new(ConnectionRegistry::new());
         let err = coord
@@ -510,6 +533,7 @@ mod tests {
                 1,
                 Uuid::new_v4(),
                 15,
+                acc_id,
             )
             .await
             .unwrap_err();
@@ -518,7 +542,7 @@ mod tests {
 
     #[tokio::test]
     async fn start_transaction_tolerates_snapshot_revision_update() {
-        let (_dir, session_repo, session_id) = setup_session_repo().await;
+        let (_dir, session_repo, session_id, acc_id) = setup_session_repo().await;
         let coord = HandoffCoordinator::new();
         let registry = Arc::new(ConnectionRegistry::new());
         let state = coord
@@ -532,6 +556,7 @@ mod tests {
                 0,
                 Uuid::new_v4(),
                 15,
+                acc_id,
             )
             .await
             .unwrap();
@@ -541,10 +566,9 @@ mod tests {
 
     #[tokio::test]
     async fn fail_transaction_notifies_target() {
-        let (_dir, session_repo, session_id) = setup_session_repo().await;
+        let (_dir, session_repo, session_id, acc_id) = setup_session_repo().await;
         let coord = HandoffCoordinator::new();
         let registry = Arc::new(ConnectionRegistry::new());
-        let account_id = Uuid::new_v4();
         let source_device_id = Uuid::new_v4();
         let target_device_id = session_repo
             .find_by_id(session_id)
@@ -552,7 +576,7 @@ mod tests {
             .unwrap()
             .expect("session exists")
             .device_id;
-        let mut rx_target = register_fake_device(&registry, target_device_id, account_id);
+        let mut rx_target = register_fake_device(&registry, target_device_id, acc_id);
         let transaction_id = Uuid::new_v4();
 
         coord
@@ -566,6 +590,7 @@ mod tests {
                 1,
                 target_device_id,
                 15,
+                acc_id,
             )
             .await
             .unwrap();
@@ -592,10 +617,9 @@ mod tests {
 
     #[tokio::test]
     async fn commit_relinquish_tolerates_snapshot_revision_update() {
-        let (_dir, session_repo, session_id) = setup_session_repo().await;
+        let (_dir, session_repo, session_id, acc_id) = setup_session_repo().await;
         let coord = HandoffCoordinator::new();
         let registry = Arc::new(ConnectionRegistry::new());
-        let account_id = Uuid::new_v4();
         let source_device_id = Uuid::new_v4();
         let target_device_id = session_repo
             .find_by_id(session_id)
@@ -603,7 +627,7 @@ mod tests {
             .unwrap()
             .expect("session exists")
             .device_id;
-        let mut rx_target = register_fake_device(&registry, target_device_id, account_id);
+        let mut rx_target = register_fake_device(&registry, target_device_id, acc_id);
         let transaction_id = Uuid::new_v4();
 
         coord
@@ -617,6 +641,7 @@ mod tests {
                 1,
                 target_device_id,
                 15,
+                acc_id,
             )
             .await
             .unwrap();
@@ -656,13 +681,12 @@ mod tests {
 
     #[tokio::test]
     async fn commit_generation_change_can_be_reported_to_target() {
-        let (_dir, session_repo, session_id) = setup_session_repo().await;
+        let (_dir, session_repo, session_id, acc_id) = setup_session_repo().await;
         let coord = HandoffCoordinator::new();
         let registry = Arc::new(ConnectionRegistry::new());
-        let account_id = Uuid::new_v4();
         let source_device_id = Uuid::new_v4();
         let target_device_id = Uuid::new_v4();
-        let mut rx_target = register_fake_device(&registry, target_device_id, account_id);
+        let mut rx_target = register_fake_device(&registry, target_device_id, acc_id);
         let transaction_id = Uuid::new_v4();
 
         coord
@@ -676,6 +700,7 @@ mod tests {
                 1,
                 target_device_id,
                 15,
+                acc_id,
             )
             .await
             .unwrap();
@@ -757,6 +782,7 @@ mod tests {
                 session.id,
                 dev_b.id,
                 chrono::Duration::hours(8),
+                acc.id,
             )
             .await
             .unwrap();
@@ -808,6 +834,7 @@ mod tests {
                 session.id,
                 dev_b.id,
                 chrono::Duration::hours(8),
+                acc.id,
             )
             .await
             .unwrap_err();

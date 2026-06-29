@@ -489,6 +489,36 @@ async fn handle_inbound(
             expected_generation,
             command,
         } => {
+            // Enforce cross-account isolation before routing (design §10).
+            if let Err(code) = require_same_account(
+                state,
+                registry,
+                account_id,
+                *target_device_id,
+            )
+            .await
+            {
+                let ack = Envelope {
+                    version: PROTOCOL_VERSION,
+                    message_id: env.message_id,
+                    connection_id: Some(connection_id),
+                    source_device_id: Some(device_id),
+                    target_device_id: Some(*target_device_id),
+                    session_id: None,
+                    expected_generation: Some(*expected_generation),
+                    seq: None,
+                    server_time: Some(server_time),
+                    payload: Payload::CommandAck {
+                        message_id: env.message_id,
+                        result: crate::protocol::CommandResult::Error {
+                            code,
+                            reason: "target device does not belong to this account".into(),
+                        },
+                    },
+                };
+                let _ = registry.send(device_id, ack);
+                return;
+            }
             // Route command to target device (design §10).
             tracing::info!(
                 target: "coordination::ws",
@@ -660,6 +690,22 @@ async fn handle_inbound(
             expected_generation,
             expected_snapshot_revision,
         } => {
+            // Enforce cross-account isolation before revealing a session
+            // snapshot (design §10 — handoff is same-account only).
+            if let Err(code) =
+                require_same_account(state, registry, account_id, *source_device_id).await
+            {
+                let _ = registry.send(
+                    device_id,
+                    error_envelope(
+                        env.message_id,
+                        code,
+                        "source device does not belong to this account",
+                        server_time,
+                    ),
+                );
+                return;
+            }
             // §10 exclusivity: a device that is currently acting as a remote
             // controller cannot be handoff-taken by another device. Surface
             // as `forbidden` so B's UI can react.
@@ -777,6 +823,24 @@ async fn handle_inbound(
                 }
             };
 
+            // Enforce cross-account isolation before starting a handoff
+            // transaction (design §10). Covers both the online and offline
+            // handoff branches below.
+            if let Err(code) =
+                require_same_account(state, registry, account_id, source_device).await
+            {
+                let _ = registry.send(
+                    device_id,
+                    error_envelope(
+                        env.message_id,
+                        code,
+                        "source device does not belong to this account",
+                        server_time,
+                    ),
+                );
+                return;
+            }
+
             if registry.is_online(source_device) {
                 // A is online: run the two-phase online handoff (design §11.1).
                 // start_transaction validates A, sends prepare_relinquish, and
@@ -793,6 +857,7 @@ async fn handle_inbound(
                         *snapshot_revision,
                         device_id, // B is the target
                         15,
+                        account_id,
                     )
                     .await
                 {
@@ -816,6 +881,7 @@ async fn handle_inbound(
                         session,
                         device_id,
                         state.config.offline_snapshot_ttl,
+                        account_id,
                     )
                     .await
                 {
@@ -926,6 +992,22 @@ async fn handle_inbound(
             }
         }
         Payload::ControlSessionBegin { target_device_id } => {
+            // Enforce cross-account isolation: B may only control a device on
+            // the same account (design §10).
+            if let Err(code) =
+                require_same_account(state, registry, account_id, *target_device_id).await
+            {
+                let _ = registry.send(
+                    device_id,
+                    error_envelope(
+                        env.message_id,
+                        code,
+                        "target device does not belong to this account",
+                        server_time,
+                    ),
+                );
+                return;
+            }
             // §10 exclusivity: record B as an active controller. While set,
             // other devices cannot remote control or handoff-take B.
             registry.begin_control(device_id, *target_device_id);
@@ -984,6 +1066,33 @@ fn error_envelope(
         },
     }
     .with_message_id(message_id)
+}
+
+/// Enforce cross-account isolation (design §10): a device may only send
+/// commands, request handoff candidates, or target handoffs toward devices
+/// on the same account. Online peers are checked via the in-memory registry;
+/// offline peers fall back to the device repository. Returns `Ok(())` when
+/// the peer belongs to the sender's account, or an `ErrorCode` describing
+/// the rejection.
+async fn require_same_account(
+    state: &AppState,
+    registry: &Arc<ConnectionRegistry>,
+    sender_account_id: Uuid,
+    peer_device_id: DeviceId,
+) -> Result<(), ErrorCode> {
+    if let Some(peer_acc) = registry.account_of(peer_device_id) {
+        return if peer_acc == sender_account_id {
+            Ok(())
+        } else {
+            Err(ErrorCode::Forbidden)
+        };
+    }
+    match state.repos.devices.find_by_id(peer_device_id).await {
+        Ok(Some(d)) if d.account_id == sender_account_id => Ok(()),
+        Ok(Some(_)) => Err(ErrorCode::Forbidden),
+        Ok(None) => Err(ErrorCode::NotFound),
+        Err(_) => Err(ErrorCode::Internal),
+    }
 }
 
 trait WithMessageId {
@@ -2117,6 +2226,7 @@ mod tests {
                 1,
                 dev_b.id,
                 15,
+                acc.id,
             )
             .await
             .unwrap();
@@ -2156,5 +2266,136 @@ mod tests {
             }
         }
         assert!(saw_failure, "B must receive handoff_conflict failure");
+    }
+
+    #[tokio::test]
+    async fn command_to_cross_account_device_is_forbidden() {
+        let (_dir, state) = setup_state().await;
+        let registry = state.realtime.clone();
+
+        // Account 1 with device A.
+        let acc1 = state
+            .repos
+            .accounts
+            .upsert_by_lookup_key("acc1", 100)
+            .await
+            .unwrap();
+        let dev_a = state
+            .repos
+            .devices
+            .create(acc1.id, "A", "web", None, 0, "h", Uuid::new_v4())
+            .await
+            .unwrap();
+        // Account 2 with device B.
+        let acc2 = state
+            .repos
+            .accounts
+            .upsert_by_lookup_key("acc2", 100)
+            .await
+            .unwrap();
+        let dev_b = state
+            .repos
+            .devices
+            .create(acc2.id, "B", "web", None, 0, "h", Uuid::new_v4())
+            .await
+            .unwrap();
+
+        let _rx_a = register_fake_device(&registry, dev_a.id, acc1.id);
+        let mut rx_b = register_fake_device(&registry, dev_b.id, acc2.id);
+
+        // B (account 2) sends a command to A (account 1). Must be rejected.
+        let env = Envelope {
+            version: PROTOCOL_VERSION,
+            message_id: Uuid::new_v4(),
+            connection_id: Some(Uuid::new_v4()),
+            source_device_id: Some(dev_b.id),
+            target_device_id: None,
+            session_id: None,
+            expected_generation: None,
+            seq: None,
+            server_time: None,
+            payload: Payload::Command {
+                target_device_id: dev_a.id,
+                expected_generation: 1,
+                command: crate::protocol::RemoteCommand::Pause,
+            },
+        };
+        handle_inbound(&state, &registry, dev_b.id, acc2.id, Uuid::new_v4(), 0, env).await;
+
+        // B must receive a CommandAck with Forbidden, and A must receive nothing.
+        let mut saw_forbidden = false;
+        while let Ok(env) = rx_b.try_recv() {
+            if let Payload::CommandAck { result, .. } = env.payload {
+                match result {
+                    crate::protocol::CommandResult::Error { code, .. } => {
+                        assert_eq!(code, ErrorCode::Forbidden);
+                        saw_forbidden = true;
+                    }
+                    _ => panic!("expected error ack for cross-account command"),
+                }
+            }
+        }
+        assert!(saw_forbidden, "B must receive forbidden ack");
+    }
+
+    #[tokio::test]
+    async fn handoff_candidate_request_cross_account_is_forbidden() {
+        let (_dir, state) = setup_state().await;
+        let registry = state.realtime.clone();
+
+        let acc1 = state
+            .repos
+            .accounts
+            .upsert_by_lookup_key("acc1", 100)
+            .await
+            .unwrap();
+        let dev_a = state
+            .repos
+            .devices
+            .create(acc1.id, "A", "web", None, 0, "h", Uuid::new_v4())
+            .await
+            .unwrap();
+        let acc2 = state
+            .repos
+            .accounts
+            .upsert_by_lookup_key("acc2", 100)
+            .await
+            .unwrap();
+        let dev_b = state
+            .repos
+            .devices
+            .create(acc2.id, "B", "web", None, 0, "h", Uuid::new_v4())
+            .await
+            .unwrap();
+
+        let _rx_a = register_fake_device(&registry, dev_a.id, acc1.id);
+        let mut rx_b = register_fake_device(&registry, dev_b.id, acc2.id);
+
+        let env = Envelope {
+            version: PROTOCOL_VERSION,
+            message_id: Uuid::new_v4(),
+            connection_id: Some(Uuid::new_v4()),
+            source_device_id: Some(dev_b.id),
+            target_device_id: None,
+            session_id: None,
+            expected_generation: None,
+            seq: None,
+            server_time: None,
+            payload: Payload::HandoffCandidateRequest {
+                source_device_id: dev_a.id,
+                expected_generation: 1,
+                expected_snapshot_revision: 1,
+            },
+        };
+        handle_inbound(&state, &registry, dev_b.id, acc2.id, Uuid::new_v4(), 0, env).await;
+
+        let mut saw_forbidden = false;
+        while let Ok(env) = rx_b.try_recv() {
+            if let Payload::Error { code, .. } = env.payload {
+                assert_eq!(code, ErrorCode::Forbidden);
+                saw_forbidden = true;
+            }
+        }
+        assert!(saw_forbidden, "B must receive forbidden for cross-account handoff candidate");
     }
 }
