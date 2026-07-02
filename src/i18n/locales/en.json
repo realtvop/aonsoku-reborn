@@ -633,6 +633,7 @@
         "placeholder": "My device"
       },
       "connect": "Connect",
+      "retry": "Retry",
       "status": "Connection status",
       "statusInfo": "This device stays available for playback handoff while connected.",
       "currentDevice": "Current device",
@@ -652,7 +653,8 @@
       "error": {
         "label": "Error",
         "missingFields": "Fill in all fields",
-        "connectFailed": "Connection failed"
+        "connectFailed": "Connection failed",
+        "disconnectedDescription": "Remote devices are unavailable until the coordination server reconnects."
       },
       "disconnect": "Disconnect this device",
       "connected": "Connected",

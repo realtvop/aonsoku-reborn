@@ -645,6 +645,7 @@
         "placeholder": "我的设备"
       },
       "connect": "连接",
+      "retry": "重试",
       "status": "连接状态",
       "statusInfo": "连接后，此设备可用于播放接力。",
       "currentDevice": "当前设备",
@@ -664,7 +665,8 @@
       "error": {
         "label": "错误",
         "missingFields": "请填写所有字段",
-        "connectFailed": "连接失败"
+        "connectFailed": "连接失败",
+        "disconnectedDescription": "协调服务器重新连接前，远程设备暂不可用。"
       },
       "disconnect": "断开此设备",
       "connected": "已连接",

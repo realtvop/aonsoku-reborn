@@ -1,35 +1,41 @@
+import {
+  Loader2,
+  MonitorSpeaker,
+  RefreshCw,
+  Settings,
+  WifiOff,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { cn } from "@/lib/utils";
-import { MonitorSpeaker, Settings, WifiOff } from "lucide-react";
+import { Button } from "@/app/components/ui/button";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@/app/components/ui/drawer";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/app/components/ui/popover";
-import {
-  Drawer,
-  DrawerTrigger,
-  DrawerContent,
-  DrawerHeader,
-  DrawerTitle,
-  DrawerDescription,
-} from "@/app/components/ui/drawer";
 import { ScrollArea } from "@/app/components/ui/scroll-area";
-import { Button } from "@/app/components/ui/button";
-import { useCoordinationStore } from "@/coordination/store";
-import { useAppSettings } from "@/store/app.store";
 import { usePlayerBreakpoint } from "@/app/hooks/use-player-breakpoint";
+import { useCoordinationStore } from "@/coordination/store";
+import { cn } from "@/lib/utils";
 import { ROUTES } from "@/routes/routesList";
-import { useDevicePlaybackModels } from "./use-device-playback-models";
+import { useAppSettings } from "@/store/app.store";
+import { HandoffStatusRow } from "./handoff-status-row";
 import {
-  ThisDeviceSection,
   LiveDevicesSection,
   OfflineSnapshotsSection,
+  ThisDeviceSection,
 } from "./sections";
-import { HandoffStatusRow } from "./handoff-status-row";
 import type { DevicePlaybackActions } from "./use-device-playback-actions";
+import { useDevicePlaybackModels } from "./use-device-playback-models";
 
 interface DevicePanelProps {
   open: boolean;
@@ -117,11 +123,20 @@ function DevicePanelContent({
   const { setOpenDialog, setCurrentPage } = useAppSettings();
 
   const isConnected = useCoordinationStore((state) => state.isConnected);
+  const connectionState = useCoordinationStore(
+    (state) => state.connectionState,
+  );
   const deviceId = useCoordinationStore((state) => state.deviceId);
+  const loadState = useCoordinationStore((state) => state.loadState);
   const models = useDevicePlaybackModels();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hasOverflow, setHasOverflow] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const isConnecting =
+    isRetrying ||
+    connectionState === "connecting" ||
+    connectionState === "reconnecting";
 
   useEffect(() => {
     if (!isMobile || activeSnapPoint !== 1) {
@@ -175,6 +190,57 @@ function DevicePanelContent({
         models={models.offlineSnapshots}
         onContinue={actions.requestHandoff}
       />
+    </div>
+  );
+
+  const disconnectedConfiguredContent = (
+    <div className="flex flex-col gap-5 p-5">
+      <ThisDeviceSection
+        model={models.thisDevice}
+        isControlling={actions.isControlling}
+        onExitControl={actions.exitRemoteControl}
+      />
+
+      <div className="flex flex-col gap-3 px-1">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <WifiOff className="w-4 h-4 flex-shrink-0" />
+          <h3 className="font-semibold text-sm text-foreground">
+            {t("settings.crossDevice.error.connectFailed", {
+              defaultValue: "Connection failed",
+            })}
+          </h3>
+        </div>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          {t("settings.crossDevice.error.disconnectedDescription", {
+            defaultValue:
+              "Remote devices are unavailable until the coordination server reconnects.",
+          })}
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            if (isConnecting) return;
+            setIsRetrying(true);
+            try {
+              await loadState();
+            } finally {
+              setIsRetrying(false);
+            }
+          }}
+          disabled={isConnecting}
+          className="self-start text-xs font-semibold gap-1.5"
+        >
+          {isConnecting ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="w-3.5 h-3.5" />
+          )}
+          {t("settings.crossDevice.retry", {
+            defaultValue: "Retry",
+          })}
+        </Button>
+      </div>
     </div>
   );
 
@@ -248,7 +314,23 @@ function DevicePanelContent({
 
       {/* Main List Scroll Area */}
       <div className="flex-1 overflow-hidden">
-        {!isConnected || !deviceId ? (
+        {!isConnected && deviceId ? (
+          isMobile ? (
+            <div
+              ref={scrollRef}
+              className={cn(
+                "h-full",
+                hasOverflow ? "overflow-y-auto" : "overflow-hidden",
+              )}
+            >
+              {disconnectedConfiguredContent}
+            </div>
+          ) : (
+            <ScrollArea className="h-full">
+              {disconnectedConfiguredContent}
+            </ScrollArea>
+          )
+        ) : !isConnected || !deviceId ? (
           <div className="flex flex-col items-center justify-center h-full p-8 text-center gap-4">
             <div className="p-4 rounded-full bg-muted/50 border border-border/30">
               <WifiOff className="w-8 h-8 text-muted-foreground/60" />
