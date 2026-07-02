@@ -422,3 +422,85 @@ async fn token_recovery_rejects_identity_mismatch_with_challenge() {
     let json = response_json(resp).await;
     assert_eq!(json["code"], "challenge_expired");
 }
+
+async fn setup_with_allowed_hosts(allowed: Vec<String>) -> (tempfile::TempDir, AppState) {
+    let dir = tempfile::tempdir().unwrap();
+    let url = format!("sqlite://{}/test.db", dir.path().display());
+    let pool = crate::storage::open_pool(&url).await.unwrap();
+    sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+    let repos = SqliteRepositories::new(pool.clone());
+    let mut config = Config::new(
+        "127.0.0.1:0".parse().unwrap(),
+        dir.path().to_path_buf(),
+        "stable-key-test".into(),
+    );
+    config.allowed_hosts = allowed;
+    let state = AppState::with_verifier(
+        Arc::new(config),
+        pool,
+        repos,
+        Arc::new(MockVerifier {
+            accepted_username: "alice".into(),
+        }),
+    );
+    state.mark_ready();
+    (dir, state)
+}
+
+#[tokio::test]
+async fn challenge_restricts_hosts() {
+    let (_dir, state) = setup_with_allowed_hosts(vec!["navidrome.example.com".to_string()]).await;
+
+    // Rejected unallowed host
+    let body = serde_json::json!({
+        "identityUrl": "https://evil.com",
+        "username": "alice",
+    })
+    .to_string();
+    let resp = send(&state, "POST", "/v1/auth/challenge", Some(body)).await;
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let json = response_json(resp).await;
+    assert_eq!(json["code"], "invalid_identity");
+
+    // Allowed host matches
+    let body = serde_json::json!({
+        "identityUrl": "https://navidrome.example.com",
+        "username": "alice",
+    })
+    .to_string();
+    let resp = send(&state, "POST", "/v1/auth/challenge", Some(body)).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn register_restricts_hosts() {
+    let (_dir, state) = setup_with_allowed_hosts(vec!["navidrome.example.com".to_string()]).await;
+
+    // Bypass check to issue a challenge for unallowed host (e.g. simulating configuration change)
+    let challenge = state
+        .repos
+        .challenges
+        .issue(
+            "https://evil.com/",
+            "alice",
+            chrono::Duration::seconds(60),
+        )
+        .await
+        .unwrap();
+
+    let body = serde_json::json!({
+        "challengeId": challenge,
+        "identityUrl": "https://evil.com",
+        "username": "alice",
+        "authMode": "password",
+        "password": "enc:616c696365",
+        "deviceName": "Dev",
+        "platform": "web",
+    })
+    .to_string();
+    let resp = send(&state, "POST", "/v1/auth/register", Some(body)).await;
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let json = response_json(resp).await;
+    assert_eq!(json["code"], "invalid_identity");
+}
+

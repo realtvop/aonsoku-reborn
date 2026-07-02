@@ -12,6 +12,9 @@ access_token_ttl_seconds = 900
 refresh_token_max_age_seconds = 7776000
 ws_ticket_ttl_seconds = 30
 challenge_ttl_seconds = 60
+# Optional: Restrict allowed Subsonic/Navidrome instance hosts/domains.
+# If empty or not set, all hosts are allowed.
+# allowed_hosts = ["navidrome.example.com", "subsonic.org"]
 
 [ssrf]
 # Public deployment defaults are strict. Self-hosted deployment defaults allow

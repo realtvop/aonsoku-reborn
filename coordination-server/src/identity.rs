@@ -78,6 +78,25 @@ pub fn normalise_identity_url(raw: &str, allow_http: bool) -> Result<String, Coo
     Ok(format!("{scheme}://{host_port}{path}"))
 }
 
+/// Check whether a normalised identity URL is allowed under the configured allowed hosts.
+/// If `allowed_hosts` is empty, any host is allowed.
+/// Hostnames/domains are compared case-insensitively.
+pub fn is_identity_allowed(allowed_hosts: &[String], normalised_identity: &str) -> bool {
+    if allowed_hosts.is_empty() {
+        return true;
+    }
+    let Ok(parsed) = Url::parse(normalised_identity) else {
+        return false;
+    };
+    let Some(host) = parsed.host_str() else {
+        return false;
+    };
+    let host_lower = host.to_lowercase();
+    allowed_hosts
+        .iter()
+        .any(|allowed| allowed.trim().to_lowercase() == host_lower)
+}
+
 /// Canonicalise a Navidrome username for account lookup (design §6.1):
 /// trim, Unicode NFKC normalise, lowercase. This rule targets Navidrome's
 /// username semantics and does not promise compatibility with Subsonic
@@ -127,5 +146,22 @@ mod tests {
         assert_eq!(canonicalise_username("  Alice "), "alice");
         // NFKC: fullwidth 'Ａ' → 'A'
         assert_eq!(canonicalise_username("Ａlice"), "alice");
+    }
+
+    #[test]
+    fn test_is_identity_allowed() {
+        let allowed = vec!["navidrome.example.com".to_string(), "SubSonic.org".to_string()];
+        // Empty list allows everything
+        assert!(is_identity_allowed(&[], "https://other.com/"));
+
+        // Match exact, case-insensitive, ignores port
+        assert!(is_identity_allowed(&allowed, "https://navidrome.example.com/"));
+        assert!(is_identity_allowed(&allowed, "https://subsonic.org/"));
+        assert!(is_identity_allowed(&allowed, "https://SUBSONIC.ORG/music"));
+        assert!(is_identity_allowed(&allowed, "https://navidrome.example.com:8443/"));
+
+        // Unallowed domains
+        assert!(!is_identity_allowed(&allowed, "https://other.com/"));
+        assert!(!is_identity_allowed(&allowed, "https://subdomain.subsonic.org/"));
     }
 }
