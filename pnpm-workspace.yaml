@@ -11,5 +11,10 @@ allowBuilds:
   electron: true
   electron-winstaller: true
   esbuild: true
+  fs-xattr: set this to true or false
+  macos-alias: set this to true or false
   register-scheme: true
+  register-scheme@https://codeload.github.com/devsnek/node-register-scheme/tar.gz/e7cc9a63a1f512565da44cb57316d9fb10750e17: set this to true or false
+  sharp: set this to true or false
   utf-8-validate: true
+  yarn: set this to true or false

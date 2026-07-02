@@ -108,9 +108,15 @@ pub async fn verify_credentials(
 ) -> Result<(), CoordinationError> {
     // Build the initial ping URL with query parameters.
     let mut url = url::Url::parse(normalised_identity).map_err(|_| {
-        CoordinationError::new(ErrorCode::InvalidIdentity, "identity url is not a valid URL")
+        CoordinationError::new(
+            ErrorCode::InvalidIdentity,
+            "identity url is not a valid URL",
+        )
     })?;
-    url.set_path(&format!("{}/rest/ping.view", url.path().trim_end_matches('/')));
+    url.set_path(&format!(
+        "{}/rest/ping.view",
+        url.path().trim_end_matches('/')
+    ));
     let mut query: Vec<(&str, String)> = vec![
         ("u", proof.username().to_string()),
         ("v", "1.16.1".into()),

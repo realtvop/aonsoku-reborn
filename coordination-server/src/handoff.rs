@@ -391,14 +391,19 @@ impl HandoffCoordinator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::{MediaKind, PROTOCOL_VERSION, Payload};
+    use crate::protocol::{MediaKind, Payload, PROTOCOL_VERSION};
     use crate::realtime::registry::DeviceConnection;
     use crate::storage::models::{PlaybackSession, SessionStatus};
     use crate::storage::repository::{AccountRepository, DeviceRepository, SessionRepository};
     use crate::storage::sqlite::SqliteSessionRepository;
     use tokio::sync::mpsc;
 
-    async fn setup_session_repo() -> (tempfile::TempDir, SqliteSessionRepository, uuid::Uuid, uuid::Uuid) {
+    async fn setup_session_repo() -> (
+        tempfile::TempDir,
+        SqliteSessionRepository,
+        uuid::Uuid,
+        uuid::Uuid,
+    ) {
         let dir = tempfile::tempdir().unwrap();
         let url = format!("sqlite://{}/test.db", dir.path().display());
         let pool = crate::storage::open_pool(&url).await.unwrap();

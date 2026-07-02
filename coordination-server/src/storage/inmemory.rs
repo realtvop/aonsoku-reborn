@@ -13,9 +13,7 @@ use parking_lot::Mutex;
 use uuid::Uuid;
 
 use crate::errors::{CoordinationError, ErrorCode};
-use crate::storage::repository::{
-    ChallengeRepository, ConsumedChallenge, TicketRepository,
-};
+use crate::storage::repository::{ChallengeRepository, ConsumedChallenge, TicketRepository};
 use crate::storage::tokens::generate_ws_ticket;
 
 #[derive(Clone)]

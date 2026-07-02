@@ -70,7 +70,8 @@ pub async fn post_register(
 
     // 2. Verify the request body matches the challenge binding.
     let request_normalised =
-        normalise_identity_url(&body.identity_url, state.config.ssrf.allow_http).map_err(map_err)?;
+        normalise_identity_url(&body.identity_url, state.config.ssrf.allow_http)
+            .map_err(map_err)?;
     let request_canonical = canonicalise_username(&body.username);
     if request_normalised != consumed.normalised_identity {
         return Err(map_err(CoordinationError::new(

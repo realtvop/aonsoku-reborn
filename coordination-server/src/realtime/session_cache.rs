@@ -55,10 +55,7 @@ impl SessionCache {
     /// on that account connects so subsequent reads and handoffs are
     /// cache-served. Sessions already present in the cache are left in place
     /// (they may be dirty and more recent than the DB row).
-    pub async fn prime_account(
-        &self,
-        account_id: Uuid,
-    ) -> Result<(), CoordinationError> {
+    pub async fn prime_account(&self, account_id: Uuid) -> Result<(), CoordinationError> {
         let sessions = self.backing.list_for_account(account_id).await?;
         let mut map = self.inner.write();
         for session in sessions {
@@ -103,10 +100,7 @@ impl SessionCache {
 
     /// Read a session by id. Served from the cache; on a miss, falls back to
     /// the backing store and primes the cache (non-dirty).
-    pub async fn find_by_id(
-        &self,
-        id: Uuid,
-    ) -> Result<Option<PlaybackSession>, CoordinationError> {
+    pub async fn find_by_id(&self, id: Uuid) -> Result<Option<PlaybackSession>, CoordinationError> {
         {
             let map = self.inner.read();
             if let Some(entry) = map.get(&id) {
@@ -222,10 +216,13 @@ impl SessionCache {
         let mut map = self.inner.write();
         match persisted {
             Some(s) => {
-                map.insert(id, CachedSession {
-                    session: s,
-                    dirty: false,
-                });
+                map.insert(
+                    id,
+                    CachedSession {
+                        session: s,
+                        dirty: false,
+                    },
+                );
             }
             None => {
                 map.remove(&id);
@@ -236,18 +233,18 @@ impl SessionCache {
 
     /// Bump a session's generation. Writes through immediately (used by the
     /// handoff CAS commit) and returns the new generation.
-    pub async fn bump_generation(
-        &self,
-        id: Uuid,
-    ) -> Result<i64, CoordinationError> {
+    pub async fn bump_generation(&self, id: Uuid) -> Result<i64, CoordinationError> {
         let new_generation = self.backing.bump_generation(id).await?;
         let persisted = self.backing.find_by_id(id).await?;
         let mut map = self.inner.write();
         if let Some(s) = persisted {
-            map.insert(id, CachedSession {
-                session: s,
-                dirty: false,
-            });
+            map.insert(
+                id,
+                CachedSession {
+                    session: s,
+                    dirty: false,
+                },
+            );
         }
         Ok(new_generation)
     }
@@ -261,16 +258,24 @@ impl SessionCache {
         transferred_to_session: Uuid,
     ) -> Result<(), CoordinationError> {
         self.backing
-            .transfer(id, new_generation, transferred_to_device, transferred_to_session)
+            .transfer(
+                id,
+                new_generation,
+                transferred_to_device,
+                transferred_to_session,
+            )
             .await?;
         let persisted = self.backing.find_by_id(id).await?;
         let mut map = self.inner.write();
         match persisted {
             Some(s) => {
-                map.insert(id, CachedSession {
-                    session: s,
-                    dirty: false,
-                });
+                map.insert(
+                    id,
+                    CachedSession {
+                        session: s,
+                        dirty: false,
+                    },
+                );
             }
             None => {
                 map.remove(&id);
@@ -296,10 +301,13 @@ impl SessionCache {
         let persisted = self.backing.find_by_id(id).await?;
         let mut map = self.inner.write();
         if let Some(s) = persisted {
-            map.insert(id, CachedSession {
-                session: s,
-                dirty: false,
-            });
+            map.insert(
+                id,
+                CachedSession {
+                    session: s,
+                    dirty: false,
+                },
+            );
         }
         Ok(new_generation)
     }
@@ -396,10 +404,7 @@ impl SessionRepository for SessionCache {
     ) -> Result<PlaybackSession, CoordinationError> {
         SessionCache::upsert_snapshot(self, session, snapshot_json).await
     }
-    async fn find_by_id(
-        &self,
-        id: Uuid,
-    ) -> Result<Option<PlaybackSession>, CoordinationError> {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<PlaybackSession>, CoordinationError> {
         SessionCache::find_by_id(self, id).await
     }
     async fn find_active_for_device(
@@ -429,7 +434,14 @@ impl SessionRepository for SessionCache {
         transferred_to_device: Uuid,
         transferred_to_session: Uuid,
     ) -> Result<(), CoordinationError> {
-        SessionCache::transfer(self, id, new_generation, transferred_to_device, transferred_to_session).await
+        SessionCache::transfer(
+            self,
+            id,
+            new_generation,
+            transferred_to_device,
+            transferred_to_session,
+        )
+        .await
     }
     async fn bump_generation(&self, id: Uuid) -> Result<i64, CoordinationError> {
         SessionCache::bump_generation(self, id).await

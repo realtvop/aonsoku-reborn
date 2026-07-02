@@ -10,8 +10,8 @@ use std::sync::Arc;
 
 use axum::{
     extract::{
-        Query, State,
         ws::{Message, WebSocket, WebSocketUpgrade},
+        Query, State,
     },
     response::IntoResponse,
 };
@@ -21,7 +21,7 @@ use uuid::Uuid;
 
 use crate::errors::ErrorCode;
 use crate::protocol::{
-    CapabilitySet, ConnectionId, ConnectionSeq, DeviceId, Envelope, PROTOCOL_VERSION, Payload,
+    CapabilitySet, ConnectionId, ConnectionSeq, DeviceId, Envelope, Payload, PROTOCOL_VERSION,
 };
 use crate::realtime::registry::{ConnectionRegistry, DeviceConnection};
 use crate::server::AppState;
@@ -490,13 +490,8 @@ async fn handle_inbound(
             command,
         } => {
             // Enforce cross-account isolation before routing (design §10).
-            if let Err(code) = require_same_account(
-                state,
-                registry,
-                account_id,
-                *target_device_id,
-            )
-            .await
+            if let Err(code) =
+                require_same_account(state, registry, account_id, *target_device_id).await
             {
                 let ack = Envelope {
                     version: PROTOCOL_VERSION,
@@ -1663,15 +1658,13 @@ mod tests {
             .set_status(stale_session_id, SessionStatus::Offline, Utc::now())
             .await
             .unwrap();
-        assert!(
-            state
-                .repos
-                .sessions
-                .find_by_id(stale_session_id)
-                .await
-                .unwrap()
-                .is_some()
-        );
+        assert!(state
+            .repos
+            .sessions
+            .find_by_id(stale_session_id)
+            .await
+            .unwrap()
+            .is_some());
 
         // Register A and B so handle_inbound has a recipient for the fan-out
         // (the projection goes to B; A is the source).
@@ -2396,6 +2389,9 @@ mod tests {
                 saw_forbidden = true;
             }
         }
-        assert!(saw_forbidden, "B must receive forbidden for cross-account handoff candidate");
+        assert!(
+            saw_forbidden,
+            "B must receive forbidden for cross-account handoff candidate"
+        );
     }
 }
