@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 fn main() {
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
@@ -6,12 +8,22 @@ fn main() {
         let mut service = aonsoku_playerd::service::PlayerService::new(
             aonsoku_playerd::backend::MockPlaybackBackend::new(),
         );
-        aonsoku_playerd::transport::run_ndjson(&mut service, stdin.lock(), stdout.lock())
+        aonsoku_playerd::transport::run_ndjson_with_events(
+            &mut service,
+            stdin,
+            stdout.lock(),
+            Duration::from_millis(250),
+        )
     } else {
         match aonsoku_playerd::rodio_backend::RodioPlaybackBackend::new() {
             Ok(backend) => {
                 let mut service = aonsoku_playerd::service::PlayerService::new(backend);
-                aonsoku_playerd::transport::run_ndjson(&mut service, stdin.lock(), stdout.lock())
+                aonsoku_playerd::transport::run_ndjson_with_events(
+                    &mut service,
+                    stdin,
+                    stdout.lock(),
+                    Duration::from_millis(250),
+                )
             }
             Err(error) => {
                 eprintln!("aonsoku-playerd backend error: {}", error.message);

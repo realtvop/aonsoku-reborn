@@ -1,4 +1,6 @@
 use std::io::{BufRead, Write};
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::time::Duration;
 
 use crate::backend::PlaybackBackend;
 use crate::protocol::{ErrorCode, JsonRpcFailure, JsonRpcRequest};
@@ -54,12 +56,74 @@ where
     Ok(())
 }
 
+pub fn run_ndjson_with_events<TBackend, TRead, TWrite>(
+    service: &mut PlayerService<TBackend>,
+    reader: TRead,
+    mut writer: TWrite,
+    tick_interval: Duration,
+) -> std::io::Result<()>
+where
+    TBackend: PlaybackBackend,
+    TRead: std::io::Read + Send + 'static,
+    TWrite: Write,
+{
+    let (line_tx, line_rx) = mpsc::channel();
+
+    std::thread::spawn(move || {
+        for line in std::io::BufReader::new(reader).lines() {
+            if line_tx.send(line).is_err() {
+                return;
+            }
+        }
+    });
+
+    loop {
+        match line_rx.recv_timeout(tick_interval) {
+            Ok(Ok(line)) => {
+                if !line.trim().is_empty() {
+                    write_messages(&mut writer, handle_ndjson_line(service, &line))?;
+                }
+            }
+            Ok(Err(error)) => return Err(error),
+            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => {
+                write_messages(&mut writer, service.drain_events())?;
+                return Ok(());
+            }
+        }
+
+        write_messages(&mut writer, service.drain_events())?;
+    }
+}
+
+fn write_messages<TWrite>(
+    writer: &mut TWrite,
+    messages: Vec<OutboundMessage>,
+) -> std::io::Result<()>
+where
+    TWrite: Write,
+{
+    if messages.is_empty() {
+        return Ok(());
+    }
+
+    for message in messages {
+        serde_json::to_writer(&mut *writer, &message)?;
+        writer.write_all(b"\n")?;
+    }
+    writer.flush()
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::{BufReader, Cursor};
+    use std::time::Duration;
 
     use super::*;
-    use crate::backend::MockPlaybackBackend;
+    use crate::backend::{BackendError, MockPlaybackBackend};
+    use crate::protocol::{
+        NativeAudioLoadOptions, NativeAudioProgressEvent, NativeAudioSeekOptions, PlayerEvent,
+    };
     use crate::service::OutboundMessage;
 
     #[test]
@@ -154,5 +218,77 @@ mod tests {
                 ))
                     && failure.error.code == ErrorCode::InvalidParams
         ));
+    }
+
+    #[test]
+    fn ndjson_event_loop_drains_backend_events() {
+        let mut output = Vec::new();
+        let mut service = PlayerService::new(EventDrainBackend { drained: false });
+
+        run_ndjson_with_events(
+            &mut service,
+            Cursor::new(""),
+            &mut output,
+            Duration::from_millis(1),
+        )
+        .unwrap();
+
+        let lines = String::from_utf8(output).unwrap();
+        let messages = lines
+            .lines()
+            .map(|line| serde_json::from_str::<OutboundMessage>(line).unwrap())
+            .collect::<Vec<_>>();
+
+        assert!(matches!(
+            messages.first(),
+            Some(OutboundMessage::Event(PlayerEvent::Progress(event)))
+                if event.current_time == 7.0
+        ));
+    }
+
+    struct EventDrainBackend {
+        drained: bool,
+    }
+
+    impl PlaybackBackend for EventDrainBackend {
+        fn load(
+            &mut self,
+            _options: NativeAudioLoadOptions,
+        ) -> Result<Vec<PlayerEvent>, BackendError> {
+            Ok(Vec::new())
+        }
+
+        fn play(&mut self, _request_id: Option<String>) -> Result<Vec<PlayerEvent>, BackendError> {
+            Ok(Vec::new())
+        }
+
+        fn pause(&mut self, _request_id: Option<String>) -> Result<Vec<PlayerEvent>, BackendError> {
+            Ok(Vec::new())
+        }
+
+        fn stop(&mut self, _request_id: Option<String>) -> Result<Vec<PlayerEvent>, BackendError> {
+            Ok(Vec::new())
+        }
+
+        fn seek(
+            &mut self,
+            _options: NativeAudioSeekOptions,
+            _request_id: Option<String>,
+        ) -> Result<Vec<PlayerEvent>, BackendError> {
+            Ok(Vec::new())
+        }
+
+        fn drain_events(&mut self) -> Vec<PlayerEvent> {
+            if self.drained {
+                return Vec::new();
+            }
+            self.drained = true;
+            vec![PlayerEvent::Progress(NativeAudioProgressEvent {
+                request_id: None,
+                current_time: 7.0,
+                duration: 10.0,
+                buffered_time: Some(10.0),
+            })]
+        }
     }
 }

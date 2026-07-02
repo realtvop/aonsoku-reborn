@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use rodio::{Decoder, DeviceSinkBuilder, MixerDeviceSink, Player, Source};
 
@@ -13,6 +13,7 @@ use crate::protocol::{
 };
 
 const DEFAULT_HTTP_BODY_LIMIT: u64 = 256 * 1024 * 1024;
+const PROGRESS_EVENT_INTERVAL: Duration = Duration::from_millis(500);
 
 pub struct RodioPlaybackBackend {
     device_sink: MixerDeviceSink,
@@ -20,6 +21,7 @@ pub struct RodioPlaybackBackend {
     state: PlaybackState,
     duration: f64,
     loaded: bool,
+    last_progress_event_at: Option<Instant>,
 }
 
 impl RodioPlaybackBackend {
@@ -38,6 +40,7 @@ impl RodioPlaybackBackend {
             state: PlaybackState::Idle,
             duration: 0.0,
             loaded: false,
+            last_progress_event_at: None,
         })
     }
 
@@ -126,6 +129,7 @@ impl RodioPlaybackBackend {
         self.duration = duration;
         self.loaded = true;
         self.player = Some(player);
+        self.last_progress_event_at = Some(Instant::now());
 
         events.push(PlayerEvent::DurationChanged(
             NativeAudioDurationChangedEvent {
@@ -227,6 +231,7 @@ impl PlaybackBackend for RodioPlaybackBackend {
         }
         self.state = PlaybackState::Stopped;
         self.loaded = false;
+        self.last_progress_event_at = None;
         Ok(vec![
             self.state_event(request_id.clone()),
             self.progress_event(request_id.clone()),
@@ -257,6 +262,42 @@ impl PlaybackBackend for RodioPlaybackBackend {
         }
 
         Ok(vec![self.progress_event(request_id)])
+    }
+
+    fn drain_events(&mut self) -> Vec<PlayerEvent> {
+        let Some(player) = &self.player else {
+            return Vec::new();
+        };
+
+        if self.state == PlaybackState::Playing && player.empty() {
+            self.state = PlaybackState::Ended;
+            self.loaded = false;
+            self.last_progress_event_at = None;
+            return vec![
+                self.progress_event(None),
+                self.state_event(None),
+                PlayerEvent::Ended(NativeAudioEndedEvent {
+                    request_id: None,
+                    reason: Some(EndedReason::Finished),
+                }),
+            ];
+        }
+
+        if self.state != PlaybackState::Playing {
+            return Vec::new();
+        }
+
+        let now = Instant::now();
+        let should_emit = self
+            .last_progress_event_at
+            .map(|last| now.duration_since(last) >= PROGRESS_EVENT_INTERVAL)
+            .unwrap_or(true);
+        if !should_emit {
+            return Vec::new();
+        }
+
+        self.last_progress_event_at = Some(now);
+        vec![self.progress_event(None)]
     }
 }
 

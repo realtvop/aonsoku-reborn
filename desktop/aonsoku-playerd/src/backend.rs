@@ -14,6 +14,10 @@ pub trait PlaybackBackend {
         options: NativeAudioSeekOptions,
         request_id: Option<String>,
     ) -> Result<Vec<PlayerEvent>, BackendError>;
+
+    fn drain_events(&mut self) -> Vec<PlayerEvent> {
+        Vec::new()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

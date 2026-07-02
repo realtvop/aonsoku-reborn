@@ -45,6 +45,14 @@ where
         }
     }
 
+    pub fn drain_events(&mut self) -> Vec<OutboundMessage> {
+        self.backend
+            .drain_events()
+            .into_iter()
+            .map(OutboundMessage::Event)
+            .collect()
+    }
+
     fn dispatch(
         &mut self,
         command: PlayerCommand,

@@ -90,6 +90,11 @@ real desktop playback behind the existing protocol.
 Set `AONSOKU_PLAYERD_BACKEND=mock` to run the deterministic mock backend used by
 protocol tests and smoke checks.
 
+While the process is running, the sidecar periodically drains backend events and
+emits progress updates during playback. When Rodio reports that the active
+source has finished, the sidecar emits `playbackStateChanged` with `ended` and
+an `ended` event with reason `finished`.
+
 ## Contract Mapping
 
 The Rust protocol mirrors the first playback subset of
