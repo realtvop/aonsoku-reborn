@@ -1,5 +1,6 @@
 pub mod backend;
 pub mod protocol;
+pub mod rodio_backend;
 pub mod service;
 pub mod transport;
 

@@ -1,0 +1,358 @@
+use std::fs::File;
+use std::io::Cursor;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+use rodio::{Decoder, DeviceSinkBuilder, MixerDeviceSink, Player, Source};
+
+use crate::backend::{BackendError, PlaybackBackend};
+use crate::protocol::{
+    EndedReason, NativeAudioBufferingChangedEvent, NativeAudioDurationChangedEvent,
+    NativeAudioEndedEvent, NativeAudioLoadOptions, NativeAudioProgressEvent,
+    NativeAudioSeekOptions, NativeAudioSource, PlaybackState, PlayerEvent,
+};
+
+const DEFAULT_HTTP_BODY_LIMIT: u64 = 256 * 1024 * 1024;
+
+pub struct RodioPlaybackBackend {
+    device_sink: MixerDeviceSink,
+    player: Option<Player>,
+    state: PlaybackState,
+    duration: f64,
+    loaded: bool,
+}
+
+impl RodioPlaybackBackend {
+    pub fn new() -> Result<Self, BackendError> {
+        let mut device_sink = DeviceSinkBuilder::open_default_sink().map_err(|error| {
+            BackendError::new(
+                "OUTPUT_DEVICE_ERROR",
+                format!("open output device: {error}"),
+            )
+        })?;
+        device_sink.log_on_drop(false);
+
+        Ok(Self {
+            device_sink,
+            player: None,
+            state: PlaybackState::Idle,
+            duration: 0.0,
+            loaded: false,
+        })
+    }
+
+    fn state_event(&self, request_id: Option<String>) -> PlayerEvent {
+        PlayerEvent::PlaybackStateChanged(crate::protocol::NativeAudioPlaybackStateChangedEvent {
+            request_id,
+            state: self.state,
+        })
+    }
+
+    fn progress_event(&self, request_id: Option<String>) -> PlayerEvent {
+        PlayerEvent::Progress(NativeAudioProgressEvent {
+            request_id,
+            current_time: self.position(),
+            duration: self.duration,
+            buffered_time: Some(self.duration),
+        })
+    }
+
+    fn position(&self) -> f64 {
+        self.player
+            .as_ref()
+            .map(|player| player.get_pos().as_secs_f64())
+            .unwrap_or(0.0)
+    }
+
+    fn require_loaded(&self) -> Result<(), BackendError> {
+        if self.loaded {
+            Ok(())
+        } else {
+            Err(BackendError::new(
+                "NOT_LOADED",
+                "cannot control playback before load",
+            ))
+        }
+    }
+
+    fn load_source(&self, source: &NativeAudioSource) -> Result<LoadedSource, BackendError> {
+        match source {
+            NativeAudioSource::Stream { url, .. }
+            | NativeAudioSource::Blob { url, .. }
+            | NativeAudioSource::Radio { url, .. } => load_url_source(url),
+            NativeAudioSource::NativeFile { uri, .. } => load_file_source(uri),
+        }
+    }
+
+    fn install_loaded_source(
+        &mut self,
+        source: LoadedSource,
+        request_id: Option<String>,
+        autoplay: bool,
+        start_time: f64,
+    ) -> Result<Vec<PlayerEvent>, BackendError> {
+        if let Some(player) = self.player.take() {
+            player.stop();
+        }
+
+        self.state = PlaybackState::Loading;
+        self.loaded = false;
+        let mut events = vec![
+            self.state_event(request_id.clone()),
+            PlayerEvent::BufferingChanged(NativeAudioBufferingChangedEvent {
+                request_id: request_id.clone(),
+                is_buffering: true,
+            }),
+        ];
+
+        let (player, duration) = match source {
+            LoadedSource::File { file, byte_len } => {
+                self.player_from_reader(file, byte_len, start_time)?
+            }
+            LoadedSource::Memory { bytes } => {
+                let byte_len = bytes.len() as u64;
+                self.player_from_reader(Cursor::new(bytes), byte_len, start_time)?
+            }
+        };
+
+        if autoplay {
+            player.play();
+            self.state = PlaybackState::Playing;
+        } else {
+            player.pause();
+            self.state = PlaybackState::Paused;
+        }
+
+        self.duration = duration;
+        self.loaded = true;
+        self.player = Some(player);
+
+        events.push(PlayerEvent::DurationChanged(
+            NativeAudioDurationChangedEvent {
+                request_id: request_id.clone(),
+                duration: self.duration,
+            },
+        ));
+        events.push(PlayerEvent::BufferingChanged(
+            NativeAudioBufferingChangedEvent {
+                request_id: request_id.clone(),
+                is_buffering: false,
+            },
+        ));
+        events.push(self.state_event(request_id.clone()));
+        events.push(self.progress_event(request_id));
+
+        Ok(events)
+    }
+
+    fn player_from_reader<R>(
+        &self,
+        reader: R,
+        byte_len: u64,
+        start_time: f64,
+    ) -> Result<(Player, f64), BackendError>
+    where
+        R: std::io::Read + std::io::Seek + Send + Sync + 'static,
+    {
+        let decoder = Decoder::builder()
+            .with_data(reader)
+            .with_byte_len(byte_len)
+            .build()
+            .map_err(|error| BackendError::new("DECODE_ERROR", format!("decode audio: {error}")))?;
+        let duration = decoder
+            .total_duration()
+            .map(|duration| duration.as_secs_f64())
+            .unwrap_or(0.0);
+        let player = Player::connect_new(self.device_sink.mixer());
+        player.append(decoder);
+
+        if start_time > 0.0 {
+            player
+                .try_seek(Duration::from_secs_f64(start_time))
+                .map_err(|error| BackendError::new("SEEK_ERROR", format!("seek audio: {error}")))?;
+        }
+
+        Ok((player, duration))
+    }
+}
+
+impl PlaybackBackend for RodioPlaybackBackend {
+    fn load(&mut self, options: NativeAudioLoadOptions) -> Result<Vec<PlayerEvent>, BackendError> {
+        let request_id = options.request_id.clone();
+        let start_time = options.start_time.unwrap_or(0.0);
+        if start_time.is_sign_negative() {
+            return Err(BackendError::new(
+                "INVALID_POSITION",
+                "start time must be non-negative",
+            ));
+        }
+
+        let source = self.load_source(&options.source)?;
+        self.install_loaded_source(
+            source,
+            request_id,
+            options.autoplay.unwrap_or(false),
+            start_time,
+        )
+    }
+
+    fn play(&mut self, request_id: Option<String>) -> Result<Vec<PlayerEvent>, BackendError> {
+        self.require_loaded()?;
+        if let Some(player) = &self.player {
+            player.play();
+        }
+        self.state = PlaybackState::Playing;
+        Ok(vec![
+            self.state_event(request_id.clone()),
+            self.progress_event(request_id),
+        ])
+    }
+
+    fn pause(&mut self, request_id: Option<String>) -> Result<Vec<PlayerEvent>, BackendError> {
+        self.require_loaded()?;
+        if let Some(player) = &self.player {
+            player.pause();
+        }
+        self.state = PlaybackState::Paused;
+        Ok(vec![
+            self.state_event(request_id.clone()),
+            self.progress_event(request_id),
+        ])
+    }
+
+    fn stop(&mut self, request_id: Option<String>) -> Result<Vec<PlayerEvent>, BackendError> {
+        self.require_loaded()?;
+        if let Some(player) = self.player.take() {
+            player.stop();
+        }
+        self.state = PlaybackState::Stopped;
+        self.loaded = false;
+        Ok(vec![
+            self.state_event(request_id.clone()),
+            self.progress_event(request_id.clone()),
+            PlayerEvent::Ended(NativeAudioEndedEvent {
+                request_id,
+                reason: Some(EndedReason::Stopped),
+            }),
+        ])
+    }
+
+    fn seek(
+        &mut self,
+        options: NativeAudioSeekOptions,
+        request_id: Option<String>,
+    ) -> Result<Vec<PlayerEvent>, BackendError> {
+        self.require_loaded()?;
+        if options.position.is_sign_negative() {
+            return Err(BackendError::new(
+                "INVALID_POSITION",
+                "seek position must be non-negative",
+            ));
+        }
+
+        if let Some(player) = &self.player {
+            player
+                .try_seek(Duration::from_secs_f64(options.position))
+                .map_err(|error| BackendError::new("SEEK_ERROR", format!("seek audio: {error}")))?;
+        }
+
+        Ok(vec![self.progress_event(request_id)])
+    }
+}
+
+enum LoadedSource {
+    File { file: File, byte_len: u64 },
+    Memory { bytes: Vec<u8> },
+}
+
+fn load_url_source(url: &str) -> Result<LoadedSource, BackendError> {
+    if url.trim().is_empty() {
+        return Err(BackendError::new(
+            "INVALID_SOURCE",
+            "load source must include a url",
+        ));
+    }
+
+    let mut response = ureq::get(url)
+        .call()
+        .map_err(|error| BackendError::new("NETWORK_ERROR", format!("fetch audio: {error}")))?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(BackendError::new(
+            "NETWORK_ERROR",
+            format!("fetch audio returned HTTP {status}"),
+        ));
+    }
+
+    let bytes = response
+        .body_mut()
+        .with_config()
+        .limit(DEFAULT_HTTP_BODY_LIMIT)
+        .read_to_vec()
+        .map_err(|error| BackendError::new("NETWORK_ERROR", format!("read audio: {error}")))?;
+    if bytes.is_empty() {
+        return Err(BackendError::new(
+            "EMPTY_SOURCE",
+            "audio response was empty",
+        ));
+    }
+
+    Ok(LoadedSource::Memory { bytes })
+}
+
+fn load_file_source(uri: &str) -> Result<LoadedSource, BackendError> {
+    let path = native_file_path(uri)?;
+    let file = File::open(&path).map_err(|error| {
+        BackendError::new(
+            "FILE_ERROR",
+            format!("open audio file {}: {error}", path.display()),
+        )
+    })?;
+    let byte_len = file
+        .metadata()
+        .map_err(|error| BackendError::new("FILE_ERROR", format!("stat audio file: {error}")))?
+        .len();
+    if byte_len == 0 {
+        return Err(BackendError::new("EMPTY_SOURCE", "audio file was empty"));
+    }
+
+    Ok(LoadedSource::File { file, byte_len })
+}
+
+fn native_file_path(uri: &str) -> Result<PathBuf, BackendError> {
+    if uri.trim().is_empty() {
+        return Err(BackendError::new(
+            "INVALID_SOURCE",
+            "load source must include a uri",
+        ));
+    }
+
+    if let Some(path) = uri.strip_prefix("file://") {
+        Ok(Path::new(path).to_path_buf())
+    } else {
+        Ok(Path::new(uri).to_path_buf())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_file_path_accepts_file_uri_and_plain_path() {
+        assert_eq!(
+            native_file_path("file:///tmp/song.mp3").unwrap(),
+            PathBuf::from("/tmp/song.mp3")
+        );
+        assert_eq!(
+            native_file_path("/tmp/song.mp3").unwrap(),
+            PathBuf::from("/tmp/song.mp3")
+        );
+    }
+
+    #[test]
+    fn native_file_path_rejects_empty_uri() {
+        let error = native_file_path(" ").unwrap_err();
+        assert_eq!(error.code, "INVALID_SOURCE");
+    }
+}

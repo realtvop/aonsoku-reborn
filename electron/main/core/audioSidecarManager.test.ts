@@ -299,7 +299,14 @@ describe("AudioSidecarManager sidecar smoke", () => {
   sidecarSmoke("drives the Rust mock sidecar MVP commands", async () => {
     const events: unknown[] = [];
     const errors: Error[] = [];
+    const spawnCommand = resolveAudioSidecarSpawnCommand({
+      env: {
+        ...process.env,
+        AONSOKU_PLAYERD_BACKEND: "mock",
+      },
+    });
     const manager = new AudioSidecarManager({
+      spawnCommand,
       requestIdPrefix: "smoke",
     });
 
