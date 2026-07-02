@@ -43,6 +43,7 @@ export type AudioSidecarDebugLoadOptions = Omit<
 
 export type AudioSidecarDebugSmokeOptions = AudioSidecarDebugLoadOptions & {
   seekTo?: number;
+  settleMs?: number;
 };
 
 export type AudioSidecarDebugSmokeResult = {
@@ -183,7 +184,7 @@ async function runSmokeSequence(
 ): Promise<AudioSidecarDebugSmokeResult> {
   const startedAtEvent = harness.events.length;
   const startedAtError = harness.errors.length;
-  const { seekTo = 1, ...loadOptions } = options;
+  const { seekTo = 1, settleMs = 50, ...loadOptions } = options;
 
   await harness.load({
     ...loadOptions,
@@ -194,6 +195,7 @@ async function runSmokeSequence(
   await harness.pause();
   await harness.play();
   await harness.stop();
+  await settleSmokeEvents(settleMs);
 
   const events = harness.events.slice(startedAtEvent);
   const errors = harness.errors.slice(startedAtError);
@@ -203,6 +205,12 @@ async function runSmokeSequence(
     errors,
     summary: summarizeSmokeResult(events, errors),
   };
+}
+
+function settleSmokeEvents(settleMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, Math.max(0, settleMs));
+  });
 }
 
 function summarizeSmokeResult(

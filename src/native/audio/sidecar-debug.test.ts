@@ -52,6 +52,7 @@ describe("audio sidecar debug harness", () => {
     await harness?.stop();
     await harness?.smokeStream("https://example.test/smoke.flac", {
       seekTo: 2,
+      settleMs: 0,
     });
 
     expect(api.load).toHaveBeenNthCalledWith(1, {
@@ -117,7 +118,9 @@ describe("audio sidecar debug harness", () => {
       });
     });
 
-    const result = await harness.smokeFile("/tmp/song.mp3");
+    const result = await harness.smokeFile("/tmp/song.mp3", {
+      settleMs: 0,
+    });
 
     expect(result.events).toEqual([
       {
@@ -200,7 +203,9 @@ describe("audio sidecar debug harness", () => {
       });
     });
 
-    const result = await harness.smokeStream("https://example.test/song.mp3");
+    const result = await harness.smokeStream("https://example.test/song.mp3", {
+      settleMs: 0,
+    });
 
     expect(result.summary.ok).toBe(true);
     expect(result.summary.observed).toEqual({
@@ -209,6 +214,52 @@ describe("audio sidecar debug harness", () => {
       stopped: true,
       progress: true,
     });
+  });
+
+  it("waits briefly for sidecar events that arrive after responses", async () => {
+    const api = createFakeAudioSidecarApi();
+    const harness = createAudioSidecarDebugHarness(api);
+
+    vi.mocked(api.play).mockImplementation(async () => {
+      api.emitEvent({
+        event: "playbackStateChanged",
+        payload: {
+          state: "playing",
+        },
+      });
+      api.emitEvent({
+        event: "progress",
+        payload: {
+          currentTime: 1,
+          duration: 10,
+        },
+      });
+    });
+    vi.mocked(api.pause).mockImplementation(async () => {
+      api.emitEvent({
+        event: "playbackStateChanged",
+        payload: {
+          state: "paused",
+        },
+      });
+    });
+    vi.mocked(api.stopPlayback).mockImplementation(async () => {
+      setTimeout(() => {
+        api.emitEvent({
+          event: "playbackStateChanged",
+          payload: {
+            state: "stopped",
+          },
+        });
+      }, 1);
+    });
+
+    const result = await harness.smokeStream("https://example.test/song.mp3", {
+      settleMs: 20,
+    });
+
+    expect(result.summary.ok).toBe(true);
+    expect(result.summary.observed.stopped).toBe(true);
   });
 
   it("collects events and removes listeners on dispose", async () => {

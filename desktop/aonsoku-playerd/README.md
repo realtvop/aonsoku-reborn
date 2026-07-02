@@ -142,7 +142,9 @@ window.aonsokuAudioSidecarDebug.errors;
 The smoke helpers return `{ events, errors, summary }`. `summary.ok` is true
 when the run had no sidecar errors and observed playing, paused, stopped, and
 progress events. Check `summary.playbackStates` and `summary.latestProgress` for
-a quick manual pass/fail read.
+a quick manual pass/fail read. The helpers wait briefly for event lines that
+arrive after command responses; pass `settleMs` to tune that wait for slow dev
+sessions.
 
 Or drive the commands one at a time:
 
