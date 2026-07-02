@@ -13,23 +13,79 @@ the full design document.
 # Build and run locally
 cargo run --bin aonsoku-coordination-server
 
+# With a config file
+AONSOKU_COORD_CONFIG=./config.toml cargo run --bin aonsoku-coordination-server
+
 # With Docker
 docker build -t aonsoku-coordination .
 docker run -p 3000:3000 -v $(pwd)/data:/data \
+  -v $(pwd)/config.toml:/config.toml:ro \
+  -e AONSOKU_COORD_CONFIG=/config.toml \
   -e AONSOKU_COORD_STABLE_KEY="your-stable-secret-key" \
   aonsoku-coordination
 ```
 
 ## Configuration
 
+Runtime settings can be provided in a TOML config file. Start from
+`config.example.toml`, then point the server at it with
+`AONSOKU_COORD_CONFIG=/path/to/config.toml`.
+
 | Environment variable | Default | Description |
 |---|---|---|
+| `AONSOKU_COORD_CONFIG` | unset | Optional TOML config file path |
 | `AONSOKU_COORD_LISTEN` | `127.0.0.1:3000` | Listen address |
 | `AONSOKU_COORD_DATA_DIR` | `./data` | SQLite database directory |
+| `AONSOKU_COORD_DATABASE_URL` | derived from data dir | Full SQLite database URL |
+| `AONSOKU_COORD_DEPLOYMENT` | `public` | `public` or `self-hosted` |
 | `AONSOKU_COORD_STABLE_KEY` | ephemeral | HMAC key for account lookup; **must be persisted** |
+
+Environment variables override values from the config file for deployment
+systems that inject secrets or bind addresses at runtime.
 
 The stable key is used for HMAC account lookup key derivation (design §6.1).
 Losing it makes existing accounts unmatchable. Include it in backups.
+
+### Config file
+
+```toml
+[server]
+listen = "127.0.0.1:3000"
+data_dir = "./data"
+deployment = "public"
+stable_key = "replace-with-a-long-random-secret"
+
+[auth]
+access_token_ttl_seconds = 900
+refresh_token_max_age_seconds = 7776000
+ws_ticket_ttl_seconds = 30
+challenge_ttl_seconds = 60
+
+[ssrf]
+connect_timeout_seconds = 5
+first_byte_timeout_seconds = 5
+total_timeout_seconds = 15
+max_body_bytes = 65536
+max_redirects = 2
+
+[realtime]
+heartbeat_interval_seconds = 15
+heartbeat_grace_seconds = 45
+max_message_bytes = 524288
+max_snapshot_songs = 2000
+snapshot_flush_interval_seconds = 30
+
+[history]
+default_history_limit = 100
+min_history_limit = 1
+max_history_limit = 1000
+
+[retention]
+offline_snapshot_ttl_seconds = 28800
+tombstone_retention_seconds = 2592000
+transferred_retention_seconds = 604800
+transferred_gc_interval_seconds = 86400
+```
 
 ## API
 

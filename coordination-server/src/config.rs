@@ -7,11 +7,15 @@
 
 use std::{net::SocketAddr, path::PathBuf};
 
+use anyhow::{Context, Result};
+use serde::Deserialize;
+
 /// Deployment trust profile.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum DeploymentMode {
     /// Public multi-tenant profile: strict SSRF protection, conservative
     /// quotas. This is the default.
+    #[default]
     Public,
     /// Self-hosted profile: administrators may opt into HTTP and private
     /// network Navidrome identity URLs.
@@ -25,6 +29,22 @@ impl DeploymentMode {
 
     pub fn allow_private_network_identity(self) -> bool {
         matches!(self, DeploymentMode::SelfHosted)
+    }
+}
+
+impl<'de> Deserialize<'de> for DeploymentMode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        match value.as_str() {
+            "public" => Ok(Self::Public),
+            "self-hosted" | "self_hosted" => Ok(Self::SelfHosted),
+            _ => Err(serde::de::Error::custom(
+                "deployment must be `public` or `self-hosted`",
+            )),
+        }
     }
 }
 
@@ -111,44 +131,252 @@ pub struct Config {
 
 impl Config {
     pub fn new(listen: SocketAddr, data_dir: PathBuf, stable_key: String) -> Self {
-        let database_url = format!("sqlite://{}/coordination.db", data_dir.display());
-        let deployment = DeploymentMode::Public;
-        let ssrf = match deployment {
+        Self::from_file_config(FileConfig {
+            server: Some(ServerConfig {
+                listen: Some(listen),
+                data_dir: Some(data_dir),
+                stable_key: Some(stable_key),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+    }
+
+    pub fn load(path: Option<PathBuf>) -> Result<Self> {
+        let mut file_config = match path {
+            Some(path) => {
+                let raw = std::fs::read_to_string(&path)
+                    .with_context(|| format!("failed to read {}", path.display()))?;
+                toml::from_str::<FileConfig>(&raw)
+                    .with_context(|| format!("failed to parse {}", path.display()))?
+            }
+            None => FileConfig::default(),
+        };
+        file_config.apply_env_overrides()?;
+        Ok(Self::from_file_config(file_config))
+    }
+
+    fn from_file_config(file_config: FileConfig) -> Self {
+        let defaults = FileConfig::default();
+        let server = file_config.server.unwrap_or_default();
+        let default_server = defaults.server.unwrap_or_default();
+        let data_dir = server
+            .data_dir
+            .or(default_server.data_dir)
+            .expect("default data_dir");
+        let database_url = server
+            .database_url
+            .unwrap_or_else(|| format!("sqlite://{}/coordination.db", data_dir.display()));
+        let deployment = server
+            .deployment
+            .or(default_server.deployment)
+            .unwrap_or_default();
+        let mut ssrf = match deployment {
             DeploymentMode::Public => SsrfPolicy::strict(),
             DeploymentMode::SelfHosted => SsrfPolicy::permissive(),
         };
+        let ssrf_config = file_config.ssrf.unwrap_or_default();
+        if let Some(v) = ssrf_config.allow_http {
+            ssrf.allow_http = v;
+        }
+        if let Some(v) = ssrf_config.allow_private_network {
+            ssrf.allow_private_network = v;
+        }
+        if let Some(v) = ssrf_config.connect_timeout_seconds {
+            ssrf.connect_timeout = std::time::Duration::from_secs(v);
+        }
+        if let Some(v) = ssrf_config.first_byte_timeout_seconds {
+            ssrf.first_byte_timeout = std::time::Duration::from_secs(v);
+        }
+        if let Some(v) = ssrf_config.total_timeout_seconds {
+            ssrf.total_timeout = std::time::Duration::from_secs(v);
+        }
+        if let Some(v) = ssrf_config.max_body_bytes {
+            ssrf.max_body_bytes = v;
+        }
+        if let Some(v) = ssrf_config.max_redirects {
+            ssrf.max_redirects = v;
+        }
+
+        let auth = file_config.auth.unwrap_or_default();
+        let realtime = file_config.realtime.unwrap_or_default();
+        let history = file_config.history.unwrap_or_default();
+        let retention = file_config.retention.unwrap_or_default();
         Self {
-            listen,
+            listen: server
+                .listen
+                .or(default_server.listen)
+                .expect("default listen"),
             database_url,
             data_dir,
             deployment,
             ssrf,
-            stable_key,
-            access_token_ttl: chrono::Duration::minutes(15),
-            refresh_token_max_age: chrono::Duration::days(90),
-            ws_ticket_ttl: chrono::Duration::seconds(30),
-            challenge_ttl: chrono::Duration::seconds(60),
-            heartbeat_interval: std::time::Duration::from_secs(15),
-            heartbeat_grace: std::time::Duration::from_secs(45),
-            offline_snapshot_ttl: chrono::Duration::hours(8),
-            default_history_limit: 100,
-            min_history_limit: 1,
-            max_history_limit: 1000,
-            max_message_bytes: 512 * 1024,
-            max_snapshot_songs: 2000,
-            tombstone_retention: chrono::Duration::days(30),
-            transferred_retention: chrono::Duration::days(7),
-            transferred_gc_interval: std::time::Duration::from_secs(24 * 60 * 60),
-            // 30s balances write amplification against recovery granularity:
-            // at most ~30s of snapshots are lost on a crash between status
-            // transitions, and the SQLite write rate drops ~6x vs the 5s
-            // per-snapshot baseline.
-            snapshot_flush_interval: std::time::Duration::from_secs(30),
+            stable_key: server.stable_key.unwrap_or_else(|| {
+                tracing::warn!(
+                    "stable_key not set; using ephemeral key. Account lookups will not survive restart."
+                );
+                "ephemeral-dev-key-do-not-use-in-production".to_string()
+            }),
+            access_token_ttl: chrono_seconds(auth.access_token_ttl_seconds.unwrap_or(15 * 60)),
+            refresh_token_max_age: chrono_seconds(
+                auth.refresh_token_max_age_seconds.unwrap_or(90 * 24 * 60 * 60),
+            ),
+            ws_ticket_ttl: chrono_seconds(auth.ws_ticket_ttl_seconds.unwrap_or(30)),
+            challenge_ttl: chrono_seconds(auth.challenge_ttl_seconds.unwrap_or(60)),
+            heartbeat_interval: std::time::Duration::from_secs(
+                realtime.heartbeat_interval_seconds.unwrap_or(15),
+            ),
+            heartbeat_grace: std::time::Duration::from_secs(
+                realtime.heartbeat_grace_seconds.unwrap_or(45),
+            ),
+            offline_snapshot_ttl: chrono_seconds(
+                retention
+                    .offline_snapshot_ttl_seconds
+                    .unwrap_or(8 * 60 * 60),
+            ),
+            default_history_limit: history.default_history_limit.unwrap_or(100),
+            min_history_limit: history.min_history_limit.unwrap_or(1),
+            max_history_limit: history.max_history_limit.unwrap_or(1000),
+            max_message_bytes: realtime.max_message_bytes.unwrap_or(512 * 1024),
+            max_snapshot_songs: realtime.max_snapshot_songs.unwrap_or(2000),
+            tombstone_retention: chrono_seconds(
+                retention
+                    .tombstone_retention_seconds
+                    .unwrap_or(30 * 24 * 60 * 60),
+            ),
+            transferred_retention: chrono_seconds(
+                retention
+                    .transferred_retention_seconds
+                    .unwrap_or(7 * 24 * 60 * 60),
+            ),
+            transferred_gc_interval: std::time::Duration::from_secs(
+                retention
+                    .transferred_gc_interval_seconds
+                    .unwrap_or(24 * 60 * 60),
+            ),
+            snapshot_flush_interval: std::time::Duration::from_secs(
+                realtime.snapshot_flush_interval_seconds.unwrap_or(30),
+            ),
         }
     }
 
     pub fn ssrf_policy(&self) -> &SsrfPolicy {
         &self.ssrf
+    }
+}
+
+fn chrono_seconds(seconds: u64) -> chrono::Duration {
+    chrono::Duration::seconds(seconds.try_into().unwrap_or(i64::MAX))
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct FileConfig {
+    server: Option<ServerConfig>,
+    auth: Option<AuthConfig>,
+    ssrf: Option<SsrfConfig>,
+    realtime: Option<RealtimeConfig>,
+    history: Option<HistoryConfig>,
+    retention: Option<RetentionConfig>,
+}
+
+impl FileConfig {
+    fn apply_env_overrides(&mut self) -> Result<()> {
+        let server = self.server.get_or_insert_with(ServerConfig::default);
+        if let Ok(value) = std::env::var("AONSOKU_COORD_LISTEN") {
+            server.listen = Some(value.parse().context("valid AONSOKU_COORD_LISTEN")?);
+        }
+        if let Ok(value) = std::env::var("AONSOKU_COORD_DATA_DIR") {
+            server.data_dir = Some(PathBuf::from(value));
+        }
+        if let Ok(value) = std::env::var("AONSOKU_COORD_DATABASE_URL") {
+            server.database_url = Some(value);
+        }
+        if let Ok(value) = std::env::var("AONSOKU_COORD_STABLE_KEY") {
+            server.stable_key = Some(value);
+        }
+        if let Ok(value) = std::env::var("AONSOKU_COORD_DEPLOYMENT") {
+            server.deployment = Some(parse_deployment_mode(&value)?);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+struct ServerConfig {
+    listen: Option<SocketAddr>,
+    data_dir: Option<PathBuf>,
+    database_url: Option<String>,
+    deployment: Option<DeploymentMode>,
+    stable_key: Option<String>,
+}
+
+impl Default for ServerConfig {
+    fn default() -> Self {
+        Self {
+            listen: Some("127.0.0.1:3000".parse().expect("default listen addr")),
+            data_dir: Some(std::env::current_dir().unwrap().join("data")),
+            database_url: None,
+            deployment: Some(DeploymentMode::Public),
+            stable_key: None,
+        }
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct AuthConfig {
+    access_token_ttl_seconds: Option<u64>,
+    refresh_token_max_age_seconds: Option<u64>,
+    ws_ticket_ttl_seconds: Option<u64>,
+    challenge_ttl_seconds: Option<u64>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct SsrfConfig {
+    allow_http: Option<bool>,
+    allow_private_network: Option<bool>,
+    connect_timeout_seconds: Option<u64>,
+    first_byte_timeout_seconds: Option<u64>,
+    total_timeout_seconds: Option<u64>,
+    max_body_bytes: Option<u64>,
+    max_redirects: Option<u32>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct RealtimeConfig {
+    heartbeat_interval_seconds: Option<u64>,
+    heartbeat_grace_seconds: Option<u64>,
+    max_message_bytes: Option<u64>,
+    max_snapshot_songs: Option<u32>,
+    snapshot_flush_interval_seconds: Option<u64>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct HistoryConfig {
+    default_history_limit: Option<u32>,
+    min_history_limit: Option<u32>,
+    max_history_limit: Option<u32>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct RetentionConfig {
+    offline_snapshot_ttl_seconds: Option<u64>,
+    tombstone_retention_seconds: Option<u64>,
+    transferred_retention_seconds: Option<u64>,
+    transferred_gc_interval_seconds: Option<u64>,
+}
+
+fn parse_deployment_mode(value: &str) -> Result<DeploymentMode> {
+    match value {
+        "public" => Ok(DeploymentMode::Public),
+        "self-hosted" | "self_hosted" => Ok(DeploymentMode::SelfHosted),
+        _ => anyhow::bail!("AONSOKU_COORD_DEPLOYMENT must be `public` or `self-hosted`"),
     }
 }
 
@@ -166,5 +394,53 @@ mod tests {
         assert!(!c.ssrf.allow_http);
         assert!(!c.ssrf.allow_private_network);
         assert_eq!(c.deployment, DeploymentMode::Public);
+    }
+
+    #[test]
+    fn file_config_overrides_hardcoded_defaults() {
+        let raw = r#"
+[server]
+listen = "127.0.0.1:4000"
+data_dir = "/tmp/aonsoku-coord"
+stable_key = "stable"
+deployment = "self-hosted"
+
+[auth]
+access_token_ttl_seconds = 120
+
+[ssrf]
+allow_http = false
+connect_timeout_seconds = 9
+
+[realtime]
+heartbeat_interval_seconds = 3
+max_message_bytes = 1024
+max_snapshot_songs = 10
+snapshot_flush_interval_seconds = 5
+
+[history]
+default_history_limit = 50
+min_history_limit = 5
+max_history_limit = 500
+
+[retention]
+tombstone_retention_seconds = 600
+"#;
+        let parsed: FileConfig = toml::from_str(raw).unwrap();
+        let c = Config::from_file_config(parsed);
+        assert_eq!(c.listen, "127.0.0.1:4000".parse().unwrap());
+        assert_eq!(c.deployment, DeploymentMode::SelfHosted);
+        assert!(!c.ssrf.allow_http);
+        assert!(c.ssrf.allow_private_network);
+        assert_eq!(c.ssrf.connect_timeout, std::time::Duration::from_secs(9));
+        assert_eq!(c.access_token_ttl, chrono::Duration::seconds(120));
+        assert_eq!(c.heartbeat_interval, std::time::Duration::from_secs(3));
+        assert_eq!(c.max_message_bytes, 1024);
+        assert_eq!(c.max_snapshot_songs, 10);
+        assert_eq!(c.snapshot_flush_interval, std::time::Duration::from_secs(5));
+        assert_eq!(c.default_history_limit, 50);
+        assert_eq!(c.min_history_limit, 5);
+        assert_eq!(c.max_history_limit, 500);
+        assert_eq!(c.tombstone_retention, chrono::Duration::seconds(600));
     }
 }

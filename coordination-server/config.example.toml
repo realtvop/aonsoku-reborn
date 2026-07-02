@@ -1,0 +1,43 @@
+[server]
+listen = "127.0.0.1:3000"
+data_dir = "./data"
+# database_url defaults to sqlite://<data_dir>/coordination.db
+# database_url = "sqlite://./data/coordination.db"
+deployment = "public"
+# stable_key must be persisted across restarts in production.
+# stable_key = "replace-with-a-long-random-secret"
+
+[auth]
+access_token_ttl_seconds = 900
+refresh_token_max_age_seconds = 7776000
+ws_ticket_ttl_seconds = 30
+challenge_ttl_seconds = 60
+
+[ssrf]
+# Public deployment defaults are strict. Self-hosted deployment defaults allow
+# HTTP and private network identity URLs unless overridden here.
+# allow_http = false
+# allow_private_network = false
+connect_timeout_seconds = 5
+first_byte_timeout_seconds = 5
+total_timeout_seconds = 15
+max_body_bytes = 65536
+max_redirects = 2
+
+[realtime]
+heartbeat_interval_seconds = 15
+heartbeat_grace_seconds = 45
+max_message_bytes = 524288
+max_snapshot_songs = 2000
+snapshot_flush_interval_seconds = 30
+
+[history]
+default_history_limit = 100
+min_history_limit = 1
+max_history_limit = 1000
+
+[retention]
+offline_snapshot_ttl_seconds = 28800
+tombstone_retention_seconds = 2592000
+transferred_retention_seconds = 604800
+transferred_gc_interval_seconds = 86400
