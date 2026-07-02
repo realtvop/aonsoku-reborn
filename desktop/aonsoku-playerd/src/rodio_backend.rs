@@ -369,9 +369,61 @@ fn native_file_path(uri: &str) -> Result<PathBuf, BackendError> {
     }
 
     if let Some(path) = uri.strip_prefix("file://") {
-        Ok(Path::new(path).to_path_buf())
+        let decoded = percent_decode_file_url_path(path)?;
+        Ok(Path::new(&decoded).to_path_buf())
     } else {
         Ok(Path::new(uri).to_path_buf())
+    }
+}
+
+fn percent_decode_file_url_path(path: &str) -> Result<String, BackendError> {
+    let bytes = path.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+
+    while index < bytes.len() {
+        if bytes[index] != b'%' {
+            decoded.push(bytes[index]);
+            index += 1;
+            continue;
+        }
+
+        let Some(hex) = bytes.get(index + 1..index + 3) else {
+            return Err(BackendError::new(
+                "INVALID_SOURCE",
+                "file uri contains an invalid percent escape",
+            ));
+        };
+        let value = decode_hex_pair(hex).ok_or_else(|| {
+            BackendError::new(
+                "INVALID_SOURCE",
+                "file uri contains an invalid percent escape",
+            )
+        })?;
+        decoded.push(value);
+        index += 3;
+    }
+
+    String::from_utf8(decoded).map_err(|error| {
+        BackendError::new(
+            "INVALID_SOURCE",
+            format!("file uri path must decode to UTF-8: {error}"),
+        )
+    })
+}
+
+fn decode_hex_pair(hex: &[u8]) -> Option<u8> {
+    let high = decode_hex_digit(*hex.first()?)?;
+    let low = decode_hex_digit(*hex.get(1)?)?;
+    Some((high << 4) | low)
+}
+
+fn decode_hex_digit(digit: u8) -> Option<u8> {
+    match digit {
+        b'0'..=b'9' => Some(digit - b'0'),
+        b'a'..=b'f' => Some(digit - b'a' + 10),
+        b'A'..=b'F' => Some(digit - b'A' + 10),
+        _ => None,
     }
 }
 
@@ -394,6 +446,21 @@ mod tests {
     #[test]
     fn native_file_path_rejects_empty_uri() {
         let error = native_file_path(" ").unwrap_err();
+        assert_eq!(error.code, "INVALID_SOURCE");
+    }
+
+    #[test]
+    fn native_file_path_decodes_file_uri_percent_escapes() {
+        assert_eq!(
+            native_file_path("file:///tmp/Aonsoku%20Smoke%20%E2%99%AB.wav").unwrap(),
+            PathBuf::from("/tmp/Aonsoku Smoke \u{266b}.wav")
+        );
+    }
+
+    #[test]
+    fn native_file_path_rejects_invalid_percent_escapes() {
+        let error = native_file_path("file:///tmp/song%XZ.mp3").unwrap_err();
+
         assert_eq!(error.code, "INVALID_SOURCE");
     }
 }
