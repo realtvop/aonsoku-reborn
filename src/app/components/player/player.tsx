@@ -1,4 +1,4 @@
-import { Pause, Play, SkipForward } from "lucide-react";
+import { Loader2, Pause, Play, SkipForward } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
@@ -29,6 +29,7 @@ import { openFullscreenPlayerWithHistory } from "@/routes/fullscreenRouter";
 import {
   useIsRemoteControlActive,
   usePlayerActions,
+  usePlayerIsBuffering,
   usePlayerIsPlaying,
   usePlayerIsTransitioning,
   usePlayerLoop,
@@ -127,7 +128,9 @@ export function Player() {
   useNativeForegroundSync();
   useSleepTimer();
 
+  const isBuffering = usePlayerIsBuffering();
   const isTransitioning = usePlayerIsTransitioning();
+  const isLoading = isBuffering || isTransitioning;
 
   useEffect(() => {
     if (!isTransitioning) return;
@@ -418,7 +421,9 @@ export function Player() {
             data-testid={`player-button-${displayIsPlaying ? "pause" : "play"}`}
             className="size-11 p-0"
           >
-            {displayIsPlaying ? (
+            {isLoading ? (
+              <Loader2 className="animate-spin text-foreground size-5" />
+            ) : displayIsPlaying ? (
               <Pause className="text-foreground fill-foreground size-5" />
             ) : (
               <Play className="text-foreground fill-foreground size-5" />
