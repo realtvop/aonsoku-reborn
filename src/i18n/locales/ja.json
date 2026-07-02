@@ -1,0 +1,1130 @@
+{
+  "home": {
+    "pinned": "ピン留め",
+    "recentlyPlayed": "最近再生した曲",
+    "mostPlayed": "再生回数の多い曲",
+    "recentlyAdded": "最近追加された曲",
+    "explore": "見つける"
+  },
+  "sidebar": {
+    "home": "ホーム",
+    "search": "検索…",
+    "miniSearch": "検索",
+    "library": "ライブラリ",
+    "artists": "アーティスト",
+    "songs": "曲",
+    "albums": "アルバム",
+    "favorites": "お気に入り",
+    "playlists": "プレイリスト",
+    "radios": "ラジオ",
+    "emptyPlaylist": "プレイリストはまだありません",
+    "collapse": "サイドバーを折りたたむ",
+    "expand": "サイドバーを展開する"
+  },
+  "menu": {
+    "language": "言語",
+    "server": "サーバー",
+    "about": "情報",
+    "serverLogout": "ログアウト"
+  },
+  "generic": {
+    "seeMore": "もっと見る",
+    "showDetails": "詳細を表示",
+    "hideDetails": "詳細を隠す",
+    "viewAll": "すべて表示",
+    "loading": "読み込み中…",
+    "clear": "クリア",
+    "viewMode": {
+      "label": "表示モード",
+      "modes": {
+        "list": "リスト",
+        "poster": "ポスター"
+      }
+    },
+    "beta": "ベータ"
+  },
+  "theme": {
+    "label": "テーマ",
+    "materialYou": "Material You のテーマカラー",
+    "materialYouInfo": "システムの壁紙に基づいたダイナミックカラーを使用します（Android 12 以降）。",
+    "light": "ライト",
+    "dark": "ダーク",
+    "system": "システム",
+    "modeLabel": "モード",
+    "modeLight": "ライト",
+    "modeDark": "ダーク",
+    "modeSystem": "システム",
+    "black": "モノクロ",
+    "one-dark": "One Dark",
+    "night-owl-light": "Night Owl Light",
+    "marmalade-beaver": "Marmalade Beaver",
+    "noctis-lilac": "Noctis Lilac",
+    "material-theme": "Material Theme",
+    "monokai-pro": "Monokai Pro",
+    "github-dark": "Github Dark",
+    "shades-of-purple": "Shades Of Purple",
+    "bearded-solarized": "Bearded Solarized",
+    "catppuccin-mocha": "Catppuccin Mocha",
+    "nuclear-dark": "Nuclear Dark",
+    "achiever": "Achiever",
+    "dracula": "Dracula",
+    "discord": "Discord",
+    "tinacious-design": "Tinacious Design",
+    "vue-dark": "Vue Dark",
+    "vim-dark-soft": "Vim Dark Soft",
+    "cool": "Cool",
+    "huacat-pink": "Huacat Pink"
+  },
+  "favorites": {
+    "headline": "お気に入り",
+    "songCount_one": "{{count}} 曲",
+    "songCount_other": "{{count}} 曲",
+    "duration": "{{duration}}",
+    "noSongs": "お気に入りの曲はまだありません！",
+    "buttons": {
+      "play": "{{name}} を再生",
+      "shuffle": "{{name}} をシャッフル再生"
+    }
+  },
+  "playlist": {
+    "headline": "プレイリスト",
+    "songCount_one": "{{count}} 曲",
+    "songCount_other": "{{count}} 曲",
+    "duration": "{{duration}}",
+    "refresh": "プレイリストを更新",
+    "buttons": {
+      "play": "{{name}} を再生",
+      "shuffle": "{{name}} をシャッフル再生",
+      "options": "{{name}} のその他のオプション"
+    },
+    "noSongList": "このプレイリストには曲がありません！",
+    "form": {
+      "labels": {
+        "name": "名前",
+        "comment": "コメント",
+        "commentDescription": "このプレイリストの簡単な説明を入力してください",
+        "isPublic": "公開",
+        "isPublicDescription": "このオプションを選択すると、プレイリストが公開されます。他のユーザーがあなたのプレイリストを閲覧・利用できるようになります。"
+      },
+      "create": {
+        "title": "プレイリストを作成",
+        "button": "作成",
+        "toast": {
+          "success": "プレイリストを作成しました！",
+          "error": "プレイリストの作成に失敗しました！"
+        }
+      },
+      "edit": {
+        "title": "プレイリストを編集",
+        "button": "更新",
+        "toast": {
+          "success": "プレイリストを更新しました！",
+          "error": "プレイリストの更新に失敗しました！"
+        }
+      },
+      "delete": {
+        "title": "このプレイリストを削除してもよろしいですか？",
+        "description": "この操作は元に戻せません。",
+        "toast": {
+          "success": "プレイリストを削除しました！",
+          "error": "プレイリストの削除に失敗しました！"
+        }
+      },
+      "validations": {
+        "nameLength": "プレイリスト名は 2 文字以上で入力してください。"
+      },
+      "removeSong": {
+        "title_one": "選択した曲を削除してもよろしいですか？",
+        "title_other": "選択した曲を削除してもよろしいですか？",
+        "description": "この操作は元に戻せません。",
+        "toast": {
+          "success_one": "曲を削除しました！",
+          "success_other": "曲を削除しました！",
+          "error_one": "曲の削除に失敗しました！",
+          "error_other": "曲の削除に失敗しました！"
+        }
+      }
+    }
+  },
+  "songs": {
+    "list": {
+      "search": {
+        "placeholder": "曲を検索…"
+      },
+      "byArtist": "{{artist}} の曲",
+      "filter": {
+        "clear": "フィルターをクリア"
+      }
+    },
+    "sort": {
+      "lastAdded": "追加日順",
+      "artist": "アーティスト A-Z",
+      "title": "曲名 A-Z",
+      "album": "アルバム A-Z"
+    }
+  },
+  "album": {
+    "headline": "アルバム",
+    "buttons": {
+      "like": "{{name}} をお気に入りに追加",
+      "dislike": "{{name}} のお気に入りを解除"
+    },
+    "info": {
+      "about": "{{name}} について",
+      "lastfm": "Last.fm で開く",
+      "musicbrainz": "MusicBrainz で開く"
+    },
+    "more": {
+      "listTitle": "このアーティストのその他の作品",
+      "discography": "アーティストのディスコグラフィー",
+      "genreTitle": "{{genre}} のその他の作品"
+    },
+    "list": {
+      "header": {
+        "albumsByArtist": "{{artist}} のアルバム"
+      },
+      "empty": {
+        "title": "おっと、アルバムがありません！",
+        "info": "現在のフィルターに該当するアルバムがないようです。",
+        "action": "フィルターを変更してみてください。"
+      },
+      "genre": {
+        "label": "ジャンルを選択…",
+        "search": "ジャンルを探す…",
+        "loading": "ジャンルを読み込み中…",
+        "notFound": "ジャンルが見つかりません。"
+      },
+      "filter": {
+        "label": "フィルター",
+        "artist": "アーティスト",
+        "genre": "ジャンル",
+        "favorites": "お気に入り",
+        "mostPlayed": "再生回数の多い曲",
+        "name": "名前",
+        "random": "ランダム",
+        "recentlyAdded": "最近追加された曲",
+        "recentlyPlayed": "最近再生した曲",
+        "releaseYear": "リリース年",
+        "discography": "ディスコグラフィー",
+        "search": "検索",
+        "year": {
+          "oldest": "古い順",
+          "newest": "新しい順"
+        }
+      },
+      "search": {
+        "placeholder": "アルバムを検索…"
+      }
+    },
+    "table": {
+      "discNumber": "ディスク {{number}}"
+    },
+    "detail": {
+      "songsUnavailable": "トラックリストはオフラインでは利用できません。ライブラリを同期するとトラックが利用可能になります。",
+      "songsUnavailableTitle": "トラックを利用できません"
+    }
+  },
+  "artist": {
+    "headline": "アーティスト",
+    "buttons": {
+      "play": "{{artist}} のラジオを再生",
+      "shuffle": "{{artist}} のラジオをシャッフル再生",
+      "options": "{{artist}} のその他のオプション"
+    },
+    "info": {
+      "albumsCount_one": "{{count}} 枚のアルバム",
+      "albumsCount_other": "{{count}} 枚のアルバム"
+    },
+    "topSongs": "人気の曲",
+    "recentAlbums": "最近のアルバム",
+    "relatedArtists": "関連アーティスト"
+  },
+  "table": {
+    "columns": {
+      "title": "タイトル",
+      "albumArtist": "アルバムアーティスト",
+      "artist": "アーティスト",
+      "contributors": "参加者",
+      "album": "アルバム",
+      "year": "年",
+      "duration": "再生時間",
+      "plays": "再生回数",
+      "lastPlayed": "最終再生",
+      "bpm": "BPM",
+      "bitrate": "ビットレート",
+      "quality": "品質",
+      "name": "名前",
+      "albumCount": "アルバム数",
+      "songCount": "曲数",
+      "comment": "コメント",
+      "public": "公開",
+      "track": "トラック",
+      "genres": "ジャンル",
+      "size": "サイズ",
+      "codec": "コーデック",
+      "path": "パス",
+      "favorite": "お気に入り",
+      "recordLabel": "レコードレーベル",
+      "discNumber": "ディスク番号",
+      "trackGain": "トラックゲイン",
+      "trackPeak": "トラックピーク",
+      "albumGain": "アルバムゲイン",
+      "albumPeak": "アルバムピーク",
+      "channelCount": "チャンネル数",
+      "samplingRate": "サンプリングレート",
+      "bitDepth": "ビット深度"
+    },
+    "buttons": {
+      "play": "{{artist}} の {{title}} を再生",
+      "pause": "{{artist}} の {{title}} を一時停止"
+    },
+    "lastPlayed": "{{date}}前",
+    "pagination": {
+      "rowsPerPage": "ページあたりの行数",
+      "currentPage": "{{totalPages}} ページ中 {{currentPage}} ページ",
+      "screenReader": {
+        "firstPage": "最初のページへ",
+        "previousPage": "前のページへ",
+        "nextPage": "次のページへ",
+        "lastPage": "最後のページへ"
+      }
+    },
+    "sort": {
+      "asc": "昇順",
+      "desc": "降順",
+      "reset": "リセット"
+    },
+    "menu": {
+      "selectedCount_one": "{{count}} 件選択中",
+      "selectedCount_other": "{{count}} 件選択中"
+    }
+  },
+  "fullscreen": {
+    "noLyrics": "歌詞が見つかりません",
+    "loadingLyrics": "歌詞を検索中…",
+    "queue": "再生キュー",
+    "queueHistory": "履歴",
+    "queueContinue": "再生を続ける",
+    "queueRepeating": "リピート中",
+    "queueShuffling": "シャッフル中",
+    "queueFromSource": "{{source}} から",
+    "playing": "再生中",
+    "lyrics": "歌詞",
+    "selectLyrics": "歌詞の設定",
+    "switchButton": "ビッグプレーヤーに切り替える",
+    "emptyQueue": "キューに曲がありません"
+  },
+  "lyrics": {
+    "customSelect": {
+      "title": "歌詞の設定",
+      "subtitle": "{{artist}} の {{title}}",
+      "noSong": "再生中の曲はありません。",
+      "serverDisabled": "カスタム歌詞サービスを使用すると、さらに多くの歌詞を選択できます",
+      "empty": "カスタム歌詞の候補が見つかりません。",
+      "searchTitle": "曲名",
+      "searchArtist": "アーティスト",
+      "search": "検索",
+      "select": "選択",
+      "selected": "選択済み",
+      "saveError": "選択した歌詞の保存に失敗しました。",
+      "currentSelection": "現在の選択: {{artist}} の {{title}}",
+      "lyricsId": "ID: {{id}}",
+      "noPreview": "プレビューは利用できません。",
+      "disableLyrics": "歌詞をオフにする",
+      "lyricsDisabled": "歌詞オフ"
+    }
+  },
+  "logout": {
+    "dialog": {
+      "title": "ログアウトしますか？",
+      "description": "ログアウトを確認してください。",
+      "cancel": "キャンセル",
+      "confirm": "続行"
+    }
+  },
+  "login": {
+    "form": {
+      "server": "サーバー",
+      "description": "Subsonic サーバーに接続します。",
+      "url": "URL",
+      "urlDescription": "サーバーの URL です",
+      "username": "ユーザー名",
+      "usernamePlaceholder": "ユーザー名",
+      "password": "パスワード",
+      "connect": "接続",
+      "connecting": "接続中…",
+      "validations": {
+        "url": "有効な URL を入力してください。",
+        "protocol": "URL は http:// または https:// で始まる必要があります",
+        "username": "ユーザー名を入力してください",
+        "usernameLength": "ユーザー名は 2 文字以上で入力してください。",
+        "password": "パスワードを入力してください",
+        "passwordLength": "パスワードは 2 文字以上で入力してください。"
+      }
+    }
+  },
+  "toast": {
+    "server": {
+      "success": "サーバーを保存しました！",
+      "error": "サーバーとの通信に失敗しました！"
+    }
+  },
+  "command": {
+    "inputPlaceholder": "アルバム、アーティスト、曲を検索",
+    "noResults": "結果が見つかりません。",
+    "commands": {
+      "heading": "コマンド",
+      "pages": "ページへ移動",
+      "theme": "テーマを変更"
+    },
+    "pages": "ページ"
+  },
+  "player": {
+    "noSongPlaying": "再生中の曲はありません",
+    "noRadioPlaying": "再生中のラジオはありません",
+    "tooltips": {
+      "shuffle": {
+        "enable": "シャッフルを有効にする",
+        "disable": "シャッフルを無効にする"
+      },
+      "rewind": "{{amount}} 秒戻す",
+      "previous": "前へ",
+      "play": "再生",
+      "pause": "一時停止",
+      "forward": "{{amount}} 秒進む",
+      "next": "次へ",
+      "repeat": {
+        "enable": "リピートを有効にする",
+        "enableOne": "1 曲リピートを有効にする",
+        "disable": "リピートを無効にする"
+      },
+      "like": "{{artist}} の {{song}} をお気に入りに追加",
+      "dislike": "{{artist}} の {{song}} のお気に入りを解除",
+      "star": "現在の曲をお気に入りに追加",
+      "unstar": "現在の曲のお気に入りを解除",
+      "progress": "シーク",
+      "miniPlayer": {
+        "open": "ミニプレーヤーを開く",
+        "close": "ミニプレーヤーを閉じる"
+      },
+      "volume": {
+        "mute": "ミュート",
+        "unmute": "ミュート解除"
+      }
+    },
+    "sleepTimer": {
+      "tooltip": "スリープタイマー",
+      "title": "スリープタイマー",
+      "endOfTrack": "現在の曲の終わり",
+      "minutes": "{{count}} 分",
+      "remaining": "残り {{time}}",
+      "cancel": "タイマーをキャンセル"
+    }
+  },
+  "error": {
+    "notFound": "見つかりません"
+  },
+  "options": {
+    "play": "再生",
+    "playNext": "次に再生",
+    "addLast": "最後に追加",
+    "pin": "ピン留め",
+    "unpin": "ピン留めを解除",
+    "download": "ダウンロード",
+    "like": "お気に入りに追加",
+    "unlike": "お気に入りを解除",
+    "playlist": {
+      "add": "プレイリストに追加",
+      "edit": "プレイリストを編集",
+      "delete": "プレイリストを削除",
+      "search": "プレイリストを探す",
+      "create": "新しいプレイリスト",
+      "notFound": "プレイリストが見つかりません",
+      "removeSong": "プレイリストから削除"
+    },
+    "removeFromQueue": "キューから削除",
+    "info": "情報を取得",
+    "goto": {
+      "artist": "アーティストへ移動",
+      "album": "アルバムへ移動"
+    },
+    "downloadAlbum": "アルバムをダウンロード",
+    "downloadPlaylist": "プレイリストをダウンロード",
+    "downloadArtist": "アーティストをダウンロード",
+    "removeDownload": "ダウンロードを削除"
+  },
+  "radios": {
+    "label": "ラジオ",
+    "addRadio": "ラジオを追加",
+    "table": {
+      "name": "名前",
+      "homepage": "ホームページ URL",
+      "stream": "ストリーム URL",
+      "actions": {
+        "edit": "ラジオを編集",
+        "delete": "ラジオを削除"
+      },
+      "playTooltip": "{{name}} ラジオを再生",
+      "pauseTooltip": "{{name}} ラジオを一時停止"
+    },
+    "empty": {
+      "title": "ラジオがありません！",
+      "info": "クリックして最初のラジオ局を追加してください。"
+    },
+    "error": "ラジオを再生できません。ストリーム URL を確認してください！",
+    "form": {
+      "create": {
+        "title": "ラジオを追加",
+        "button": "保存",
+        "toast": {
+          "success": "ラジオを作成しました！",
+          "error": "ラジオの作成に失敗しました！"
+        }
+      },
+      "edit": {
+        "title": "ラジオを編集",
+        "button": "更新",
+        "toast": {
+          "success": "ラジオを更新しました！",
+          "error": "ラジオの更新に失敗しました！"
+        }
+      },
+      "delete": {
+        "title": "このラジオ局を削除してもよろしいですか？",
+        "description": "この操作は元に戻せません。",
+        "toast": {
+          "success": "ラジオを削除しました！",
+          "error": "ラジオの削除に失敗しました！"
+        }
+      },
+      "validations": {
+        "name": "ラジオ名は 3 文字以上で入力してください。",
+        "url": "有効な URL を入力してください。",
+        "homepageUrlLength": "ホームページ URL は 10 文字以上で入力してください",
+        "streamUrlLength": "ストリーム URL は 10 文字以上で入力してください"
+      }
+    }
+  },
+  "time": {
+    "days_one": "{{days}} 日",
+    "days_other": "{{days}} 日",
+    "hour": "{{hour}} 時間",
+    "minutes": "{{minutes}} 分",
+    "seconds": "{{seconds}} 秒"
+  },
+  "server": {
+    "songCount_one": "{{count}} 曲",
+    "songCount_other": "{{count}} 曲",
+    "folderCount_one": "{{count}} 個のフォルダー",
+    "folderCount_other": "{{count}} 個のフォルダー",
+    "lastScan": "最終スキャン: {{date}}",
+    "status": "ステータス",
+    "management": "サーバー管理",
+    "incompatible": {
+      "title": "非対応のサーバー",
+      "description": "このサーバーは完全にはサポートされていない古いバージョンの Subsonic プロトコルを使用しています。問題が発生する可能性があるため、注意して続行してください。",
+      "skip": "このまま続行"
+    },
+    "buttons": {
+      "refresh": "ステータスを更新",
+      "startScan": "クイックスキャン"
+    }
+  },
+  "queue": {
+    "title": "再生キュー",
+    "clear": "キューをクリア",
+    "close": "キューを閉じる",
+    "open": "キューを開く"
+  },
+  "shortcuts": {
+    "modal": {
+      "title": "キーボードショートカット",
+      "description": {
+        "first": "押す",
+        "last": "でこのモーダルを切り替えます。"
+      }
+    },
+    "playback": {
+      "label": "再生",
+      "play": "再生 / 一時停止",
+      "shuffle": "シャッフル",
+      "repeat": "リピート",
+      "previous": "前の曲へ",
+      "next": "次の曲へ",
+      "raiseVolume": "音量を上げる",
+      "lowerVolume": "音量を下げる"
+    },
+    "navigation": {
+      "label": "ナビゲーション"
+    }
+  },
+  "songInfo": {
+    "title": "曲の詳細",
+    "error": "曲の情報を取得できません。後でもう一度お試しください。"
+  },
+  "warnings": {
+    "reload": "曲を再生中です！\nページを再読み込みしてもよろしいですか？",
+    "songError": "曲を再生できません。サーバーを確認してください！"
+  },
+  "update": {
+    "dialog": {
+      "title": "新しいバージョンが利用可能です！",
+      "remindLater": "後で通知",
+      "install": "インストールして再起動"
+    },
+    "toasts": {
+      "started": "更新処理を開始しました。",
+      "success": "更新がインストールされました！アプリを再起動します。",
+      "error": "更新のインストールに失敗しました。GitHub から直接ダウンロードしてください。"
+    },
+    "sw": {
+      "updating": "更新中...",
+      "refresh": "更新",
+      "error": "更新に失敗しました – 再試行"
+    }
+  },
+  "about": {
+    "client": "クライアント",
+    "server": "サーバー",
+    "version": "バージョン",
+    "type": "種類",
+    "apiVersion": "API バージョン",
+    "buildTime": "ビルド日時",
+    "toasts": {
+      "copy": "リンクをクリップボードにコピーしました！"
+    }
+  },
+  "mobile": {
+    "unsupported_message": "{{app_name}} は携帯電話に対応していません。",
+    "access_recommendation": "パソコンまたはタブレットからアクセスしてください。"
+  },
+  "settings": {
+    "label": "設定",
+    "options": {
+      "appearance": "外観",
+      "language": "言語と地域",
+      "audio": "プレーヤーとオーディオ",
+      "content": "コンテンツ",
+      "accounts": "アカウント",
+      "desktop": "デスクトップアプリケーション",
+      "server": "サーバー",
+      "privacy": "プライバシーとセキュリティ",
+      "storage": "オフライン体験"
+    },
+    "server": {
+      "group": "サーバー",
+      "description": "起動時に使用するメインサーバーと任意のフォールバック URL を管理します。",
+      "primaryUrl": {
+        "label": "メイン URL",
+        "info": "アプリ起動時に最初に試すサーバー URL です。",
+        "placeholder": "https://your-server.example.com"
+      },
+      "fallbackUrl": {
+        "label": "フォールバック URL",
+        "info": "起動時にメイン URL に接続できない場合に使用する任意のサーバー URL です。",
+        "placeholder": "https://fallback-server.example.com"
+      },
+      "activeUrl": {
+        "label": "現在の URL",
+        "info": "このアプリのセッションで現在使用しているサーバー URL です。",
+        "empty": "サーバーが選択されていません"
+      },
+      "activeType": {
+        "label": "現在のサーバー",
+        "info": "このセッションがメイン URL とフォールバック URL のどちらを使用しているかを表示します。",
+        "primary": "メイン URL",
+        "fallback": "フォールバック URL",
+        "none": "未接続"
+      },
+      "validation": {
+        "primaryUrl": "有効なメイン URL を入力してください。",
+        "fallbackUrl": "有効なフォールバック URL を入力してください。"
+      },
+      "toast": {
+        "success": "サーバー URL を保存しました。",
+        "error": "メインまたはフォールバックのサーバーに接続できません。"
+      },
+      "save": "サーバー URL を保存",
+      "saving": "保存中...",
+      "locked": "サーバー URL の設定はこのデプロイによりロックされています。"
+    },
+    "appearance": {
+      "general": {
+        "group": "全般",
+        "description": "アプリの外観と表示の動作をカスタマイズします。",
+        "fullscreen": {
+          "label": "自動フルスクリーンを有効にする",
+          "info": "有効にすると、ビッグプレーヤーを開いたときに自動的にフルスクリーンモードになります。"
+        },
+        "albumCoverForSongs": {
+          "label": "常にアルバムカバーを使用する",
+          "info": "有効にすると、すべての曲のアートワーク取得にアルバムカバーを使用し、読み込み時間を短縮します。"
+        }
+      },
+      "queue": {
+        "colors": {
+          "info": "有効にすると、現在のアルバムカバーの主要な色を背景色として使用します。",
+          "label": "ダイナミック背景色を有効にする"
+        },
+        "description": "再生キューと歌詞ページをカスタマイズします。",
+        "group": "キューと歌詞"
+      }
+    },
+    "audio": {
+      "hapticFeedback": {
+        "group": "触覚フィードバック",
+        "description": "アプリ操作時の振動フィードバックを制御します。",
+        "enabled": {
+          "label": "触覚フィードバックを有効にする",
+          "info": "有効にすると、モバイルでキューの項目をドラッグしたときにデバイスが振動します。"
+        }
+      },
+      "pip": {
+        "group": "ピクチャー・イン・ピクチャー",
+        "description": "ブラウザからのピクチャー・イン・ピクチャー要求への応答方法を制御します。",
+        "acceptBrowserRequest": {
+          "label": "ブラウザの PiP 要求を受け入れる",
+          "info": "有効にすると、ブラウザからのピクチャー・イン・ピクチャー要求に応答します。無効にすると、ミニプレーヤーは PiP ボタンから手動でのみ開けます。"
+        }
+      },
+      "replayGain": {
+        "group": "ReplayGain",
+        "description": "オーディオの再生レベルを自動的に正規化し、一貫したリスニング体験を提供します。",
+        "enabled": "有効",
+        "error": {
+          "message": "ReplayGain を使用したトラックの再生中にエラーが発生しました。",
+          "button": "再試行"
+        },
+        "mode": {
+          "label": "モード",
+          "track": "トラックゲイン",
+          "album": "アルバムゲイン"
+        },
+        "preAmp": "プリアンプ (dB)",
+        "defaultGain": {
+          "label": "デフォルトゲイン (dB)",
+          "info": "このゲインレベルは、ReplayGain メタデータを含まない曲に適用され、一貫した音量を確保します。推奨範囲は -10 dB から -1 dB です。"
+        }
+      },
+      "lyrics": {
+        "group": "歌詞",
+        "description": "歌詞の設定をカスタマイズします。",
+        "preferSynced": {
+          "label": "同期歌詞を優先する",
+          "info": "有効にすると、同期歌詞が非同期歌詞より優先されます。"
+        },
+        "showTranslation": {
+          "label": "翻訳を表示する",
+          "info": "利用可能な場合、元の歌詞の下に翻訳された歌詞を表示します。"
+        },
+        "source": {
+          "label": "歌詞ソースの優先順位",
+          "info": "プレーンまたは LRC 歌詞を取得する順序を選択します。",
+          "dragInstruction": "ドラッグしてソースの順序を変更します。",
+          "dragHandle": "{{source}} ソースをドラッグ",
+          "priority": "{{priority}}. {{source}}",
+          "navidrome": "Navidrome",
+          "lrclib": "LRCLIB",
+          "custom": "カスタム"
+        },
+        "customServer": {
+          "enabled": {
+            "label": "カスタム歌詞サーバー",
+            "info": "ユーザー定義の外部歌詞サーバーから歌詞を取得します。"
+          },
+          "url": {
+            "label": "サーバー URL",
+            "placeholder": "https://example.com/lyrics",
+            "info": "外部歌詞を取得するためのエンドポイントです。",
+            "invalid": "有効な HTTP または HTTPS の歌詞サーバー URL を入力してください。"
+          },
+          "password": {
+            "label": "パスワード",
+            "placeholder": "認証パスワード",
+            "info": "カスタム歌詞サーバーに送信する任意の Authorization ヘッダーの値です。歌詞サーバー側で設定します。"
+          },
+          "save": "保存",
+          "saved": "カスタム歌詞サーバーの設定を保存しました。"
+        }
+      },
+      "history": {
+        "group": "再生履歴",
+        "description": "10 秒以上再生された曲は再生履歴に記録されます。",
+        "maxSize": {
+          "label": "履歴の最大件数",
+          "info": "再生履歴に保持する曲の最大数です。上限を超えると古い項目が削除されます。"
+        }
+      }
+    },
+    "privacy": {
+      "services": {
+        "group": "外部サービス",
+        "description": "Aonsoku がアクセスできる外部サービスを管理します。",
+        "lrclib": {
+          "info": "LRCLIB は曲の歌詞を検索するために使用されます。",
+          "label": "LRCLIB"
+        }
+      }
+    },
+    "storage": {
+      "coverArt": {
+        "group": "カバーアートキャッシュ",
+        "description": "アルバムカバー画像をキャッシュして読み込みを高速化します。",
+        "enabled": "カバーアートキャッシュを有効にする",
+        "size": "キャッシュサイズ",
+        "entries": "{{count}} 件の画像をキャッシュ済み",
+        "clear": "カバーアートキャッシュをクリア"
+      },
+      "audio": {
+        "group": "オーディオキャッシュ",
+        "description": "オーディオファイルをキャッシュして、再聴時に即座に再生できるようにします。",
+        "enabled": "オーディオキャッシュを有効にする",
+        "maxSize": "最大キャッシュサイズ",
+        "size": "キャッシュサイズ",
+        "entries": "{{count}} 曲をキャッシュ済み",
+        "clear": "オーディオキャッシュをクリア"
+      },
+      "metadata": {
+        "group": "すべてのキャッシュ",
+        "description": "メタデータ、カバーアート、オーディオファイルを含むすべてのキャッシュデータをクリアします。",
+        "clear": "すべてのキャッシュをクリア"
+      },
+      "sync": {
+        "group": "ライブラリ同期",
+        "description": "オフライン閲覧用にライブラリのメタデータを同期します。ダウンロード済みの曲は常にオフラインで利用できます。",
+        "libraryCaching": "ライブラリキャッシュ",
+        "libraryCachingInfo": "有効にすると、メタデータと（任意で）曲がオフラインアクセス用にローカルにキャッシュされます。無効にすると、アプリは完全なオンラインモードのままになり、バックグラウンド同期は実行されません。",
+        "libraryCachingInfoIos": "iOS ではオフライン再生をサポートするため、ライブラリキャッシュが必須で常に有効です。",
+        "enabled": "ライブラリを同期",
+        "coverArt": "カバーアートを含める",
+        "coverArtInfo": "同期中にすべてのアルバムとアーティストの画像をダウンロードします。大量のストレージと帯域幅を使用する場合があります。",
+        "coverArtConcurrency": "カバーアートの並列数",
+        "coverArtConcurrencyInfo": "カバーアートの並列ダウンロード数です。値を大きくすると同期が速くなりますが、帯域幅をより多く使用します。1 に設定すると順次ダウンロードします。",
+        "coverArtConcurrencyOff": "順次",
+        "lastSynced": "最終同期",
+        "never": "なし",
+        "syncNow": "今すぐ同期",
+        "cancel": "キャンセル",
+        "clear": "同期データをクリア",
+        "entries": "{{count}} 件を同期済み",
+        "phases": {
+          "idle": "準備中…",
+          "genres": "ジャンルを同期中…",
+          "artists": "アーティストを同期中…",
+          "playlists": "プレイリストを同期中…",
+          "albums": "アルバムを同期中…",
+          "songs": "曲を同期中…",
+          "favorites": "お気に入りを同期中…",
+          "coverArt": "カバーアートを同期中…",
+          "done": "同期が完了しました",
+          "error": "同期に失敗しました",
+          "cancelled": "同期をキャンセルしました"
+        },
+        "tier": {
+          "t1": {
+            "label": "基本",
+            "description": "お気に入り · プレイリスト · ジャンル"
+          },
+          "t2": {
+            "label": "ライブラリの骨組み",
+            "description": "アーティスト · アルバム"
+          },
+          "t3": {
+            "label": "すべての曲",
+            "description": "すべての曲のメタデータ"
+          },
+          "coverArt": {
+            "label": "カバーアート",
+            "description": "アルバム · アーティスト · プレイリストの画像"
+          }
+        },
+        "justNow": "たった今",
+        "downloading_one": "{{count}} 曲をダウンロード中",
+        "downloading_other": "{{count}} 曲をダウンロード中",
+        "completed": "完了",
+        "showMore": "他 {{count}} 件を表示",
+        "clearConfirm": {
+          "title": "ライブラリキャッシュを無効にしますか？",
+          "description": "ライブラリキャッシュを無効にすると、同期済みのすべてのライブラリデータ（アーティスト、アルバム、曲、プレイリスト、ジャンル）が削除されます。いつでも再度有効にして再同期できます。",
+          "keep": "有効のままにする",
+          "clear": "クリアして無効にする"
+        },
+        "downloading": "{{count}} 曲をダウンロード中"
+      },
+      "offline": {
+        "group": "オフライン体験",
+        "description": "曲、メタデータ、アートワークをローカルにキャッシュしてオフラインでアクセスできます。ライブラリキャッシュを有効にすると、ダウンロード品質、スマートダウンロード、同期設定が利用可能になります。"
+      },
+      "limits": {
+        "group": "キャッシュストレージ",
+        "description": "各ダウンロードソースには独自の割り当てがあります。明示的なダウンロードは自動的に削除されません。",
+        "maxSize": "最大オーディオキャッシュサイズ",
+        "audioSize": "オーディオキャッシュ",
+        "audioEntries": "{{count}} 曲をキャッシュ済み",
+        "coverSize": "カバーアートキャッシュ",
+        "coverEntries": "{{count}} 件の画像をキャッシュ済み",
+        "clearAudio": "クリア",
+        "clearCovers": "クリア",
+        "clearAll": "すべてのキャッシュをクリア",
+        "quota": "割り当て",
+        "unlimited": "無制限",
+        "songEntries": "{{count}} 曲",
+        "imageEntries": "{{count}} 件の画像",
+        "pool": {
+          "explicit": {
+            "label": "明示的なダウンロード",
+            "description": "自分でダウンロードした曲、アルバム、プレイリスト。自動的に削除されることはありません。"
+          },
+          "smart": {
+            "label": "スマートダウンロード",
+            "description": "スマートルールに一致して自動ダウンロードされたもの。トリガーとなるルールが一致しなくなると削除されます。"
+          },
+          "lru": {
+            "label": "最近再生した曲",
+            "description": "再生中に機会的にキャッシュされます。割り当てを超えると古い項目から削除されます。"
+          },
+          "assets": {
+            "label": "カバーアート",
+            "description": "ライブラリを高速に描画するためにキャッシュされたアルバムとアーティストの画像。"
+          }
+        }
+      },
+      "cacheManager": {
+        "group": "キャッシュマネージャー",
+        "description": "個々のキャッシュ項目を表示・管理します。",
+        "filter": {
+          "all": "すべて",
+          "audio": "オーディオ",
+          "cover": "カバーアート",
+          "album": "アルバム",
+          "playlist": "プレイリスト",
+          "explicit": "明示的",
+          "smart": "スマート",
+          "lru": "LRU"
+        },
+        "list": {
+          "name": "名前",
+          "type": "種類",
+          "source": "ソース",
+          "size": "サイズ",
+          "cachedAt": "キャッシュ日時",
+          "actions": "操作",
+          "delete": "削除",
+          "empty": "キャッシュされた項目はありません。",
+          "total": "{{count}} 件、合計 {{size}}",
+          "type_audio": "オーディオ",
+          "type_cover": "カバー",
+          "type_album": "アルバム",
+          "type_playlist": "プレイリスト",
+          "removedFromServer": "サーバーから削除済み"
+        },
+        "confirmDelete": {
+          "title": "キャッシュ項目を削除しますか？",
+          "description": "'{{name}}' をキャッシュから削除します。後で再ダウンロードできます。"
+        }
+      },
+      "smart": {
+        "group": "スマートダウンロード",
+        "description": "有効なルールに一致する曲を自動的にキャッシュします。トリガーとなるすべてのルールが一致しなくなった瞬間に削除され、手動ダウンロードより優先されることはありません。",
+        "enabled": "スマートダウンロードを有効にする",
+        "rule": {
+          "favoriteSongs": "お気に入りの曲",
+          "favoritePlaylists": "お気に入りのプレイリスト"
+        }
+      }
+    },
+    "content": {
+      "sidebar": {
+        "group": "サイドバー",
+        "description": "サイドバーに表示されるセクションの表示と並び順を管理します。",
+        "radios": {
+          "section": "ラジオセクションを非表示にする"
+        }
+      }
+    },
+    "accounts": {
+      "discord": {
+        "group": "Discord リッチプレゼンス",
+        "description": "現在再生中の曲を Discord の友達と共有します。",
+        "enabled": {
+          "label": "連携を有効にする"
+        }
+      }
+    },
+    "desktop": {
+      "general": {
+        "group": "全般",
+        "description": "デスクトップアプリケーションの設定をカスタマイズします。",
+        "tray": {
+          "label": "トレイに最小化",
+          "info": "有効にすると、閉じるボタンをクリックしたときにアプリを閉じる代わりにシステムトレイに最小化します。"
+        }
+      },
+      "updates": {
+        "group": "アプリの更新",
+        "description": "アプリケーションの更新を確認してインストールします。",
+        "currentVersion": {
+          "label": "現在のバージョン",
+          "info": "現在実行中の Aonsoku のバージョンです。"
+        },
+        "status": {
+          "label": "更新ステータス",
+          "info": "アプリケーション更新の現在のステータスです。"
+        },
+        "checkNow": {
+          "label": "更新を確認",
+          "info": "利用可能な更新を手動で確認します。"
+        },
+        "checking": "更新を確認中...",
+        "checkingManually": "更新を確認中...",
+        "upToDate": "最新の状態です",
+        "updateAvailable": "更新が利用可能",
+        "updateAvailableDesc": "バージョン {{version}} が利用可能です",
+        "availableVersion": "バージョン {{version}} が利用可能",
+        "download": "更新をダウンロード",
+        "downloading": "ダウンロード中... {{percent}}%",
+        "downloadStarted": "ダウンロード開始",
+        "downloadStartedDesc": "更新のダウンロードを開始しました",
+        "downloadError": "ダウンロードに失敗しました",
+        "updateReady": "更新の準備完了",
+        "updateReadyDesc": "アプリを再起動すると更新がインストールされます",
+        "readyToInstall": "インストール準備完了（再起動が必要）",
+        "installNow": "インストールして再起動",
+        "updateError": "更新の確認に失敗しました"
+      },
+      "lanControl": {
+        "group": "LAN コントロール",
+        "description": "リモートアクセス用の LAN コントロール設定を管理します。",
+        "enable": {
+          "label": "LAN コントロールを有効にする",
+          "info": "LAN コントロールを有効にして、このアプリケーションへのリモートアクセスを許可します。"
+        },
+        "port": {
+          "label": "ポート",
+          "info": "LAN コントロールサーバーのポート番号を指定します。"
+        },
+        "password": {
+          "label": "パスワード",
+          "info": "LAN コントロールサーバーへの安全なアクセスのためのパスワードを設定します。"
+        },
+        "address": {
+          "label": "サーバーアドレス",
+          "info": "LAN コントロールアクセスに利用可能なサーバーアドレスです。"
+        },
+        "allowNavidromeAuth": {
+          "label": "Navidrome 認証を許可する",
+          "info": "Navidrome の認証情報を使用した認証を有効にします。"
+        },
+        "serverStarted": "LAN コントロールサーバーを開始しました。",
+        "serverError": "LAN コントロールサーバーの開始に失敗しました。",
+        "passwordRegenerated": "パスワードを再生成しました。",
+        "addressCopied": "サーバーアドレスをクリップボードにコピーしました。",
+        "passwordCopied": "パスワードをクリップボードにコピーしました。",
+        "copyPassword": "パスワードをコピー",
+        "copyAddress": "アドレスをコピー",
+        "regeneratePassword": "パスワードを再生成"
+      }
+    }
+  },
+  "lanControl": {
+    "remote": {
+      "menu": "他のデバイスを操作",
+      "title": "他のデバイスを操作",
+      "description": "LAN コントロールサーバーに接続して、再生をリモートで管理します。",
+      "serverRunning": "このデバイスは現在 LAN コントロールサーバーとして動作しています。サーバーモード中は他のデバイスを操作できません。",
+      "address": "サーバーアドレス",
+      "ip": "IP アドレス",
+      "port": "ポート",
+      "password": "アクセスコード",
+      "status": {
+        "label": "ステータス",
+        "connected": "接続済み",
+        "connecting": "接続中",
+        "authenticating": "認証中",
+        "error": "エラー",
+        "disconnected": "切断済み"
+      },
+      "actions": {
+        "connect": "接続",
+        "connecting": "接続中...",
+        "disconnect": "切断",
+        "refresh": "状態を更新"
+      },
+      "nowPlaying": "再生中",
+      "volume": "音量: {{volume}}%",
+      "emptyTitle": "再生中のトラックはありません",
+      "emptyArtist": "不明なアーティスト",
+      "loadingSong": "読み込み中...",
+      "queue": "再生キュー",
+      "playing": "再生中",
+      "currentlyPlaying": "現在再生中",
+      "clickToPlay": "クリックして再生",
+      "tabs": {
+        "control": "コントロール",
+        "library": "ライブラリ"
+      },
+      "library": {
+        "search": "検索",
+        "albums": "アルバム",
+        "playlists": "プレイリスト",
+        "songs": "曲",
+        "searchPlaceholder": "曲、アルバムを検索...",
+        "searchButton": "検索",
+        "searching": "検索中...",
+        "noResults": "結果が見つかりません",
+        "loading": "読み込み中...",
+        "noAlbums": "利用可能なアルバムがありません",
+        "noPlaylists": "利用可能なプレイリストがありません",
+        "back": "戻る"
+      },
+      "controls": {
+        "previous": "前へ",
+        "play": "再生",
+        "pause": "一時停止",
+        "next": "次へ",
+        "shuffle": "シャッフルを切り替え",
+        "repeat": "リピートを切り替え"
+      },
+      "items": "件",
+      "queueEmpty": "キューは空です",
+      "unknownDevice": "不明なデバイス",
+      "version": "v{{version}}",
+      "autoConnectFailed": "リモートデバイスへの接続に失敗しました。ローカル再生モードに切り替えます"
+    }
+  },
+  "dayjs": {
+    "relativeTime": {
+      "future": "%s後",
+      "past": "%s前",
+      "s": "数秒",
+      "m": "1 分",
+      "mm": "%d 分",
+      "h": "1 時間",
+      "hh": "%d 時間",
+      "d": "1 日",
+      "dd": "%d 日",
+      "M": "1 か月",
+      "MM": "%d か月",
+      "y": "1 年",
+      "yy": "%d 年"
+    }
+  },
+  "offline": {
+    "mode": "オフライン",
+    "reconnecting": "再接続中…",
+    "reconnected": "サーバーに再接続しました",
+    "reconnectFailed": "再接続できませんでした。オフラインモードを継続します。",
+    "songUnavailable": "この曲はオフラインでは利用できません",
+    "disconnected": "サーバーに到達できません",
+    "searchUnavailable": "検索にはオフラインライブラリの同期が必要です。",
+    "metered": "制限あり",
+    "meteredTooltip": "低速または従量制の接続を使用しています。バックグラウンド同期とスマートダウンロードは一時停止中です。上書きするにはダウンロードボタンをタップしてください。",
+    "badge": {
+      "downloaded": "ダウンロード済み",
+      "smart": "スマートダウンロードルールにより保存",
+      "downloading": "ダウンロード中…",
+      "cloud": "ネットワークが必要",
+      "orphan": "サーバーから削除済み（オフラインでは再生可能）"
+    }
+  }
+}

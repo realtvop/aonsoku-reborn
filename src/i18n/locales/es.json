@@ -135,7 +135,7 @@
     "queueHistory": "Historial",
     "queueRepeating": "Repitiendo",
     "switchButton": "Cambiar a Reproductor Grande",
-    "selectLyrics": "Seleccionar letra"
+    "selectLyrics": "Configuración de letra"
   },
   "generic": {
     "beta": "Beta",
@@ -1098,10 +1098,10 @@
   },
   "lyrics": {
     "customSelect": {
-      "title": "Seleccionar letra",
+      "title": "Configuración de letra",
       "subtitle": "{{title}} de {{artist}}",
       "noSong": "No se está reproduciendo ninguna canción.",
-      "serverDisabled": "El servidor personalizado de letras no está activado.",
+      "serverDisabled": "Usa un servicio de letras personalizado para elegir más letras",
       "empty": "No se encontraron letras personalizadas candidatas.",
       "searchTitle": "Título de la canción",
       "searchArtist": "Artista",

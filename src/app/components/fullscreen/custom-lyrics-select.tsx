@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Music2, Search } from "lucide-react";
+import { Check, Eye, EyeOff, Music2, Search } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
@@ -43,6 +43,7 @@ export function CustomLyricsSelect({ onBack }: CustomLyricsSelectProps) {
     customServerUrl,
     selectedCustomLyrics,
     setSelectedCustomLyrics,
+    setSongLyricsDisabled,
   } = useLyricsSettings();
 
   const { artist, title, album, duration, path } = currentSong || {};
@@ -50,6 +51,7 @@ export function CustomLyricsSelect({ onBack }: CustomLyricsSelectProps) {
     artist && title ? { artist, title, album, duration, path } : null;
   const songKey = songData ? getCustomLyricsSongKey(songData) : "";
   const selectedLyrics = getSelectedCustomLyrics(selectedCustomLyrics, songKey);
+  const lyricsDisabled = selectedLyrics?.disabled === true;
   const [searchTitle, setSearchTitle] = useState("");
   const [searchArtist, setSearchArtist] = useState("");
   const [submittedSearch, setSubmittedSearch] = useState({
@@ -135,6 +137,19 @@ export function CustomLyricsSelect({ onBack }: CustomLyricsSelectProps) {
     onBack();
   }
 
+  async function handleToggleDisabled() {
+    if (!songData) return;
+
+    try {
+      await setSongLyricsDisabled(songKey, !lyricsDisabled);
+    } catch {
+      toast.error(t("lyrics.customSelect.saveError"));
+      return;
+    }
+
+    queryClient.invalidateQueries({ queryKey: queryKeys.lyrics.plain });
+  }
+
   const customServerReady = customServerEnabled && customServerUrl.trim();
 
   return (
@@ -157,6 +172,27 @@ export function CustomLyricsSelect({ onBack }: CustomLyricsSelectProps) {
               : t("player.noSongPlaying")}
           </p>
         </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          className={cn(
+            "ml-auto mr-6 shrink-0 gap-1.5 rounded-full border border-border",
+            lyricsDisabled
+              ? "bg-foreground/15 hover:bg-foreground/20"
+              : "bg-muted/30 backdrop-blur-md hover:bg-muted/50",
+          )}
+          disabled={!currentSong}
+          onClick={handleToggleDisabled}
+        >
+          {lyricsDisabled ? (
+            <Eye className="size-4" />
+          ) : (
+            <EyeOff className="size-4" />
+          )}
+          {lyricsDisabled
+            ? t("lyrics.customSelect.lyricsDisabled")
+            : t("lyrics.customSelect.disableLyrics")}
+        </Button>
       </div>
 
       {currentSong && customServerReady && (
@@ -202,7 +238,7 @@ export function CustomLyricsSelect({ onBack }: CustomLyricsSelectProps) {
               {t("lyrics.customSelect.search")}
             </Button>
           </form>
-          {selectedLyrics && (
+          {selectedLyrics && !lyricsDisabled && (
             <p className="mt-3 truncate text-xs text-foreground/55">
               {t("lyrics.customSelect.currentSelection", {
                 title: selectedLyrics.title || currentSong.title,

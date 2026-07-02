@@ -126,6 +126,25 @@ export function createInitialSettings(set: SetFn): IPlayerContext["settings"] {
           state.settings.lyrics.selectedCustomLyrics[songKey] = meta;
         });
       },
+      setSongLyricsDisabled: async (songKey, disabled) => {
+        try {
+          const { deleteCustomLyricsBodies } = await import("@/service/lyrics");
+          await deleteCustomLyricsBodies([songKey]);
+        } catch (err) {
+          logger.warn("[player] Failed to delete custom lyrics body:", err);
+        }
+        set((state) => {
+          state.settings.lyrics.selectedCustomLyrics ||= {};
+          if (disabled) {
+            state.settings.lyrics.selectedCustomLyrics[songKey] = {
+              key: "",
+              disabled: true,
+            };
+          } else {
+            delete state.settings.lyrics.selectedCustomLyrics[songKey];
+          }
+        });
+      },
     },
     replayGain: {
       values: {

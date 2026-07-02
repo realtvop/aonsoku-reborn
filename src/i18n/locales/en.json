@@ -311,16 +311,16 @@
     "queueFromSource": "From {{source}}",
     "playing": "Playing now",
     "lyrics": "Lyrics",
-    "selectLyrics": "Select lyrics",
+    "selectLyrics": "Lyrics settings",
     "switchButton": "Switch to Big Player",
     "emptyQueue": "No songs in queue"
   },
   "lyrics": {
     "customSelect": {
-      "title": "Select lyrics",
+      "title": "Lyrics settings",
       "subtitle": "{{title}} by {{artist}}",
       "noSong": "No song is playing.",
-      "serverDisabled": "Custom lyrics server is not enabled.",
+      "serverDisabled": "Use a custom lyrics service to choose more lyrics",
       "empty": "No custom lyrics candidates found.",
       "searchTitle": "Song title",
       "searchArtist": "Artist",
@@ -330,7 +330,9 @@
       "saveError": "Failed to save selected lyrics.",
       "currentSelection": "Current selection: {{title}} by {{artist}}",
       "lyricsId": "ID: {{id}}",
-      "noPreview": "No preview available."
+      "noPreview": "No preview available.",
+      "disableLyrics": "Turn off lyrics",
+      "lyricsDisabled": "Lyrics off"
     }
   },
   "logout": {

@@ -15,6 +15,7 @@ import "dayjs/locale/ru";
 import "dayjs/locale/fr";
 import "dayjs/locale/sv";
 import "dayjs/locale/cs";
+import "dayjs/locale/ja";
 
 import i18n from "@/i18n";
 import { languages, resources } from "@/i18n/languages";

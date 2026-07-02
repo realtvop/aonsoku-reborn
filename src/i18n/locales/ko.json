@@ -134,7 +134,7 @@
     "queueHistory": "재생 기록",
     "queueRepeating": "반복 재생 중",
     "switchButton": "큰 플레이어로 전환",
-    "selectLyrics": "가사 선택"
+    "selectLyrics": "가사 설정"
   },
   "generic": {
     "beta": "베타",
@@ -1089,10 +1089,10 @@
   },
   "lyrics": {
     "customSelect": {
-      "title": "가사 선택",
+      "title": "가사 설정",
       "subtitle": "{{artist}} - {{title}}",
       "noSong": "재생 중인 곡이 없습니다.",
-      "serverDisabled": "사용자 지정 가사 서버가 활성화되어 있지 않습니다.",
+      "serverDisabled": "더 많은 가사를 선택하려면 사용자 지정 가사 서비스를 사용하세요",
       "empty": "사용자 지정 가사 후보를 찾을 수 없습니다.",
       "searchTitle": "곡 제목",
       "searchArtist": "아티스트",

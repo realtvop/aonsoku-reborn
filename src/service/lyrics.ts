@@ -120,6 +120,14 @@ async function getLyrics(getLyricsData: GetLyricsData) {
     getCustomLyricsSongKey(getLyricsData),
   );
 
+  if (selectedCustomLyrics?.disabled) {
+    return {
+      artist: getLyricsData.artist,
+      title: getLyricsData.title,
+      value: "",
+    };
+  }
+
   const cacheKey = getLyricsCacheKey(
     getLyricsData,
     preferSyncedLyrics,

@@ -9,10 +9,7 @@ import { useHasLyrics } from "@/app/hooks/use-has-lyrics";
 import { useIsTouchPrimary } from "@/app/hooks/use-input-mode";
 import { cn } from "@/lib/utils";
 import { closeFullscreenPlayerWithHistory } from "@/routes/fullscreenRouter";
-import {
-  useFullscreenPlayerState,
-  useLyricsSettings,
-} from "@/store/player.store";
+import { useFullscreenPlayerState } from "@/store/player.store";
 import { ArtworkWithInfo } from "./artwork-with-info";
 import { FullscreenControlPanel } from "./control-panel";
 import { CustomLyricsSelect } from "./custom-lyrics-select";
@@ -29,13 +26,10 @@ export const DesktopLayout = memo(function DesktopLayout() {
   } = useFullscreenPlayerState();
   const { t } = useTranslation();
   const { hasLyrics } = useHasLyrics();
-  const { customServerEnabled, customServerUrl } = useLyricsSettings();
   const isTouchPrimary = useIsTouchPrimary();
   const contrast = useFullscreenContrast();
 
   const lyricsDisabled = hasLyrics === false;
-  const customLyricsDisabled =
-    !customServerEnabled || customServerUrl.trim().length === 0;
 
   function handleQueueClick() {
     setRightPanelView(rightPanelView === "queue" ? null : "queue");
@@ -47,8 +41,6 @@ export const DesktopLayout = memo(function DesktopLayout() {
   }
 
   function handleSelectLyricsClick() {
-    if (customLyricsDisabled) return;
-
     setRightPanelView(
       rightPanelView === "customLyrics" ? null : "customLyrics",
     );
@@ -101,9 +93,8 @@ export const DesktopLayout = memo(function DesktopLayout() {
               <Button
                 variant="ghost"
                 size="icon"
-                className={`size-10 rounded-full ${contrast.hoverBg} ${customLyricsDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                className={`size-10 rounded-full ${contrast.hoverBg}`}
                 onClick={handleSelectLyricsClick}
-                disabled={customLyricsDisabled}
                 aria-label={t("fullscreen.selectLyrics")}
               >
                 <ListChecks className="size-4" />
@@ -167,13 +158,11 @@ export const DesktopLayout = memo(function DesktopLayout() {
               size="sm"
               className={cn(
                 "gap-1.5",
-                customLyricsDisabled && "opacity-50 cursor-not-allowed",
                 rightPanelView === "customLyrics"
                   ? "fullscreen-backdrop-layer rounded-md hover:bg-transparent"
                   : contrast.hoverBg,
               )}
               onClick={handleSelectLyricsClick}
-              disabled={customLyricsDisabled}
             >
               <ListChecks className="size-4" />
               {t("fullscreen.selectLyrics")}
