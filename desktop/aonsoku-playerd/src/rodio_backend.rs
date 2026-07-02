@@ -165,7 +165,8 @@ impl RodioPlaybackBackend {
     {
         let mut builder = Decoder::builder()
             .with_data(reader)
-            .with_byte_len(byte_len);
+            .with_byte_len(byte_len)
+            .with_seekable(true);
 
         if let Some(h) = hint {
             builder = builder.with_hint(h);
