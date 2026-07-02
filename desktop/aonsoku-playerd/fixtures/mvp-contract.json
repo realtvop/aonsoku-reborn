@@ -1,0 +1,130 @@
+{
+  "commands": [
+    {
+      "name": "loadStreamAutoplay",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": "load-1",
+        "method": "load",
+        "params": {
+          "source": {
+            "kind": "stream",
+            "url": "https://example.test/song.flac",
+            "songId": "song-1"
+          },
+          "metadata": {
+            "title": "Fixture Song",
+            "artist": "Aonsoku",
+            "album": "Fixture Album",
+            "duration": 120,
+            "artworkUrl": "https://example.test/cover.jpg",
+            "coverArtId": "cover-1"
+          },
+          "autoplay": true,
+          "startTime": 12.5,
+          "requestId": "load-1"
+        }
+      }
+    },
+    {
+      "name": "play",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": "play-1",
+        "method": "play"
+      }
+    },
+    {
+      "name": "pause",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": "pause-1",
+        "method": "pause"
+      }
+    },
+    {
+      "name": "stop",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": "stop-1",
+        "method": "stop"
+      }
+    },
+    {
+      "name": "seek",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": "seek-1",
+        "method": "seek",
+        "params": {
+          "position": 42
+        }
+      }
+    }
+  ],
+  "events": [
+    {
+      "name": "playbackStateChanged",
+      "event": {
+        "event": "playbackStateChanged",
+        "payload": {
+          "requestId": "play-1",
+          "state": "playing"
+        }
+      }
+    },
+    {
+      "name": "progress",
+      "event": {
+        "event": "progress",
+        "payload": {
+          "requestId": "seek-1",
+          "currentTime": 42,
+          "duration": 120,
+          "bufferedTime": 88
+        }
+      }
+    },
+    {
+      "name": "durationChanged",
+      "event": {
+        "event": "durationChanged",
+        "payload": {
+          "requestId": "load-1",
+          "duration": 120
+        }
+      }
+    },
+    {
+      "name": "bufferingChanged",
+      "event": {
+        "event": "bufferingChanged",
+        "payload": {
+          "requestId": "load-1",
+          "isBuffering": false
+        }
+      }
+    },
+    {
+      "name": "ended",
+      "event": {
+        "event": "ended",
+        "payload": {
+          "requestId": "stop-1",
+          "reason": "stopped"
+        }
+      }
+    },
+    {
+      "name": "error",
+      "event": {
+        "event": "error",
+        "payload": {
+          "requestId": "seek-before-load",
+          "code": "NOT_LOADED",
+          "message": "cannot control playback before load"
+        }
+      }
+    }
+  ]
+}

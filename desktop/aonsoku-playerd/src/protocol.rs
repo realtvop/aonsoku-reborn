@@ -364,7 +364,24 @@ pub struct NativeAudioErrorEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde::Deserialize;
     use serde_json::json;
+
+    #[derive(Debug, Deserialize)]
+    struct FixtureSet {
+        commands: Vec<CommandFixture>,
+        events: Vec<EventFixture>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct CommandFixture {
+        request: Value,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct EventFixture {
+        event: Value,
+    }
 
     #[test]
     fn load_request_matches_audio_contract_shape() {
@@ -433,5 +450,21 @@ mod tests {
                 }
             })
         );
+    }
+
+    #[test]
+    fn mvp_contract_fixtures_match_rust_protocol() {
+        let fixtures: FixtureSet =
+            serde_json::from_str(include_str!("../fixtures/mvp-contract.json")).unwrap();
+
+        assert_eq!(fixtures.commands.len(), 5);
+        for fixture in fixtures.commands {
+            JsonRpcRequest::from_value(fixture.request).unwrap();
+        }
+
+        assert_eq!(fixtures.events.len(), 6);
+        for fixture in fixtures.events {
+            serde_json::from_value::<PlayerEvent>(fixture.event).unwrap();
+        }
     }
 }

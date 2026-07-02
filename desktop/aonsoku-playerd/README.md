@@ -15,6 +15,8 @@ This crate covers the first desktop MVP boundary:
   `bufferingChanged`, `ended`, and `error`
 - stdio NDJSON framing where each line is one JSON-RPC-style request
 - a mock playback backend that proves the command/event lifecycle
+- shared MVP JSON fixtures under `fixtures/` for Rust and TypeScript contract
+  conformance checks
 
 It does not include a real native audio engine, queue control, cache/download
 management, scrobbling, remote control, sleep timer, or system volume support.
@@ -38,7 +40,7 @@ printf '%s\n' \
   | cargo run --quiet
 ```
 
-Each output line is either a JSON-RPC response:
+Each output line is either a JSON-RPC-style response:
 
 ```json
 {"jsonrpc":"2.0","id":"seek-1","result":{}}
@@ -80,6 +82,21 @@ Requests are newline-delimited JSON objects with a JSON-RPC-style envelope:
 {"jsonrpc":"2.0","id":"play-1","method":"play"}
 ```
 
+This is not a full JSON-RPC implementation. The sidecar currently uses the
+small envelope shape needed by the desktop MVP: `jsonrpc` must be `"2.0"`,
+`id` must be a string or integer, `method` must be one of the supported MVP
+commands, and `params` must match that command when required. Notifications,
+batches, named JSON-RPC error codes, and general-purpose method dispatch are
+out of scope.
+
 `id` is copied into the response and used as the fallback event `requestId`.
 For `load`, an explicit `params.requestId` wins when present because that field
 already exists in `NativeAudioLoadOptions`.
+
+## Fixtures
+
+`fixtures/mvp-contract.json` contains the current command and event surface for
+the desktop sidecar MVP. Rust tests parse those fixtures into the sidecar DTOs,
+and Vitest checks the same JSON is assignable to the TypeScript
+`@aonsoku/audio-contract` payload types. Update this file when the MVP bridge
+surface changes.
