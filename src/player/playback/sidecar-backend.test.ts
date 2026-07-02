@@ -211,6 +211,57 @@ describe("ElectronAudioSidecarPlaybackBackend", () => {
     expect(listeners.play).not.toHaveBeenCalled();
   });
 
+  it("accepts command-scoped sidecar events after a load request", async () => {
+    const api = createFakeAudioSidecarApi();
+    const backend = new ElectronAudioSidecarPlaybackBackend(api);
+    const listeners = makePlaybackListeners();
+
+    backend.subscribe("play", listeners.play);
+    backend.subscribe("pause", listeners.pause);
+
+    await backend.load(createUrlPlaybackSource("https://server/song.mp3"));
+
+    api.emitEvent({
+      event: "playbackStateChanged",
+      payload: {
+        requestId: "playerd:play:2",
+        state: "playing",
+      },
+    });
+    api.emitEvent({
+      event: "playbackStateChanged",
+      payload: {
+        requestId: "playerd:pause:3",
+        state: "paused",
+      },
+    });
+
+    expect(listeners.play).toHaveBeenCalledTimes(1);
+    expect(listeners.pause).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not emit ended for stopped sidecar events", async () => {
+    const api = createFakeAudioSidecarApi();
+    const backend = new ElectronAudioSidecarPlaybackBackend(api);
+    const listeners = makePlaybackListeners();
+
+    backend.subscribe("pause", listeners.pause);
+    backend.subscribe("ended", listeners.ended);
+
+    await backend.load(createUrlPlaybackSource("https://server/song.mp3"));
+
+    api.emitEvent({
+      event: "ended",
+      payload: {
+        requestId: "playerd:stop:2",
+        reason: "stopped",
+      },
+    });
+
+    expect(listeners.pause).toHaveBeenCalledTimes(1);
+    expect(listeners.ended).not.toHaveBeenCalled();
+  });
+
   it("removes listeners and stops the sidecar process on dispose", () => {
     const api = createFakeAudioSidecarApi();
     const backend = new ElectronAudioSidecarPlaybackBackend(api);

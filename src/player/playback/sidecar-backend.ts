@@ -188,7 +188,11 @@ export class ElectronAudioSidecarPlaybackBackend implements PlaybackBackend {
         this.#emit("buffering", { isBuffering: payload.isBuffering });
         break;
       case "ended":
-        this.#emit("ended", undefined);
+        if (payload.reason === "stopped") {
+          this.#emit("pause", undefined);
+        } else {
+          this.#emit("ended", undefined);
+        }
         break;
       case "error":
         this.#emit("error", toPlaybackErrorEvent(payload));
@@ -292,11 +296,14 @@ function isStaleSidecarEvent(
   event: { requestId?: string | null },
   activeRequestId: string | null,
 ) {
+  const requestId = event.requestId;
+
   return (
-    event.requestId !== undefined &&
-    event.requestId !== null &&
+    requestId !== undefined &&
+    requestId !== null &&
+    requestId.startsWith("sidecar-audio-") &&
     activeRequestId !== null &&
-    event.requestId !== activeRequestId
+    requestId !== activeRequestId
   );
 }
 
