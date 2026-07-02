@@ -132,6 +132,23 @@ window.aonsokuAudioSidecarDebug.events;
 window.aonsokuAudioSidecarDebug.errors;
 ```
 
+## Remaining Integration Work
+
+The sidecar is ready for dev-only manual playback smoke testing, but it is not
+yet a production playback replacement. Before routing normal Electron playback
+through `aonsoku-playerd`, the next phase should:
+
+- run the opt-in Rodio stream smoke on a desktop session with a working audio
+  output device
+- decide how renderer playback state should reconcile sidecar progress, ended,
+  and error events with the existing player store
+- add production packaging for the sidecar binary under Electron resources
+- replace the current in-memory URL fetch with progressive network buffering if
+  large streams or radio latency require it
+- keep queue, cache/download, scrobbling, remote control, sleep timer, system
+  volume, and mobile playback out of this bridge until their contracts are
+  deliberately extended
+
 ## Contract Mapping
 
 The Rust protocol mirrors the first playback subset of
