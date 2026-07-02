@@ -107,6 +107,7 @@ export interface IAonsokuAPI {
 }
 
 export interface IAonsokuAudioSidecarAPI {
+  bridgeEnabled: boolean;
   isAvailable: () => Promise<boolean>;
   start: () => Promise<void>;
   stop: () => Promise<void>;

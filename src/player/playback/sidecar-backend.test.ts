@@ -312,7 +312,22 @@ describe("Electron sidecar playback flag", () => {
     expect(isAudioSidecarPlaybackEnabled(target)).toBe(true);
   });
 
-  it("reports the Electron preload sidecar API when the flag and bridge exist", () => {
+  it("stays unavailable when the renderer flag is enabled without the main bridge flag", () => {
+    vi.stubEnv("VITE_AONSOKU_AUDIO_SIDECAR", "1");
+    mockIsDesktop.mockReturnValue(true);
+    mockHasElectronBridge.mockReturnValue(true);
+
+    expect(
+      getElectronAudioSidecarAvailability(
+        createTarget({}, createFakeAudioSidecarApi({ bridgeEnabled: false })),
+      ),
+    ).toEqual({
+      available: false,
+      reason: "missing-bridge",
+    });
+  });
+
+  it("reports the Electron preload sidecar API when both flags and bridge exist", () => {
     vi.stubEnv("VITE_AONSOKU_AUDIO_SIDECAR", "1");
     mockIsDesktop.mockReturnValue(true);
     mockHasElectronBridge.mockReturnValue(true);
@@ -325,13 +340,16 @@ describe("Electron sidecar playback flag", () => {
   });
 });
 
-function createFakeAudioSidecarApi() {
+function createFakeAudioSidecarApi(
+  options: { bridgeEnabled?: boolean } = {},
+) {
   const eventListeners = new Set<(event: AudioSidecarEventEnvelope) => void>();
   const errorListeners = new Set<
     (error: AudioSidecarBridgeErrorPayload) => void
   >();
 
   return {
+    bridgeEnabled: options.bridgeEnabled ?? true,
     isAvailable: vi.fn(async () => true),
     start: vi.fn(async () => {}),
     stop: vi.fn(async () => {}),

@@ -68,6 +68,7 @@ const api: IAonsokuAPI = {
   isAlwaysOnTop: () => ipcRenderer.invoke(IpcChannels.IsAlwaysOnTop),
   // Audio Sidecar
   audioSidecar: {
+    bridgeEnabled: process.env.AONSOKU_PLAYERD_BRIDGE === "1",
     isAvailable: () => ipcRenderer.invoke(IpcChannels.AudioSidecarIsAvailable),
     start: () => ipcRenderer.invoke(IpcChannels.AudioSidecarStart),
     stop: () => ipcRenderer.invoke(IpcChannels.AudioSidecarStop),

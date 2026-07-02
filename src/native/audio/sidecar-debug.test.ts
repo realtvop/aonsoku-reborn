@@ -307,6 +307,7 @@ function createFakeAudioSidecarApi(options: { available?: boolean } = {}) {
   const errorListeners = new Set<Parameters<AudioSidecarApi["onError"]>[0]>();
 
   return {
+    bridgeEnabled: true,
     isAvailable: vi.fn().mockResolvedValue(options.available ?? true),
     start: vi.fn().mockResolvedValue(undefined),
     stop: vi.fn().mockResolvedValue(undefined),

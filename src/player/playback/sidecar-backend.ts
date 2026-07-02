@@ -263,7 +263,11 @@ export function getElectronAudioSidecarAvailability(
     return { available: false, reason: "unsupported-platform" };
   }
 
-  if (!hasElectronBridge() || !target?.api?.audioSidecar) {
+  if (
+    !hasElectronBridge() ||
+    !target?.api?.audioSidecar ||
+    !target.api.audioSidecar.bridgeEnabled
+  ) {
     return { available: false, reason: "missing-bridge" };
   }
 
