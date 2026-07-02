@@ -192,6 +192,30 @@ existing app-facing `PlaybackBackend` calls to `window.api.audioSidecar` for
 scrobbling, cache/download, sleep timer, system volume, and mobile playback
 remain on the existing code paths or are no-ops for this MVP adapter.
 
+### Manual App Playback Smoke Checklist
+
+Run with:
+
+```bash
+AONSOKU_PLAYERD_BRIDGE=1 VITE_AONSOKU_AUDIO_SIDECAR=1 pnpm run electron:dev
+```
+
+- Play one normal app-selected stream track and confirm audio, progress, and
+  duration update.
+- Pause, resume, and confirm no duplicate play/pause behavior from the hidden
+  DOM audio element.
+- Seek within the current track and confirm progress resumes from the target
+  position.
+- Switch tracks with next, previous, or a direct track selection and confirm the
+  old track stops and stale events do not affect the new track.
+- Enable loop-one, let a track end, and confirm it restarts instead of
+  advancing the queue.
+- Trigger an error path, such as an unreachable stream, and confirm the app
+  surfaces or retries the error without advancing from an intentional stop.
+- Remove `aonsoku.audioSidecar.playback.enabled` or relaunch without
+  `VITE_AONSOKU_AUDIO_SIDECAR=1`, then confirm playback returns to the existing
+  web/Electron audio path.
+
 ## Remaining Integration Work
 
 The sidecar can drive dev-only Electron renderer playback behind a feature flag,
@@ -200,8 +224,6 @@ default Electron path, the next phase should:
 
 - run the opt-in Rodio stream smoke on a desktop session with a working audio
   output device
-- smoke one normal app-selected track with
-  `AONSOKU_PLAYERD_BRIDGE=1 VITE_AONSOKU_AUDIO_SIDECAR=1 pnpm run electron:dev`
 - add production packaging for the sidecar binary under Electron resources
 - replace the current in-memory URL fetch with progressive network buffering if
   large streams or radio latency require it
