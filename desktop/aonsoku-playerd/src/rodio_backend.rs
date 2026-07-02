@@ -410,12 +410,29 @@ fn native_file_path(uri: &str) -> Result<PathBuf, BackendError> {
         ));
     }
 
-    if let Some(path) = uri.strip_prefix("file://") {
-        let decoded = percent_decode_file_url_path(path)?;
+    if let Some(file_url) = uri.strip_prefix("file://") {
+        let decoded = percent_decode_file_url_path(file_url_path(file_url)?)?;
         Ok(Path::new(&decoded).to_path_buf())
     } else {
         Ok(Path::new(uri).to_path_buf())
     }
+}
+
+fn file_url_path(file_url: &str) -> Result<&str, BackendError> {
+    if let Some(path) = file_url.strip_prefix("localhost") {
+        if path.starts_with('/') {
+            return Ok(path);
+        }
+    }
+
+    if file_url.starts_with('/') {
+        return Ok(file_url);
+    }
+
+    Err(BackendError::new(
+        "INVALID_SOURCE",
+        "file uri host must be empty or localhost",
+    ))
 }
 
 fn percent_decode_file_url_path(path: &str) -> Result<String, BackendError> {
@@ -480,6 +497,10 @@ mod tests {
             PathBuf::from("/tmp/song.mp3")
         );
         assert_eq!(
+            native_file_path("file://localhost/tmp/song.mp3").unwrap(),
+            PathBuf::from("/tmp/song.mp3")
+        );
+        assert_eq!(
             native_file_path("/tmp/song.mp3").unwrap(),
             PathBuf::from("/tmp/song.mp3")
         );
@@ -502,6 +523,13 @@ mod tests {
     #[test]
     fn native_file_path_rejects_invalid_percent_escapes() {
         let error = native_file_path("file:///tmp/song%XZ.mp3").unwrap_err();
+
+        assert_eq!(error.code, "INVALID_SOURCE");
+    }
+
+    #[test]
+    fn native_file_path_rejects_remote_file_uri_hosts() {
+        let error = native_file_path("file://example.test/tmp/song.mp3").unwrap_err();
 
         assert_eq!(error.code, "INVALID_SOURCE");
     }
