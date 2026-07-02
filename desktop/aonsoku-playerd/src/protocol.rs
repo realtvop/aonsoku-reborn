@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 pub const JSONRPC_VERSION: &str = "2.0";
 
@@ -20,9 +20,30 @@ impl JsonRpcRequest {
             command,
         }
     }
+
+    pub fn from_value(value: Value) -> Result<Self, RequestValidationError> {
+        let object = value.as_object().ok_or_else(|| {
+            RequestValidationError::new(
+                None,
+                ErrorCode::InvalidRequest,
+                "request must be an object",
+            )
+        })?;
+        let id = extract_request_id(object);
+
+        validate_request_object(object, id.clone())?;
+
+        serde_json::from_value::<Self>(Value::Object(object.clone())).map_err(|error| {
+            RequestValidationError::new(
+                id,
+                ErrorCode::InvalidParams,
+                format!("invalid request params: {error}"),
+            )
+        })
+    }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum RequestId {
     String(String),
@@ -102,6 +123,91 @@ pub enum ErrorCode {
     InvalidRequest,
     InvalidParams,
     BackendError,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RequestValidationError {
+    pub id: Option<RequestId>,
+    pub code: ErrorCode,
+    pub message: String,
+}
+
+impl RequestValidationError {
+    fn new(id: Option<RequestId>, code: ErrorCode, message: impl Into<String>) -> Self {
+        Self {
+            id,
+            code,
+            message: message.into(),
+        }
+    }
+}
+
+fn validate_request_object(
+    object: &Map<String, Value>,
+    id: Option<RequestId>,
+) -> Result<(), RequestValidationError> {
+    for key in object.keys() {
+        if !matches!(key.as_str(), "jsonrpc" | "id" | "method" | "params") {
+            return Err(RequestValidationError::new(
+                id,
+                ErrorCode::InvalidRequest,
+                format!("unknown request field: {key}"),
+            ));
+        }
+    }
+
+    match object.get("jsonrpc") {
+        Some(Value::String(version)) if version == JSONRPC_VERSION => {}
+        Some(_) => {
+            return Err(RequestValidationError::new(
+                id,
+                ErrorCode::InvalidRequest,
+                "jsonrpc must be \"2.0\"",
+            ));
+        }
+        None => {
+            return Err(RequestValidationError::new(
+                id,
+                ErrorCode::InvalidRequest,
+                "jsonrpc is required",
+            ));
+        }
+    }
+
+    if !object.contains_key("id") {
+        return Err(RequestValidationError::new(
+            None,
+            ErrorCode::InvalidRequest,
+            "id is required",
+        ));
+    }
+    if id.is_none() {
+        return Err(RequestValidationError::new(
+            None,
+            ErrorCode::InvalidRequest,
+            "id must be a string or integer",
+        ));
+    }
+
+    match object.get("method") {
+        Some(Value::String(_)) => Ok(()),
+        Some(_) => Err(RequestValidationError::new(
+            id,
+            ErrorCode::InvalidRequest,
+            "method must be a string",
+        )),
+        None => Err(RequestValidationError::new(
+            id,
+            ErrorCode::InvalidRequest,
+            "method is required",
+        )),
+    }
+}
+
+fn extract_request_id(object: &Map<String, Value>) -> Option<RequestId> {
+    object
+        .get("id")
+        .and_then(|id| serde_json::from_value::<RequestId>(id.clone()).ok())
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

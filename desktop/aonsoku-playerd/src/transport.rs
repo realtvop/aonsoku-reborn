@@ -11,12 +11,19 @@ pub fn handle_ndjson_line<TBackend>(
 where
     TBackend: PlaybackBackend,
 {
-    match serde_json::from_str::<JsonRpcRequest>(line) {
-        Ok(request) => service.handle(request),
+    match serde_json::from_str(line) {
+        Ok(value) => match JsonRpcRequest::from_value(value) {
+            Ok(request) => service.handle(request),
+            Err(error) => vec![OutboundMessage::Failure(JsonRpcFailure::new(
+                error.id,
+                error.code,
+                error.message,
+            ))],
+        },
         Err(error) => vec![OutboundMessage::Failure(JsonRpcFailure::new(
             None,
             ErrorCode::InvalidRequest,
-            format!("invalid JSON-RPC request: {error}"),
+            format!("invalid JSON: {error}"),
         ))],
     }
 }
@@ -92,5 +99,60 @@ mod tests {
             OutboundMessage::Event(crate::protocol::PlayerEvent::Progress(event))
                 if event.current_time == 12.0
         )));
+    }
+
+    #[test]
+    fn ndjson_transport_rejects_invalid_jsonrpc_version() {
+        let mut service = PlayerService::new(MockPlaybackBackend::new());
+
+        let messages = handle_ndjson_line(
+            &mut service,
+            "{\"jsonrpc\":\"1.0\",\"id\":\"bad-version\",\"method\":\"play\"}",
+        );
+
+        assert!(matches!(
+            messages.first(),
+            Some(OutboundMessage::Failure(failure))
+                if failure.id == Some(crate::protocol::RequestId::String(
+                    "bad-version".to_string()
+                ))
+                    && failure.error.code == ErrorCode::InvalidRequest
+                    && failure.error.message == "jsonrpc must be \"2.0\""
+        ));
+    }
+
+    #[test]
+    fn ndjson_transport_rejects_malformed_request_shape() {
+        let mut service = PlayerService::new(MockPlaybackBackend::new());
+
+        let messages = handle_ndjson_line(&mut service, "[]");
+
+        assert!(matches!(
+            messages.first(),
+            Some(OutboundMessage::Failure(failure))
+                if failure.id.is_none()
+                    && failure.error.code == ErrorCode::InvalidRequest
+                    && failure.error.message == "request must be an object"
+        ));
+    }
+
+    #[test]
+    fn ndjson_transport_rejects_invalid_command_params() {
+        let mut service = PlayerService::new(MockPlaybackBackend::new());
+
+        let messages = handle_ndjson_line(
+            &mut service,
+            "{\"jsonrpc\":\"2.0\",\"id\":\"bad-seek\",\"method\":\"seek\",\
+             \"params\":{\"position\":\"later\"}}",
+        );
+
+        assert!(matches!(
+            messages.first(),
+            Some(OutboundMessage::Failure(failure))
+                if failure.id == Some(crate::protocol::RequestId::String(
+                    "bad-seek".to_string()
+                ))
+                    && failure.error.code == ErrorCode::InvalidParams
+        ));
     }
 }
