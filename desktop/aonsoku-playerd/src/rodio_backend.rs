@@ -113,12 +113,12 @@ impl RodioPlaybackBackend {
         ];
 
         let (player, duration) = match source {
-            LoadedSource::File { file, byte_len } => {
-                self.player_from_reader(file, byte_len, start_time)?
+            LoadedSource::File { file, byte_len, hint } => {
+                self.player_from_reader(file, byte_len, hint.as_deref(), start_time)?
             }
-            LoadedSource::Memory { bytes } => {
+            LoadedSource::Memory { bytes, hint } => {
                 let byte_len = bytes.len() as u64;
-                self.player_from_reader(Cursor::new(bytes), byte_len, start_time)?
+                self.player_from_reader(Cursor::new(bytes), byte_len, hint.as_deref(), start_time)?
             }
         };
 
@@ -157,14 +157,21 @@ impl RodioPlaybackBackend {
         &self,
         reader: R,
         byte_len: u64,
+        hint: Option<&str>,
         start_time: f64,
     ) -> Result<(Player, f64), BackendError>
     where
         R: std::io::Read + std::io::Seek + Send + Sync + 'static,
     {
-        let decoder = Decoder::builder()
+        let mut builder = Decoder::builder()
             .with_data(reader)
-            .with_byte_len(byte_len)
+            .with_byte_len(byte_len);
+
+        if let Some(h) = hint {
+            builder = builder.with_hint(h);
+        }
+
+        let decoder = builder
             .build()
             .map_err(|error| BackendError::new("DECODE_ERROR", format!("decode audio: {error}")))?;
         let duration = decoder
@@ -343,9 +350,52 @@ fn drain_runtime_error_events(runtime_errors: &mpsc::Receiver<String>) -> Vec<Pl
     events
 }
 
+fn get_format_hint(url: &str, mime_type: Option<&str>) -> Option<&'static str> {
+    if let Some(mime) = mime_type {
+        let mime = mime.to_lowercase();
+        if mime.contains("mpeg") || mime.contains("mp3") {
+            return Some("mp3");
+        } else if mime.contains("flac") {
+            return Some("flac");
+        } else if mime.contains("aac") {
+            return Some("aac");
+        } else if mime.contains("mp4") || mime.contains("m4a") {
+            return Some("m4a");
+        } else if mime.contains("ogg") || mime.contains("vorbis") {
+            return Some("ogg");
+        } else if mime.contains("wav") || mime.contains("wave") {
+            return Some("wav");
+        }
+    }
+
+    let url_lower = url.to_lowercase();
+    if url_lower.contains("format=mp3") || url_lower.contains(".mp3") {
+        Some("mp3")
+    } else if url_lower.contains("format=flac") || url_lower.contains(".flac") {
+        Some("flac")
+    } else if url_lower.contains("format=aac") || url_lower.contains(".aac") {
+        Some("aac")
+    } else if url_lower.contains("format=m4a") || url_lower.contains(".m4a") || url_lower.contains("format=mp4") || url_lower.contains(".mp4") {
+        Some("m4a")
+    } else if url_lower.contains("format=ogg") || url_lower.contains(".ogg") || url_lower.contains("format=vorbis") || url_lower.contains(".opus") || url_lower.contains("format=opus") {
+        Some("ogg")
+    } else if url_lower.contains("format=wav") || url_lower.contains(".wav") {
+        Some("wav")
+    } else {
+        None
+    }
+}
+
 enum LoadedSource {
-    File { file: File, byte_len: u64 },
-    Memory { bytes: Vec<u8> },
+    File {
+        file: File,
+        byte_len: u64,
+        hint: Option<String>,
+    },
+    Memory {
+        bytes: Vec<u8>,
+        hint: Option<String>,
+    },
 }
 
 fn load_url_source(url: &str) -> Result<LoadedSource, BackendError> {
@@ -367,6 +417,12 @@ fn load_url_source(url: &str) -> Result<LoadedSource, BackendError> {
         ));
     }
 
+    let mime_type = response
+        .headers()
+        .get("content-type")
+        .and_then(|val| val.to_str().ok());
+    let hint = get_format_hint(url, mime_type).map(|s| s.to_string());
+
     let bytes = response
         .body_mut()
         .with_config()
@@ -380,7 +436,7 @@ fn load_url_source(url: &str) -> Result<LoadedSource, BackendError> {
         ));
     }
 
-    Ok(LoadedSource::Memory { bytes })
+    Ok(LoadedSource::Memory { bytes, hint })
 }
 
 fn load_file_source(uri: &str) -> Result<LoadedSource, BackendError> {
@@ -399,7 +455,9 @@ fn load_file_source(uri: &str) -> Result<LoadedSource, BackendError> {
         return Err(BackendError::new("EMPTY_SOURCE", "audio file was empty"));
     }
 
-    Ok(LoadedSource::File { file, byte_len })
+    let hint = get_format_hint(uri, None).map(|s| s.to_string());
+
+    Ok(LoadedSource::File { file, byte_len, hint })
 }
 
 fn native_file_path(uri: &str) -> Result<PathBuf, BackendError> {
@@ -547,5 +605,15 @@ mod tests {
                 if event.code.as_deref() == Some("AUDIO_STREAM_ERROR")
                     && event.message == "audio stream error: underrun"
         ));
+    }
+
+    #[test]
+    fn get_format_hint_detects_proper_formats() {
+        assert_eq!(get_format_hint("http://example.com/stream?format=flac", None), Some("flac"));
+        assert_eq!(get_format_hint("http://example.com/song.mp3", None), Some("mp3"));
+        assert_eq!(get_format_hint("http://example.com/stream", Some("audio/mpeg")), Some("mp3"));
+        assert_eq!(get_format_hint("http://example.com/stream", Some("audio/x-m4a")), Some("m4a"));
+        assert_eq!(get_format_hint("http://example.com/stream", Some("audio/aac")), Some("aac"));
+        assert_eq!(get_format_hint("http://example.com/stream", None), None);
     }
 }
