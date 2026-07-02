@@ -1,5 +1,5 @@
-import { Capacitor, registerPlugin, WebPlugin } from "@capacitor/core";
 import type { PluginListenerHandle } from "@capacitor/core";
+import { Capacitor, registerPlugin, WebPlugin } from "@capacitor/core";
 import {
   NATIVE_AUDIO_PLUGIN_NAME,
   type NativeAddToUserQueueOptions,
@@ -11,13 +11,15 @@ import {
   type NativeAudioPlugin,
   type NativeAudioQueueOptions,
   type NativeAudioRepeatModeOptions,
-  type NativeRemotePlaybackStateOptions,
   type NativeAudioSeekOptions,
   type NativeAudioShuffleOptions,
   type NativeAudioSource,
   type NativeAudioStoreFileOptions,
+  type NativeMarkAsShuffledOptions,
   type NativePlayAtIndexOptions,
+  type NativeRemotePlaybackStateOptions,
   type NativeRemoveFromUserQueueOptions,
+  type NativeReorderContextQueueOptions,
   type NativeSetContextQueueOptions,
   type NativeSetSleepTimerOptions,
   type NativeUpdateContextQueueOptions,
@@ -71,6 +73,10 @@ class UnavailableNativeAudioWeb extends WebPlugin implements NativeAudioPlugin {
 
   setShuffle(_options: NativeAudioShuffleOptions): Promise<void> {
     return Promise.reject(createNativeAudioUnavailableError("setShuffle"));
+  }
+
+  markAsShuffled(_options: NativeMarkAsShuffledOptions): Promise<void> {
+    return Promise.reject(createNativeAudioUnavailableError("markAsShuffled"));
   }
 
   setQueue(_options: NativeAudioQueueOptions): Promise<void> {
@@ -145,6 +151,14 @@ class UnavailableNativeAudioWeb extends WebPlugin implements NativeAudioPlugin {
     );
   }
 
+  reorderContextQueue(
+    _options: NativeReorderContextQueueOptions,
+  ): Promise<void> {
+    return Promise.reject(
+      createNativeAudioUnavailableError("reorderContextQueue"),
+    );
+  }
+
   addToUserQueue(_options: NativeAddToUserQueueOptions): Promise<void> {
     return Promise.reject(createNativeAudioUnavailableError("addToUserQueue"));
   }
@@ -163,6 +177,10 @@ class UnavailableNativeAudioWeb extends WebPlugin implements NativeAudioPlugin {
 
   playAtIndex(_options: NativePlayAtIndexOptions): Promise<void> {
     return Promise.reject(createNativeAudioUnavailableError("playAtIndex"));
+  }
+
+  resolveSongs() {
+    return Promise.reject(createNativeAudioUnavailableError("resolveSongs"));
   }
 
   getFullState() {
@@ -200,6 +218,10 @@ class UnavailableNativeAudioWeb extends WebPlugin implements NativeAudioPlugin {
   }
 
   setVolumeHUDEnabled(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  setLikeActive(): Promise<void> {
     return Promise.resolve();
   }
 

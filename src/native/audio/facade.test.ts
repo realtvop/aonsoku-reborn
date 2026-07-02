@@ -1,14 +1,14 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { NativeAudioEventName, NativeAudioPlugin } from ".";
 import {
-  addNativeAudioListener,
   AonsokuNativeAudio,
+  addNativeAudioListener,
   getNativeAudioPluginAvailability,
   isNativeAudioPluginAvailable,
   NATIVE_AUDIO_PLUGIN_NAME,
   tryAddNativeAudioListener,
 } from ".";
-import type { NativeAudioEventName, NativeAudioPlugin } from ".";
 
 const mocks = vi.hoisted(() => {
   class MockWebPlugin {
@@ -44,10 +44,13 @@ const mocks = vi.hoisted(() => {
     seek: vi.fn(),
     setRepeatMode: vi.fn(),
     setShuffle: vi.fn(),
+    markAsShuffled: vi.fn(),
     setQueue: vi.fn(),
     skipToNext: vi.fn(),
     skipToPrevious: vi.fn(),
     updateMetadata: vi.fn(),
+    updateRemotePlaybackState: vi.fn(),
+    clearRemotePlaybackState: vi.fn(),
     preload: vi.fn(),
     clear: vi.fn(),
     storeAudioFile: vi.fn(),
@@ -55,6 +58,26 @@ const mocks = vi.hoisted(() => {
     getAudioFileSize: vi.fn(),
     deleteAudioFile: vi.fn(),
     clearAudioFiles: vi.fn(),
+    setContextQueue: vi.fn(),
+    updateContextQueue: vi.fn(),
+    reorderContextQueue: vi.fn(),
+    addToUserQueue: vi.fn(),
+    removeFromUserQueue: vi.fn(),
+    clearUserQueue: vi.fn(),
+    playAtIndex: vi.fn(),
+    getFullState: vi.fn(),
+    resolveSongs: vi.fn(),
+    getScrobbleBuffer: vi.fn(),
+    clearScrobbleBuffer: vi.fn(),
+    downloadAudioFile: vi.fn(),
+    cancelDownload: vi.fn(),
+    setSystemVolume: vi.fn(),
+    getSystemVolume: vi.fn(),
+    setVolumeHUDEnabled: vi.fn(),
+    setLikeActive: vi.fn(),
+    setSleepTimer: vi.fn(),
+    cancelSleepTimer: vi.fn(),
+    getSleepTimerRemaining: vi.fn(),
     addListener: vi.fn(),
     removeAllListeners: vi.fn(),
   };
