@@ -1,0 +1,18 @@
+[package]
+name = "aonsoku-playerd"
+version = "0.1.0"
+edition = "2021"
+description = "Desktop audio sidecar foundation for Aonsoku"
+license = "MIT"
+publish = false
+
+[lib]
+name = "aonsoku_playerd"
+path = "src/lib.rs"
+
+[[bin]]
+name = "aonsoku-playerd"
+path = "src/main.rs"
+
+[dependencies]
+
