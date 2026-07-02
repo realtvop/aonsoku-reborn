@@ -66,6 +66,7 @@ type JsonRpcFailure = {
 type PendingRequest = {
   resolve: () => void;
   reject: (error: Error) => void;
+  timeout: ReturnType<typeof setTimeout>;
 };
 
 export type AudioSidecarSpawnCommand = {
@@ -97,6 +98,7 @@ export type AudioSidecarManagerOptions = {
   spawnCommand?: AudioSidecarSpawnCommand;
   spawn?: SpawnAudioSidecar;
   requestIdPrefix?: string;
+  requestTimeoutMs?: number;
   audioEventSink?: (envelope: AudioSidecarEventEnvelope) => void;
 };
 
@@ -123,6 +125,7 @@ export class AudioSidecarManager {
   private readonly spawnCommand: AudioSidecarSpawnCommand;
   private readonly spawn: SpawnAudioSidecar;
   private readonly requestIdPrefix: string;
+  private readonly requestTimeoutMs: number;
   private readonly audioEventSink?: (
     envelope: AudioSidecarEventEnvelope,
   ) => void;
@@ -136,6 +139,7 @@ export class AudioSidecarManager {
       options.spawnCommand ?? resolveAudioSidecarSpawnCommand();
     this.spawn = options.spawn ?? spawnAudioSidecarProcess;
     this.requestIdPrefix = options.requestIdPrefix ?? "playerd";
+    this.requestTimeoutMs = options.requestTimeoutMs ?? 10_000;
     this.audioEventSink = options.audioEventSink;
   }
 
@@ -258,15 +262,26 @@ export class AudioSidecarManager {
     const line = `${JSON.stringify(request)}\n`;
 
     return new Promise((resolveRequest, reject) => {
+      const timeout = setTimeout(() => {
+        this.pending.delete(id);
+        reject(
+          new AudioSidecarError(
+            `aonsoku-playerd request timed out: ${method}`,
+            "REQUEST_TIMEOUT",
+          ),
+        );
+      }, this.requestTimeoutMs);
+
       this.pending.set(id, {
         resolve: resolveRequest,
         reject,
+        timeout,
       });
 
       this.child?.stdin?.write(line, (error) => {
         if (!error) return;
 
-        this.pending.delete(id);
+        this.removePending(id);
         reject(error);
       });
     });
@@ -299,6 +314,15 @@ export class AudioSidecarManager {
       return;
     }
 
+    if (isJsonObject(message) && typeof message.event === "string") {
+      this.emitError(
+        new AudioSidecarError(
+          `invalid aonsoku-playerd event payload: ${message.event}`,
+        ),
+      );
+      return;
+    }
+
     if (isJsonRpcFailure(message)) {
       this.rejectResponse(message);
       return;
@@ -324,7 +348,7 @@ export class AudioSidecarManager {
     const pending = this.pending.get(String(response.id));
     if (!pending) return;
 
-    this.pending.delete(String(response.id));
+    this.removePending(String(response.id));
     pending.resolve();
   }
 
@@ -339,7 +363,7 @@ export class AudioSidecarManager {
     const pending = this.pending.get(String(response.id));
     if (!pending) return;
 
-    this.pending.delete(String(response.id));
+    this.removePending(String(response.id));
     pending.reject(
       new AudioSidecarError(response.error.message, response.error.code),
     );
@@ -375,10 +399,19 @@ export class AudioSidecarManager {
 
   private rejectPending(error: Error): void {
     for (const pending of this.pending.values()) {
+      clearTimeout(pending.timeout);
       pending.reject(error);
     }
 
     this.pending.clear();
+  }
+
+  private removePending(id: string): void {
+    const pending = this.pending.get(id);
+    if (!pending) return;
+
+    clearTimeout(pending.timeout);
+    this.pending.delete(id);
   }
 
   private emitError(error: Error): void {
@@ -471,7 +504,9 @@ function isAudioEventEnvelope(
   if (!isJsonObject(message)) return false;
   if (typeof message.event !== "string") return false;
 
-  return isMvpAudioEventName(message.event) && isJsonObject(message.payload);
+  if (!isMvpAudioEventName(message.event)) return false;
+
+  return isValidMvpAudioEventPayload(message.event, message.payload);
 }
 
 function isJsonRpcSuccess(message: unknown): message is JsonRpcSuccess {
@@ -513,4 +548,59 @@ function isMvpAudioEventName(value: string): value is MvpAudioEventName {
     value === "ended" ||
     value === "error"
   );
+}
+
+function isValidMvpAudioEventPayload(
+  eventName: MvpAudioEventName,
+  payload: unknown,
+): payload is MvpAudioEvents[MvpAudioEventName] {
+  if (!isJsonObject(payload)) return false;
+  if (
+    payload.requestId !== undefined &&
+    typeof payload.requestId !== "string"
+  ) {
+    return false;
+  }
+
+  switch (eventName) {
+    case "playbackStateChanged":
+      return isPlaybackState(payload.state);
+    case "progress":
+      return (
+        isNumber(payload.currentTime) &&
+        isNumber(payload.duration) &&
+        (payload.bufferedTime === undefined || isNumber(payload.bufferedTime))
+      );
+    case "durationChanged":
+      return isNumber(payload.duration);
+    case "bufferingChanged":
+      return typeof payload.isBuffering === "boolean";
+    case "ended":
+      return (
+        payload.reason === undefined ||
+        payload.reason === "finished" ||
+        payload.reason === "stopped"
+      );
+    case "error":
+      return (
+        typeof payload.message === "string" &&
+        (payload.code === undefined || typeof payload.code === "string")
+      );
+  }
+}
+
+function isPlaybackState(value: unknown): boolean {
+  return (
+    value === "idle" ||
+    value === "loading" ||
+    value === "playing" ||
+    value === "paused" ||
+    value === "stopped" ||
+    value === "ended" ||
+    value === "failed"
+  );
+}
+
+function isNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }

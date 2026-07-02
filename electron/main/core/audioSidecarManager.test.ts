@@ -146,6 +146,39 @@ describe("AudioSidecarManager", () => {
     ]);
   });
 
+  it("emits protocol errors instead of forwarding invalid audio events", async () => {
+    const fake = new FakeSidecarProcess();
+    const listenerEvents: unknown[] = [];
+    const errors: Error[] = [];
+    const manager = createManager(fake);
+    manager.onAudioEvent((event) => {
+      listenerEvents.push(event);
+    });
+    manager.onSidecarError((error) => {
+      errors.push(error);
+    });
+
+    manager.start();
+    fake.stdout.write(
+      `${JSON.stringify({
+        event: "progress",
+        payload: {
+          requestId: "load-1",
+          currentTime: "12",
+          duration: 120,
+        },
+      })}\n`,
+    );
+
+    await waitFor(() => errors.length === 1);
+
+    expect(listenerEvents).toEqual([]);
+    expect(errors[0]).toBeInstanceOf(AudioSidecarError);
+    expect(errors[0].message).toBe(
+      "invalid aonsoku-playerd event payload: progress",
+    );
+  });
+
   it("rejects a correlated request on sidecar failure responses", async () => {
     const fake = new FakeSidecarProcess();
     const writes = collectWrites(fake);
@@ -174,6 +207,21 @@ describe("AudioSidecarManager", () => {
       name: "AudioSidecarError",
       code: "BACKEND_ERROR",
       message: "not loaded",
+    });
+  });
+
+  it("rejects requests when playerd does not respond before timeout", async () => {
+    const fake = new FakeSidecarProcess();
+    const manager = createManager(fake, {
+      requestTimeoutMs: 5,
+    });
+
+    manager.start();
+
+    await expect(manager.play()).rejects.toMatchObject({
+      name: "AudioSidecarError",
+      code: "REQUEST_TIMEOUT",
+      message: "aonsoku-playerd request timed out: play",
     });
   });
 
@@ -315,6 +363,7 @@ function createManager(
   fake: FakeSidecarProcess,
   options: {
     audioEventSink?: AudioSidecarManagerOptions["audioEventSink"];
+    requestTimeoutMs?: AudioSidecarManagerOptions["requestTimeoutMs"];
   } = {},
 ): AudioSidecarManager {
   return new AudioSidecarManager({
@@ -324,6 +373,7 @@ function createManager(
     },
     spawn: () => fake,
     requestIdPrefix: "test",
+    requestTimeoutMs: options.requestTimeoutMs,
     audioEventSink: options.audioEventSink,
   });
 }
