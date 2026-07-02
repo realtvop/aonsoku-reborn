@@ -129,6 +129,12 @@ await window.aonsokuAudioSidecarDebug.smokeStream("https://server/song.mp3", {
   autoplay: true,
   seekTo: 30,
 });
+await window.aonsokuAudioSidecarDebug.smokeFile(
+  "file:///Users/me/Music/song.mp3",
+  {
+    seekTo: 30,
+  },
+);
 window.aonsokuAudioSidecarDebug.events;
 window.aonsokuAudioSidecarDebug.errors;
 ```
