@@ -1,7 +1,8 @@
 # aonsoku-playerd
 
 `aonsoku-playerd` is the desktop audio sidecar foundation for Aonsoku. It is
-currently intentionally standalone: Electron does not spawn it yet, and the
+currently intentionally out of the active playback path: Electron has a
+testable main-process sidecar manager that can spawn and speak to it, but the
 existing web/Electron playback behavior still uses the current
 `PlaybackBackend` path.
 
@@ -17,9 +18,13 @@ This crate covers the first desktop MVP boundary:
 - a mock playback backend that proves the command/event lifecycle
 - shared MVP JSON fixtures under `fixtures/` for Rust and TypeScript contract
   conformance checks
+- Electron main-process client plumbing in
+  `electron/main/core/audioSidecarManager.ts` for lifecycle, request
+  correlation, NDJSON parsing, and audio event fan-out
 
 It does not include a real native audio engine, queue control, cache/download
-management, scrobbling, remote control, sleep timer, or system volume support.
+management, scrobbling, remote control, sleep timer, system volume support, or
+renderer playback routing through the sidecar.
 
 ## Run And Test
 
@@ -28,6 +33,18 @@ From this directory:
 ```bash
 cargo test
 cargo build
+```
+
+Run the Electron-side client tests from the repository root:
+
+```bash
+./node_modules/.bin/vitest run electron/main/core/audioSidecarManager.test.ts
+```
+
+Run the optional Electron-to-sidecar smoke test after Rust is available:
+
+```bash
+AONSOKU_PLAYERD_SMOKE=1 ./node_modules/.bin/vitest run electron/main/core/audioSidecarManager.test.ts
 ```
 
 Run a manual stdio smoke test:
