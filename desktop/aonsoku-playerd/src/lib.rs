@@ -1,4 +1,7 @@
+pub mod backend;
 pub mod protocol;
+pub mod service;
+pub mod transport;
 
 pub const PROTOCOL_VERSION: u32 = 1;
 
