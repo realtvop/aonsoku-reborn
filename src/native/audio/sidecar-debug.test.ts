@@ -50,6 +50,9 @@ describe("audio sidecar debug harness", () => {
     await harness?.loadFile("/tmp/song.mp3");
     await harness?.seek(12);
     await harness?.stop();
+    await harness?.smokeStream("https://example.test/smoke.flac", {
+      seekTo: 2,
+    });
 
     expect(api.load).toHaveBeenNthCalledWith(1, {
       autoplay: true,
@@ -67,8 +70,66 @@ describe("audio sidecar debug harness", () => {
         uri: "/tmp/song.mp3",
       },
     });
+    expect(api.load).toHaveBeenNthCalledWith(3, {
+      autoplay: false,
+      source: {
+        kind: "stream",
+        url: "https://example.test/smoke.flac",
+      },
+    });
     expect(api.seek).toHaveBeenCalledWith({ position: 12 });
+    expect(api.seek).toHaveBeenCalledWith({ position: 2 });
     expect(api.stopPlayback).toHaveBeenCalled();
+  });
+
+  it("returns only events and errors from a smoke sequence", async () => {
+    const api = createFakeAudioSidecarApi();
+    const harness = createAudioSidecarDebugHarness(api);
+
+    api.emitEvent({
+      event: "progress",
+      payload: {
+        currentTime: 99,
+        duration: 100,
+      },
+    });
+    vi.mocked(api.play).mockImplementation(async () => {
+      api.emitEvent({
+        event: "playbackStateChanged",
+        payload: {
+          state: "playing",
+        },
+      });
+    });
+    vi.mocked(api.pause).mockImplementation(async () => {
+      api.emitError({
+        name: "AudioSidecarError",
+        message: "pause failed",
+      });
+    });
+
+    const result = await harness.smokeFile("/tmp/song.mp3");
+
+    expect(result.events).toEqual([
+      {
+        event: "playbackStateChanged",
+        payload: {
+          state: "playing",
+        },
+      },
+      {
+        event: "playbackStateChanged",
+        payload: {
+          state: "playing",
+        },
+      },
+    ]);
+    expect(result.errors).toEqual([
+      {
+        name: "AudioSidecarError",
+        message: "pause failed",
+      },
+    ]);
   });
 
   it("collects events and removes listeners on dispose", async () => {

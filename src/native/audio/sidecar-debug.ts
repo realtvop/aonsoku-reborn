@@ -25,6 +25,14 @@ export type AudioSidecarDebugHarness = {
   pause: () => Promise<void>;
   stop: () => Promise<void>;
   seek: (position: number | AudioSidecarSeekOptions) => Promise<void>;
+  smokeStream: (
+    url: string,
+    options?: AudioSidecarDebugSmokeOptions,
+  ) => Promise<AudioSidecarDebugSmokeResult>;
+  smokeFile: (
+    uri: string,
+    options?: AudioSidecarDebugSmokeOptions,
+  ) => Promise<AudioSidecarDebugSmokeResult>;
   dispose: () => Promise<void>;
 };
 
@@ -32,6 +40,15 @@ export type AudioSidecarDebugLoadOptions = Omit<
   Partial<AudioSidecarLoadOptions>,
   "source"
 >;
+
+export type AudioSidecarDebugSmokeOptions = AudioSidecarDebugLoadOptions & {
+  seekTo?: number;
+};
+
+export type AudioSidecarDebugSmokeResult = {
+  events: AudioSidecarEvent[];
+  errors: AudioSidecarError[];
+};
 
 export type InstallAudioSidecarDebugOptions = {
   isDev: boolean;
@@ -78,7 +95,7 @@ export function createAudioSidecarDebugHarness(
     errors.push(error);
   });
 
-  return {
+  const harness: AudioSidecarDebugHarness = {
     events,
     errors,
     start: () => audioSidecar.start(),
@@ -110,10 +127,58 @@ export function createAudioSidecarDebugHarness(
             }
           : position,
       ),
+    smokeStream: (url, options = {}) =>
+      runSmokeSequence(harness, {
+        ...options,
+        source: {
+          kind: "stream",
+          url,
+        },
+      }),
+    smokeFile: (uri, options = {}) =>
+      runSmokeSequence(harness, {
+        ...options,
+        source: {
+          kind: "native-file",
+          uri,
+        },
+      }),
     dispose: async () => {
       removeEventListener();
       removeErrorListener();
       await audioSidecar.stop();
     },
+  };
+
+  return harness;
+}
+
+async function runSmokeSequence(
+  harness: Pick<
+    AudioSidecarDebugHarness,
+    "errors" | "events" | "load" | "pause" | "play" | "seek" | "stop"
+  >,
+  options: AudioSidecarDebugLoadOptions & {
+    source: AudioSidecarLoadOptions["source"];
+    seekTo?: number;
+  },
+): Promise<AudioSidecarDebugSmokeResult> {
+  const startedAtEvent = harness.events.length;
+  const startedAtError = harness.errors.length;
+  const { seekTo = 1, ...loadOptions } = options;
+
+  await harness.load({
+    ...loadOptions,
+    autoplay: loadOptions.autoplay ?? false,
+  });
+  await harness.play();
+  await harness.seek(seekTo);
+  await harness.pause();
+  await harness.play();
+  await harness.stop();
+
+  return {
+    events: harness.events.slice(startedAtEvent),
+    errors: harness.errors.slice(startedAtError),
   };
 }

@@ -125,9 +125,19 @@ does not route normal player playback through the sidecar.
 Example console commands:
 
 ```js
-await window.aonsokuAudioSidecarDebug.loadStream("https://server/song.mp3", {
+await window.aonsokuAudioSidecarDebug.smokeStream("https://server/song.mp3", {
   autoplay: true,
+  seekTo: 30,
 });
+window.aonsokuAudioSidecarDebug.events;
+window.aonsokuAudioSidecarDebug.errors;
+```
+
+Or drive the commands one at a time:
+
+```js
+await window.aonsokuAudioSidecarDebug.loadStream("https://server/song.mp3");
+await window.aonsokuAudioSidecarDebug.play();
 await window.aonsokuAudioSidecarDebug.pause();
 await window.aonsokuAudioSidecarDebug.seek(30);
 await window.aonsokuAudioSidecarDebug.play();
