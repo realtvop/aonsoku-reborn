@@ -423,6 +423,8 @@ fn load_url_source(url: &str) -> Result<LoadedSource, BackendError> {
         .and_then(|val| val.to_str().ok());
     let hint = get_format_hint(url, mime_type).map(|s| s.to_string());
 
+    eprintln!("[audio-sidecar-log] URL: {}, MIME-type: {:?}, Hint: {:?}", url, mime_type, hint);
+
     let bytes = response
         .body_mut()
         .with_config()
@@ -456,6 +458,8 @@ fn load_file_source(uri: &str) -> Result<LoadedSource, BackendError> {
     }
 
     let hint = get_format_hint(uri, None).map(|s| s.to_string());
+
+    eprintln!("[audio-sidecar-log] URI: {}, Hint: {:?}", uri, hint);
 
     Ok(LoadedSource::File { file, byte_len, hint })
 }
