@@ -24,7 +24,6 @@ export type AudioSidecarBridgeManager = Pick<
   | "seek"
   | "onAudioEvent"
   | "onSidecarError"
-  | "onStderr"
 >;
 
 export type AudioSidecarBridgeWindow = {
@@ -132,13 +131,6 @@ export class AudioSidecarBridge {
         this.send(this.errorChannel, serializeError(error));
       }),
     ];
-    if (typeof manager.onStderr === "function") {
-      this.cleanupListeners.push(
-        manager.onStderr((line) => {
-          console.error(`[audio-sidecar-stderr] ${line.trim()}`);
-        })
-      );
-    }
     this.manager = manager;
 
     return manager;

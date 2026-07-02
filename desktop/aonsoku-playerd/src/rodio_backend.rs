@@ -431,8 +431,6 @@ fn load_url_source(url: &str) -> Result<LoadedSource, BackendError> {
         .read_to_vec()
         .map_err(|error| BackendError::new("NETWORK_ERROR", format!("read audio: {error}")))?;
 
-    eprintln!("[audio-sidecar-log] URL: {}, MIME-type: {:?}, Hint: {:?}, Byte length: {}", url, mime_type, hint, bytes.len());
-
     if bytes.is_empty() {
         return Err(BackendError::new(
             "EMPTY_SOURCE",
@@ -460,8 +458,6 @@ fn load_file_source(uri: &str) -> Result<LoadedSource, BackendError> {
     }
 
     let hint = get_format_hint(uri, None).map(|s| s.to_string());
-
-    eprintln!("[audio-sidecar-log] URI: {}, Hint: {:?}", uri, hint);
 
     Ok(LoadedSource::File { file, byte_len, hint })
 }
