@@ -1,10 +1,9 @@
 # aonsoku-playerd
 
-`aonsoku-playerd` is the desktop audio sidecar foundation for Aonsoku. It is
-currently intentionally out of the active playback path: Electron has a
-testable main-process sidecar manager that can spawn and speak to it, but the
-existing web/Electron playback behavior still uses the current
-`PlaybackBackend` path.
+`aonsoku-playerd` is the desktop audio sidecar foundation for Aonsoku.
+Electron can opt into this sidecar from the existing renderer
+`PlaybackBackend` facade during dev smoke testing, but the current web/Electron
+playback path remains the default fallback.
 
 ## Scope
 
@@ -26,15 +25,17 @@ This crate covers the first desktop MVP boundary:
   correlation, NDJSON parsing, and audio event fan-out
 - an opt-in Electron IPC/preload bridge exposed as `window.api.audioSidecar`
   when Electron dev mode is running with `AONSOKU_PLAYERD_BRIDGE=1`
+- a feature-flagged renderer playback adapter that can route the existing
+  Electron player facade through `window.api.audioSidecar` for the MVP command
+  and event surface
 
 It does not include queue control, cache/download management, scrobbling, remote
 control, sleep timer, system volume support, progressive network buffering, or
-renderer playback routing through the sidecar.
+mobile playback changes.
 
-The Electron bridge is intentionally dev-only and opt-in. It exists so future
-renderer integration work can manually drive the sidecar MVP commands, but the
-current player still uses the existing playback backend unless later code
-explicitly routes playback through this bridge.
+The Electron bridge and renderer adapter are intentionally dev-only and opt-in.
+The current player still uses the existing playback backend unless both the
+main-process bridge and the renderer playback flag are enabled.
 
 ## Run And Test
 
@@ -65,8 +66,7 @@ AONSOKU_PLAYERD_REAL_SMOKE_URL="https://server/song.mp3" ./node_modules/.bin/vit
 ```
 
 That smoke test drives `load`, `play`, `seek`, `pause`, and `stop` through the
-Electron `AudioSidecarManager` and the Rust sidecar without routing the normal
-player through the sidecar.
+Electron `AudioSidecarManager` and the Rust sidecar.
 
 For slow dev streams, set `AONSOKU_PLAYERD_REQUEST_TIMEOUT_MS` to a larger
 positive integer before launching Electron or running the smoke test. The
@@ -159,16 +159,49 @@ window.aonsokuAudioSidecarDebug.events;
 window.aonsokuAudioSidecarDebug.errors;
 ```
 
+## Feature-Flagged Renderer Playback
+
+The normal Electron player can route the current app-selected track through the
+sidecar MVP backend in dev mode. Enable both layers before launching Electron:
+
+```bash
+AONSOKU_PLAYERD_BRIDGE=1 VITE_AONSOKU_AUDIO_SIDECAR=1 pnpm run electron:dev
+```
+
+For a runtime toggle during manual smoke testing, enable the bridge at launch,
+then set the renderer flag and reload:
+
+```js
+localStorage.setItem("aonsoku.audioSidecar.playback.enabled", "1");
+location.reload();
+```
+
+Remove the key or launch without `VITE_AONSOKU_AUDIO_SIDECAR=1` to switch back
+to the existing Electron playback path:
+
+```js
+localStorage.removeItem("aonsoku.audioSidecar.playback.enabled");
+location.reload();
+```
+
+With the flag enabled, `src/player/playback/sidecar-backend.ts` maps the
+existing app-facing `PlaybackBackend` calls to `window.api.audioSidecar` for
+`load`, `play`, `pause`, `stop`, and `seek`. It listens only for
+`playbackStateChanged`, `progress`, `durationChanged`, `bufferingChanged`,
+`ended`, and `error`. Queue, preload, shuffle, repeat, remote control,
+scrobbling, cache/download, sleep timer, system volume, and mobile playback
+remain on the existing code paths or are no-ops for this MVP adapter.
+
 ## Remaining Integration Work
 
-The sidecar is ready for dev-only manual playback smoke testing, but it is not
-yet a production playback replacement. Before routing normal Electron playback
-through `aonsoku-playerd`, the next phase should:
+The sidecar can drive dev-only Electron renderer playback behind a feature flag,
+but it is not yet a production playback replacement. Before making it the
+default Electron path, the next phase should:
 
 - run the opt-in Rodio stream smoke on a desktop session with a working audio
   output device
-- decide how renderer playback state should reconcile sidecar progress, ended,
-  and error events with the existing player store
+- smoke one normal app-selected track with
+  `AONSOKU_PLAYERD_BRIDGE=1 VITE_AONSOKU_AUDIO_SIDECAR=1 pnpm run electron:dev`
 - add production packaging for the sidecar binary under Electron resources
 - replace the current in-memory URL fetch with progressive network buffering if
   large streams or radio latency require it
