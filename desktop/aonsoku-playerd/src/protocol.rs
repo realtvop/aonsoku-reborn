@@ -71,6 +71,7 @@ impl JsonRpcSuccess {
 #[serde(rename_all = "camelCase")]
 pub struct JsonRpcFailure {
     pub jsonrpc: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<RequestId>,
     pub error: JsonRpcError,
 }
@@ -121,21 +122,25 @@ pub enum NativeAudioSource {
     #[serde(rename_all = "camelCase")]
     Stream {
         url: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
         song_id: Option<String>,
     },
     #[serde(rename_all = "camelCase")]
     Blob {
         url: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
         song_id: Option<String>,
     },
     #[serde(rename_all = "camelCase")]
     NativeFile {
         uri: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
         song_id: Option<String>,
     },
     #[serde(rename_all = "camelCase")]
     Radio {
         url: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
         radio_id: Option<String>,
     },
 }
@@ -143,11 +148,17 @@ pub enum NativeAudioSource {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeAudioMetadata {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub artist: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub album: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub duration: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub artwork_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_art_id: Option<String>,
 }
 
@@ -155,9 +166,13 @@ pub struct NativeAudioMetadata {
 #[serde(rename_all = "camelCase")]
 pub struct NativeAudioLoadOptions {
     pub source: NativeAudioSource,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<NativeAudioMetadata>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub autoplay: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub start_time: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
 }
 
@@ -182,6 +197,7 @@ pub enum PlaybackState {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeAudioPlaybackStateChangedEvent {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
     pub state: PlaybackState,
 }
@@ -189,15 +205,18 @@ pub struct NativeAudioPlaybackStateChangedEvent {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeAudioProgressEvent {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
     pub current_time: f64,
     pub duration: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub buffered_time: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeAudioDurationChangedEvent {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
     pub duration: f64,
 }
@@ -205,6 +224,7 @@ pub struct NativeAudioDurationChangedEvent {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeAudioBufferingChangedEvent {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
     pub is_buffering: bool,
 }
@@ -219,14 +239,18 @@ pub enum EndedReason {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeAudioEndedEvent {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<EndedReason>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeAudioErrorEvent {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub code: Option<String>,
     pub message: String,
 }
@@ -272,10 +296,7 @@ mod tests {
                     "metadata": {
                         "title": "Intro",
                         "artist": "Aonsoku",
-                        "album": null,
                         "duration": 180.5,
-                        "artworkUrl": null,
-                        "coverArtId": null
                     },
                     "autoplay": true,
                     "startTime": 12.25,
