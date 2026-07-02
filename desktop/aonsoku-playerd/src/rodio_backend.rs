@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use rodio::{Decoder, DeviceSinkBuilder, MixerDeviceSink, Player, Source};
@@ -8,7 +9,7 @@ use rodio::{Decoder, DeviceSinkBuilder, MixerDeviceSink, Player, Source};
 use crate::backend::{BackendError, PlaybackBackend};
 use crate::protocol::{
     EndedReason, NativeAudioBufferingChangedEvent, NativeAudioDurationChangedEvent,
-    NativeAudioEndedEvent, NativeAudioLoadOptions, NativeAudioProgressEvent,
+    NativeAudioEndedEvent, NativeAudioErrorEvent, NativeAudioLoadOptions, NativeAudioProgressEvent,
     NativeAudioSeekOptions, NativeAudioSource, PlaybackState, PlayerEvent,
 };
 
@@ -22,11 +23,13 @@ pub struct RodioPlaybackBackend {
     duration: f64,
     loaded: bool,
     last_progress_event_at: Option<Instant>,
+    runtime_errors: mpsc::Receiver<String>,
 }
 
 impl RodioPlaybackBackend {
     pub fn new() -> Result<Self, BackendError> {
-        let mut device_sink = DeviceSinkBuilder::open_default_sink().map_err(|error| {
+        let (runtime_error_tx, runtime_errors) = mpsc::channel();
+        let mut device_sink = open_output_sink(runtime_error_tx).map_err(|error| {
             BackendError::new(
                 "OUTPUT_DEVICE_ERROR",
                 format!("open output device: {error}"),
@@ -41,6 +44,7 @@ impl RodioPlaybackBackend {
             duration: 0.0,
             loaded: false,
             last_progress_event_at: None,
+            runtime_errors,
         })
     }
 
@@ -265,6 +269,14 @@ impl PlaybackBackend for RodioPlaybackBackend {
     }
 
     fn drain_events(&mut self) -> Vec<PlayerEvent> {
+        let runtime_errors = drain_runtime_error_events(&self.runtime_errors);
+        if !runtime_errors.is_empty() {
+            self.state = PlaybackState::Failed;
+            return std::iter::once(self.state_event(None))
+                .chain(runtime_errors)
+                .collect();
+        }
+
         let Some(player) = &self.player else {
             return Vec::new();
         };
@@ -299,6 +311,36 @@ impl PlaybackBackend for RodioPlaybackBackend {
         self.last_progress_event_at = Some(now);
         vec![self.progress_event(None)]
     }
+}
+
+fn open_output_sink(
+    runtime_error_tx: mpsc::Sender<String>,
+) -> Result<MixerDeviceSink, rodio::stream::DeviceSinkError> {
+    match DeviceSinkBuilder::from_default_device() {
+        Ok(builder) => {
+            let error_callback = move |error| {
+                let _ = runtime_error_tx.send(format!("audio stream error: {error}"));
+            };
+            builder
+                .with_error_callback(error_callback)
+                .open_sink_or_fallback()
+        }
+        Err(_) => DeviceSinkBuilder::open_default_sink(),
+    }
+}
+
+fn drain_runtime_error_events(runtime_errors: &mpsc::Receiver<String>) -> Vec<PlayerEvent> {
+    let mut events = Vec::new();
+
+    while let Ok(message) = runtime_errors.try_recv() {
+        events.push(PlayerEvent::Error(NativeAudioErrorEvent {
+            request_id: None,
+            code: Some("AUDIO_STREAM_ERROR".to_string()),
+            message,
+        }));
+    }
+
+    events
 }
 
 enum LoadedSource {
@@ -462,5 +504,20 @@ mod tests {
         let error = native_file_path("file:///tmp/song%XZ.mp3").unwrap_err();
 
         assert_eq!(error.code, "INVALID_SOURCE");
+    }
+
+    #[test]
+    fn runtime_stream_errors_emit_error_events() {
+        let (tx, rx) = mpsc::channel();
+        tx.send("audio stream error: underrun".to_string()).unwrap();
+
+        let events = drain_runtime_error_events(&rx);
+
+        assert!(matches!(
+            events.first(),
+            Some(PlayerEvent::Error(event))
+                if event.code.as_deref() == Some("AUDIO_STREAM_ERROR")
+                    && event.message == "audio stream error: underrun"
+        ));
     }
 }
