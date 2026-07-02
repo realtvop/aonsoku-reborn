@@ -201,7 +201,11 @@ export function AudioPlayer({
 
       const backend = getPlaybackBackend(audio);
       if (backend) {
-        backend.load(createPlaybackSource(sourceUrl), metadata ?? undefined);
+        Promise.resolve(
+          backend.load(createPlaybackSource(sourceUrl), metadata ?? undefined),
+        ).catch((error) => {
+          logger.info("[PlaybackBackend] load failed", error);
+        });
       } else {
         audio.load();
       }
@@ -252,11 +256,18 @@ export function AudioPlayer({
       if (audio && src) {
         const shouldAutoplay =
           state.playerState.isPlaying && !state.remoteControl.active;
-        getPlaybackBackend(audio)?.load(
-          createPlaybackSource(src),
-          metadata ?? undefined,
-          shouldAutoplay ? { autoplay: true } : undefined,
-        );
+        const backend = getPlaybackBackend(audio);
+        if (backend) {
+          Promise.resolve(
+            backend.load(
+              createPlaybackSource(src),
+              metadata ?? undefined,
+              shouldAutoplay ? { autoplay: true } : undefined,
+            ),
+          ).catch((error) => {
+            logger.info("[PlaybackBackend] load failed", error);
+          });
+        }
         if (shouldAutoplay) {
           sessionRef.current.markLoopRestartSyncHandled();
         }

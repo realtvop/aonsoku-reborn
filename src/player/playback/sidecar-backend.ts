@@ -1,9 +1,10 @@
+import { hasElectronBridge, isDesktop } from "@/utils/desktop";
 import type {
   AudioSidecarBridgeErrorPayload,
   AudioSidecarEventEnvelope,
 } from "../../../electron/main/core/audioSidecarBridge";
-import { hasElectronBridge, isDesktop } from "@/utils/desktop";
 import { nativePlaybackErrorKind, playbackErrorCodeFromKind } from "./errors";
+import { toNativeAudioMetadata, toNativeAudioSource } from "./native-backend";
 import {
   type PlaybackBackend,
   type PlaybackBackendEvent,
@@ -15,7 +16,6 @@ import {
   type PlaybackSource,
   type UnsubscribePlaybackEvent,
 } from "./types";
-import { toNativeAudioMetadata, toNativeAudioSource } from "./native-backend";
 
 export const AUDIO_SIDECAR_PLAYBACK_FLAG =
   "aonsoku.audioSidecar.playback.enabled";
@@ -73,12 +73,14 @@ export class ElectronAudioSidecarPlaybackBackend implements PlaybackBackend {
     this.#assertActive();
     const requestId = this.#nextRequestId();
 
-    return this.#api.load({
-      source: toNativeAudioSource(source),
-      metadata: metadata ? toNativeAudioMetadata(metadata) : undefined,
-      requestId,
-      autoplay: options?.autoplay,
-    });
+    return this.#handleCommandError(
+      this.#api.load({
+        source: toNativeAudioSource(source),
+        metadata: metadata ? toNativeAudioMetadata(metadata) : undefined,
+        requestId,
+        autoplay: options?.autoplay,
+      }),
+    );
   }
 
   play() {
@@ -147,7 +149,7 @@ export class ElectronAudioSidecarPlaybackBackend implements PlaybackBackend {
     this.#activeRequestId = null;
     this.#removeEventListener();
     this.#removeErrorListener();
-    void this.#api.stop().catch(() => {});
+    this.#api.stop().catch(() => {});
 
     for (const listeners of Object.values(this.#listeners)) {
       listeners.clear();
@@ -222,6 +224,13 @@ export class ElectronAudioSidecarPlaybackBackend implements PlaybackBackend {
     }
   }
 
+  #handleCommandError(promise: Promise<void>) {
+    return promise.catch((error: unknown) => {
+      this.#emit("error", toPlaybackErrorEvent(error));
+      throw error;
+    });
+  }
+
   #nextRequestId() {
     const requestId = `sidecar-audio-${++this.#loadSequence}`;
     this.#activeRequestId = requestId;
@@ -292,15 +301,55 @@ function isStaleSidecarEvent(
 }
 
 function toPlaybackErrorEvent(
-  error: AudioSidecarBridgeErrorPayload | { code?: string; message: string },
+  error:
+    | AudioSidecarBridgeErrorPayload
+    | { code?: string; message: string }
+    | unknown,
 ): PlaybackErrorEvent {
-  const kind = nativePlaybackErrorKind(error.code);
+  if (!isAudioSidecarErrorLike(error)) {
+    return {
+      error,
+      kind: "unknown",
+      message: "Audio sidecar command failed",
+    };
+  }
+
+  const message = normalizeAudioSidecarErrorMessage(error.message);
+  const nativeCode = inferAudioSidecarErrorCode(error.code, message);
+  const kind = nativePlaybackErrorKind(nativeCode);
 
   return {
     error,
-    code: playbackErrorCodeFromKind(kind) ?? error.code,
+    code: playbackErrorCodeFromKind(kind) ?? nativeCode,
     kind,
-    message: error.message,
-    nativeCode: error.code,
+    message,
+    nativeCode,
   };
+}
+
+function isAudioSidecarErrorLike(
+  error: unknown,
+): error is { code?: string; message: string } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as { message?: unknown }).message === "string" &&
+    (!("code" in error) ||
+      typeof (error as { code?: unknown }).code === "string")
+  );
+}
+
+function normalizeAudioSidecarErrorMessage(message: string) {
+  return message.replace(
+    /^Error invoking remote method '[^']+': AudioSidecarError: /,
+    "",
+  );
+}
+
+function inferAudioSidecarErrorCode(code: string | undefined, message: string) {
+  if (code) return code;
+  if (/^decode audio:/i.test(message)) return "DECODE_ERROR";
+
+  return undefined;
 }

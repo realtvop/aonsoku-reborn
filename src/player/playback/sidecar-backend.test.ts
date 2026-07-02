@@ -143,6 +143,30 @@ describe("ElectronAudioSidecarPlaybackBackend", () => {
     });
   });
 
+  it("emits playback errors when sidecar load rejects", async () => {
+    const api = createFakeAudioSidecarApi();
+    const backend = new ElectronAudioSidecarPlaybackBackend(api);
+    const listeners = makePlaybackListeners();
+    const error = new Error(
+      "Error invoking remote method 'audio-sidecar:load': AudioSidecarError: decode audio: The format of the data has not been recognized.",
+    );
+    api.load.mockRejectedValueOnce(error);
+
+    backend.subscribe("error", listeners.error);
+
+    await expect(
+      backend.load(createUrlPlaybackSource("https://server/song.flac")),
+    ).rejects.toBe(error);
+
+    expect(listeners.error).toHaveBeenCalledWith({
+      error,
+      code: 3,
+      kind: "decode",
+      message: "decode audio: The format of the data has not been recognized.",
+      nativeCode: "DECODE_ERROR",
+    });
+  });
+
   it("ignores stale sidecar events from previous load requests", async () => {
     const api = createFakeAudioSidecarApi();
     const backend = new ElectronAudioSidecarPlaybackBackend(api);

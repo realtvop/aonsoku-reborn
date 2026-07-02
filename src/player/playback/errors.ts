@@ -22,6 +22,7 @@ const nativeErrorKindByCode = new Map<string, PlaybackErrorKind>([
   ["load_failed", "network"],
   ["playback_failed", "network"],
   ["decode", "decode"],
+  ["decode_error", "decode"],
   ["decode_failed", "decode"],
   ["invalid_source", "source-not-supported"],
   ["unsupported_source", "source-not-supported"],
@@ -71,7 +72,7 @@ export function nativePlaybackErrorKind(
 ): PlaybackErrorKind {
   if (!nativeCode) return "unknown";
 
-  return nativeErrorKindByCode.get(nativeCode) ?? "unknown";
+  return nativeErrorKindByCode.get(nativeCode.toLowerCase()) ?? "unknown";
 }
 
 export function getPlaybackErrorKind(
