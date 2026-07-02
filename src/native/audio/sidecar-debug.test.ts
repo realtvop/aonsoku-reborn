@@ -148,6 +148,12 @@ describe("audio sidecar debug harness", () => {
     ]);
     expect(result.summary).toEqual({
       ok: false,
+      observed: {
+        playing: true,
+        paused: false,
+        stopped: false,
+        progress: true,
+      },
       eventNames: ["playbackStateChanged", "playbackStateChanged", "progress"],
       playbackStates: ["playing", "playing"],
       latestProgress: {
@@ -155,6 +161,53 @@ describe("audio sidecar debug harness", () => {
         duration: 10,
       },
       errorMessages: ["pause failed"],
+    });
+  });
+
+  it("marks a smoke sequence ok after play pause stop and progress", async () => {
+    const api = createFakeAudioSidecarApi();
+    const harness = createAudioSidecarDebugHarness(api);
+
+    vi.mocked(api.play).mockImplementation(async () => {
+      api.emitEvent({
+        event: "playbackStateChanged",
+        payload: {
+          state: "playing",
+        },
+      });
+      api.emitEvent({
+        event: "progress",
+        payload: {
+          currentTime: 1,
+          duration: 10,
+        },
+      });
+    });
+    vi.mocked(api.pause).mockImplementation(async () => {
+      api.emitEvent({
+        event: "playbackStateChanged",
+        payload: {
+          state: "paused",
+        },
+      });
+    });
+    vi.mocked(api.stopPlayback).mockImplementation(async () => {
+      api.emitEvent({
+        event: "playbackStateChanged",
+        payload: {
+          state: "stopped",
+        },
+      });
+    });
+
+    const result = await harness.smokeStream("https://example.test/song.mp3");
+
+    expect(result.summary.ok).toBe(true);
+    expect(result.summary.observed).toEqual({
+      playing: true,
+      paused: true,
+      stopped: true,
+      progress: true,
     });
   });
 

@@ -53,6 +53,12 @@ export type AudioSidecarDebugSmokeResult = {
 
 export type AudioSidecarDebugSmokeSummary = {
   ok: boolean;
+  observed: {
+    playing: boolean;
+    paused: boolean;
+    stopped: boolean;
+    progress: boolean;
+  };
   eventNames: string[];
   playbackStates: string[];
   latestProgress: {
@@ -217,9 +223,21 @@ function summarizeSmokeResult(
       };
     }
   }
+  const observed = {
+    playing: playbackStates.includes("playing"),
+    paused: playbackStates.includes("paused"),
+    stopped: playbackStates.includes("stopped"),
+    progress: latestProgress !== null,
+  };
 
   return {
-    ok: errors.length === 0,
+    ok:
+      errors.length === 0 &&
+      observed.playing &&
+      observed.paused &&
+      observed.stopped &&
+      observed.progress,
+    observed,
     eventNames: events.map(({ event }) => event),
     playbackStates,
     latestProgress,
