@@ -32,8 +32,8 @@ control, sleep timer, system volume support, progressive network buffering, or
 renderer playback routing through the sidecar.
 
 The Electron bridge is intentionally dev-only and opt-in. It exists so future
-renderer integration work can manually drive the mock sidecar MVP commands, but
-the current player still uses the existing playback backend unless later code
+renderer integration work can manually drive the sidecar MVP commands, but the
+current player still uses the existing playback backend unless later code
 explicitly routes playback through this bridge.
 
 ## Run And Test
@@ -94,6 +94,32 @@ While the process is running, the sidecar periodically drains backend events and
 emits progress updates during playback. When Rodio reports that the active
 source has finished, the sidecar emits `playbackStateChanged` with `ended` and
 an `ended` event with reason `finished`.
+
+## Electron Dev Harness
+
+Launch Electron in dev mode with the bridge flag enabled:
+
+```bash
+AONSOKU_PLAYERD_BRIDGE=1 pnpm run electron:dev
+```
+
+When the bridge is available, the renderer installs
+`window.aonsokuAudioSidecarDebug` for console-only manual smoke testing. This
+does not route normal player playback through the sidecar.
+
+Example console commands:
+
+```js
+await window.aonsokuAudioSidecarDebug.loadStream("https://server/song.mp3", {
+  autoplay: true,
+});
+await window.aonsokuAudioSidecarDebug.pause();
+await window.aonsokuAudioSidecarDebug.seek(30);
+await window.aonsokuAudioSidecarDebug.play();
+await window.aonsokuAudioSidecarDebug.stop();
+window.aonsokuAudioSidecarDebug.events;
+window.aonsokuAudioSidecarDebug.errors;
+```
 
 ## Contract Mapping
 

@@ -20,6 +20,12 @@ import { blockFeatures } from "@/utils/browser";
 
 blockFeatures();
 
+if (import.meta.env.DEV) {
+  installAudioSidecarDebugHarnessForDev().catch((error) => {
+    console.warn("[AudioSidecarDebug] install failed", error);
+  });
+}
+
 window.addEventListener("beforeunload", flushNativeWrites);
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) flushNativeWrites();
@@ -41,3 +47,13 @@ async function bootstrap() {
 }
 
 bootstrap();
+
+async function installAudioSidecarDebugHarnessForDev() {
+  const { installAudioSidecarDebugHarness } = await import(
+    "@/native/audio/sidecar-debug"
+  );
+  await installAudioSidecarDebugHarness(window, {
+    isDev: true,
+    log: console,
+  });
+}
