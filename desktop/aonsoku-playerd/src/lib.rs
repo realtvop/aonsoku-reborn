@@ -1,3 +1,5 @@
+pub mod protocol;
+
 pub const PROTOCOL_VERSION: u32 = 1;
 
 pub fn version_banner() -> String {
@@ -13,4 +15,3 @@ mod tests {
         assert_eq!(version_banner(), "aonsoku-playerd protocol v1");
     }
 }
-
