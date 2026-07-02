@@ -57,6 +57,17 @@ Run the optional Electron-to-sidecar smoke test after Rust is available:
 AONSOKU_PLAYERD_SMOKE=1 ./node_modules/.bin/vitest run electron/main/core/audioSidecarManager.test.ts
 ```
 
+Run the opt-in real Rodio stream smoke test on a desktop with an audio output
+device:
+
+```bash
+AONSOKU_PLAYERD_REAL_SMOKE_URL="https://server/song.mp3" ./node_modules/.bin/vitest run electron/main/core/audioSidecarManager.test.ts
+```
+
+That smoke test drives `load`, `play`, `seek`, `pause`, and `stop` through the
+Electron `AudioSidecarManager` and the Rust sidecar without routing the normal
+player through the sidecar.
+
 Run a manual stdio smoke test against the deterministic mock backend:
 
 ```bash

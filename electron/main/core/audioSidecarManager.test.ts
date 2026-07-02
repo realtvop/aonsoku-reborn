@@ -294,6 +294,9 @@ describe("resolveAudioSidecarSpawnCommand", () => {
 });
 
 const sidecarSmoke = process.env.AONSOKU_PLAYERD_SMOKE === "1" ? it : it.skip;
+const realSidecarSmoke = process.env.AONSOKU_PLAYERD_REAL_SMOKE_URL
+  ? it
+  : it.skip;
 
 describe("AudioSidecarManager sidecar smoke", () => {
   sidecarSmoke("drives the Rust mock sidecar MVP commands", async () => {
@@ -364,6 +367,65 @@ describe("AudioSidecarManager sidecar smoke", () => {
       }),
     });
   });
+
+  realSidecarSmoke(
+    "drives the Rust Rodio sidecar against a real stream",
+    async () => {
+      const streamUrl = process.env.AONSOKU_PLAYERD_REAL_SMOKE_URL;
+      expect(streamUrl).toBeTruthy();
+
+      const events: unknown[] = [];
+      const errors: Error[] = [];
+      const manager = new AudioSidecarManager({
+        requestIdPrefix: "real-smoke",
+        requestTimeoutMs: 30_000,
+      });
+
+      manager.onAudioEvent((event) => {
+        events.push(event);
+      });
+      manager.onSidecarError((error) => {
+        errors.push(error);
+      });
+
+      manager.start();
+
+      try {
+        await manager.load({
+          source: {
+            kind: "stream",
+            url: streamUrl as string,
+          },
+          autoplay: false,
+        });
+        await manager.play();
+        await waitFor(() =>
+          events.some((event) => matchesEvent(event, "progress", {})),
+        );
+        await manager.seek({
+          position: 1,
+        });
+        await manager.pause();
+        await manager.stopPlayback();
+      } finally {
+        manager.stop();
+      }
+
+      expect(errors).toEqual([]);
+      expect(events).toContainEqual({
+        event: "playbackStateChanged",
+        payload: expect.objectContaining({
+          state: "playing",
+        }),
+      });
+      expect(events).toContainEqual({
+        event: "playbackStateChanged",
+        payload: expect.objectContaining({
+          state: "stopped",
+        }),
+      });
+    },
+  );
 });
 
 function createManager(
