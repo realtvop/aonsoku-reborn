@@ -5,6 +5,10 @@ import {
   AudioSidecarBridge,
   isAudioSidecarBridgeEnabled,
 } from "./audioSidecarBridge";
+import {
+  AudioSidecarManager,
+  resolveAudioSidecarRequestTimeoutMs,
+} from "./audioSidecarManager";
 
 let activeBridge: AudioSidecarBridge | null = null;
 let cleanupActiveBridge: (() => void) | null = null;
@@ -15,6 +19,10 @@ export function setupAudioSidecarIpc(window: BrowserWindow): void {
   const bridge = new AudioSidecarBridge({
     enabled: isAudioSidecarBridgeEnabled(process.env, is.dev),
     getWindow: () => window,
+    managerFactory: () =>
+      new AudioSidecarManager({
+        requestTimeoutMs: resolveAudioSidecarRequestTimeoutMs(process.env),
+      }),
     eventChannel: IpcChannels.AudioSidecarEvent,
     errorChannel: IpcChannels.AudioSidecarError,
   });

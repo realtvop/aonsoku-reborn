@@ -6,6 +6,8 @@ import {
   AudioSidecarManager,
   type AudioSidecarManagerOptions,
   type AudioSidecarProcess,
+  DEFAULT_AUDIO_SIDECAR_REQUEST_TIMEOUT_MS,
+  resolveAudioSidecarRequestTimeoutMs,
   resolveAudioSidecarSpawnCommand,
 } from "./audioSidecarManager";
 
@@ -290,6 +292,35 @@ describe("resolveAudioSidecarSpawnCommand", () => {
       ],
       cwd: "/tmp/aonsoku-playerd-test/desktop/aonsoku-playerd",
     });
+  });
+});
+
+describe("resolveAudioSidecarRequestTimeoutMs", () => {
+  it("uses the default timeout when no override is provided", () => {
+    expect(resolveAudioSidecarRequestTimeoutMs({})).toBe(
+      DEFAULT_AUDIO_SIDECAR_REQUEST_TIMEOUT_MS,
+    );
+  });
+
+  it("accepts a positive integer env override", () => {
+    expect(
+      resolveAudioSidecarRequestTimeoutMs({
+        AONSOKU_PLAYERD_REQUEST_TIMEOUT_MS: "30000",
+      }),
+    ).toBe(30_000);
+  });
+
+  it("ignores invalid env overrides", () => {
+    expect(
+      resolveAudioSidecarRequestTimeoutMs({
+        AONSOKU_PLAYERD_REQUEST_TIMEOUT_MS: "-1",
+      }),
+    ).toBe(DEFAULT_AUDIO_SIDECAR_REQUEST_TIMEOUT_MS);
+    expect(
+      resolveAudioSidecarRequestTimeoutMs({
+        AONSOKU_PLAYERD_REQUEST_TIMEOUT_MS: "soon",
+      }),
+    ).toBe(DEFAULT_AUDIO_SIDECAR_REQUEST_TIMEOUT_MS);
   });
 });
 

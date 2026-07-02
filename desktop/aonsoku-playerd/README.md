@@ -68,6 +68,10 @@ That smoke test drives `load`, `play`, `seek`, `pause`, and `stop` through the
 Electron `AudioSidecarManager` and the Rust sidecar without routing the normal
 player through the sidecar.
 
+For slow dev streams, set `AONSOKU_PLAYERD_REQUEST_TIMEOUT_MS` to a larger
+positive integer before launching Electron or running the smoke test. The
+default request timeout is 10000 ms.
+
 Run a manual stdio smoke test against the deterministic mock backend:
 
 ```bash

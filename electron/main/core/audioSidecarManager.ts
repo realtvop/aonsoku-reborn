@@ -109,6 +109,8 @@ export type ResolveAudioSidecarSpawnOptions = {
   resourcesPath?: string;
 };
 
+export const DEFAULT_AUDIO_SIDECAR_REQUEST_TIMEOUT_MS = 10_000;
+
 export class AudioSidecarError extends Error {
   constructor(
     message: string,
@@ -139,7 +141,8 @@ export class AudioSidecarManager {
       options.spawnCommand ?? resolveAudioSidecarSpawnCommand();
     this.spawn = options.spawn ?? spawnAudioSidecarProcess;
     this.requestIdPrefix = options.requestIdPrefix ?? "playerd";
-    this.requestTimeoutMs = options.requestTimeoutMs ?? 10_000;
+    this.requestTimeoutMs =
+      options.requestTimeoutMs ?? DEFAULT_AUDIO_SIDECAR_REQUEST_TIMEOUT_MS;
     this.audioEventSink = options.audioEventSink;
   }
 
@@ -468,6 +471,20 @@ export function resolveAudioSidecarSpawnCommand(
     cwd: crateDir,
     env,
   };
+}
+
+export function resolveAudioSidecarRequestTimeoutMs(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const raw = env.AONSOKU_PLAYERD_REQUEST_TIMEOUT_MS;
+  if (!raw) return DEFAULT_AUDIO_SIDECAR_REQUEST_TIMEOUT_MS;
+
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_AUDIO_SIDECAR_REQUEST_TIMEOUT_MS;
+  }
+
+  return parsed;
 }
 
 function spawnAudioSidecarProcess(
