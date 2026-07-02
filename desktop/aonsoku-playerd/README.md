@@ -21,10 +21,17 @@ This crate covers the first desktop MVP boundary:
 - Electron main-process client plumbing in
   `electron/main/core/audioSidecarManager.ts` for lifecycle, request
   correlation, NDJSON parsing, and audio event fan-out
+- an opt-in Electron IPC/preload bridge exposed as `window.api.audioSidecar`
+  when Electron dev mode is running with `AONSOKU_PLAYERD_BRIDGE=1`
 
 It does not include a real native audio engine, queue control, cache/download
 management, scrobbling, remote control, sleep timer, system volume support, or
 renderer playback routing through the sidecar.
+
+The Electron bridge is intentionally dev-only and opt-in. It exists so future
+renderer integration work can manually drive the mock sidecar MVP commands, but
+the current player still uses the existing playback backend unless later code
+explicitly routes playback through this bridge.
 
 ## Run And Test
 
@@ -38,7 +45,7 @@ cargo build
 Run the Electron-side client tests from the repository root:
 
 ```bash
-./node_modules/.bin/vitest run electron/main/core/audioSidecarManager.test.ts
+./node_modules/.bin/vitest run electron/main/core/audioSidecarManager.test.ts electron/main/core/audioSidecarBridge.test.ts
 ```
 
 Run the optional Electron-to-sidecar smoke test after Rust is available:

@@ -1,3 +1,11 @@
+import type {
+  NativeAudioLoadOptions,
+  NativeAudioSeekOptions,
+} from "@aonsoku/audio-contract";
+import type {
+  AudioSidecarBridgeErrorPayload,
+  AudioSidecarEventEnvelope,
+} from "../main/core/audioSidecarBridge";
 import { RpcPayload } from "../main/core/discordRpc";
 import { ISettingPayload } from "../main/core/settings";
 
@@ -25,6 +33,17 @@ export enum IpcChannels {
   SetAlwaysOnTop = "set-always-on-top",
   IsAlwaysOnTop = "is-always-on-top",
   FocusMainWindow = "focus-main-window",
+  // Audio sidecar bridge
+  AudioSidecarIsAvailable = "audio-sidecar:is-available",
+  AudioSidecarStart = "audio-sidecar:start",
+  AudioSidecarStop = "audio-sidecar:stop",
+  AudioSidecarLoad = "audio-sidecar:load",
+  AudioSidecarPlay = "audio-sidecar:play",
+  AudioSidecarPause = "audio-sidecar:pause",
+  AudioSidecarStopPlayback = "audio-sidecar:stop-playback",
+  AudioSidecarSeek = "audio-sidecar:seek",
+  AudioSidecarEvent = "audio-sidecar:event",
+  AudioSidecarError = "audio-sidecar:error",
 }
 
 export type OverlayColors = {
@@ -77,9 +96,26 @@ export interface IAonsokuAPI {
   removeMiniPlayerStatusListener: () => void;
   setAlwaysOnTop: (isAlwaysOnTop: boolean) => void;
   isAlwaysOnTop: () => Promise<boolean>;
+  // Audio Sidecar
+  audioSidecar: IAonsokuAudioSidecarAPI;
   // App Update
   update: {
     checkForUpdates: () => Promise<void>;
     getVersion: () => Promise<string>;
   };
+}
+
+export interface IAonsokuAudioSidecarAPI {
+  isAvailable: () => Promise<boolean>;
+  start: () => Promise<void>;
+  stop: () => Promise<void>;
+  load: (options: NativeAudioLoadOptions) => Promise<void>;
+  play: () => Promise<void>;
+  pause: () => Promise<void>;
+  stopPlayback: () => Promise<void>;
+  seek: (options: NativeAudioSeekOptions) => Promise<void>;
+  onEvent: (func: (event: AudioSidecarEventEnvelope) => void) => () => void;
+  onError: (
+    func: (error: AudioSidecarBridgeErrorPayload) => void,
+  ) => () => void;
 }

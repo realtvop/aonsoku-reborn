@@ -1,5 +1,5 @@
 import { electronAPI } from "@electron-toolkit/preload";
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, type IpcRendererEvent, ipcRenderer } from "electron";
 import { IAonsokuAPI, IpcChannels, PlayerStateListenerActions } from "./types";
 
 // Custom APIs for renderer
@@ -66,6 +66,42 @@ const api: IAonsokuAPI = {
   setAlwaysOnTop: (isAlwaysOnTop) =>
     ipcRenderer.send(IpcChannels.SetAlwaysOnTop, isAlwaysOnTop),
   isAlwaysOnTop: () => ipcRenderer.invoke(IpcChannels.IsAlwaysOnTop),
+  // Audio Sidecar
+  audioSidecar: {
+    isAvailable: () => ipcRenderer.invoke(IpcChannels.AudioSidecarIsAvailable),
+    start: () => ipcRenderer.invoke(IpcChannels.AudioSidecarStart),
+    stop: () => ipcRenderer.invoke(IpcChannels.AudioSidecarStop),
+    load: (options) =>
+      ipcRenderer.invoke(IpcChannels.AudioSidecarLoad, options),
+    play: () => ipcRenderer.invoke(IpcChannels.AudioSidecarPlay),
+    pause: () => ipcRenderer.invoke(IpcChannels.AudioSidecarPause),
+    stopPlayback: () =>
+      ipcRenderer.invoke(IpcChannels.AudioSidecarStopPlayback),
+    seek: (options) =>
+      ipcRenderer.invoke(IpcChannels.AudioSidecarSeek, options),
+    onEvent: (func) => {
+      const listener = (_: IpcRendererEvent, event: unknown) => {
+        func(event as Parameters<typeof func>[0]);
+      };
+
+      ipcRenderer.on(IpcChannels.AudioSidecarEvent, listener);
+
+      return () => {
+        ipcRenderer.off(IpcChannels.AudioSidecarEvent, listener);
+      };
+    },
+    onError: (func) => {
+      const listener = (_: IpcRendererEvent, error: unknown) => {
+        func(error as Parameters<typeof func>[0]);
+      };
+
+      ipcRenderer.on(IpcChannels.AudioSidecarError, listener);
+
+      return () => {
+        ipcRenderer.off(IpcChannels.AudioSidecarError, listener);
+      };
+    },
+  },
 
   // App Update
   update: {

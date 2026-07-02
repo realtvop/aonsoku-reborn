@@ -8,6 +8,7 @@ import {
 import { getIsQuitting } from "../index";
 import { setupMiniPlayerIpc } from "../mini-player";
 import { tray, updateTray } from "../tray";
+import { setupAudioSidecarIpc } from "./audioSidecarIpc";
 import { colorsState } from "./colors";
 import {
   clearDiscordRpcActivity,
@@ -84,6 +85,7 @@ export function setupIpcEvents(window: BrowserWindow | null) {
   ipcMain.removeAllListeners();
 
   setupMiniPlayerIpc();
+  setupAudioSidecarIpc(window);
 
   ipcMain.on(IpcChannels.ToggleFullscreen, (_, isFullscreen: boolean) => {
     window.setFullScreen(isFullscreen);
