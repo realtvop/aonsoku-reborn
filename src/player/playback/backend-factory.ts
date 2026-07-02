@@ -4,6 +4,12 @@ import {
 } from "@/native/audio";
 import { getPlaybackCapabilities } from "@/utils/capabilities";
 import {
+  createElectronAudioSidecarPlaybackBackend,
+  getElectronAudioSidecarAvailability,
+  type ElectronAudioSidecarAvailability,
+  type ElectronAudioSidecarPlaybackBackend,
+} from "./sidecar-backend";
+import {
   createNativeAudioPlaybackBackend,
   type NativeAudioPlaybackBackend,
 } from "./native-backend";
@@ -13,7 +19,7 @@ import {
   type WebAudioPlaybackBackendOptions,
 } from "./web-backend";
 
-export type PlaybackBackendKind = "web" | "native";
+export type PlaybackBackendKind = "web" | "native" | "sidecar";
 
 export interface PlaybackBackendSelection {
   backend: PlaybackBackend;
@@ -22,10 +28,14 @@ export interface PlaybackBackendSelection {
 }
 
 export interface PlaybackBackendSelectionOptions {
+  createSidecarBackend?: (
+    availability: Extract<ElectronAudioSidecarAvailability, { available: true }>,
+  ) => PlaybackBackend;
   createNativeBackend?: (
     availability: Extract<NativeAudioPluginAvailability, { available: true }>,
   ) => PlaybackBackend;
   createWebBackend?: (audio: HTMLAudioElement) => PlaybackBackend;
+  getSidecarAvailability?: () => ElectronAudioSidecarAvailability;
   getNativeAudioAvailability?: () => NativeAudioPluginAvailability;
   getCapabilities?: () => ReturnType<typeof getPlaybackCapabilities>;
   webOptions?: WebAudioPlaybackBackendOptions;
@@ -40,6 +50,28 @@ export function createPlaybackBackend(
     options.createWebBackend ??
     ((webAudio: HTMLAudioElement) =>
       createWebAudioPlaybackBackend(webAudio, options.webOptions));
+
+  const sidecarAvailability = (
+    options.getSidecarAvailability ?? getElectronAudioSidecarAvailability
+  )();
+
+  if (sidecarAvailability.available) {
+    try {
+      return {
+        backend:
+          options.createSidecarBackend?.(sidecarAvailability) ??
+          createElectronAudioSidecarPlaybackBackend(sidecarAvailability.api),
+        kind: "sidecar",
+      };
+    } catch (error) {
+      return {
+        backend: createWebBackend(audio),
+        kind: "web",
+        fallbackReason:
+          error instanceof Error ? error.message : "sidecar-backend-error",
+      };
+    }
+  }
 
   if (!caps.supportsNativePlayback) {
     return {
@@ -80,9 +112,16 @@ export function createPlaybackBackend(
 export function shouldUseNativePlaybackBackend(
   options: Pick<
     PlaybackBackendSelectionOptions,
-    "getNativeAudioAvailability" | "getCapabilities"
+    | "getSidecarAvailability"
+    | "getNativeAudioAvailability"
+    | "getCapabilities"
   > = {},
 ) {
+  const sidecarAvailability = (
+    options.getSidecarAvailability ?? getElectronAudioSidecarAvailability
+  )();
+  if (sidecarAvailability.available) return true;
+
   const caps = (options.getCapabilities ?? getPlaybackCapabilities)();
   if (!caps.supportsNativePlayback) {
     return false;
@@ -93,4 +132,4 @@ export function shouldUseNativePlaybackBackend(
   )().available;
 }
 
-export type { NativeAudioPlaybackBackend };
+export type { ElectronAudioSidecarPlaybackBackend, NativeAudioPlaybackBackend };

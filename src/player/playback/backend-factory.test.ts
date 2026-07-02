@@ -85,6 +85,29 @@ describe("playback backend selection", () => {
     });
   });
 
+  it("prefers the Electron sidecar backend when it is feature-flagged", () => {
+    const webBackend = makeBackend();
+    const nativeBackend = makeBackend();
+    const sidecarBackend = makeBackend();
+
+    const selection = createPlaybackBackend(makeAudio(), {
+      getCapabilities: () => caps({ supportsNativePlayback: true }),
+      getSidecarAvailability: () => ({
+        available: true,
+        api: {} as Window["api"]["audioSidecar"],
+      }),
+      getNativeAudioAvailability: makeAvailablePlugin,
+      createWebBackend: () => webBackend,
+      createNativeBackend: () => nativeBackend,
+      createSidecarBackend: () => sidecarBackend,
+    });
+
+    expect(selection).toEqual({
+      backend: sidecarBackend,
+      kind: "sidecar",
+    });
+  });
+
   it("falls back to web when the plugin is missing", () => {
     const webBackend = makeBackend();
     const nativeFactory = vi.fn(() => makeBackend());
@@ -127,6 +150,28 @@ describe("playback backend selection", () => {
     });
   });
 
+  it("falls back to web if sidecar backend construction fails", () => {
+    const webBackend = makeBackend();
+
+    const selection = createPlaybackBackend(makeAudio(), {
+      getCapabilities: () => caps({ supportsNativePlayback: false }),
+      getSidecarAvailability: () => ({
+        available: true,
+        api: {} as Window["api"]["audioSidecar"],
+      }),
+      createWebBackend: () => webBackend,
+      createSidecarBackend: () => {
+        throw new Error("sidecar unavailable");
+      },
+    });
+
+    expect(selection).toEqual({
+      backend: webBackend,
+      kind: "web",
+      fallbackReason: "sidecar unavailable",
+    });
+  });
+
   it("reports whether native playback should be used", () => {
     expect(
       shouldUseNativePlaybackBackend({
@@ -148,6 +193,15 @@ describe("playback backend selection", () => {
       shouldUseNativePlaybackBackend({
         getCapabilities: () => caps({ supportsNativePlayback: true }),
         getNativeAudioAvailability: makeAvailablePlugin,
+      }),
+    ).toBe(true);
+    expect(
+      shouldUseNativePlaybackBackend({
+        getCapabilities: () => caps({ supportsNativePlayback: false }),
+        getSidecarAvailability: () => ({
+          available: true,
+          api: {} as Window["api"]["audioSidecar"],
+        }),
       }),
     ).toBe(true);
   });

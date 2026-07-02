@@ -561,7 +561,7 @@ export function AudioPlayer({
     Promise.resolve(entry.backend.setRepeatMode(repeatMode)).catch((error) => {
       logger.info("[PlaybackBackend] repeat sync failed", error);
     });
-    if (entry.kind !== "native") {
+    if (entry.kind === "web") {
       Promise.resolve(entry.backend.setShuffle(isShuffleActive)).catch(
         (error) => {
           logger.info("[PlaybackBackend] shuffle sync failed", error);
@@ -575,7 +575,7 @@ export function AudioPlayer({
     if (!audio) return;
 
     const backendEntry = getPlaybackBackendEntry(audio);
-    if (!backendEntry || backendEntry.kind !== "native") return;
+    if (!backendEntry || backendEntry.kind === "web") return;
 
     const unsubscribeProgress = backendEntry.backend.subscribe(
       "progress",
@@ -755,7 +755,7 @@ export function AudioPlayer({
             return;
           }
 
-          if (backendRef.current?.kind === "native") {
+          if (isDetachedPlaybackBackendKind(backendRef.current?.kind)) {
             logger.info(
               "[PlayEffect:SKIP] reason=nativeBackend | native player handles its own playback",
             );
@@ -767,7 +767,7 @@ export function AudioPlayer({
         } else {
           sessionRef.current.consumeSyncPlayHandled();
 
-          if (backendRef.current?.kind === "native") {
+          if (isDetachedPlaybackBackendKind(backendRef.current?.kind)) {
             logger.info(
               "[PlayEffect:SKIP] reason=nativeBackend | native player handles its own playback",
             );
@@ -960,4 +960,8 @@ export function AudioPlayer({
       preload="auto"
     />
   );
+}
+
+function isDetachedPlaybackBackendKind(kind?: PlaybackBackendKind) {
+  return kind === "native" || kind === "sidecar";
 }
