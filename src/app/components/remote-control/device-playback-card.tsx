@@ -78,7 +78,7 @@ export function DevicePlaybackCard({
   const { device, snapshot } = model;
 
   const currentDeviceId = useCoordinationStore((state) => state.deviceId);
-  const isSelf = device.id === currentDeviceId;
+  const isSelf = device.id === currentDeviceId || device.platform === "local";
 
   // Local song hooks
   const localSong = usePlayerCurrentSong();

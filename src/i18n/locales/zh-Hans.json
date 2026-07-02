@@ -666,7 +666,9 @@
         "label": "错误",
         "missingFields": "请填写所有字段",
         "connectFailed": "连接失败",
-        "disconnectedDescription": "协调服务器重新连接前，远程设备暂不可用。"
+        "disconnectedDescription": "协调服务器重新连接前，远程设备暂不可用。",
+        "unconfiguredTitle": "跨设备播放",
+        "unconfiguredDescription": "连接到协调服务器"
       },
       "disconnect": "断开此设备",
       "connected": "已连接",

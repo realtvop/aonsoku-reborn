@@ -654,7 +654,9 @@
         "label": "Error",
         "missingFields": "Fill in all fields",
         "connectFailed": "Connection failed",
-        "disconnectedDescription": "Remote devices are unavailable until the coordination server reconnects."
+        "disconnectedDescription": "Remote devices are unavailable until the coordination server reconnects.",
+        "unconfiguredTitle": "Cross-device Playback",
+        "unconfiguredDescription": "Connect to coordination server"
       },
       "disconnect": "Disconnect this device",
       "connected": "Connected",
