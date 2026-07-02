@@ -36,9 +36,7 @@ export type ElectronAudioSidecarAvailability =
       reason: "disabled" | "unsupported-platform" | "missing-bridge";
     };
 
-export class ElectronAudioSidecarPlaybackBackend
-  implements PlaybackBackend
-{
+export class ElectronAudioSidecarPlaybackBackend implements PlaybackBackend {
   readonly #api: AudioSidecarApi;
   readonly #listeners: ListenerMap;
   readonly #removeEventListener: () => void;
@@ -239,8 +237,10 @@ export function createElectronAudioSidecarPlaybackBackend(
 }
 
 export function getElectronAudioSidecarAvailability(
-  target: Pick<Window, "api" | "localStorage"> | undefined =
-    typeof window === "undefined" ? undefined : window,
+  target: Pick<Window, "api" | "localStorage"> | undefined = typeof window ===
+  "undefined"
+    ? undefined
+    : window,
 ): ElectronAudioSidecarAvailability {
   if (!isAudioSidecarPlaybackEnabled(target)) {
     return { available: false, reason: "disabled" };
@@ -261,8 +261,10 @@ export function getElectronAudioSidecarAvailability(
 }
 
 export function isAudioSidecarPlaybackEnabled(
-  target: Pick<Window, "localStorage"> | undefined =
-    typeof window === "undefined" ? undefined : window,
+  target: Pick<Window, "localStorage"> | undefined = typeof window ===
+  "undefined"
+    ? undefined
+    : window,
 ) {
   if (!import.meta.env.DEV) return false;
 

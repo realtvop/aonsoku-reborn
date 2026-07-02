@@ -29,7 +29,10 @@ export interface PlaybackBackendSelection {
 
 export interface PlaybackBackendSelectionOptions {
   createSidecarBackend?: (
-    availability: Extract<ElectronAudioSidecarAvailability, { available: true }>,
+    availability: Extract<
+      ElectronAudioSidecarAvailability,
+      { available: true }
+    >,
   ) => PlaybackBackend;
   createNativeBackend?: (
     availability: Extract<NativeAudioPluginAvailability, { available: true }>,
@@ -112,9 +115,7 @@ export function createPlaybackBackend(
 export function shouldUseNativePlaybackBackend(
   options: Pick<
     PlaybackBackendSelectionOptions,
-    | "getSidecarAvailability"
-    | "getNativeAudioAvailability"
-    | "getCapabilities"
+    "getSidecarAvailability" | "getNativeAudioAvailability" | "getCapabilities"
   > = {},
 ) {
   const sidecarAvailability = (

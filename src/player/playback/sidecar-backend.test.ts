@@ -243,9 +243,7 @@ describe("Electron sidecar playback flag", () => {
     mockHasElectronBridge.mockReturnValue(true);
     const api = createFakeAudioSidecarApi();
 
-    expect(
-      getElectronAudioSidecarAvailability(createTarget({}, api)),
-    ).toEqual({
+    expect(getElectronAudioSidecarAvailability(createTarget({}, api))).toEqual({
       available: true,
       api,
     });

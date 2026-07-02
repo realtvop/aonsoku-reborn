@@ -86,9 +86,14 @@ export function AudioPlayer({
   const seekToStart = usePlayerStore((s) => s.playerState.seekToStart);
   const isRemoteControlActive = useIsRemoteControlActive();
   const playbackCapabilities = useMemo(() => getPlaybackCapabilities(), []);
+  const shouldUseDetachedPlayback = useMemo(
+    () => shouldUseNativePlaybackBackend(),
+    [],
+  );
 
   const shouldUseWebAudioReplayGain =
     playbackCapabilities.supportsWebAudioReplayGain &&
+    !shouldUseDetachedPlayback &&
     isSong &&
     replayGainEnabled &&
     !replayGainError &&
@@ -698,12 +703,19 @@ export function AudioPlayer({
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !isSong) return;
-    if (shouldUseNativePlaybackBackend()) return;
+    if (shouldUseDetachedPlayback) return;
 
     if (!audioSrc && !songId) {
       pauseAudio(audio);
     }
-  }, [audioRef, audioSrc, songId, isSong, pauseAudio]);
+  }, [
+    audioRef,
+    audioSrc,
+    songId,
+    isSong,
+    pauseAudio,
+    shouldUseDetachedPlayback,
+  ]);
 
   useEffect(() => {
     async function handleSongPlayback() {
@@ -849,13 +861,11 @@ export function AudioPlayer({
     return "anonymous";
   }, [shouldUseWebAudioReplayGain, audioSrc]);
 
-  const shouldAttachDomAudioSource = !shouldUseNativePlaybackBackend();
-
   return (
     <audio
       ref={audioRef}
       {...props}
-      src={shouldAttachDomAudioSource ? audioSrc : undefined}
+      src={shouldUseDetachedPlayback ? undefined : audioSrc}
       crossOrigin={crossOrigin}
       onError={handleError}
       onTimeUpdate={handleTimeUpdate}
