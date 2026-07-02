@@ -148,6 +148,44 @@ describe("AudioSidecarManager", () => {
     ]);
   });
 
+  it("forwards sidecar playback error events without throwing", async () => {
+    const fake = new FakeSidecarProcess();
+    const listenerEvents: unknown[] = [];
+    const manager = createManager(fake);
+    manager.onAudioEvent((event) => {
+      listenerEvents.push(event);
+    });
+
+    manager.start();
+    expect(() => {
+      fake.stdout.write(
+        `${JSON.stringify({
+          event: "error",
+          payload: {
+            requestId: "playerd:load:1",
+            code: "DECODE_ERROR",
+            message:
+              "decode audio: The format of the data has not been recognized.",
+          },
+        })}\n`,
+      );
+    }).not.toThrow();
+
+    await waitFor(() => listenerEvents.length === 1);
+
+    expect(listenerEvents).toEqual([
+      {
+        event: "error",
+        payload: {
+          requestId: "playerd:load:1",
+          code: "DECODE_ERROR",
+          message:
+            "decode audio: The format of the data has not been recognized.",
+        },
+      },
+    ]);
+  });
+
   it("emits protocol errors instead of forwarding invalid audio events", async () => {
     const fake = new FakeSidecarProcess();
     const listenerEvents: unknown[] = [];

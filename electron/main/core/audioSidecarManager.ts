@@ -344,7 +344,9 @@ export class AudioSidecarManager {
   private emitAudioEvent(envelope: AudioSidecarEventEnvelope): void {
     this.audioEventSink?.(envelope);
     this.emitter.emit("audio-event", envelope);
-    this.emitter.emit(envelope.event, envelope.payload);
+    if (envelope.event !== "error") {
+      this.emitter.emit(envelope.event, envelope.payload);
+    }
   }
 
   private resolveResponse(response: JsonRpcSuccess): void {
