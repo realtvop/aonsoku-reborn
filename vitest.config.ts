@@ -4,6 +4,10 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   resolve: {
     alias: {
+      "@aonsoku/audio-contract": path.resolve(
+        __dirname,
+        "./packages/audio-contract/src",
+      ),
       "@": path.resolve(__dirname, "./src"),
     },
   },

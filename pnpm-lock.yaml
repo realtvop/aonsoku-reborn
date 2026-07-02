@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@aonsoku/audio-contract':
+        specifier: workspace:*
+        version: link:packages/audio-contract
       '@aonsoku/capacitor-native':
         specifier: workspace:*
         version: link:capacitor-plugins/capacitor-native
@@ -432,9 +435,14 @@ importers:
 
   capacitor-plugins/capacitor-native:
     dependencies:
+      '@aonsoku/audio-contract':
+        specifier: workspace:*
+        version: link:../../packages/audio-contract
       '@capacitor/core':
         specifier: '>=8.0.0'
         version: 8.3.4
+
+  packages/audio-contract: {}
 
 packages:
 

@@ -37,6 +37,10 @@ export default defineConfig(() => {
       },
       resolve: {
         alias: {
+          "@aonsoku/audio-contract": resolve(
+            __dirname,
+            "./packages/audio-contract/src",
+          ),
           "@": resolve(__dirname, "./src"),
         },
       },

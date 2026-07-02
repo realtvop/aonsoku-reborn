@@ -9,6 +9,7 @@
     /* shadcn/ui */
     "baseUrl": ".",
     "paths": {
+      "@aonsoku/audio-contract": ["./packages/audio-contract/src/index.ts"],
       "@/*": ["./src/*"],
       "cy/*": ["./cypress/*"]
     },

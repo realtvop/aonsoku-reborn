@@ -1,5 +1,5 @@
+import type * as AudioContract from "@aonsoku/audio-contract";
 import type * as PackageAudio from "@aonsoku/capacitor-native/audio";
-import type * as AudioContract from "@aonsoku/capacitor-native/audio/contract";
 import type * as AppAudio from "@/native/audio";
 
 type IsEqual<TLeft, TRight> = (<T>() => T extends TLeft ? 1 : 2) extends <
@@ -11,14 +11,11 @@ type IsEqual<TLeft, TRight> = (<T>() => T extends TLeft ? 1 : 2) extends <
 type Assert<TValue extends true> = TValue;
 
 export type AppAudioPluginUsesContract = Assert<
-  IsEqual<AppAudio.NativeAudioPlugin, AudioContract.NativeAudioPlugin>
+  IsEqual<AppAudio.NativeAudioPlugin, PackageAudio.NativeAudioPlugin>
 >;
 
 export type PackageAudioPluginUsesContract = Assert<
-  IsEqual<
-    PackageAudio.AonsokuNativeAudioPlugin,
-    AudioContract.NativeAudioPlugin
-  >
+  IsEqual<PackageAudio.AonsokuNativeAudioPlugin, PackageAudio.NativeAudioPlugin>
 >;
 
 export type AppAudioEventsUseContract = Assert<
@@ -31,4 +28,8 @@ export type PackageAudioEventsUseContract = Assert<
 
 export type DesktopBridgeApiUsesContract = Assert<
   IsEqual<PackageAudio.AonsokuAudioApi, AudioContract.AonsokuAudioApi>
+>;
+
+export type DesktopBridgeEventsUseContract = Assert<
+  IsEqual<PackageAudio.AonsokuAudioBridge, AudioContract.AonsokuAudioBridge>
 >;

@@ -1,5 +1,6 @@
 packages:
   - "."
+  - "packages/*"
   - "capacitor-plugins/*"
 
 allowBuilds:

@@ -38,6 +38,7 @@
     "url": "https://github.com/realtvop/aonsoku-reborn.git"
   },
   "dependencies": {
+    "@aonsoku/audio-contract": "workspace:*",
     "@aonsoku/capacitor-native": "workspace:*",
     "@applemusic-like-lyrics/core": "0.2.0",
     "@applemusic-like-lyrics/lyric": "0.3.0",

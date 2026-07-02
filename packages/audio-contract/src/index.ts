@@ -1,12 +1,10 @@
-import type { Plugin, PluginListenerHandle } from "@capacitor/core";
-
 export const NATIVE_AUDIO_PLUGIN_NAME = "AonsokuNativeAudio";
 
 /**
- * App-facing audio boundary shared by React, Capacitor native plugins, and
- * future desktop bridges. This file is the source of truth for method payloads,
- * return payloads, and event payloads; platform adapters should re-export or
- * narrow these types instead of redefining them.
+ * Host-agnostic audio boundary shared by React, Capacitor native plugins, and
+ * future desktop bridges. This package is the source of truth for method
+ * payloads, return payloads, event payloads, and listener handles; platform
+ * adapters should re-export or narrow these types instead of redefining them.
  */
 
 export type NativeAudioSource =
@@ -405,6 +403,14 @@ export interface NativeAudioEvents {
 
 export type NativeAudioEventName = keyof NativeAudioEvents;
 
+export interface AonsokuAudioListenerHandle {
+  remove(): Promise<void> | void;
+}
+
+export type AonsokuAudioEventListener<TEvent extends NativeAudioEventName> = (
+  event: NativeAudioEvents[TEvent],
+) => void;
+
 export interface AonsokuAudioApi {
   load(options: NativeAudioLoadOptions): Promise<void>;
   play(): Promise<void>;
@@ -469,11 +475,13 @@ export interface AonsokuAudioApi {
   getSleepTimerRemaining(): Promise<NativeSleepTimerRemainingResult>;
 }
 
-export interface AonsokuNativeAudioPlugin extends Plugin, AonsokuAudioApi {
+export interface AonsokuAudioEventSource {
   addListener<TEvent extends NativeAudioEventName>(
     eventName: TEvent,
-    listenerFunc: (event: NativeAudioEvents[TEvent]) => void,
-  ): Promise<PluginListenerHandle>;
+    listenerFunc: AonsokuAudioEventListener<TEvent>,
+  ): Promise<AonsokuAudioListenerHandle>;
 }
 
-export type NativeAudioPlugin = AonsokuNativeAudioPlugin;
+export interface AonsokuAudioBridge
+  extends AonsokuAudioApi,
+    AonsokuAudioEventSource {}
