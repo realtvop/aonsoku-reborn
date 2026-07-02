@@ -139,6 +139,10 @@ window.aonsokuAudioSidecarDebug.events;
 window.aonsokuAudioSidecarDebug.errors;
 ```
 
+The smoke helpers return `{ events, errors, summary }`; check
+`summary.ok`, `summary.playbackStates`, and `summary.latestProgress` for a quick
+manual pass/fail read.
+
 Or drive the commands one at a time:
 
 ```js

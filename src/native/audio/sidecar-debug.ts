@@ -48,6 +48,18 @@ export type AudioSidecarDebugSmokeOptions = AudioSidecarDebugLoadOptions & {
 export type AudioSidecarDebugSmokeResult = {
   events: AudioSidecarEvent[];
   errors: AudioSidecarError[];
+  summary: AudioSidecarDebugSmokeSummary;
+};
+
+export type AudioSidecarDebugSmokeSummary = {
+  ok: boolean;
+  eventNames: string[];
+  playbackStates: string[];
+  latestProgress: {
+    currentTime: number;
+    duration: number;
+  } | null;
+  errorMessages: string[];
 };
 
 export type InstallAudioSidecarDebugOptions = {
@@ -177,8 +189,40 @@ async function runSmokeSequence(
   await harness.play();
   await harness.stop();
 
+  const events = harness.events.slice(startedAtEvent);
+  const errors = harness.errors.slice(startedAtError);
+
   return {
-    events: harness.events.slice(startedAtEvent),
-    errors: harness.errors.slice(startedAtError),
+    events,
+    errors,
+    summary: summarizeSmokeResult(events, errors),
+  };
+}
+
+function summarizeSmokeResult(
+  events: AudioSidecarEvent[],
+  errors: AudioSidecarError[],
+): AudioSidecarDebugSmokeSummary {
+  const playbackStates: string[] = [];
+  let latestProgress: AudioSidecarDebugSmokeSummary["latestProgress"] = null;
+
+  for (const { event, payload } of events) {
+    if (event === "playbackStateChanged") {
+      playbackStates.push(payload.state);
+    }
+    if (event === "progress") {
+      latestProgress = {
+        currentTime: payload.currentTime,
+        duration: payload.duration,
+      };
+    }
+  }
+
+  return {
+    ok: errors.length === 0,
+    eventNames: events.map(({ event }) => event),
+    playbackStates,
+    latestProgress,
+    errorMessages: errors.map(({ message }) => message),
   };
 }

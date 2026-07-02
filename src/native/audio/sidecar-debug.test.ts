@@ -82,7 +82,7 @@ describe("audio sidecar debug harness", () => {
     expect(api.stopPlayback).toHaveBeenCalled();
   });
 
-  it("returns only events and errors from a smoke sequence", async () => {
+  it("summarizes events and errors from a smoke sequence", async () => {
     const api = createFakeAudioSidecarApi();
     const harness = createAudioSidecarDebugHarness(api);
 
@@ -107,6 +107,15 @@ describe("audio sidecar debug harness", () => {
         message: "pause failed",
       });
     });
+    vi.mocked(api.stopPlayback).mockImplementation(async () => {
+      api.emitEvent({
+        event: "progress",
+        payload: {
+          currentTime: 2,
+          duration: 10,
+        },
+      });
+    });
 
     const result = await harness.smokeFile("/tmp/song.mp3");
 
@@ -123,6 +132,13 @@ describe("audio sidecar debug harness", () => {
           state: "playing",
         },
       },
+      {
+        event: "progress",
+        payload: {
+          currentTime: 2,
+          duration: 10,
+        },
+      },
     ]);
     expect(result.errors).toEqual([
       {
@@ -130,6 +146,16 @@ describe("audio sidecar debug harness", () => {
         message: "pause failed",
       },
     ]);
+    expect(result.summary).toEqual({
+      ok: false,
+      eventNames: ["playbackStateChanged", "playbackStateChanged", "progress"],
+      playbackStates: ["playing", "playing"],
+      latestProgress: {
+        currentTime: 2,
+        duration: 10,
+      },
+      errorMessages: ["pause failed"],
+    });
   });
 
   it("collects events and removes listeners on dispose", async () => {
