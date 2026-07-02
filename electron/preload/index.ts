@@ -79,6 +79,8 @@ const api: IAonsokuAPI = {
       ipcRenderer.invoke(IpcChannels.AudioSidecarStopPlayback),
     seek: (options) =>
       ipcRenderer.invoke(IpcChannels.AudioSidecarSeek, options),
+    setVolume: (options) =>
+      ipcRenderer.invoke(IpcChannels.AudioSidecarSetVolume, options),
     onEvent: (func) => {
       const listener = (_: IpcRendererEvent, event: unknown) => {
         func(event as Parameters<typeof func>[0]);

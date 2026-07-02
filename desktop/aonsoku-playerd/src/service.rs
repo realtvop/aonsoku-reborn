@@ -67,6 +67,7 @@ where
             PlayerCommand::Pause => self.backend.pause(Some(fallback_request_id)),
             PlayerCommand::Stop => self.backend.stop(Some(fallback_request_id)),
             PlayerCommand::Seek(options) => self.backend.seek(options, Some(fallback_request_id)),
+            PlayerCommand::SetVolume(options) => self.backend.set_volume(options.volume as f32, Some(fallback_request_id)),
         }
     }
 }

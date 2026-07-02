@@ -24,6 +24,7 @@ pub struct RodioPlaybackBackend {
     loaded: bool,
     last_progress_event_at: Option<Instant>,
     runtime_errors: mpsc::Receiver<String>,
+    volume: f32,
 }
 
 impl RodioPlaybackBackend {
@@ -45,6 +46,7 @@ impl RodioPlaybackBackend {
             loaded: false,
             last_progress_event_at: None,
             runtime_errors,
+            volume: 1.0,
         })
     }
 
@@ -121,6 +123,8 @@ impl RodioPlaybackBackend {
                 self.player_from_reader(Cursor::new(bytes), byte_len, hint.as_deref(), start_time)?
             }
         };
+
+        player.set_volume(self.volume);
 
         if autoplay {
             player.play();
@@ -274,6 +278,18 @@ impl PlaybackBackend for RodioPlaybackBackend {
         }
 
         Ok(vec![self.progress_event(request_id)])
+    }
+
+    fn set_volume(
+        &mut self,
+        volume: f32,
+        _request_id: Option<String>,
+    ) -> Result<Vec<PlayerEvent>, BackendError> {
+        self.volume = volume;
+        if let Some(player) = &self.player {
+            player.set_volume(volume);
+        }
+        Ok(Vec::new())
     }
 
     fn drain_events(&mut self) -> Vec<PlayerEvent> {

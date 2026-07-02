@@ -38,7 +38,8 @@ export type AudioSidecarRequestMethod =
   | "play"
   | "pause"
   | "stop"
-  | "seek";
+  | "seek"
+  | "setVolume";
 
 export type AudioSidecarRequestParams = {
   load: NativeAudioLoadOptions;
@@ -46,6 +47,7 @@ export type AudioSidecarRequestParams = {
   pause: undefined;
   stop: undefined;
   seek: NativeAudioSeekOptions;
+  setVolume: { volume: number };
 };
 
 type JsonRpcSuccess = {
@@ -222,6 +224,10 @@ export class AudioSidecarManager {
 
   seek(options: NativeAudioSeekOptions): Promise<void> {
     return this.sendRequest("seek", options);
+  }
+
+  setVolume(options: { volume: number }): Promise<void> {
+    return this.sendRequest("setVolume", options);
   }
 
   onAudioEvent(

@@ -68,6 +68,8 @@ pub enum PlayerCommand {
     Pause,
     Stop,
     Seek(NativeAudioSeekOptions),
+    #[serde(rename_all = "camelCase")]
+    SetVolume(NativeAudioVolumeOptions),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -288,6 +290,12 @@ pub struct NativeAudioSeekOptions {
     pub position: f64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeAudioVolumeOptions {
+    pub volume: f64,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PlaybackState {
@@ -457,7 +465,7 @@ mod tests {
         let fixtures: FixtureSet =
             serde_json::from_str(include_str!("../fixtures/mvp-contract.json")).unwrap();
 
-        assert_eq!(fixtures.commands.len(), 5);
+        assert_eq!(fixtures.commands.len(), 6);
         for fixture in fixtures.commands {
             JsonRpcRequest::from_value(fixture.request).unwrap();
         }

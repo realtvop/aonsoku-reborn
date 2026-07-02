@@ -75,6 +75,9 @@ function registerAudioSidecarIpcHandlers(bridge: AudioSidecarBridge): void {
   ipcMain.handle(IpcChannels.AudioSidecarSeek, (_, options) => {
     return bridge.seek(options);
   });
+  ipcMain.handle(IpcChannels.AudioSidecarSetVolume, (_, options) => {
+    return bridge.setVolume(options);
+  });
 }
 
 function removeAudioSidecarIpcHandlers(): void {
@@ -92,4 +95,5 @@ const AUDIO_SIDECAR_HANDLER_CHANNELS = [
   IpcChannels.AudioSidecarPause,
   IpcChannels.AudioSidecarStopPlayback,
   IpcChannels.AudioSidecarSeek,
+  IpcChannels.AudioSidecarSetVolume,
 ];

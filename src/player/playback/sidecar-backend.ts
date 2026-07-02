@@ -128,9 +128,9 @@ export class ElectronAudioSidecarPlaybackBackend implements PlaybackBackend {
     return Promise.resolve();
   }
 
-  setVolume(_value: number) {
+  setVolume(value: number) {
     this.#assertActive();
-    return Promise.resolve();
+    return this.#api.setVolume({ volume: value });
   }
 
   updateMetadata(_metadata: PlaybackMetadata) {

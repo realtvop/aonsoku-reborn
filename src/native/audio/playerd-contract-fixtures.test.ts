@@ -41,6 +41,7 @@ describe("aonsoku-playerd contract fixtures", () => {
       "pause",
       "stop",
       "seek",
+      "setVolume",
     ]);
 
     for (const { request } of fixtureSet.commands) {
@@ -55,6 +56,8 @@ describe("aonsoku-playerd contract fixtures", () => {
         assertSeekOptions(request.params);
         const payload: NativeAudioSeekOptions = request.params;
         expect(payload.position).toBe(42);
+      } else if (request.method === "setVolume") {
+        expect(request.params).toEqual({ volume: 0.5 });
       } else {
         expect(request.params).toBeUndefined();
       }

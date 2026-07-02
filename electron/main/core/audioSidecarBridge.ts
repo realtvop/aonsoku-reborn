@@ -22,6 +22,7 @@ export type AudioSidecarBridgeManager = Pick<
   | "pause"
   | "stopPlayback"
   | "seek"
+  | "setVolume"
   | "onAudioEvent"
   | "onSidecarError"
 >;
@@ -96,6 +97,10 @@ export class AudioSidecarBridge {
 
   async seek(options: NativeAudioSeekOptions): Promise<void> {
     await this.ensureStarted().seek(options);
+  }
+
+  async setVolume(options: { volume: number }): Promise<void> {
+    await this.ensureStarted().setVolume(options);
   }
 
   dispose(): void {

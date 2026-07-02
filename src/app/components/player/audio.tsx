@@ -984,5 +984,5 @@ export function AudioPlayer({
 }
 
 function isDetachedPlaybackBackendKind(kind?: PlaybackBackendKind) {
-  return kind === "native" || kind === "sidecar";
+  return kind === "native";
 }

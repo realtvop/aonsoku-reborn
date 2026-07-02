@@ -42,6 +42,7 @@ export enum IpcChannels {
   AudioSidecarPause = "audio-sidecar:pause",
   AudioSidecarStopPlayback = "audio-sidecar:stop-playback",
   AudioSidecarSeek = "audio-sidecar:seek",
+  AudioSidecarSetVolume = "audio-sidecar:set-volume",
   AudioSidecarEvent = "audio-sidecar:event",
   AudioSidecarError = "audio-sidecar:error",
 }
@@ -114,6 +115,7 @@ export interface IAonsokuAudioSidecarAPI {
   pause: () => Promise<void>;
   stopPlayback: () => Promise<void>;
   seek: (options: NativeAudioSeekOptions) => Promise<void>;
+  setVolume: (options: { volume: number }) => Promise<void>;
   onEvent: (func: (event: AudioSidecarEventEnvelope) => void) => () => void;
   onError: (
     func: (error: AudioSidecarBridgeErrorPayload) => void,

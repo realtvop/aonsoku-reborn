@@ -60,6 +60,17 @@
           "position": 42
         }
       }
+    },
+    {
+      "name": "setVolume",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": "set-volume-1",
+        "method": "setVolume",
+        "params": {
+          "volume": 0.5
+        }
+      }
     }
   ],
   "events": [
