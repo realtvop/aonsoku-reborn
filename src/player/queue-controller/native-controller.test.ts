@@ -104,6 +104,7 @@ const mocks = vi.hoisted(() => {
       isPlaying: true,
       isBuffering: false,
       currentDuration: 123,
+      volume: 100,
       mediaType: "song" as const,
     },
     playerProgress: {
@@ -198,6 +199,7 @@ describe("NativeQueueController terminal playback reset", () => {
     mocks.storeState.playerState.isPlaying = true;
     mocks.storeState.playerState.isBuffering = false;
     mocks.storeState.playerState.currentDuration = 123;
+    mocks.storeState.playerState.volume = 100;
     mocks.storeState.playerProgress.progress = 123;
     mocks.storeState.playerProgress.bufferedProgress = 123;
     mocks.storeState.songlist.contextQueue.songs = [];
@@ -277,7 +279,7 @@ describe("NativeQueueController setVolume", () => {
     controller.dispose();
   });
 
-  it("calls setSystemVolume on Electron", () => {
+  it("routes Electron volume to the desktop player bridge", () => {
     mocks.mockGetRuntime.mockReturnValue("electron");
     const controller = new NativeQueueController();
 
@@ -286,6 +288,7 @@ describe("NativeQueueController setVolume", () => {
     expect(mocks.plugin.setSystemVolume).toHaveBeenCalledWith({
       value: 0.4,
     });
+    expect(mocks.storeState.playerState.volume).toBe(40);
 
     controller.dispose();
   });

@@ -44,6 +44,10 @@ export class UnavailableDesktopAudioEngine implements DesktopAudioEngine {
     return this.#reject();
   }
 
+  setVolume(_value: number): Promise<void> {
+    return this.#reject();
+  }
+
   clear(): Promise<void> {
     return Promise.resolve();
   }

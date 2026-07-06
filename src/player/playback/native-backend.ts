@@ -7,6 +7,7 @@ import type {
   NativeAudioPlugin,
   NativeAudioSource,
 } from "@/native/audio";
+import { getRuntime } from "@/utils/capabilities";
 import { nativePlaybackErrorKind, playbackErrorCodeFromKind } from "./errors";
 import {
   type PlaybackBackend,
@@ -108,9 +109,14 @@ export class NativeAudioPlaybackBackend implements PlaybackBackend {
     return this.#plugin.skipToPrevious();
   }
 
-  setVolume(_value: number) {
+  setVolume(value: number) {
     this.#assertActive();
-    return Promise.resolve();
+    if (getRuntime() !== "electron") return Promise.resolve();
+
+    return this.#plugin
+      .setSystemVolume({ value: clampUnitVolume(value) })
+      .then(() => undefined)
+      .catch(() => undefined);
   }
 
   updateMetadata(metadata: PlaybackMetadata) {
@@ -333,4 +339,9 @@ function isNativeAudioErrorEvent(
     "message" in error &&
     typeof (error as { message?: unknown }).message === "string"
   );
+}
+
+function clampUnitVolume(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.max(0, Math.min(1, value));
 }

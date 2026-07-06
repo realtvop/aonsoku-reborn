@@ -120,6 +120,11 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
     this.#emitProgress();
   }
 
+  async setVolume(value: number): Promise<void> {
+    const player = await this.#ensureStarted();
+    await this.#setProperty(player, "volume", clampUnitVolume(value) * 100);
+  }
+
   async clear(): Promise<void> {
     if (this.#player) {
       this.#ignoreNextStopEnd = true;
@@ -367,4 +372,9 @@ function normalizeSeconds(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return 0;
 
   return Math.max(0, value);
+}
+
+function clampUnitVolume(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.max(0, Math.min(1, value));
 }

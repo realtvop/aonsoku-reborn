@@ -117,6 +117,7 @@ export class NativeAudioService implements AonsokuAudioApi {
   #playbackState: NativeAudioEvents["playbackStateChanged"]["state"] = "idle";
   #currentTime = 0;
   #duration = 0;
+  #playerVolume = 1;
   #currentSource: NativeAudioQueueItem | null = null;
   #remotePlaybackState: NativeRemotePlaybackStateOptions | null = null;
 
@@ -446,15 +447,18 @@ export class NativeAudioService implements AonsokuAudioApi {
   async setSystemVolume(
     options: NativeSetSystemVolumeOptions,
   ): Promise<NativeSystemVolumeResult> {
-    const result = await this.#systemAudio.setSystemVolume(
-      clampUnitVolume(options.value),
-    );
+    // Desktop keeps the mobile plugin method name for contract parity, but the
+    // bridge intentionally adjusts only the mpv/player volume. The user's OS
+    // output volume must remain untouched on Electron.
+    this.#playerVolume = clampUnitVolume(options.value);
+    const result = { volume: this.#playerVolume };
+    await this.#engine.setVolume(this.#playerVolume);
     this.#emit("systemVolumeChanged", result);
     return result;
   }
 
   getSystemVolume(): Promise<NativeSystemVolumeResult> {
-    return this.#systemAudio.getSystemVolume();
+    return Promise.resolve({ volume: this.#playerVolume });
   }
 
   setVolumeHUDEnabled(options: { enabled: boolean }): Promise<void> {

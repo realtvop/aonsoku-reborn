@@ -233,7 +233,10 @@ Key files:
   Electron service includes a desktop queue engine aligned with the mobile
   native plugin contract for context/user queues, shuffle/repeat, full-state
   export, scrobble buffering, sleep timers, remote playback projection, and a
-  platform-scoped system audio adapter for volume/HUD/like integration. See
+  platform-scoped system adapter for HUD/like integration. Special desktop
+  volume behavior: the Electron bridge keeps the mobile `setSystemVolume`
+  method name for contract parity, but it controls only the embedded
+  player/libmpv volume and must not change the user's OS output volume. See
   `docs/native-audio-libmpv.md` for build, smoke-test, and packaging details.
 - `src/player/queue-controller/` — queue management
   (`web-controller` / `native-controller`). Runtimes with native playback

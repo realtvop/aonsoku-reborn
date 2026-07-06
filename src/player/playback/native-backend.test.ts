@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NativeAudioEvents, NativeAudioPlugin } from "@/native/audio";
 import {
   createUrlPlaybackSource,
@@ -8,6 +8,14 @@ import {
   type PlaybackBackendEvent,
   type PlaybackBackendListener,
 } from ".";
+
+const mocks = vi.hoisted(() => ({
+  getRuntime: vi.fn(() => "capacitor-ios"),
+}));
+
+vi.mock("@/utils/capabilities", () => ({
+  getRuntime: mocks.getRuntime,
+}));
 
 type ListenerMap = {
   [TEvent in keyof NativeAudioEvents]?: Array<
@@ -28,6 +36,7 @@ function createPlugin() {
     setQueue: vi.fn(async () => {}),
     skipToNext: vi.fn(async () => {}),
     skipToPrevious: vi.fn(async () => {}),
+    setSystemVolume: vi.fn(async () => ({ volume: 1 })),
     updateMetadata: vi.fn(async () => {}),
     preload: vi.fn(async () => {}),
     clear: vi.fn(async () => {}),
@@ -67,6 +76,10 @@ function createPlugin() {
 }
 
 describe("NativeAudioPlaybackBackend", () => {
+  beforeEach(() => {
+    mocks.getRuntime.mockReturnValue("capacitor-ios");
+  });
+
   it("maps playback sources to native audio sources", () => {
     expect(
       toNativeAudioSource(
@@ -171,6 +184,7 @@ describe("NativeAudioPlaybackBackend", () => {
     expect(plugin.setShuffle).toHaveBeenCalledWith({ enabled: true });
     expect(plugin.skipToNext).toHaveBeenCalledTimes(1);
     expect(plugin.skipToPrevious).toHaveBeenCalledTimes(1);
+    expect(plugin.setSystemVolume).not.toHaveBeenCalled();
     expect(plugin.updateMetadata).toHaveBeenCalledWith({
       title: "Updated Song",
       artist: undefined,
@@ -185,6 +199,22 @@ describe("NativeAudioPlaybackBackend", () => {
         songId: "song-2",
       },
     });
+  });
+
+  it("routes Electron native backend volume to the desktop player bridge", async () => {
+    mocks.getRuntime.mockReturnValue("electron");
+    const { plugin } = createPlugin();
+    const backend = new NativeAudioPlaybackBackend(plugin);
+
+    await backend.setVolume(1.25);
+    await backend.setVolume(-1);
+    await backend.setVolume(Number.NaN);
+
+    expect(plugin.setSystemVolume).toHaveBeenCalledWith({ value: 1 });
+    expect(plugin.setSystemVolume).toHaveBeenCalledWith({ value: 0 });
+    expect(plugin.setSystemVolume).toHaveBeenCalledTimes(3);
+
+    backend.dispose();
   });
 
   it("loads radio streams with their native radio metadata", async () => {

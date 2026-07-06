@@ -200,6 +200,18 @@ describe("LibMpvAudioEngine", () => {
     ).toHaveLength(1);
   });
 
+  it("sets player volume through the mpv volume property", async () => {
+    const { engine, player } = createHarness();
+
+    await engine.setVolume(1.25);
+    await engine.setVolume(-1);
+    await engine.setVolume(Number.NaN);
+
+    expect(player.setProperty.mock.calls).toContainEqual(["volume", 100]);
+    expect(player.setProperty.mock.calls).toContainEqual(["volume", 0]);
+    expect(player.setProperty.mock.calls).toContainEqual(["volume", 100]);
+  });
+
   it("maps libmpv playback errors and command failures", async () => {
     const { engine, events, player } = createHarness();
 

@@ -66,6 +66,7 @@ export interface DesktopAudioEngine {
   pause(): Promise<void>;
   stop(): Promise<void>;
   seek(position: number): Promise<void>;
+  setVolume(value: number): Promise<void>;
   clear(): Promise<void>;
   updateMetadata(metadata: NativeAudioMetadata): Promise<void>;
   onEvent(listener: DesktopAudioEngineEventListener): () => void;

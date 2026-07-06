@@ -23,6 +23,7 @@ class FakeAudioEngine implements DesktopAudioEngine {
   readonly pause = vi.fn(async () => {});
   readonly stop = vi.fn(async () => {});
   readonly seek = vi.fn(async (_position: number) => {});
+  readonly setVolume = vi.fn(async (_value: number) => {});
   readonly clear = vi.fn(async () => {});
   readonly updateMetadata = vi.fn(async (_metadata: NativeAudioMetadata) => {});
   readonly listeners = new Set<DesktopAudioEngineEventListener>();
@@ -616,7 +617,7 @@ describe("NativeAudioService", () => {
     });
   });
 
-  it("delegates desktop system controls through the system adapter", async () => {
+  it("routes desktop volume to the player and HUD/like through the system adapter", async () => {
     const systemAudioAdapter = createFakeSystemAudioAdapter();
     const systemService = new NativeAudioService({
       engine,
@@ -630,16 +631,15 @@ describe("NativeAudioService", () => {
       await expect(
         systemService.setSystemVolume({ value: 1.5 }),
       ).resolves.toEqual({
-        volume: 0.75,
+        volume: 1,
       });
       await expect(systemService.getSystemVolume()).resolves.toEqual({
-        volume: 0.75,
+        volume: 1,
       });
       await systemService.setVolumeHUDEnabled({ enabled: false });
       await systemService.setLikeActive({ active: true });
 
-      expect(systemAudioAdapter.setSystemVolume).toHaveBeenCalledWith(1);
-      expect(systemAudioAdapter.getSystemVolume).toHaveBeenCalledTimes(1);
+      expect(engine.setVolume).toHaveBeenCalledWith(1);
       expect(systemAudioAdapter.setVolumeHUDEnabled).toHaveBeenCalledWith(
         false,
       );
@@ -647,7 +647,7 @@ describe("NativeAudioService", () => {
       expect(events).toContainEqual({
         eventName: "systemVolumeChanged",
         event: {
-          volume: 0.75,
+          volume: 1,
         },
       });
     } finally {
@@ -1259,14 +1259,10 @@ function mockSlowAudioFetch(options: {
 }
 
 function createFakeSystemAudioAdapter(): DesktopSystemAudioAdapter & {
-  setSystemVolume: ReturnType<typeof vi.fn>;
-  getSystemVolume: ReturnType<typeof vi.fn>;
   setVolumeHUDEnabled: ReturnType<typeof vi.fn>;
   setLikeActive: ReturnType<typeof vi.fn>;
 } {
   return {
-    setSystemVolume: vi.fn(async () => ({ volume: 0.75 })),
-    getSystemVolume: vi.fn(async () => ({ volume: 0.75 })),
     setVolumeHUDEnabled: vi.fn(async () => {}),
     setLikeActive: vi.fn(async () => {}),
   };
