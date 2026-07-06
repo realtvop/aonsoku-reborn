@@ -36,12 +36,12 @@ describe("desktop native audio IPC method binding", () => {
       handler?.(
         {},
         {
-          method: "markAsShuffled",
-          args: [{ originalSongs: [] }],
+          method: "resolveSongs",
+          args: [{ ids: [] }],
         },
       ),
     ).rejects.toThrow(
-      "Desktop native audio bridge method markAsShuffled is not implemented.",
+      "Desktop native audio bridge method resolveSongs is not implemented.",
     );
   });
 });
