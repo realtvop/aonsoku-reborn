@@ -232,11 +232,20 @@ It excludes source directories and `node_modules` from app packaging. The
 Node-API addon is not rebuilt by Forge; build it with `pnpm native-audio:build`
 and copy it with `pnpm native-audio:prepare`.
 
-The `make`, `publish`, `build:unpack`, and platform build scripts run
-`pnpm native-audio:verify-package` before Electron build/make. By default this
-warns when native-audio binaries are missing so development builds still work.
-Set `AONSOKU_REQUIRE_NATIVE_AUDIO_RESOURCES=1` in release CI to fail packages
-that would depend only on global libmpv.
+`build:unpack` runs non-strict `pnpm native-audio:verify-package` before the
+Electron build so development builds still work and print warnings when local
+native-audio binaries are incomplete.
+
+`make`, `publish`, and platform package scripts run strict verification before
+Electron build/make:
+
+```bash
+pnpm native-audio:verify-package:strict
+```
+
+Strict verification fails if the target `resources/native-audio/<platform>-<arch>`
+directory, addon, manifest, or runtime libraries are missing. This prevents
+release packages from depending only on global libmpv.
 
 ## Startup Diagnostics
 
@@ -271,6 +280,7 @@ pnpm native-audio:smoke
 pnpm native-audio:prepare
 pnpm native-audio:smoke:packaged
 pnpm native-audio:verify-package
+pnpm native-audio:verify-package:strict
 pnpm run build:unpack
 pnpm exec vitest run \
   electron/main/native/audio/engine-factory.test.ts \

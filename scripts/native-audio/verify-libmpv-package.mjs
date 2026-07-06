@@ -206,6 +206,8 @@ function parseArgs(argv) {
     const arg = argv[index];
 
     switch (arg) {
+      case "--":
+        break;
       case "--platform":
         parsed.platform = readArgValue(argv, index, arg);
         index += 1;

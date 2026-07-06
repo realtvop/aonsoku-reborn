@@ -55,6 +55,7 @@ pnpm native-audio:prepare # Copy addon/runtime libs into resources/native-audio
 pnpm native-audio:smoke   # Load libmpv and play a generated WAV fixture
 pnpm native-audio:smoke:packaged # Smoke test resources/native-audio layout
 pnpm native-audio:verify-package # Check Forge/resource/native-audio packaging
+pnpm native-audio:verify-package:strict # Fail if native runtime files are missing
 ```
 
 ## Architecture
@@ -237,9 +238,9 @@ Key files:
   manifests, uses `process.resourcesPath` in packaged apps, and falls back to
   the source build path for development. Missing native pieces produce startup
   diagnostics and visible `error` events while cache/download APIs remain
-  usable. `pnpm native-audio:verify-package` runs before make/publish/build
-  scripts; release CI should set `AONSOKU_REQUIRE_NATIVE_AUDIO_RESOURCES=1` to
-  fail if addon/runtime files are missing. The Electron service includes a
+  usable. `make`, `publish`, and platform package scripts run strict native
+  audio verification and fail if addon/runtime files are missing; development
+  `build:unpack` runs the non-strict verifier. The Electron service includes a
   desktop queue engine aligned with the mobile native plugin contract for
   context/user queues, shuffle/repeat, full-state export, scrobble buffering,
   sleep timers, remote playback projection, and a platform-scoped system
