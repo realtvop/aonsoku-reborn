@@ -55,7 +55,10 @@ export function setupDesktopNativeAudioIpc(window?: BrowserWindow | null): void 
         throw new Error(`Unknown desktop native audio method ${payload.method}`);
       }
 
-      return (method as DesktopNativeAudioServiceMethod)(...payload.args);
+      return (method as DesktopNativeAudioServiceMethod).apply(
+        desktopNativeAudioService,
+        payload.args,
+      );
     },
   );
 }

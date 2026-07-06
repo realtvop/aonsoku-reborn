@@ -236,8 +236,12 @@ describe("NativeAudioService", () => {
     await service.pause();
     await service.stop();
     await service.seek({ position: -5 });
+    await service.setRepeatMode({ mode: "all" });
+    await service.setShuffle({ enabled: true });
     await service.clear();
     await service.updateMetadata({ title: "Updated title" });
+    await service.setVolumeHUDEnabled({ enabled: false });
+    await service.setLikeActive({ active: true });
 
     expect(engine.play).toHaveBeenCalledTimes(1);
     expect(engine.pause).toHaveBeenCalledTimes(1);

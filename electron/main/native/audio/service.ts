@@ -119,11 +119,11 @@ export class NativeAudioService implements AonsokuAudioApi {
   }
 
   setRepeatMode(_options: NativeAudioRepeatModeOptions): Promise<void> {
-    return this.notImplemented("setRepeatMode");
+    return Promise.resolve();
   }
 
   setShuffle(_options: NativeAudioShuffleOptions): Promise<void> {
-    return this.notImplemented("setShuffle");
+    return Promise.resolve();
   }
 
   markAsShuffled(_options: NativeMarkAsShuffledOptions): Promise<void> {
@@ -270,11 +270,11 @@ export class NativeAudioService implements AonsokuAudioApi {
   }
 
   setVolumeHUDEnabled(_options: { enabled: boolean }): Promise<void> {
-    return this.notImplemented("setVolumeHUDEnabled");
+    return Promise.resolve();
   }
 
   setLikeActive(_options: { active: boolean }): Promise<void> {
-    return this.notImplemented("setLikeActive");
+    return Promise.resolve();
   }
 
   setSleepTimer(_options: NativeSetSleepTimerOptions): Promise<void> {
