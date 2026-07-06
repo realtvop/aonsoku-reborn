@@ -4,6 +4,7 @@ import { updateElectronApp } from "update-electron-app";
 
 import { createAppMenu } from "./core/menu";
 import { destroyMiniPlayerWindow } from "./mini-player";
+import { destroyDesktopNativeAudioService } from "./native/audio/ipc";
 import { createWindow, mainWindow } from "./window";
 
 let isQuitting = false;
@@ -68,6 +69,12 @@ if (!instanceLock) {
     isQuitting = true;
 
     destroyMiniPlayerWindow();
+    const nativeAudioDestroyed = destroyDesktopNativeAudioService();
+    if (nativeAudioDestroyed) {
+      nativeAudioDestroyed.catch((error) => {
+        console.error("Failed to destroy desktop native audio service.", error);
+      });
+    }
   });
 }
 

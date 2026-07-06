@@ -60,6 +60,22 @@ export interface DesktopAudioEngineLoadOptions {
   startTime?: number;
 }
 
+export type DesktopAudioEngineDiagnostics =
+  | {
+      backend: "libmpv";
+      status: "available";
+      platformKey: string;
+      runtimeInfo?: Record<string, string>;
+    }
+  | {
+      backend: "libmpv";
+      status: "unavailable";
+      code: string;
+      message: string;
+      platformKey?: string;
+      searchedPaths?: string[];
+    };
+
 export interface DesktopAudioEngine {
   load(options: DesktopAudioEngineLoadOptions): Promise<void>;
   play(): Promise<void>;
@@ -70,5 +86,7 @@ export interface DesktopAudioEngine {
   clear(): Promise<void>;
   updateMetadata(metadata: NativeAudioMetadata): Promise<void>;
   onEvent(listener: DesktopAudioEngineEventListener): () => void;
+  getDiagnostics?(): DesktopAudioEngineDiagnostics;
+  checkAvailability?(): Promise<DesktopAudioEngineDiagnostics>;
   destroy?(): Promise<void> | void;
 }

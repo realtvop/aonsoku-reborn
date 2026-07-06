@@ -32,7 +32,9 @@ type DesktopNativeAudioServiceMethod = (
   ...args: Parameters<AonsokuAudioApi[keyof AonsokuAudioApi]>
 ) => ReturnType<AonsokuAudioApi[keyof AonsokuAudioApi]>;
 
-export function setupDesktopNativeAudioIpc(window?: BrowserWindow | null): void {
+export function setupDesktopNativeAudioIpc(
+  window?: BrowserWindow | null,
+): void {
   ipcMain.removeHandler(DESKTOP_NATIVE_AUDIO_INVOKE_CHANNEL);
   unsubscribeFromNativeAudioEvents?.();
   unsubscribeFromNativeAudioEvents = desktopNativeAudioService.onEvent(
@@ -52,7 +54,9 @@ export function setupDesktopNativeAudioIpc(window?: BrowserWindow | null): void 
     async (_, payload: DesktopNativeAudioInvokePayload) => {
       const method = desktopNativeAudioService[payload.method];
       if (typeof method !== "function") {
-        throw new Error(`Unknown desktop native audio method ${payload.method}`);
+        throw new Error(
+          `Unknown desktop native audio method ${payload.method}`,
+        );
       }
 
       return (method as DesktopNativeAudioServiceMethod).apply(
@@ -63,7 +67,17 @@ export function setupDesktopNativeAudioIpc(window?: BrowserWindow | null): void 
   );
 }
 
-export function sendDesktopNativeAudioEvent<TEvent extends NativeAudioEventName>(
+export function destroyDesktopNativeAudioService(): Promise<void> | void {
+  ipcMain.removeHandler(DESKTOP_NATIVE_AUDIO_INVOKE_CHANNEL);
+  unsubscribeFromNativeAudioEvents?.();
+  unsubscribeFromNativeAudioEvents = null;
+
+  return desktopNativeAudioService.destroy();
+}
+
+export function sendDesktopNativeAudioEvent<
+  TEvent extends NativeAudioEventName,
+>(
   window: BrowserWindow,
   eventName: TEvent,
   event: NativeAudioEvents[TEvent],

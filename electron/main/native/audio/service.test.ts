@@ -12,6 +12,7 @@ import { NativeAudioService } from "./service";
 import type { DesktopSystemAudioAdapter } from "./system-adapter";
 import type {
   DesktopAudioEngine,
+  DesktopAudioEngineDiagnostics,
   DesktopAudioEngineEvent,
   DesktopAudioEngineEventListener,
   DesktopAudioEngineLoadOptions,
@@ -27,6 +28,8 @@ class FakeAudioEngine implements DesktopAudioEngine {
   readonly clear = vi.fn(async () => {});
   readonly updateMetadata = vi.fn(async (_metadata: NativeAudioMetadata) => {});
   readonly listeners = new Set<DesktopAudioEngineEventListener>();
+  getDiagnostics?: () => DesktopAudioEngineDiagnostics;
+  checkAvailability?: () => Promise<DesktopAudioEngineDiagnostics>;
 
   onEvent(listener: DesktopAudioEngineEventListener): () => void {
     this.listeners.add(listener);
@@ -196,6 +199,74 @@ describe("NativeAudioService", () => {
         },
       },
     ]);
+  });
+
+  it("replays startup libmpv availability failures to new listeners", async () => {
+    service.destroy();
+    const startupEngine = new FakeAudioEngine();
+    startupEngine.getDiagnostics = () => ({
+      backend: "libmpv",
+      status: "unavailable",
+      code: "libmpv-addon-unavailable",
+      message: "Unable to load the Aonsoku libmpv native addon.",
+      platformKey: "darwin-arm64",
+      searchedPaths: ["/missing/aonsoku_libmpv.node"],
+    });
+    const startupService = new NativeAudioService({
+      engine: startupEngine,
+      audioCacheDirectory,
+    });
+    const events: unknown[] = [];
+
+    try {
+      startupService.onEvent((event) => events.push(event));
+      await delay(0);
+
+      expect(events).toEqual([
+        {
+          eventName: "error",
+          event: {
+            code: "libmpv-addon-unavailable",
+            message: "Unable to load the Aonsoku libmpv native addon.",
+          },
+        },
+      ]);
+    } finally {
+      startupService.destroy();
+    }
+  });
+
+  it("emits startup check failures that happen after listeners attach", async () => {
+    service.destroy();
+    const startupEngine = new FakeAudioEngine();
+    startupEngine.checkAvailability = vi.fn(async () => {
+      throw Object.assign(new Error("libmpv property observer failed"), {
+        code: "mpv-observer-failed",
+      });
+    });
+    const startupService = new NativeAudioService({
+      engine: startupEngine,
+      audioCacheDirectory,
+    });
+    const events: unknown[] = [];
+
+    try {
+      startupService.onEvent((event) => events.push(event));
+      await delay(0);
+
+      expect(events).toEqual([
+        {
+          eventName: "error",
+          event: {
+            code: "mpv-observer-failed",
+            message:
+              "Desktop native audio startup check failed: libmpv property observer failed",
+          },
+        },
+      ]);
+    } finally {
+      startupService.destroy();
+    }
   });
 
   it("stores, resolves, sizes, deletes, and loads cached audio files", async () => {
@@ -1186,6 +1257,14 @@ describe("NativeAudioService", () => {
         },
       },
     ]);
+  });
+
+  it("unsubscribes from engine events when destroyed", () => {
+    expect(engine.listeners.size).toBe(1);
+
+    service.destroy();
+
+    expect(engine.listeners.size).toBe(0);
   });
 });
 

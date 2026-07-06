@@ -1,17 +1,18 @@
 import { EventEmitter } from "node:events";
 import type { NativeAudioMetadata } from "@aonsoku/audio-contract";
 import type {
-  DesktopAudioEngine,
-  DesktopAudioEngineEvent,
-  DesktopAudioEngineEventListener,
-  DesktopAudioEngineLoadOptions,
-} from "./types";
-import type {
   MpvPlayer,
   MpvPlayerEvent,
   MpvPlayerFactory,
   MpvPropertyFormat,
 } from "./mpv-player";
+import type {
+  DesktopAudioEngine,
+  DesktopAudioEngineDiagnostics,
+  DesktopAudioEngineEvent,
+  DesktopAudioEngineEventListener,
+  DesktopAudioEngineLoadOptions,
+} from "./types";
 
 interface ObservedMpvProperty {
   name: string;
@@ -20,6 +21,7 @@ interface ObservedMpvProperty {
 
 export interface LibMpvAudioEngineOptions {
   playerFactory: MpvPlayerFactory;
+  diagnostics?: DesktopAudioEngineDiagnostics;
 }
 
 export class LibMpvAudioEngineError extends Error {
@@ -32,7 +34,7 @@ export class LibMpvAudioEngineError extends Error {
   }
 }
 
-const MPV_OPTIONS: Record<string, string> = {
+export const LIBMPV_ENGINE_OPTIONS: Record<string, string> = {
   "audio-display": "no",
   "force-window": "no",
   idle: "yes",
@@ -40,7 +42,7 @@ const MPV_OPTIONS: Record<string, string> = {
   vid: "no",
 };
 
-const MPV_OBSERVED_PROPERTIES: ObservedMpvProperty[] = [
+export const LIBMPV_OBSERVED_PROPERTIES: ObservedMpvProperty[] = [
   { name: "time-pos", format: "number" },
   { name: "duration", format: "number" },
   { name: "pause", format: "boolean" },
@@ -51,6 +53,7 @@ const MPV_OBSERVED_PROPERTIES: ObservedMpvProperty[] = [
 export class LibMpvAudioEngine implements DesktopAudioEngine {
   readonly #events = new EventEmitter();
   readonly #playerFactory: MpvPlayerFactory;
+  readonly #diagnostics: DesktopAudioEngineDiagnostics | undefined;
   #player: MpvPlayer | null = null;
   #unsubscribeFromPlayer: (() => void) | null = null;
   #currentTime = 0;
@@ -62,6 +65,7 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
 
   constructor(options: LibMpvAudioEngineOptions) {
     this.#playerFactory = options.playerFactory;
+    this.#diagnostics = options.diagnostics;
   }
 
   async load(options: DesktopAudioEngineLoadOptions): Promise<void> {
@@ -157,6 +161,22 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
     };
   }
 
+  getDiagnostics(): DesktopAudioEngineDiagnostics | undefined {
+    return this.#diagnostics;
+  }
+
+  async checkAvailability(): Promise<DesktopAudioEngineDiagnostics> {
+    await verifyLibMpvPlayer(this.#playerFactory);
+
+    return (
+      this.#diagnostics ?? {
+        backend: "libmpv",
+        status: "available",
+        platformKey: `${process.platform}-${process.arch}`,
+      }
+    );
+  }
+
   async destroy(): Promise<void> {
     this.#destroyed = true;
     this.#unsubscribeFromPlayer?.();
@@ -191,16 +211,12 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
     );
 
     try {
-      await player.initialize({ options: MPV_OPTIONS });
-
-      for (const property of MPV_OBSERVED_PROPERTIES) {
-        await player.observeProperty(property.name, property.format);
-      }
+      await initializeLibMpvPlayer(player);
     } catch (error) {
       this.#unsubscribeFromPlayer?.();
       this.#unsubscribeFromPlayer = null;
-      await player.destroy();
-      throw toLibMpvError("mpv-init-failed", error);
+      await destroyMpvPlayerSafely(player);
+      throw error;
     }
 
     this.#player = player;
@@ -366,6 +382,48 @@ function toLibMpvError(code: string, error: unknown): LibMpvAudioEngineError {
     error instanceof Error ? error.message : "libmpv audio engine failed.";
 
   return new LibMpvAudioEngineError(code, message);
+}
+
+export async function initializeLibMpvPlayer(player: MpvPlayer): Promise<void> {
+  try {
+    await player.initialize({ options: LIBMPV_ENGINE_OPTIONS });
+  } catch (error) {
+    throw toLibMpvError("mpv-init-failed", error);
+  }
+
+  try {
+    for (const property of LIBMPV_OBSERVED_PROPERTIES) {
+      await player.observeProperty(property.name, property.format);
+    }
+  } catch (error) {
+    throw toLibMpvError("mpv-observer-failed", error);
+  }
+}
+
+export async function verifyLibMpvPlayer(
+  playerFactory: MpvPlayerFactory,
+): Promise<void> {
+  let player: MpvPlayer;
+
+  try {
+    player = playerFactory();
+  } catch (error) {
+    throw toLibMpvError("libmpv-unavailable", error);
+  }
+
+  try {
+    await initializeLibMpvPlayer(player);
+  } finally {
+    await destroyMpvPlayerSafely(player);
+  }
+}
+
+async function destroyMpvPlayerSafely(player: MpvPlayer): Promise<void> {
+  try {
+    await player.destroy();
+  } catch {
+    // Preserve the original startup/load failure; destroy is best-effort here.
+  }
 }
 
 function normalizeSeconds(value: unknown): number {

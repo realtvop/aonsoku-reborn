@@ -13,7 +13,6 @@ import type {
   NativeAudioQueueOptions,
   NativeAudioRemoteCommand,
   NativeAudioRepeatModeOptions,
-  NativeRemoteControlCommandEvent,
   NativeAudioResolveFileResult,
   NativeAudioSeekOptions,
   NativeAudioShuffleOptions,
@@ -25,6 +24,7 @@ import type {
   NativeMarkAsShuffledOptions,
   NativePlayAtIndexOptions,
   NativeQueueSong,
+  NativeRemoteControlCommandEvent,
   NativeRemotePlaybackStateOptions,
   NativeRemoveFromUserQueueOptions,
   NativeReorderContextQueueOptions,
@@ -58,6 +58,7 @@ import {
 } from "./system-adapter";
 import type {
   DesktopAudioEngine,
+  DesktopAudioEngineDiagnostics,
   DesktopAudioEngineEvent,
   NativeAudioServiceEvent,
   NativeAudioServiceEventListener,
@@ -106,6 +107,11 @@ export class NativeAudioService implements AonsokuAudioApi {
   readonly #cacheLoadedStreams: boolean;
   readonly #systemAudio: DesktopSystemAudioAdapter;
   readonly #listeners = new Set<NativeAudioServiceEventListener>();
+  readonly #unsubscribeFromEngine: () => void;
+  #startupAvailabilityError: Omit<
+    NativeAudioEvents["error"],
+    "requestId"
+  > | null = null;
   readonly #streamUrlsBySongId = new Map<string, string>();
   readonly #queueEngine = new DesktopQueueEngine();
   readonly #scrobbleBuffer = new DesktopScrobbleBuffer();
@@ -158,7 +164,10 @@ export class NativeAudioService implements AonsokuAudioApi {
       queueEngineSeekToStart: (_engine, song) =>
         this.#seekQueueSongToStart(song),
     };
-    this.#engine.onEvent((event) => this.#handleEngineEvent(event));
+    this.#unsubscribeFromEngine = this.#engine.onEvent((event) =>
+      this.#handleEngineEvent(event),
+    );
+    this.#scheduleStartupAvailabilityCheck();
   }
 
   async load(options: NativeAudioLoadOptions): Promise<void> {
@@ -507,6 +516,7 @@ export class NativeAudioService implements AonsokuAudioApi {
 
   onEvent(listener: NativeAudioServiceEventListener): () => void {
     this.#listeners.add(listener);
+    this.#replayStartupAvailabilityError(listener);
 
     return () => {
       this.#listeners.delete(listener);
@@ -514,6 +524,8 @@ export class NativeAudioService implements AonsokuAudioApi {
   }
 
   destroy(): Promise<void> | void {
+    this.#unsubscribeFromEngine();
+    this.#listeners.clear();
     this.#downloadManager.cancelAll();
     this.#cancelSleepTimerInternal();
     const engineDestroyed = this.#engine.destroy?.();
@@ -669,6 +681,50 @@ export class NativeAudioService implements AonsokuAudioApi {
     this.#emit("error", {
       requestId: this.#requestId,
       ...toNativeAudioErrorEvent(error),
+    });
+  }
+
+  #scheduleStartupAvailabilityCheck(): void {
+    const diagnostics = this.#engine.getDiagnostics?.();
+    if (diagnostics?.status === "unavailable") {
+      this.#startupAvailabilityError = startupErrorFromDiagnostics(diagnostics);
+      return;
+    }
+
+    this.#engine
+      .checkAvailability?.()
+      .then((result) => {
+        if (result.status === "unavailable") {
+          this.#setStartupAvailabilityError(
+            startupErrorFromDiagnostics(result),
+          );
+        }
+      })
+      .catch((error) => {
+        this.#setStartupAvailabilityError(startupErrorFromCheckFailure(error));
+      });
+  }
+
+  #setStartupAvailabilityError(
+    event: Omit<NativeAudioEvents["error"], "requestId">,
+  ): void {
+    this.#startupAvailabilityError = event;
+    this.#emit("error", event);
+  }
+
+  #replayStartupAvailabilityError(
+    listener: NativeAudioServiceEventListener,
+  ): void {
+    const event = this.#startupAvailabilityError;
+    if (!event) return;
+
+    queueMicrotask(() => {
+      if (!this.#listeners.has(listener)) return;
+
+      listener({
+        eventName: "error",
+        event,
+      });
     });
   }
 
@@ -993,6 +1049,29 @@ function toNativeAudioErrorEvent(
 
   return {
     message: "Desktop native audio failed.",
+  };
+}
+
+function startupErrorFromDiagnostics(
+  diagnostics: Extract<
+    DesktopAudioEngineDiagnostics,
+    { status: "unavailable" }
+  >,
+): Omit<NativeAudioEvents["error"], "requestId"> {
+  return {
+    code: diagnostics.code,
+    message: diagnostics.message,
+  };
+}
+
+function startupErrorFromCheckFailure(
+  error: unknown,
+): Omit<NativeAudioEvents["error"], "requestId"> {
+  const event = toNativeAudioErrorEvent(error);
+
+  return {
+    code: event.code ?? "libmpv-unavailable",
+    message: `Desktop native audio startup check failed: ${event.message}`,
   };
 }
 

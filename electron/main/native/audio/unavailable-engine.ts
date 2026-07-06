@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import type { NativeAudioMetadata } from "@aonsoku/audio-contract";
 import type {
   DesktopAudioEngine,
+  DesktopAudioEngineDiagnostics,
   DesktopAudioEngineEvent,
   DesktopAudioEngineEventListener,
   DesktopAudioEngineLoadOptions,
@@ -18,10 +19,25 @@ export class DesktopNativeAudioUnavailableError extends Error {
 
 export class UnavailableDesktopAudioEngine implements DesktopAudioEngine {
   readonly #events = new EventEmitter();
-  readonly #reason: string;
+  readonly #diagnostics: Extract<
+    DesktopAudioEngineDiagnostics,
+    { status: "unavailable" }
+  >;
 
-  constructor(reason: string) {
-    this.#reason = reason;
+  constructor(
+    reasonOrDiagnostics:
+      | string
+      | Extract<DesktopAudioEngineDiagnostics, { status: "unavailable" }>,
+  ) {
+    this.#diagnostics =
+      typeof reasonOrDiagnostics === "string"
+        ? {
+            backend: "libmpv",
+            status: "unavailable",
+            code: "libmpv-unavailable",
+            message: reasonOrDiagnostics,
+          }
+        : reasonOrDiagnostics;
   }
 
   load(_options: DesktopAudioEngineLoadOptions): Promise<void> {
@@ -64,8 +80,18 @@ export class UnavailableDesktopAudioEngine implements DesktopAudioEngine {
     };
   }
 
+  getDiagnostics(): DesktopAudioEngineDiagnostics {
+    return this.#diagnostics;
+  }
+
+  checkAvailability(): Promise<DesktopAudioEngineDiagnostics> {
+    return Promise.resolve(this.#diagnostics);
+  }
+
   #reject(): Promise<never> {
-    const error = new DesktopNativeAudioUnavailableError(this.#reason);
+    const error = new DesktopNativeAudioUnavailableError(
+      this.#diagnostics.message,
+    );
     this.#emit({
       type: "error",
       code: error.code,

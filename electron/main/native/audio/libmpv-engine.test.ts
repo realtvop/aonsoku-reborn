@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { LibMpvAudioEngine } from "./libmpv-engine";
 import type {
   MpvPlayer,
   MpvPlayerEvent,
@@ -7,7 +8,6 @@ import type {
   MpvPropertyFormat,
   MpvPropertyValue,
 } from "./mpv-player";
-import { LibMpvAudioEngine } from "./libmpv-engine";
 import type { DesktopAudioEngineEvent } from "./types";
 
 class FakeMpvPlayer implements MpvPlayer {
@@ -239,6 +239,48 @@ describe("LibMpvAudioEngine", () => {
     });
   });
 
+  it("cleans up players when initialization or observers fail", async () => {
+    const initFailure = new FakeMpvPlayer();
+    initFailure.initialize.mockRejectedValueOnce(new Error("bad init"));
+    const initEngine = new LibMpvAudioEngine({
+      playerFactory: () => initFailure,
+    });
+
+    await expect(
+      initEngine.load({
+        source: {
+          kind: "stream",
+          target: "https://server/rest/stream?id=song-1",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "mpv-init-failed",
+      message: "bad init",
+    });
+    expect(initFailure.destroy).toHaveBeenCalledTimes(1);
+
+    const observerFailure = new FakeMpvPlayer();
+    observerFailure.observeProperty.mockRejectedValueOnce(
+      new Error("bad observe"),
+    );
+    const observerEngine = new LibMpvAudioEngine({
+      playerFactory: () => observerFailure,
+    });
+
+    await expect(
+      observerEngine.load({
+        source: {
+          kind: "stream",
+          target: "https://server/rest/stream?id=song-1",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "mpv-observer-failed",
+      message: "bad observe",
+    });
+    expect(observerFailure.destroy).toHaveBeenCalledTimes(1);
+  });
+
   it("normalizes player creation failures", async () => {
     const engine = new LibMpvAudioEngine({
       playerFactory: () => {
@@ -257,6 +299,19 @@ describe("LibMpvAudioEngine", () => {
       code: "libmpv-unavailable",
       message: "addon missing",
     });
+  });
+
+  it("preflights libmpv initialization without keeping a player alive", async () => {
+    const { engine, player } = createHarness();
+
+    await expect(engine.checkAvailability()).resolves.toEqual({
+      backend: "libmpv",
+      status: "available",
+      platformKey: `${process.platform}-${process.arch}`,
+    });
+    expect(player.initialize).toHaveBeenCalledTimes(1);
+    expect(player.observeProperty).toHaveBeenCalledTimes(5);
+    expect(player.destroy).toHaveBeenCalledTimes(1);
   });
 
   it("releases the player and ignores late events after destroy", async () => {

@@ -1,5 +1,5 @@
-import type { NativeAudioServiceEventListener } from "./types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { NativeAudioServiceEventListener } from "./types";
 
 const mocks = vi.hoisted(() => {
   let serviceListener: NativeAudioServiceEventListener | null = null;
@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => {
     seek: vi.fn(async () => {}),
     clear: vi.fn(async () => {}),
     updateMetadata: vi.fn(async () => {}),
+    destroy: vi.fn(async () => {}),
     onEvent: vi.fn((listener: NativeAudioServiceEventListener) => {
       serviceListener = listener;
       return unsubscribe;
@@ -62,6 +63,7 @@ vi.mock("./service", () => ({
 import {
   DESKTOP_NATIVE_AUDIO_EVENT_CHANNEL,
   DESKTOP_NATIVE_AUDIO_INVOKE_CHANNEL,
+  destroyDesktopNativeAudioService,
   setupDesktopNativeAudioIpc,
 } from "./ipc";
 
@@ -162,5 +164,20 @@ describe("desktop native audio IPC", () => {
       unsubscribeCallsAfterFirstSetup + 1,
     );
     expect(mocks.service.onEvent).toHaveBeenCalledTimes(2);
+  });
+
+  it("destroys the service and removes IPC bindings", async () => {
+    setupDesktopNativeAudioIpc(windowArg());
+    const unsubscribeCallsAfterSetup = mocks.unsubscribe.mock.calls.length;
+
+    await destroyDesktopNativeAudioService();
+
+    expect(mocks.ipcMain.removeHandler).toHaveBeenLastCalledWith(
+      DESKTOP_NATIVE_AUDIO_INVOKE_CHANNEL,
+    );
+    expect(mocks.unsubscribe).toHaveBeenCalledTimes(
+      unsubscribeCallsAfterSetup + 1,
+    );
+    expect(mocks.service.destroy).toHaveBeenCalledTimes(1);
   });
 });
