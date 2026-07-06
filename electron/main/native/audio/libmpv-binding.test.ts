@@ -59,6 +59,13 @@ describe("libmpv native binding loader", () => {
 describe("native mpv player adapter", () => {
   it("forwards player methods and events through the typed interface", () => {
     let eventCallback: ((event: MpvPlayerEvent) => void) | null = null;
+    const emitNativeEvent = (event: MpvPlayerEvent) => {
+      if (!eventCallback) {
+        throw new Error("native event callback was not registered");
+      }
+
+      eventCallback(event);
+    };
     const nativePlayer = {
       setEventCallback: vi.fn((listener) => {
         eventCallback = listener;
@@ -81,7 +88,7 @@ describe("native mpv player adapter", () => {
     player.command(["loadfile", "/tmp/song.mp3", "replace"]);
     player.setProperty("pause", false);
     player.observeProperty("time-pos", "number");
-    eventCallback?.({
+    emitNativeEvent({
       type: "property-change",
       name: "time-pos",
       data: 5,

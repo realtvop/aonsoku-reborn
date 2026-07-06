@@ -14,10 +14,6 @@ import type {
 
 const ADDON_FILENAME = "aonsoku_libmpv.node";
 
-interface ElectronProcess extends NodeJS.Process {
-  resourcesPath?: string;
-}
-
 export interface NativeMpvPlayerBinding {
   setEventCallback(listener: (event: MpvPlayerEvent) => void): void;
   initialize(options: MpvPlayerInitializeOptions): void;
@@ -157,8 +153,11 @@ class NativeMpvPlayerAdapter implements MpvPlayer {
 function packagedAddonPath(
   options: LibMpvBindingLoadOptions,
 ): string | undefined {
-  const resourcesPath =
-    options.resourcesPath ?? (process as ElectronProcess).resourcesPath;
+  const processResourcesPath =
+    typeof process.resourcesPath === "string"
+      ? process.resourcesPath
+      : undefined;
+  const resourcesPath = options.resourcesPath ?? processResourcesPath;
   if (!resourcesPath) return undefined;
 
   return path.join(
