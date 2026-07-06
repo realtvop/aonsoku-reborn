@@ -877,6 +877,83 @@ describe("NativeAudioService", () => {
     expect(engine.seek).toHaveBeenLastCalledWith(0);
   });
 
+  it("buffers scrobble durations across pause, resume, song switch, and ended", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+
+    try {
+      await service.load({
+        requestId: "request-song-1",
+        source: {
+          kind: "stream",
+          url: "https://server/rest/stream?id=song-1",
+          songId: "song-1",
+        },
+        metadata: {
+          title: "Song 1",
+          duration: 100,
+        },
+        autoplay: true,
+      });
+
+      vi.advanceTimersByTime(1_500);
+      await service.pause();
+      vi.advanceTimersByTime(1_000);
+      await service.play();
+      vi.advanceTimersByTime(500);
+
+      await service.load({
+        requestId: "request-song-2",
+        source: {
+          kind: "stream",
+          url: "https://server/rest/stream?id=song-2",
+          songId: "song-2",
+        },
+        metadata: {
+          title: "Song 2",
+          duration: 120,
+        },
+        autoplay: true,
+      });
+
+      await expect(service.getScrobbleBuffer()).resolves.toEqual({
+        entries: [
+          {
+            songId: "song-1",
+            playedDurationMs: 2_000,
+            timestamp: 1_000,
+          },
+        ],
+      });
+
+      vi.advanceTimersByTime(750);
+      engine.emit({ type: "ended", reason: "finished" });
+
+      await expect(service.getScrobbleBuffer()).resolves.toEqual({
+        entries: [
+          {
+            songId: "song-1",
+            playedDurationMs: 2_000,
+            timestamp: 1_000,
+          },
+          {
+            songId: "song-2",
+            playedDurationMs: 750,
+            timestamp: 4_000,
+          },
+        ],
+      });
+
+      await service.clearScrobbleBuffer();
+
+      await expect(service.getScrobbleBuffer()).resolves.toEqual({
+        entries: [],
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("handles play toggles natively only after audio is loaded", async () => {
     await expect(service.handleRemoteCommand("togglePlayPause")).resolves.toBe(
       false,
