@@ -5,7 +5,7 @@ import {
   OverlayColors,
   PlayerStatePayload,
 } from "../../preload/types";
-import { setupDesktopNativeAudioIpc } from "../native-audio/ipc";
+import { setupDesktopNativeAudioIpc } from "../native/audio/ipc";
 import { getIsQuitting } from "../index";
 import { setupMiniPlayerIpc } from "../mini-player";
 import { tray, updateTray } from "../tray";

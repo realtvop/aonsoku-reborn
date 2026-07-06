@@ -10,7 +10,7 @@ import {
   DESKTOP_NATIVE_AUDIO_INVOKE_CHANNEL,
   type DesktopNativeAudioEventPayload,
   type DesktopNativeAudioInvokePayload,
-} from "../main/native-audio/ipc";
+} from "../main/native/audio/ipc";
 
 function invokeNativeAudio<TMethod extends keyof AonsokuAudioApi>(
   method: TMethod,
