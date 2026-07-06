@@ -110,6 +110,7 @@ const mockPlugin = mocks.mockPlugin as NativeAudioPlugin;
 
 describe("Aonsoku native audio facade", () => {
   beforeEach(() => {
+    vi.unstubAllGlobals();
     mockIsNativePlatform.mockReset();
     mockGetPlatform.mockReset();
     mockIsPluginAvailable.mockReset();
@@ -141,15 +142,29 @@ describe("Aonsoku native audio facade", () => {
         },
       }),
     ).rejects.toThrow(
-      "AonsokuNativeAudio.load is only available on native Capacitor platforms",
+      "AonsokuNativeAudio.load is only available on Electron desktop or native Capacitor platforms",
     );
+  });
+
+  it("prefers the Electron desktop bridge when it is exposed", () => {
+    vi.stubGlobal("window", {
+      aonsokuNativeAudio: mockPlugin,
+    });
+
+    expect(getNativeAudioPluginAvailability()).toEqual({
+      available: true,
+      plugin: mockPlugin,
+    });
+    expect(mockIsNativePlatform).not.toHaveBeenCalled();
+    expect(isNativeAudioPluginAvailable()).toBe(true);
   });
 
   it("reports unsupported platforms as unavailable", () => {
     expect(getNativeAudioPluginAvailability()).toEqual({
       available: false,
       reason: "unsupported-platform",
-      message: "AonsokuNativeAudio requires a native Capacitor platform.",
+      message:
+        "AonsokuNativeAudio requires Electron desktop or a native Capacitor platform.",
     });
     expect(isNativeAudioPluginAvailable()).toBe(false);
 
@@ -195,7 +210,26 @@ describe("Aonsoku native audio facade", () => {
     );
   });
 
-  it("adds typed listeners through the native plugin", async () => {
+  it("adds typed listeners through the Electron desktop bridge", async () => {
+    const handle = { remove: vi.fn() };
+    const listener = vi.fn();
+    vi.mocked(mockPlugin.addListener).mockResolvedValue(handle);
+    vi.stubGlobal("window", {
+      aonsokuNativeAudio: mockPlugin,
+    });
+
+    await expect(addNativeAudioListener("progress", listener)).resolves.toBe(
+      handle,
+    );
+
+    expect(mockPlugin.addListener).toHaveBeenCalledWith(
+      "progress" satisfies NativeAudioEventName,
+      listener,
+    );
+    expect(mockIsNativePlatform).not.toHaveBeenCalled();
+  });
+
+  it("adds typed listeners through the native Capacitor plugin", async () => {
     const handle = { remove: vi.fn() };
     const listener = vi.fn();
     vi.mocked(mockPlugin.addListener).mockResolvedValue(handle);
@@ -218,7 +252,7 @@ describe("Aonsoku native audio facade", () => {
       tryAddNativeAudioListener("ended", vi.fn()),
     ).resolves.toBeNull();
     await expect(addNativeAudioListener("ended", vi.fn())).rejects.toThrow(
-      "AonsokuNativeAudio requires a native Capacitor platform.",
+      "AonsokuNativeAudio requires Electron desktop or a native Capacitor platform.",
     );
   });
 });
