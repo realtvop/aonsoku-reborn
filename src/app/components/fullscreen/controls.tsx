@@ -23,8 +23,8 @@ function FullscreenControls() {
     isTransitioning,
     isShuffleActive,
     loopState,
-    cannotSkipPrev,
     cannotSkipNext,
+    canUsePreviousControl,
     isLoopOff,
     isLoopAll,
     isLoopOne,
@@ -76,7 +76,7 @@ function FullscreenControls() {
         className={secondaryBtnClass}
         style={{ backfaceVisibility: "hidden" }}
         onClick={() => playPrevSong()}
-        disabled={cannotSkipPrev}
+        disabled={!canUsePreviousControl}
         unfocusable
       >
         <SkipBack className="w-5 h-5 md:w-6 md:h-6 text-secondary-foreground fill-secondary-foreground" />

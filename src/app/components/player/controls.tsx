@@ -34,8 +34,8 @@ export function PlayerControls({ song, radio }: PlayerControlsProps) {
     isTransitioning,
     isShuffleActive,
     loopState,
-    cannotSkipPrev,
     cannotSkipNext,
+    canUsePreviousControl,
     isLoopOff,
     isLoopAll,
     isLoopOne,
@@ -100,7 +100,7 @@ export function PlayerControls({ song, radio }: PlayerControlsProps) {
       )}
 
       <PlayerButton
-        disabled={disableButtons || cannotSkipPrev}
+        disabled={disableButtons || !canUsePreviousControl}
         onClick={playPrevSong}
         data-testid="player-button-prev"
         tooltip={previousTooltip}

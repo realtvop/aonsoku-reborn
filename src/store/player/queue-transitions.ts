@@ -139,7 +139,12 @@ export function transitionPrevSong(
     return { ...baseTransition(cloneSonglist(songlist)), seekToStart: true };
   }
 
-  if (!hasPrevEffectiveSong(songlist)) return null;
+  if (!hasPrevEffectiveSong(songlist)) {
+    if (currentSong) {
+      return { ...baseTransition(cloneSonglist(songlist)), seekToStart: true };
+    }
+    return null;
+  }
 
   const next = cloneSonglist(songlist);
 

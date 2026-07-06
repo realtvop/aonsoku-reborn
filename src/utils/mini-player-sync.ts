@@ -65,7 +65,7 @@ function getStateFromStore(): MiniPlayerState {
     isBuffering: state.playerState.isBuffering,
     shuffleActive: state.songlist.isShuffleActive,
     loopState: state.playerState.loopState,
-    hasPrev: state.playerState.hasPrev,
+    hasPrev: Boolean(song),
     hasNext: state.playerState.hasNext,
     isSongStarred: state.playerState.isSongStarred,
     currentSong: song
