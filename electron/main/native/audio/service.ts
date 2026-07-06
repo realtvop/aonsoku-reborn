@@ -36,6 +36,7 @@ import type {
   NativeSystemVolumeResult,
   NativeUpdateContextQueueOptions,
 } from "@aonsoku/audio-contract";
+import { DesktopAudioFileStore } from "./cache";
 import { MpvAudioEngine } from "./mpv";
 import {
   DesktopNativeAudioUnsupportedSourceError,
@@ -57,6 +58,8 @@ export class DesktopNativeAudioNotImplementedError extends Error {
 
 export interface NativeAudioServiceOptions {
   engine?: DesktopAudioEngine;
+  audioFileStore?: DesktopAudioFileStore;
+  audioCacheDirectory?: string | (() => string | Promise<string>);
 }
 
 export interface NativeAudioControlState {
@@ -69,6 +72,7 @@ export interface NativeAudioControlState {
 
 export class NativeAudioService implements AonsokuAudioApi {
   readonly #engine: DesktopAudioEngine;
+  readonly #audioFiles: DesktopAudioFileStore;
   readonly #listeners = new Set<NativeAudioServiceEventListener>();
   #requestId: string | undefined;
   #queueRequestSequence = 0;
@@ -83,6 +87,11 @@ export class NativeAudioService implements AonsokuAudioApi {
 
   constructor(options: NativeAudioServiceOptions = {}) {
     this.#engine = options.engine ?? new MpvAudioEngine();
+    this.#audioFiles =
+      options.audioFileStore ??
+      new DesktopAudioFileStore({
+        cacheDirectory: options.audioCacheDirectory,
+      });
     this.#engine.onEvent((event) => this.#handleEngineEvent(event));
   }
 
@@ -176,7 +185,10 @@ export class NativeAudioService implements AonsokuAudioApi {
   }
 
   async skipToNext(): Promise<void> {
-    if (!this.#hasNativeQueue || this.#queueIndex >= this.#queueItems.length - 1) {
+    if (
+      !this.#hasNativeQueue ||
+      this.#queueIndex >= this.#queueItems.length - 1
+    ) {
       return this.notImplemented("skipToNext");
     }
 
@@ -240,31 +252,39 @@ export class NativeAudioService implements AonsokuAudioApi {
   }
 
   storeAudioFile(
-    _options: NativeAudioStoreFileOptions,
+    options: NativeAudioStoreFileOptions,
   ): Promise<NativeAudioCachedAudioFile> {
-    return this.notImplemented("storeAudioFile");
+    return this.#audioFiles.storeAudioFile(options);
   }
 
   resolveAudioFile(
-    _options: NativeAudioFileOptions,
+    options: NativeAudioFileOptions,
   ): Promise<NativeAudioResolveFileResult> {
-    return this.notImplemented("resolveAudioFile");
+    return this.#audioFiles
+      .resolveAudioFile(options.songId)
+      .then((file) => ({ file }));
   }
 
   getAudioFileSize(
-    _options: NativeAudioFileOptions,
+    options: NativeAudioFileOptions,
   ): Promise<NativeAudioFileSizeResult> {
-    return this.notImplemented("getAudioFileSize");
+    return this.#audioFiles
+      .getAudioFileSize(options.songId)
+      .then((sizeBytes) => ({ sizeBytes }));
   }
 
   deleteAudioFile(
-    _options: NativeAudioFileOptions,
+    options: NativeAudioFileOptions,
   ): Promise<NativeAudioDeleteFileResult> {
-    return this.notImplemented("deleteAudioFile");
+    return this.#audioFiles
+      .deleteAudioFile(options.songId)
+      .then((deleted) => ({ deleted }));
   }
 
   clearAudioFiles(): Promise<NativeAudioClearFilesResult> {
-    return this.notImplemented("clearAudioFiles");
+    return this.#audioFiles
+      .clearAudioFiles()
+      .then((deletedCount) => ({ deletedCount }));
   }
 
   async setContextQueue(options: NativeSetContextQueueOptions): Promise<void> {
@@ -431,7 +451,9 @@ export class NativeAudioService implements AonsokuAudioApi {
     };
   }
 
-  async handleRemoteCommand(command: NativeAudioRemoteCommand): Promise<boolean> {
+  async handleRemoteCommand(
+    command: NativeAudioRemoteCommand,
+  ): Promise<boolean> {
     switch (command) {
       case "play":
         if (!this.#currentSource) return false;
@@ -609,7 +631,9 @@ function normalizeQueueIndex(
   return Math.max(0, Math.min(index, items.length - 1));
 }
 
-function nativeQueueSongToQueueItem(song: NativeQueueSong): NativeAudioQueueItem {
+function nativeQueueSongToQueueItem(
+  song: NativeQueueSong,
+): NativeAudioQueueItem {
   return {
     source: song.cachedFileUri
       ? {

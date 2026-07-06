@@ -1,6 +1,10 @@
-import { pathToFileURL } from "node:url";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { promises as fs } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NativeAudioMetadata } from "@aonsoku/audio-contract";
+import { audioCacheDirectoryFromUserDataPath, audioCacheId } from "./cache";
 import { NativeAudioService } from "./service";
 import type {
   DesktopAudioEngine,
@@ -16,9 +20,7 @@ class FakeAudioEngine implements DesktopAudioEngine {
   readonly stop = vi.fn(async () => {});
   readonly seek = vi.fn(async (_position: number) => {});
   readonly clear = vi.fn(async () => {});
-  readonly updateMetadata = vi.fn(
-    async (_metadata: NativeAudioMetadata) => {},
-  );
+  readonly updateMetadata = vi.fn(async (_metadata: NativeAudioMetadata) => {});
   readonly listeners = new Set<DesktopAudioEngineEventListener>();
 
   onEvent(listener: DesktopAudioEngineEventListener): () => void {
@@ -39,10 +41,18 @@ class FakeAudioEngine implements DesktopAudioEngine {
 describe("NativeAudioService", () => {
   let engine: FakeAudioEngine;
   let service: NativeAudioService;
+  let audioCacheDirectory: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    audioCacheDirectory = await fs.mkdtemp(
+      path.join(tmpdir(), "aonsoku-audio-service-"),
+    );
     engine = new FakeAudioEngine();
-    service = new NativeAudioService({ engine });
+    service = new NativeAudioService({ engine, audioCacheDirectory });
+  });
+
+  afterEach(async () => {
+    await fs.rm(audioCacheDirectory, { force: true, recursive: true });
   });
 
   it("loads stream, radio, and native-file sources through the engine", async () => {
@@ -120,7 +130,9 @@ describe("NativeAudioService", () => {
           songId: "song-blob",
         },
       }),
-    ).rejects.toThrow("Desktop native audio does not support blob sources yet.");
+    ).rejects.toThrow(
+      "Desktop native audio does not support blob sources yet.",
+    );
 
     expect(engine.load).not.toHaveBeenCalled();
     expect(events).toEqual([
@@ -140,6 +152,118 @@ describe("NativeAudioService", () => {
         },
       },
     ]);
+  });
+
+  it("stores, resolves, sizes, deletes, and loads cached audio files", async () => {
+    const songId = "song/cache-1";
+    const data = Buffer.from("cached audio bytes");
+    const cacheId = audioCacheId(songId);
+
+    const stored = await service.storeAudioFile({
+      songId,
+      dataBase64: data.toString("base64"),
+      contentType: "audio/mpeg; charset=binary",
+    });
+
+    const expectedAudioPath = path.join(audioCacheDirectory, `${cacheId}.mp3`);
+    const expectedMetadataPath = path.join(
+      audioCacheDirectory,
+      `${cacheId}.json`,
+    );
+    const metadata = JSON.parse(
+      await fs.readFile(expectedMetadataPath, "utf8"),
+    ) as Record<string, unknown>;
+
+    expect(stored).toEqual({
+      songId,
+      uri: pathToFileURL(expectedAudioPath).toString(),
+      contentType: "audio/mpeg; charset=binary",
+      sizeBytes: data.byteLength,
+      lastModifiedAt: expect.any(Number),
+    });
+    expect(metadata).toEqual({
+      songId,
+      fileName: `${cacheId}.mp3`,
+      contentType: "audio/mpeg; charset=binary",
+      lastModifiedAt: stored.lastModifiedAt,
+    });
+    expect(await fs.readFile(fileURLToPath(stored.uri), "utf8")).toBe(
+      "cached audio bytes",
+    );
+
+    await expect(service.resolveAudioFile({ songId })).resolves.toEqual({
+      file: stored,
+    });
+    await expect(service.getAudioFileSize({ songId })).resolves.toEqual({
+      sizeBytes: data.byteLength,
+    });
+
+    await service.load({
+      requestId: "request-cached",
+      source: {
+        kind: "native-file",
+        uri: stored.uri,
+        songId,
+      },
+    });
+
+    expect(engine.load).toHaveBeenLastCalledWith({
+      source: {
+        kind: "native-file",
+        target: expectedAudioPath,
+      },
+      metadata: undefined,
+      autoplay: undefined,
+      startTime: undefined,
+    });
+
+    const replacement = await service.storeAudioFile({
+      songId,
+      dataBase64: Buffer.from("replacement").toString("base64"),
+      contentType: "audio/flac",
+    });
+
+    expect(fileURLToPath(replacement.uri)).toBe(
+      path.join(audioCacheDirectory, `${cacheId}.flac`),
+    );
+    await expect(fs.access(expectedAudioPath)).rejects.toThrow();
+
+    await expect(service.deleteAudioFile({ songId })).resolves.toEqual({
+      deleted: true,
+    });
+    await expect(service.resolveAudioFile({ songId })).resolves.toEqual({
+      file: null,
+    });
+    await expect(service.getAudioFileSize({ songId })).resolves.toEqual({
+      sizeBytes: null,
+    });
+    await expect(service.deleteAudioFile({ songId })).resolves.toEqual({
+      deleted: false,
+    });
+  });
+
+  it("clears cached audio files without leaking outside the cache directory", async () => {
+    await service.storeAudioFile({
+      songId: "song-1",
+      dataBase64: Buffer.from("one").toString("base64"),
+      contentType: "audio/mpeg",
+    });
+    await service.storeAudioFile({
+      songId: "song-2",
+      dataBase64: Buffer.from("two").toString("base64"),
+      contentType: "audio/ogg",
+    });
+
+    await expect(service.clearAudioFiles()).resolves.toEqual({
+      deletedCount: 2,
+    });
+    await expect(fs.readdir(audioCacheDirectory)).resolves.toEqual([]);
+  });
+
+  it("derives the default desktop cache directory below Electron userData", () => {
+    expect(
+      audioCacheDirectoryFromUserDataPath(path.join("tmp", "user-data")),
+    ).toBe(path.join("tmp", "user-data", "AudioCache"));
   });
 
   it("forwards base engine events with the active request id", async () => {
@@ -340,9 +464,9 @@ describe("NativeAudioService", () => {
   });
 
   it("handles play toggles natively only after audio is loaded", async () => {
-    await expect(
-      service.handleRemoteCommand("togglePlayPause"),
-    ).resolves.toBe(false);
+    await expect(service.handleRemoteCommand("togglePlayPause")).resolves.toBe(
+      false,
+    );
 
     await service.load({
       requestId: "request-1",
@@ -356,9 +480,9 @@ describe("NativeAudioService", () => {
       state: "playing",
     });
 
-    await expect(
-      service.handleRemoteCommand("togglePlayPause"),
-    ).resolves.toBe(true);
+    await expect(service.handleRemoteCommand("togglePlayPause")).resolves.toBe(
+      true,
+    );
     expect(engine.pause).toHaveBeenCalledTimes(1);
   });
 
