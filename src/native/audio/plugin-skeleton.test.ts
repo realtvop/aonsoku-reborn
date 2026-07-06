@@ -185,6 +185,9 @@ describe("Aonsoku native audio plugin skeleton", () => {
     const appTypes = readText(
       path.join(process.cwd(), "src/native/audio/types.ts"),
     );
+    const audioContract = readText(
+      path.join(process.cwd(), "packages/audio-contract/src/index.ts"),
+    );
     const packageDefinitions = readText(
       path.join(pluginRoot, "src/audio/definitions.ts"),
     );
@@ -195,21 +198,25 @@ describe("Aonsoku native audio plugin skeleton", () => {
       ),
     );
 
+    expect(appTypes).toContain('export * from "@aonsoku/audio-contract"');
+    expect(appTypes).toContain("AonsokuAudioBridge as NativeAudioPlugin");
+    expect(packageDefinitions).toContain(
+      'export * from "@aonsoku/audio-contract"',
+    );
+    expect(packageDefinitions).toContain("extends Plugin, AonsokuAudioApi");
+
     for (const method of nativeAudioMethods) {
-      expect(appTypes).toContain(`${method}(`);
-      expect(packageDefinitions).toContain(`${method}(`);
+      expect(audioContract).toContain(`${method}(`);
       expect(swift).toContain(`CAPPluginMethod(name: "${method}"`);
     }
 
     for (const eventName of nativeAudioEventNames) {
-      expect(appTypes).toContain(`${eventName}:`);
-      expect(packageDefinitions).toContain(`${eventName}:`);
+      expect(audioContract).toContain(`${eventName}:`);
       expect(swift).toContain(`notifyListeners("${eventName}"`);
     }
 
     for (const sourceKind of nativeAudioSourceKinds) {
-      expect(appTypes).toContain(`kind: "${sourceKind}"`);
-      expect(packageDefinitions).toContain(`kind: "${sourceKind}"`);
+      expect(audioContract).toContain(`kind: "${sourceKind}"`);
     }
   });
 
