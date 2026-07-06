@@ -15,6 +15,7 @@ import {
   RpcPayload,
   setDiscordRpcActivity,
 } from "./discordRpc";
+import { setupDesktopPlaybackControlChrome } from "./playerControls";
 import { playerState } from "./playerState";
 import { getAppSetting, ISettingPayload, saveAppSettings } from "./settings";
 import { setTaskbarButtons } from "./taskbar";
@@ -86,6 +87,10 @@ export function setupIpcEvents(window: BrowserWindow | null) {
 
   setupMiniPlayerIpc();
   setupDesktopNativeAudioIpc(window);
+  setupDesktopPlaybackControlChrome(() => {
+    setTaskbarButtons();
+    updateTray();
+  });
 
   ipcMain.on(IpcChannels.ToggleFullscreen, (_, isFullscreen: boolean) => {
     window.setFullScreen(isFullscreen);

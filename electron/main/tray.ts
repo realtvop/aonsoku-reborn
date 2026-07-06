@@ -9,8 +9,10 @@ import {
   getVariantForScaleFactor,
   NativeIconVariants,
 } from "./core/nativeIcons";
-import { sendPlayerEvents } from "./core/playerEvents";
-import { playerState } from "./core/playerState";
+import {
+  dispatchDesktopPlaybackAction,
+  getDesktopPlaybackControlState,
+} from "./core/playerControls";
 import { resourcesPath } from "./core/taskbar";
 import { mainWindow } from "./window";
 
@@ -89,7 +91,8 @@ export function updateTray(title?: string) {
   const isVisible = mainWindow.isVisible();
   const trayTooltip = title ?? mainWindow.title;
 
-  const { isPlaying, hasPrevious, hasNext, hasSonglist } = playerState.value();
+  const { isPlaying, hasPrevious, hasNext, hasSonglist } =
+    getDesktopPlaybackControlState();
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -113,7 +116,7 @@ export function updateTray(title?: string) {
           }
         : {}),
       click: () => {
-        sendPlayerEvents("skipBackwards");
+        dispatchDesktopPlaybackAction("skipBackwards").catch(() => {});
       },
     },
     {
@@ -127,7 +130,7 @@ export function updateTray(title?: string) {
           }
         : {}),
       click: () => {
-        sendPlayerEvents("togglePlayPause");
+        dispatchDesktopPlaybackAction("togglePlayPause").catch(() => {});
       },
     },
     {
@@ -141,7 +144,7 @@ export function updateTray(title?: string) {
           }
         : {}),
       click: () => {
-        sendPlayerEvents("skipForward");
+        dispatchDesktopPlaybackAction("skipForward").catch(() => {});
       },
     },
     {
