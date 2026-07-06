@@ -1,5 +1,6 @@
 import { electronAPI } from "@electron-toolkit/preload";
 import { contextBridge, ipcRenderer } from "electron";
+import { aonsokuNativeAudioBridge } from "./native-audio";
 import { IAonsokuAPI, IpcChannels, PlayerStateListenerActions } from "./types";
 
 // Custom APIs for renderer
@@ -81,6 +82,10 @@ if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld("electron", electronAPI);
     contextBridge.exposeInMainWorld("api", api);
+    contextBridge.exposeInMainWorld(
+      "aonsokuNativeAudio",
+      aonsokuNativeAudioBridge,
+    );
   } catch (error) {
     console.error(error);
   }
@@ -89,4 +94,6 @@ if (process.contextIsolated) {
   window.electron = electronAPI;
   // @ts-expect-error (define in dts)
   window.api = api;
+  // @ts-expect-error (define in dts)
+  window.aonsokuNativeAudio = aonsokuNativeAudioBridge;
 }
