@@ -659,7 +659,7 @@ export class NativeQueueController implements QueueController {
 
   setVolume(volume: number): void {
     const runtime = getRuntime();
-    if (runtime !== "capacitor-android") return;
+    if (runtime !== "capacitor-android" && runtime !== "electron") return;
 
     const clamped = Math.max(0, Math.min(100, Math.round(volume)));
     this.#plugin.setSystemVolume({ value: clamped / 100 }).catch(() => {

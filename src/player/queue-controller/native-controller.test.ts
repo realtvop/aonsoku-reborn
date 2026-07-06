@@ -277,6 +277,19 @@ describe("NativeQueueController setVolume", () => {
     controller.dispose();
   });
 
+  it("calls setSystemVolume on Electron", () => {
+    mocks.mockGetRuntime.mockReturnValue("electron");
+    const controller = new NativeQueueController();
+
+    controller.setVolume(40);
+
+    expect(mocks.plugin.setSystemVolume).toHaveBeenCalledWith({
+      value: 0.4,
+    });
+
+    controller.dispose();
+  });
+
   it("does not call setSystemVolume on iOS", () => {
     mocks.mockGetRuntime.mockReturnValue("capacitor-ios");
     const controller = new NativeQueueController();

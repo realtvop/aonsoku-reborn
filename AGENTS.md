@@ -232,10 +232,14 @@ Key files:
   `libmpv-unavailable` error while cache/download APIs remain usable. The
   Electron service includes a desktop queue engine aligned with the mobile
   native plugin contract for context/user queues, shuffle/repeat, full-state
-  export, scrobble buffering, and sleep timers. See
+  export, scrobble buffering, sleep timers, remote playback projection, and a
+  platform-scoped system audio adapter for volume/HUD/like integration. See
   `docs/native-audio-libmpv.md` for build, smoke-test, and packaging details.
 - `src/player/queue-controller/` — queue management
-  (`web-controller` / `native-controller`).
+  (`web-controller` / `native-controller`). Runtimes with native playback
+  support, including Electron when the desktop bridge is available, attempt the
+  native controller first and fall back to the web controller on construction
+  failure.
 - `src/store/player/playback-actions.ts` — runtime-aware action dispatch.
 - `src/utils/capabilities.ts` — runtime detection and capability matrix.
 
