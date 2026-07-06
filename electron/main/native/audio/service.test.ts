@@ -954,6 +954,91 @@ describe("NativeAudioService", () => {
     }
   });
 
+  it("fires and cancels duration sleep timers", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(10_000);
+    const events: unknown[] = [];
+    service.onEvent((event) => events.push(event));
+
+    try {
+      await service.load({
+        requestId: "request-sleep",
+        source: {
+          kind: "stream",
+          url: "https://server/rest/stream?id=song-1",
+          songId: "song-1",
+        },
+        autoplay: true,
+      });
+      await service.setSleepTimer({ seconds: 5, mode: "duration" });
+
+      await expect(service.getSleepTimerRemaining()).resolves.toEqual({
+        remainingSeconds: 5,
+      });
+
+      vi.advanceTimersByTime(2_000);
+
+      await expect(service.getSleepTimerRemaining()).resolves.toEqual({
+        remainingSeconds: 3,
+      });
+
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      expect(engine.pause).toHaveBeenCalledTimes(1);
+      expect(events).toContainEqual({
+        eventName: "playbackStateChanged",
+        event: {
+          requestId: "request-sleep",
+          state: "paused",
+        },
+      });
+      expect(events).toContainEqual({
+        eventName: "sleepTimerFired",
+        event: {
+          reason: "duration",
+        },
+      });
+      await expect(service.getSleepTimerRemaining()).resolves.toEqual({
+        remainingSeconds: 0,
+      });
+
+      await service.setSleepTimer({ seconds: 5, mode: "duration" });
+      await service.cancelSleepTimer();
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(engine.pause).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fires end-of-track sleep timers before queue advancement", async () => {
+    await service.setContextQueue({
+      songs: [queueSong("1"), queueSong("2")],
+      currentIndex: 0,
+    });
+    await service.setSleepTimer({ seconds: 0, mode: "endOfTrack" });
+
+    await expect(service.getSleepTimerRemaining()).resolves.toEqual({
+      remainingSeconds: 0,
+    });
+
+    const firedPromise = waitForServiceEvent(service, "sleepTimerFired");
+    engine.emit({ type: "ended", reason: "finished" });
+
+    await expect(firedPromise).resolves.toEqual({
+      reason: "endOfTrack",
+    });
+    expect(engine.pause).toHaveBeenCalledTimes(1);
+    expect(engine.load).toHaveBeenCalledTimes(1);
+    await expect(service.getFullState()).resolves.toMatchObject({
+      contextQueue: {
+        currentIndex: 0,
+      },
+      currentSongId: "1",
+    });
+  });
+
   it("handles play toggles natively only after audio is loaded", async () => {
     await expect(service.handleRemoteCommand("togglePlayPause")).resolves.toBe(
       false,

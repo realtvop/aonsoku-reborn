@@ -104,6 +104,9 @@ export class NativeAudioService implements AonsokuAudioApi {
   readonly #scrobbleBuffer = new DesktopScrobbleBuffer();
   #requestId: string | undefined;
   #queueRequestSequence = 0;
+  #sleepTimerMode: NativeSetSleepTimerOptions["mode"] = "duration";
+  #sleepTimerDeadlineMs = 0;
+  #sleepTimerHandle: ReturnType<typeof setTimeout> | null = null;
   #playbackState: NativeAudioEvents["playbackStateChanged"]["state"] = "idle";
   #currentTime = 0;
   #duration = 0;
@@ -279,6 +282,7 @@ export class NativeAudioService implements AonsokuAudioApi {
     try {
       await this.#engine.clear();
       this.#stopScrobbleTracking();
+      this.#cancelSleepTimerInternal();
       this.#requestId = undefined;
       this.#queueRequestSequence = 0;
       this.#queueEngine.clear();
@@ -436,16 +440,40 @@ export class NativeAudioService implements AonsokuAudioApi {
     return Promise.resolve();
   }
 
-  setSleepTimer(_options: NativeSetSleepTimerOptions): Promise<void> {
-    return this.notImplemented("setSleepTimer");
+  setSleepTimer(options: NativeSetSleepTimerOptions): Promise<void> {
+    this.#cancelSleepTimerInternal();
+
+    if (options.mode === "endOfTrack") {
+      this.#sleepTimerMode = "endOfTrack";
+      return Promise.resolve();
+    }
+
+    const seconds = Math.max(0, options.seconds);
+    if (seconds <= 0) return Promise.resolve();
+
+    this.#sleepTimerMode = "duration";
+    this.#sleepTimerDeadlineMs = Date.now() + seconds * 1_000;
+    this.#sleepTimerHandle = setTimeout(() => {
+      this.#fireSleepTimer("duration").catch((error) => {
+        this.#emitFailure(error);
+      });
+    }, seconds * 1_000);
+
+    return Promise.resolve();
   }
 
   cancelSleepTimer(): Promise<void> {
-    return this.notImplemented("cancelSleepTimer");
+    this.#cancelSleepTimerInternal();
+    return Promise.resolve();
   }
 
   getSleepTimerRemaining(): Promise<NativeSleepTimerRemainingResult> {
-    return this.notImplemented("getSleepTimerRemaining");
+    return Promise.resolve({
+      remainingSeconds:
+        this.#sleepTimerDeadlineMs > 0
+          ? Math.max(0, (this.#sleepTimerDeadlineMs - Date.now()) / 1_000)
+          : 0,
+    });
   }
 
   onEvent(listener: NativeAudioServiceEventListener): () => void {
@@ -458,6 +486,7 @@ export class NativeAudioService implements AonsokuAudioApi {
 
   destroy(): Promise<void> | void {
     this.#downloadManager.cancelAll();
+    this.#cancelSleepTimerInternal();
     return this.#engine.destroy?.();
   }
 
@@ -715,6 +744,31 @@ export class NativeAudioService implements AonsokuAudioApi {
     }
   }
 
+  #cancelSleepTimerInternal(): void {
+    if (this.#sleepTimerHandle) {
+      clearTimeout(this.#sleepTimerHandle);
+    }
+
+    this.#sleepTimerHandle = null;
+    this.#sleepTimerDeadlineMs = 0;
+    this.#sleepTimerMode = "duration";
+  }
+
+  async #fireSleepTimer(
+    reason: NativeAudioEvents["sleepTimerFired"]["reason"],
+  ): Promise<void> {
+    await this.pause();
+    this.#cancelSleepTimerInternal();
+    this.#playbackState = "paused";
+    this.#emit("playbackStateChanged", {
+      requestId: this.#requestId,
+      state: "paused",
+    });
+    this.#emit("sleepTimerFired", {
+      reason,
+    });
+  }
+
   #emitQueueContentsChanged(reason: DesktopQueueContentsReason): void {
     this.#emit("queueContentsChanged", {
       requestId: this.#requestId,
@@ -780,6 +834,11 @@ export class NativeAudioService implements AonsokuAudioApi {
   async #handlePlaybackEnded(
     event: Extract<DesktopAudioEngineEvent, { type: "ended" }>,
   ): Promise<void> {
+    if (this.#sleepTimerMode === "endOfTrack") {
+      await this.#fireSleepTimer("endOfTrack");
+      return;
+    }
+
     if (this.#hasNativeQueue()) {
       try {
         await this.#queueEngine.handleEnded();
