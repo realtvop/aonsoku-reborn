@@ -209,12 +209,17 @@ interface) supporting multiple playback stacks:
 |---|---|---|
 | Web Audio (HTMLAudioElement) | web, electron | `src/player/playback/web-backend.ts` |
 | Native audio (Capacitor plugin) | capacitor-ios, capacitor-android | `src/player/playback/native-backend.ts` |
+| Native audio bridge skeleton | electron | `electron/preload/native-audio.ts` + `electron/main/native-audio/` |
 
 Key files:
 
 - `src/player/playback/types.ts` — unified `PlaybackBackend` interface.
 - `src/player/playback/backend-factory.ts` — platform-aware backend selection.
 - `src/native/audio/` — native audio facade and shared TS types.
+- `electron/preload/native-audio.ts` and `electron/main/native-audio/` —
+  desktop bridge IPC and service skeleton implementing
+  `@aonsoku/audio-contract`; until a real desktop service is wired,
+  Electron native playback selection remains capability-gated.
 - `src/player/queue-controller/` — queue management
   (`web-controller` / `native-controller`).
 - `src/store/player/playback-actions.ts` — runtime-aware action dispatch.
