@@ -174,7 +174,13 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
 
     if (this.#player) return this.#player;
 
-    const player = this.#playerFactory();
+    let player: MpvPlayer;
+    try {
+      player = this.#playerFactory();
+    } catch (error) {
+      throw toLibMpvError("libmpv-unavailable", error);
+    }
+
     this.#unsubscribeFromPlayer = player.onEvent((event) =>
       this.#handleMpvEvent(event),
     );

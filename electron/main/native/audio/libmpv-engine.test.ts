@@ -227,6 +227,26 @@ describe("LibMpvAudioEngine", () => {
     });
   });
 
+  it("normalizes player creation failures", async () => {
+    const engine = new LibMpvAudioEngine({
+      playerFactory: () => {
+        throw new Error("addon missing");
+      },
+    });
+
+    await expect(
+      engine.load({
+        source: {
+          kind: "stream",
+          target: "https://server/rest/stream?id=song-1",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "libmpv-unavailable",
+      message: "addon missing",
+    });
+  });
+
   it("releases the player and ignores late events after destroy", async () => {
     const { engine, events, player } = createHarness();
 

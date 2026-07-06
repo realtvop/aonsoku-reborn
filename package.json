@@ -27,6 +27,8 @@
     "electron:build": "electron-vite build",
     "make": "pnpm electron:build && electron-forge make",
     "publish": "pnpm electron:build && electron-forge publish",
+    "native-audio:build": "node electron/main/native/audio/libmpv/build-addon.mjs",
+    "native-audio:smoke": "node electron/main/native/audio/libmpv/smoke-check.mjs",
     "build:unpack": "pnpm electron:build",
     "build:win": "pnpm electron:build && electron-forge make --platform win32",
     "build:mac": "pnpm electron:build && electron-forge make --platform darwin",
