@@ -18,6 +18,7 @@ import { logger } from "@/utils/logger";
 import {
   getMaxShuffleHistory,
   getMaxShuffleStartHistory,
+  pickRandomStartIndex,
   pushToHistory,
 } from "@/utils/songListFunctions";
 import { transitionHandleSongEnded } from "./queue-transitions";
@@ -134,43 +135,50 @@ export function createQueueActions(shared: SharedDeps) {
   return {
     setSongList: (
       songlist: ISong[],
-      index: number,
+      index?: number | null,
       shuffle = false,
       sourceId?: QueueSourceId | { albumId: string } | { playlistId: string },
       sourceName?: string,
     ) => {
-      const nativeController = getNativeQueueController();
-      if (nativeController) {
-        nativeController.setSongList(
-          songlist,
-          index,
-          shuffle,
-          sourceId,
-          sourceName,
-        );
-        return;
-      }
-
       if (!songlist || songlist.length === 0) return;
-      index = Math.max(0, Math.min(index, songlist.length - 1));
+
+      let targetIndex = index;
+      if (shuffle && (targetIndex === null || targetIndex === undefined)) {
+        const startHistory = get().songlist.shuffleStartHistory ?? [];
+        targetIndex = pickRandomStartIndex(
+          songlist.length,
+          startHistory,
+          (i) => songlist[i].id,
+        );
+      } else if (targetIndex === null || targetIndex === undefined) {
+        targetIndex = 0;
+      }
+      targetIndex = Math.max(0, Math.min(targetIndex, songlist.length - 1));
 
       if (isRemoteActive()) {
         sendSongListRemote(
           remoteSend,
           songlist,
-          index,
+          targetIndex,
           shuffle,
           sourceId,
           sourceName,
         );
         set((state) => {
           state.playerState.isPlaying = true;
-          state.songlist.isShuffleActive = Boolean(shuffle);
-          state.songlist.contextQueue.sourceName =
-            sourceName !== undefined
-              ? sourceName || null
-              : state.songlist.contextQueue.sourceName;
         });
+        return;
+      }
+
+      const nativeController = getNativeQueueController();
+      if (nativeController) {
+        nativeController.setSongList(
+          songlist,
+          targetIndex,
+          shuffle,
+          sourceId,
+          sourceName,
+        );
         return;
       }
 
@@ -180,7 +188,7 @@ export function createQueueActions(shared: SharedDeps) {
         sourceQueue.songs.length > 0 ? sourceQueue.songs : contextQueue.songs;
       const listsAreEqual = areSongListsEqual(sourceSongs, songlist);
       const currentSong = getCurrentSong(get().songlist);
-      const sameIndex = currentSong?.id === songlist[index]?.id;
+      const sameIndex = currentSong?.id === songlist[targetIndex]?.id;
       const sameSourceId =
         JSON.stringify(contextQueue.sourceId) === JSON.stringify(normalizedId);
 
@@ -194,7 +202,7 @@ export function createQueueActions(shared: SharedDeps) {
       if (listsAreEqual && !sameIndex && !shuffle && sameSourceId) {
         const queueSongs = buildContextQueueSongs(
           songlist,
-          index,
+          targetIndex,
           get().playerState.loopState,
           false,
         );
@@ -204,7 +212,7 @@ export function createQueueActions(shared: SharedDeps) {
           state.playerState.isPlaying = true;
           state.songlist.contextQueue.songs = queueSongs;
           state.songlist.contextQueue.currentIndex = 0;
-          state.songlist.sourceQueue.currentIndex = index;
+          state.songlist.sourceQueue.currentIndex = targetIndex;
           resetUserQueue(state.songlist);
           if (sourceName !== undefined) {
             state.songlist.contextQueue.sourceName = sourceName || null;
@@ -216,10 +224,10 @@ export function createQueueActions(shared: SharedDeps) {
 
       if (shuffle) {
         const startHistory = get().songlist.shuffleStartHistory ?? [];
-        const startSong = songlist[index];
+        const startSong = songlist[targetIndex];
         const queueSongs = buildContextQueueSongs(
           songlist,
-          index,
+          targetIndex,
           get().playerState.loopState,
           true,
         );
@@ -245,7 +253,7 @@ export function createQueueActions(shared: SharedDeps) {
           state.songlist.sourceQueue = {
             ...emptyContextQueue(),
             songs: [...songlist],
-            currentIndex: index,
+            currentIndex: targetIndex,
             sourceId: normalizedId,
             sourceName: state.songlist.contextQueue.sourceName,
           };
@@ -261,7 +269,7 @@ export function createQueueActions(shared: SharedDeps) {
       } else {
         const queueSongs = buildContextQueueSongs(
           songlist,
-          index,
+          targetIndex,
           get().playerState.loopState,
           false,
         );
@@ -282,7 +290,7 @@ export function createQueueActions(shared: SharedDeps) {
           state.songlist.sourceQueue = {
             ...emptyContextQueue(),
             songs: [...songlist],
-            currentIndex: index,
+            currentIndex: targetIndex,
             sourceId: normalizedId,
             sourceName: state.songlist.contextQueue.sourceName,
           };
@@ -298,12 +306,6 @@ export function createQueueActions(shared: SharedDeps) {
     },
 
     playFromQueue: (contextSongs: ISong[], contextIndex: number) => {
-      const nativeController = getNativeQueueController();
-      if (nativeController) {
-        nativeController.playFromQueue(contextSongs, contextIndex);
-        return;
-      }
-
       if (!contextSongs || contextSongs.length === 0) return;
       contextIndex = Math.max(
         0,
@@ -313,8 +315,17 @@ export function createQueueActions(shared: SharedDeps) {
       if (isRemoteActive()) {
         const song = contextSongs[contextIndex];
         if (song) {
-          remoteSend(LanControlMessageType.PLAY_SONG, { songId: song.id });
+          remoteSend(LanControlMessageType.PLAY_AT_INDEX, {
+            songIds: contextSongs.map((s) => s.id),
+            index: contextIndex,
+          });
         }
+        return;
+      }
+
+      const nativeController = getNativeQueueController();
+      if (nativeController) {
+        nativeController.playFromQueue(contextSongs, contextIndex);
         return;
       }
 
@@ -366,20 +377,29 @@ export function createQueueActions(shared: SharedDeps) {
     },
 
     playFromUserQueue: (userQueueIndex: number) => {
+      if (isRemoteActive()) {
+        const { userQueue, contextQueue } = get().songlist;
+        const song = userQueue.songs[userQueueIndex];
+        if (song) {
+          const allIds = [
+            ...contextQueue.songs.map((s) => s.id),
+            ...userQueue.songs.map((s) => s.id),
+          ];
+          const targetIndex = contextQueue.songs.length + userQueueIndex;
+          remoteSend(LanControlMessageType.PLAY_AT_INDEX, {
+            songIds: allIds,
+            index: targetIndex,
+          });
+        }
+        return;
+      }
+
       const nativeController = getNativeQueueController();
       if (nativeController) {
         nativeController.playFromUserQueue(userQueueIndex);
         return;
       }
 
-      if (isRemoteActive()) {
-        const { userQueue } = get().songlist;
-        const song = userQueue.songs[userQueueIndex];
-        if (song) {
-          remoteSend(LanControlMessageType.PLAY_SONG, { songId: song.id });
-        }
-        return;
-      }
       const { userQueue } = get().songlist;
       if (userQueueIndex < 0 || userQueueIndex >= userQueue.songs.length)
         return;
@@ -397,15 +417,16 @@ export function createQueueActions(shared: SharedDeps) {
     },
 
     playSong: (song: ISong, sourceName?: string) => {
+      if (remoteSend(LanControlMessageType.PLAY_SONG, { songId: song.id })) {
+        return;
+      }
+
       const nativeController = getNativeQueueController();
       if (nativeController) {
         nativeController.playSong(song, sourceName);
         return;
       }
 
-      if (remoteSend(LanControlMessageType.PLAY_SONG, { songId: song.id })) {
-        return;
-      }
       const { isPlaying } = get().playerState;
       const songIsAlreadyPlaying = get().actions.checkActiveSong(song.id);
       if (songIsAlreadyPlaying && !isPlaying) {
@@ -446,18 +467,18 @@ export function createQueueActions(shared: SharedDeps) {
       list: ISong[],
       sourceId?: QueueSourceId | { albumId: string } | { playlistId: string },
     ) => {
-      const nativeController = getNativeQueueController();
-      if (nativeController) {
-        nativeController.addToQueueNext(list, sourceId);
-        return;
-      }
-
       if (isRemoteActive()) {
         if (list.length === 0) return;
         sendAddToQueueRemote(remoteSend, sourceId, list);
         return;
       }
       if (!list || list.length === 0) return;
+
+      const nativeController = getNativeQueueController();
+      if (nativeController) {
+        nativeController.addToQueueNext(list, sourceId);
+        return;
+      }
 
       set((state) => {
         state.songlist.userQueue.songs = setNextOnUserQueue(
@@ -471,18 +492,18 @@ export function createQueueActions(shared: SharedDeps) {
       list: ISong[],
       sourceId?: QueueSourceId | { albumId: string } | { playlistId: string },
     ) => {
-      const nativeController = getNativeQueueController();
-      if (nativeController) {
-        nativeController.addToQueueLast(list, sourceId);
-        return;
-      }
-
       if (isRemoteActive()) {
         if (list.length === 0) return;
         sendAddToQueueRemote(remoteSend, sourceId, list);
         return;
       }
       if (!list || list.length === 0) return;
+
+      const nativeController = getNativeQueueController();
+      if (nativeController) {
+        nativeController.addToQueueLast(list, sourceId);
+        return;
+      }
 
       set((state) => {
         state.songlist.userQueue.songs = setLastOnUserQueue(
@@ -493,13 +514,14 @@ export function createQueueActions(shared: SharedDeps) {
     },
 
     removeSongFromQueue: (id: string, tier?: QueueTier) => {
+      if (isRemoteActive()) return;
+
       const nativeController = getNativeQueueController();
       if (nativeController) {
         nativeController.removeFromQueue(id, tier);
         return;
       }
 
-      if (isRemoteActive()) return;
       const detectedTier = tier ?? findSongTier(get().songlist, id);
       if (!detectedTier) return;
 
@@ -568,6 +590,11 @@ export function createQueueActions(shared: SharedDeps) {
     },
 
     clearUserQueue: () => {
+      if (isRemoteActive()) {
+        remoteSend(LanControlMessageType.CLEAR_QUEUE);
+        return;
+      }
+
       const nativeController = getNativeQueueController();
       if (nativeController) {
         nativeController.clearUserQueue();
@@ -584,13 +611,14 @@ export function createQueueActions(shared: SharedDeps) {
     },
 
     reorderQueue: (fromIndex: number, toIndex: number) => {
+      if (isRemoteActive()) return;
+
       const nativeController = getNativeQueueController();
       if (nativeController) {
         nativeController.reorderQueue(fromIndex, toIndex);
         return;
       }
 
-      if (isRemoteActive()) return;
       if (fromIndex === toIndex) return;
 
       const { contextQueue, userQueue } = get().songlist;
@@ -634,17 +662,14 @@ export function createQueueActions(shared: SharedDeps) {
     },
 
     toggleShuffle: () => {
-      const nativeController = getNativeQueueController();
-      if (nativeController) {
-        nativeController.toggleShuffle();
+      if (isRemoteActive()) {
+        remoteSend(LanControlMessageType.TOGGLE_SHUFFLE);
         return;
       }
 
-      if (isRemoteActive()) {
-        remoteSend(LanControlMessageType.TOGGLE_SHUFFLE);
-        set((state) => {
-          state.songlist.isShuffleActive = !state.songlist.isShuffleActive;
-        });
+      const nativeController = getNativeQueueController();
+      if (nativeController) {
+        nativeController.toggleShuffle();
         return;
       }
 
@@ -661,15 +686,16 @@ export function createQueueActions(shared: SharedDeps) {
     },
 
     playNextSong: () => {
+      if (isRemoteActive()) {
+        if (remoteSend(LanControlMessageType.NEXT)) return;
+      }
+
       const nativeController = getNativeQueueController();
       if (nativeController) {
         nativeController.playNext();
         return;
       }
 
-      if (isRemoteActive()) {
-        if (remoteSend(LanControlMessageType.NEXT)) return;
-      }
       const now = Date.now();
       if (now - lastNextSongTime < NEXT_SONG_DEBOUNCE_MS) return;
       lastNextSongTime = now;
@@ -750,24 +776,28 @@ export function createQueueActions(shared: SharedDeps) {
     },
 
     playPrevSong: () => {
+      if (isRemoteActive()) {
+        if (remoteSend(LanControlMessageType.PREVIOUS)) return;
+      }
+
       const nativeController = getNativeQueueController();
       if (nativeController) {
         nativeController.playPrev();
         return;
       }
 
-      if (isRemoteActive()) {
-        if (remoteSend(LanControlMessageType.PREVIOUS)) return;
-      }
-
       const currentSong = getCurrentSong(get().songlist);
       const progress = get().playerProgress.progress;
-      const willSeekToStart = !!(currentSong && progress > PREV_SEEK_THRESHOLD);
+      const hasPrev = hasPrevEffectiveSong(get().songlist);
+      const willSeekToStart = !!(
+        currentSong &&
+        (progress > PREV_SEEK_THRESHOLD || !hasPrev)
+      );
       logger.info(
-        `[playPrevSong] progress=${progress} | willSeekToStart=${willSeekToStart} | hasPrev=${hasPrevEffectiveSong(get().songlist)} | songId=${currentSong?.id}`,
+        `[playPrevSong] progress=${progress} | willSeekToStart=${willSeekToStart} | hasPrev=${hasPrev} | songId=${currentSong?.id}`,
       );
 
-      if (currentSong && progress > PREV_SEEK_THRESHOLD) {
+      if (willSeekToStart) {
         set((state) => {
           state.playerProgress.progress = 0;
           state.playerProgress.bufferedProgress = 0;
@@ -784,7 +814,7 @@ export function createQueueActions(shared: SharedDeps) {
       if (now - lastPrevSongTime < PREV_SONG_DEBOUNCE_MS) return;
       lastPrevSongTime = now;
 
-      if (!hasPrevEffectiveSong(get().songlist)) return;
+      if (!hasPrev) return;
 
       const { isInUserQueue, playedUserQueueHistory, contextQueue } =
         get().songlist;
@@ -943,13 +973,14 @@ export function createQueueActions(shared: SharedDeps) {
     },
 
     clearPlayerState: () => {
+      if (isRemoteActive()) return;
+
       const nativeController = getNativeQueueController();
       if (nativeController) {
         nativeController.clearPlayerState();
         return;
       }
 
-      if (isRemoteActive()) return;
       set((state) => {
         clearSonglistState(state.songlist);
         state.playerState.mediaType = "song";

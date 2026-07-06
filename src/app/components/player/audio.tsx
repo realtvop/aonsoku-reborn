@@ -14,7 +14,6 @@ import {
   createUrlPlaybackSource,
   getPlaybackEndedDecision,
   getPlaybackErrorKind,
-  handlePlaybackRemoteCommand,
   type PlaybackBackend,
   type PlaybackBackendKind,
   type PlaybackErrorEvent,
@@ -113,11 +112,6 @@ export function AudioPlayer({
     setCurrentDuration: setStoreCurrentDuration,
     setIsBuffering: setStoreIsBuffering,
     setProgress: setStoreProgress,
-    togglePlayPause,
-    playNextSong,
-    playPrevSong,
-    starCurrentSong,
-    toggleShuffle,
   } = usePlayerActions();
 
   const getPlaybackBackendEntry = useCallback(
@@ -531,38 +525,6 @@ export function AudioPlayer({
     [audioRef, cancelRetry, isRadio, isSong, onPlaybackError, scheduleRetry],
   );
 
-  const handleNativeRemoteCommand = useCallback(
-    (event: Parameters<typeof handlePlaybackRemoteCommand>[0]) => {
-      const audio = audioRef.current;
-
-      handlePlaybackRemoteCommand(event, {
-        isPlaying: () => usePlayerStore.getState().playerState.isPlaying,
-        togglePlayPause,
-        playNextSong,
-        playPrevSong,
-        seek: (position) => {
-          if (!audio) return;
-
-          seekAudio(audio, position);
-          usePlayerStore.setState((state) => {
-            state.playerProgress.progress = position;
-          });
-        },
-        starCurrentSong,
-        toggleShuffle,
-      });
-    },
-    [
-      audioRef,
-      playNextSong,
-      playPrevSong,
-      seekAudio,
-      starCurrentSong,
-      togglePlayPause,
-      toggleShuffle,
-    ],
-  );
-
   const handleAudioErrorRef = useRef(handleAudioError);
   handleAudioErrorRef.current = handleAudioError;
 
@@ -675,6 +637,7 @@ export function AudioPlayer({
         sessionRef.current.markLoopRestarting();
         sessionRef.current.markLoopRestartSyncHandled();
         seekAudio(audio, 0);
+        setStoreProgress(0, true);
         safePlay(audio, "LoopRestartSync");
       }
 
@@ -684,11 +647,6 @@ export function AudioPlayer({
       "error",
       handleNativeBackendError,
     );
-    const unsubscribeRemoteCommand = backendEntry.backend.subscribe(
-      "remoteCommand",
-      handleNativeRemoteCommand,
-    );
-
     return () => {
       unsubscribeProgress();
       unsubscribeDuration();
@@ -697,20 +655,19 @@ export function AudioPlayer({
       unsubscribePause();
       unsubscribeEnded();
       unsubscribeError();
-      unsubscribeRemoteCommand();
     };
   }, [
     applyPendingResume,
     audioRef,
     getPlaybackBackendEntry,
     handleNativeBackendError,
-    handleNativeRemoteCommand,
     onEnded,
     safePlay,
     seekAudio,
     setStoreBufferedProgress,
     setStoreCurrentDuration,
     setStoreIsBuffering,
+    setStoreProgress,
     songId,
   ]);
 
@@ -773,6 +730,7 @@ export function AudioPlayer({
             );
             sessionRef.current.markLoopRestarting();
             seekAudio(audio, 0);
+            setStoreProgress(0, true);
             usePlayerStore.setState((state) => {
               state.playerState.seekToStart = false;
             });
@@ -835,6 +793,7 @@ export function AudioPlayer({
     safePlay,
     seekToStart,
     seekAudio,
+    setStoreProgress,
     shouldUseWebAudioReplayGain,
     songId,
   ]);
@@ -987,6 +946,7 @@ export function AudioPlayer({
           sessionRef.current.markLoopRestarting();
           sessionRef.current.markLoopRestartSyncHandled();
           seekAudio(e.currentTarget, 0);
+          setStoreProgress(0, true);
           safePlay(e.currentTarget, "LoopRestartSync");
         } else {
           logger.info(

@@ -68,6 +68,7 @@ public class AonsokuNativeBridgePlugin: CAPPlugin, CAPBridgedPlugin {
         var result: [String: Any] = [
             "serverUrl": credentials.serverUrl,
             "username": credentials.username,
+            "password": credentials.password,
             "authType": credentials.authType,
             "protocolVersion": credentials.protocolVersion,
             "serverType": credentials.serverType,

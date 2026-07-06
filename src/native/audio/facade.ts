@@ -11,6 +11,7 @@ import {
   type NativeAudioPlugin,
   type NativeAudioQueueOptions,
   type NativeAudioRepeatModeOptions,
+  type NativeRemotePlaybackStateOptions,
   type NativeAudioSeekOptions,
   type NativeAudioShuffleOptions,
   type NativeAudioSource,
@@ -86,6 +87,20 @@ class UnavailableNativeAudioWeb extends WebPlugin implements NativeAudioPlugin {
 
   updateMetadata(_metadata: NativeAudioMetadata): Promise<void> {
     return Promise.reject(createNativeAudioUnavailableError("updateMetadata"));
+  }
+
+  updateRemotePlaybackState(
+    _options: NativeRemotePlaybackStateOptions,
+  ): Promise<void> {
+    return Promise.reject(
+      createNativeAudioUnavailableError("updateRemotePlaybackState"),
+    );
+  }
+
+  clearRemotePlaybackState(): Promise<void> {
+    return Promise.reject(
+      createNativeAudioUnavailableError("clearRemotePlaybackState"),
+    );
   }
 
   preload(_options: { source: NativeAudioSource }): Promise<void> {

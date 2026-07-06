@@ -8,6 +8,7 @@ import {
   LaptopIcon,
   Paintbrush,
   Server,
+  Share2,
 } from "lucide-react";
 import { ComponentType } from "react";
 import { useTranslation } from "react-i18next";
@@ -30,6 +31,7 @@ export type SettingsOptions =
   | "storage"
   | "accounts"
   | "desktop"
+  | "cross-device"
   | "privacy";
 
 interface OptionsData {
@@ -48,6 +50,7 @@ const options: OptionsData[] = [
   { id: "content", icon: FileText },
   { id: "storage", icon: HardDrive },
   ...(isDesktop() ? [accountsOption, desktopOption] : []),
+  { id: "cross-device", icon: Share2 },
   { id: "privacy", icon: EarthLock },
 ];
 

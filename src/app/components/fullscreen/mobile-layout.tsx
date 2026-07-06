@@ -1,10 +1,27 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, ListChecks, ListMusic, MicVocalIcon } from "lucide-react";
-import { memo, type ReactNode } from "react";
+import {
+  ChevronDown,
+  ListChecks,
+  ListMusic,
+  MicVocalIcon,
+  MonitorSpeaker,
+} from "lucide-react";
+import {
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/app/components/ui/button";
+import { DevicePanel } from "@/app/components/remote-control/device-panel";
+import { useDevicePlaybackActions } from "@/app/components/remote-control/use-device-playback-actions";
+import { HandoffConfirmationDialog } from "@/app/components/remote-control/handoff-confirmation-dialog";
 import { Drawer as DrawerPrimitive } from "vaul";
 import { useFullscreenContrast } from "@/app/hooks/use-fullscreen-contrast";
+import { useCoordinationReconnectOnOpen } from "@/app/hooks/use-coordination-reconnect-on-open";
 import { useHasLyrics } from "@/app/hooks/use-has-lyrics";
 import { useIsTouchPrimary } from "@/app/hooks/use-input-mode";
 import { cn } from "@/lib/utils";
@@ -80,21 +97,19 @@ const MobileHeader = memo(function MobileHeader({
   );
 });
 
-function MobileTabButton({
-  icon,
-  active,
-  disabled = false,
-  onClick,
-  label,
-}: {
-  icon: ReactNode;
-  active: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-  label: string;
-}) {
+const MobileTabButton = forwardRef<
+  HTMLButtonElement,
+  {
+    icon: ReactNode;
+    active: boolean;
+    disabled?: boolean;
+    onClick?: () => void;
+    label: string;
+  } & React.ComponentPropsWithoutRef<typeof Button>
+>(({ icon, active, disabled = false, onClick, label, ...props }, ref) => {
   return (
     <Button
+      ref={ref}
       variant="ghost"
       size="icon"
       role="tab"
@@ -112,23 +127,43 @@ function MobileTabButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
+      {...props}
     >
       {icon}
     </Button>
   );
-}
+});
+MobileTabButton.displayName = "MobileTabButton";
 
 const MobileBottomTabs = memo(function MobileBottomTabs() {
   const { t } = useTranslation();
   const { fullscreenPlayerTab } = useFullscreenPlayerState();
   const { hasLyrics } = useHasLyrics();
 
+  const [panelOpen, setPanelOpen] = useState(false);
+  const reconnectCoordinationOnOpen = useCoordinationReconnectOnOpen();
+  const deviceActions = useDevicePlaybackActions();
+
+  const handleDevicePanelOpenChange = useCallback(
+    (open: boolean) => {
+      setPanelOpen(open);
+      reconnectCoordinationOnOpen(open);
+    },
+    [reconnectCoordinationOnOpen],
+  );
+
+  useEffect(() => {
+    const handleOpen = () => handleDevicePanelOpenChange(true);
+    window.addEventListener("open-device-panel", handleOpen);
+    return () => window.removeEventListener("open-device-panel", handleOpen);
+  }, [handleDevicePanelOpenChange]);
+
   const lyricsDisabled = hasLyrics === false;
 
   return (
     <div
       className={cn(
-        "shrink-0 flex items-center justify-between w-full mx-auto px-0 pt-2 pb-5 w-[65dvw] max-w-[450px]",
+        "shrink-0 flex items-center justify-between w-full mx-auto px-0 pt-2 pb-5 w-[75dvw] max-w-[480px]",
       )}
       role="tablist"
     >
@@ -162,6 +197,25 @@ const MobileBottomTabs = memo(function MobileBottomTabs() {
             fullscreenPlayerTab === "queue" ? "playing" : "queue",
           )
         }
+      />
+      <DevicePanel
+        open={panelOpen}
+        onOpenChange={handleDevicePanelOpenChange}
+        actions={deviceActions}
+        trigger={
+          <MobileTabButton
+            icon={<MonitorSpeaker className="size-5" />}
+            label={t("settings.crossDevice.title", { defaultValue: "Devices" })}
+            active={panelOpen}
+          />
+        }
+      />
+      <HandoffConfirmationDialog
+        open={deviceActions.isConfirmationOpen}
+        onOpenChange={deviceActions.setIsConfirmationOpen}
+        pendingDevice={deviceActions.pendingDevice}
+        onConfirm={deviceActions.confirmLocalReplacement}
+        onCancel={deviceActions.cancelPendingHandoff}
       />
     </div>
   );

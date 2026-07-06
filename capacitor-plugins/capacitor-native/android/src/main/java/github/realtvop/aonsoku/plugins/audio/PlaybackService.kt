@@ -15,6 +15,7 @@ import android.Manifest
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
 import androidx.annotation.OptIn
 import androidx.core.app.NotificationCompat
 import androidx.media.app.NotificationCompat.MediaStyle
@@ -41,6 +42,7 @@ import github.realtvop.aonsoku.plugins.bridge.AndroidCredentialStore
 import github.realtvop.aonsoku.plugins.bridge.SubsonicHttpClient
 import github.realtvop.aonsoku.plugins.data.db.AonsokuDatabase
 import github.realtvop.aonsoku.plugins.data.image.ImageCacheManager
+import github.realtvop.aonsoku.plugins.coordination.AonsokuNativeCoordinationPlugin
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -74,12 +76,30 @@ class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
     private var player: Player? = null
     private var cachedArtworkBitmap: Bitmap? = null
+    private var artworkLoadRevision = 0
     private var isBoundToActivity = false
+    private var snapshotProgressOverride: SnapshotProgressOverride? = null
+    private var remoteProjectionProgressOverride: SnapshotProgressOverride? = null
 
     val queueEngine = NativeQueueEngine()
     var isQueueEngineActive = false
     var savedRestoreTime: Double? = null
     var currentSongMetadata: MediaMetadata? = null
+    private var localPlaybackMediaItem: MediaItem? = null
+    var isRemotePlaybackProjectionActive = false
+        private set
+    private var remotePlaybackMetadata: MediaMetadata? = null
+    private var remotePlaybackMediaItem: MediaItem? = null
+    private var remotePlaybackIsPlaying = false
+    private var remotePlaybackPositionSeconds = 0.0
+    private var remotePlaybackDurationSeconds = 0.0
+    private var remotePlaybackSongId: String? = null
+    private var remotePlaybackIsShuffleActive = false
+    private var remotePlaybackRepeatMode = "off"
+    private var remotePlaybackVolume: Double? = null
+    private var remotePlaybackArtworkKey: String? = null
+    private var remoteControlTargetDeviceId: String? = null
+    private var remoteControlExpectedGeneration: Int? = null
 
     private val httpClient = SubsonicHttpClient()
     private val credentialStore by lazy {
@@ -112,7 +132,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun getCustomLayoutButtons(): List<CommandButton> {
-        val shuffleIconName = if (queueEngine.isShuffleActive) "ic_shuffle_on" else "ic_shuffle"
+        val shuffleIconName = if (effectiveShuffleActive()) "ic_shuffle_on" else "ic_shuffle"
         val shuffleIconResId = resources.getIdentifier(shuffleIconName, "drawable", packageName)
         val shuffleIcon = if (shuffleIconResId != 0) shuffleIconResId else android.R.drawable.ic_menu_share
 
@@ -136,6 +156,13 @@ class PlaybackService : MediaSessionService() {
 
         return listOf(shuffleButton, likeButton)
     }
+
+    private fun effectiveShuffleActive(): Boolean =
+        if (isRemotePlaybackProjectionActive) {
+            remotePlaybackIsShuffleActive
+        } else {
+            queueEngine.isShuffleActive
+        }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val preferencesStore by lazy { NativePreferencesStore(this) }
@@ -192,6 +219,7 @@ class PlaybackService : MediaSessionService() {
 
     interface Listener {
         fun onRemoteCommand(command: String, position: Double?)
+        fun onRemoteControlCommand(command: JSONObject, targetDeviceId: String?, expectedGeneration: Int?)
         fun onQueueStateChanged(currentIndex: Int, songId: String, reason: String, isInUserQueue: Boolean)
         fun onQueueContentsChanged(reason: String)
         fun onPlaybackStateChanged(state: String)
@@ -213,7 +241,44 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun emitRemoteCommand(command: String, position: Double? = null) {
+        buildRemoteControlCommand(command, position)?.let { remoteCommand ->
+            listeners.forEach {
+                it.onRemoteControlCommand(
+                    remoteCommand,
+                    remoteControlTargetDeviceId,
+                    remoteControlExpectedGeneration,
+                )
+            }
+            return
+        }
         listeners.forEach { it.onRemoteCommand(command, position) }
+    }
+
+    private fun emitRemotePlayPauseCommand() {
+        emitRemoteCommand(if (remotePlaybackIsPlaying) "pause" else "play")
+    }
+
+    private fun buildRemoteControlCommand(command: String, position: Double?): JSONObject? {
+        if (!isRemotePlaybackProjectionActive) return null
+
+        return when (command) {
+            "play" -> JSONObject().put("type", "play")
+            "pause" -> JSONObject().put("type", "pause")
+            "togglePlayPause" -> JSONObject().put("type", "toggle_play_pause")
+            "next" -> JSONObject().put("type", "next")
+            "previous" -> JSONObject().put("type", "previous")
+            "seek" -> {
+                val seconds = position ?: return null
+                JSONObject()
+                    .put("type", "seek")
+                    .put("seconds", seconds.coerceAtLeast(0.0))
+            }
+            "shuffle" -> JSONObject()
+                .put("type", "set_shuffle")
+                .put("enabled", !remotePlaybackIsShuffleActive)
+            "like" -> JSONObject().put("type", "toggle_like")
+            else -> null
+        }
     }
 
     private fun emitQueueStateChanged(currentIndex: Int, songId: String, reason: String, isInUserQueue: Boolean) {
@@ -226,6 +291,46 @@ class PlaybackService : MediaSessionService() {
 
     private fun emitPlaybackState(state: String) {
         listeners.forEach { it.onPlaybackStateChanged(state) }
+    }
+
+    fun snapshotProgressSeconds(songId: String?, fallback: Double): Double {
+        val override = snapshotProgressOverride ?: return fallback
+        if (override.songId != null && override.songId != songId) {
+            return fallback
+        }
+        val ageMs = SystemClock.elapsedRealtime() - override.createdAtMs
+        if (fallback <= 0.25 || ageMs >= 2_000L) {
+            snapshotProgressOverride = null
+        }
+        return override.seconds
+    }
+
+    private fun forceSnapshotProgress(songId: String?, seconds: Double) {
+        snapshotProgressOverride = SnapshotProgressOverride(
+            songId,
+            seconds.coerceAtLeast(0.0),
+            SystemClock.elapsedRealtime(),
+        )
+    }
+
+    private fun remoteProjectionProgressSeconds(songId: String?, fallback: Double): Double {
+        val override = remoteProjectionProgressOverride ?: return fallback
+        if (override.songId != null && override.songId != songId) {
+            return fallback
+        }
+        val ageMs = SystemClock.elapsedRealtime() - override.createdAtMs
+        if (fallback <= 0.25 || ageMs >= 2_000L) {
+            remoteProjectionProgressOverride = null
+        }
+        return override.seconds
+    }
+
+    private fun forceRemoteProjectionProgress(songId: String?, seconds: Double) {
+        remoteProjectionProgressOverride = SnapshotProgressOverride(
+            songId,
+            seconds.coerceAtLeast(0.0),
+            SystemClock.elapsedRealtime(),
+        )
     }
 
     private fun emitEnded(reason: String) {
@@ -320,7 +425,114 @@ class PlaybackService : MediaSessionService() {
             }
 
             override fun getMediaMetadata(): MediaMetadata {
-                return currentSongMetadata ?: super.getMediaMetadata()
+                return remotePlaybackMetadata
+                    ?: currentSongMetadata
+                    ?: super.getMediaMetadata()
+            }
+
+            override fun getCurrentMediaItem(): MediaItem? {
+                return remotePlaybackMediaItem ?: super.getCurrentMediaItem()
+            }
+
+            override fun getCurrentPosition(): Long {
+                if (isRemotePlaybackProjectionActive) {
+                    return (remotePlaybackPositionSeconds * 1000).toLong()
+                }
+                return super.getCurrentPosition()
+            }
+
+            override fun getDuration(): Long {
+                if (isRemotePlaybackProjectionActive) {
+                    return (remotePlaybackDurationSeconds * 1000).toLong()
+                }
+                return super.getDuration()
+            }
+
+            override fun isPlaying(): Boolean {
+                if (isRemotePlaybackProjectionActive) return remotePlaybackIsPlaying
+                return super.isPlaying()
+            }
+
+            override fun getPlayWhenReady(): Boolean {
+                if (isRemotePlaybackProjectionActive) return remotePlaybackIsPlaying
+                return super.getPlayWhenReady()
+            }
+
+            override fun getPlaybackState(): Int {
+                if (isRemotePlaybackProjectionActive) return Player.STATE_READY
+                return super.getPlaybackState()
+            }
+
+            override fun play() {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemoteCommand("play")
+                    return
+                }
+                super.play()
+            }
+
+            override fun pause() {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemoteCommand("pause")
+                    return
+                }
+                super.pause()
+            }
+
+            override fun seekTo(positionMs: Long) {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemoteCommand("seek", positionMs.coerceAtLeast(0L) / 1000.0)
+                    return
+                }
+                super.seekTo(positionMs)
+            }
+
+            override fun seekTo(mediaItemIndex: Int, positionMs: Long) {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemoteCommand("seek", positionMs.coerceAtLeast(0L) / 1000.0)
+                    return
+                }
+                super.seekTo(mediaItemIndex, positionMs)
+            }
+
+            override fun seekToNext() {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemoteCommand("next")
+                    return
+                }
+                super.seekToNext()
+            }
+
+            override fun seekToNextMediaItem() {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemoteCommand("next")
+                    return
+                }
+                super.seekToNextMediaItem()
+            }
+
+            override fun seekToPrevious() {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemoteCommand("previous")
+                    return
+                }
+                super.seekToPrevious()
+            }
+
+            override fun seekToPreviousMediaItem() {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemoteCommand("previous")
+                    return
+                }
+                super.seekToPreviousMediaItem()
+            }
+
+            override fun setShuffleModeEnabled(shuffleModeEnabled: Boolean) {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemoteCommand("shuffle")
+                    return
+                }
+                super.setShuffleModeEnabled(shuffleModeEnabled)
             }
         }
 
@@ -342,6 +554,7 @@ class PlaybackService : MediaSessionService() {
                 handleScrobbleSongEnded()
                 val duration = engine.currentSong?.duration ?: 0.0
                 handleScrobbleSongStarted(songId, duration)
+                forceSnapshotProgress(songId, 0.0)
                 emitQueueStateChanged(index, songId, reason.value, engine.isInUserQueue)
             }
 
@@ -356,6 +569,7 @@ class PlaybackService : MediaSessionService() {
                     handleScrobbleSongEnded()
                     player?.pause()
                     player?.seekTo(0)
+                    forceSnapshotProgress(engine.currentSong?.id, 0.0)
                     emitPlaybackState("ended")
                     emitEnded("finished")
                 }
@@ -368,6 +582,8 @@ class PlaybackService : MediaSessionService() {
                     handleScrobbleSongStarted(song.id, song.duration)
                     player?.seekTo(0)
                     player?.play()
+                    forceSnapshotProgress(song.id, 0.0)
+                    emitPlaybackState("playing")
                 }
             }
         }
@@ -508,6 +724,10 @@ class PlaybackService : MediaSessionService() {
             ): Int {
                 when (playerCommand) {
                     Player.COMMAND_SEEK_TO_NEXT, Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> {
+                        if (isRemotePlaybackProjectionActive) {
+                            emitRemoteCommand("next")
+                            return SessionResult.RESULT_INFO_SKIPPED
+                        }
                         if (isQueueEngineActive) {
                             queueEngine.skipToNext()
                             return SessionResult.RESULT_INFO_SKIPPED
@@ -516,6 +736,10 @@ class PlaybackService : MediaSessionService() {
                         return SessionResult.RESULT_INFO_SKIPPED
                     }
                     Player.COMMAND_SEEK_TO_PREVIOUS, Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> {
+                        if (isRemotePlaybackProjectionActive) {
+                            emitRemoteCommand("previous")
+                            return SessionResult.RESULT_INFO_SKIPPED
+                        }
                         if (isQueueEngineActive) {
                             val currentTime = (player?.currentPosition ?: 0L) / 1000.0
                             queueEngine.skipToPrevious(currentTime)
@@ -525,10 +749,16 @@ class PlaybackService : MediaSessionService() {
                         return SessionResult.RESULT_INFO_SKIPPED
                     }
                     else -> {
+                        if (isRemotePlaybackProjectionActive) {
+                            return super.onPlayerCommandRequest(
+                                session,
+                                controller,
+                                playerCommand,
+                            )
+                        }
                         if (!isQueueEngineActive) {
                             val commandName = when (playerCommand) {
                                 Player.COMMAND_PLAY_PAUSE -> "togglePlayPause"
-                                Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM -> "seek"
                                 else -> null
                             }
                             if (commandName != null) {
@@ -593,7 +823,12 @@ class PlaybackService : MediaSessionService() {
         val title: String
         val text: String
         var subText: String? = null
-        if (session != null) {
+        if (isRemotePlaybackProjectionActive && remotePlaybackMetadata != null) {
+            val metadata = remotePlaybackMetadata!!
+            title = metadata.title?.toString() ?: "Aonsoku"
+            text = metadata.artist?.toString() ?: "Playing"
+            subText = metadata.albumTitle?.toString()
+        } else if (session != null) {
             val metadata = session.player.mediaMetadata
             title = metadata.title?.toString() ?: "Aonsoku"
             text = metadata.artist?.toString() ?: "Playing"
@@ -667,10 +902,12 @@ class PlaybackService : MediaSessionService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        val playPauseIcon = if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
-        val playPauseLabel = if (isPlaying) "Pause" else "Play"
+        val effectiveIsPlaying =
+            if (isRemotePlaybackProjectionActive) remotePlaybackIsPlaying else isPlaying
+        val playPauseIcon = if (effectiveIsPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
+        val playPauseLabel = if (effectiveIsPlaying) "Pause" else "Play"
 
-        val shuffleIconName = if (queueEngine.isShuffleActive) "ic_shuffle_on" else "ic_shuffle"
+        val shuffleIconName = if (effectiveShuffleActive()) "ic_shuffle_on" else "ic_shuffle"
         val shuffleIconResId = resources.getIdentifier(shuffleIconName, "drawable", packageName)
         val shuffleIcon = if (shuffleIconResId != 0) shuffleIconResId else android.R.drawable.ic_menu_share
 
@@ -711,7 +948,8 @@ class PlaybackService : MediaSessionService() {
     private var isForegroundStarted = false
 
     private fun showNotification() {
-        val isPlaying = player?.isPlaying ?: false
+        val isPlaying =
+            if (isRemotePlaybackProjectionActive) remotePlaybackIsPlaying else player?.isPlaying ?: false
         val notification = buildNotification(isPlaying)
         if (!isForegroundStarted) {
             try {
@@ -818,6 +1056,11 @@ class PlaybackService : MediaSessionService() {
         NativeLogger.info("PlaybackService onTaskRemoved", "playback-service")
         val currentPlayer = player
         if (currentPlayer == null || !currentPlayer.isPlaying) {
+            // §2.1.8: the service is being stopped, so detach the coordination
+            // socket from the foreground service. The plugin keeps the socket
+            // in plugin-owned mode; it degrades gracefully and resumes on the
+            // next foreground entry.
+            AonsokuNativeCoordinationPlugin.detachActiveForegroundService()
             persistence.stopProgressTracking()
             persistence.flushNow()
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -829,8 +1072,17 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // §2.1.8: while the foreground service is (re)starting, attach the
+        // coordination WebSocket so the OS keeps the socket alive in the
+        // background. No-op if the plugin is not loaded or no socket is open.
+        AonsokuNativeCoordinationPlugin.attachToActiveForegroundService()
         when (intent?.action) {
             ACTION_PLAY_PAUSE -> {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemotePlayPauseCommand()
+                    updateNotification()
+                    return START_STICKY
+                }
                 val currentPlayer = player ?: return START_STICKY
                 if (currentPlayer.isPlaying) {
                     currentPlayer.pause()
@@ -840,7 +1092,9 @@ class PlaybackService : MediaSessionService() {
                 updateNotification()
             }
             ACTION_SKIP_NEXT -> {
-                if (isQueueEngineActive) {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemoteCommand("next")
+                } else if (isQueueEngineActive) {
                     queueEngine.skipToNext()
                 } else {
                     emitRemoteCommand("next")
@@ -848,7 +1102,9 @@ class PlaybackService : MediaSessionService() {
                 updateNotification()
             }
             ACTION_SKIP_PREV -> {
-                if (isQueueEngineActive) {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemoteCommand("previous")
+                } else if (isQueueEngineActive) {
                     val currentTime = (player?.currentPosition ?: 0L) / 1000.0
                     queueEngine.skipToPrevious(currentTime)
                 } else {
@@ -863,6 +1119,11 @@ class PlaybackService : MediaSessionService() {
                 emitRemoteCommand("like")
             }
             ACTION_STOP -> {
+                if (isRemotePlaybackProjectionActive) {
+                    emitRemoteCommand("pause")
+                    clearRemotePlaybackProjection()
+                    return START_STICKY
+                }
                 player?.stop()
                 player?.clearMediaItems()
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -874,6 +1135,8 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         NativeLogger.info("PlaybackService destroyed", "playback-service")
+        // §2.1.8: release the foreground-service association before teardown.
+        AonsokuNativeCoordinationPlugin.detachActiveForegroundService()
         handleScrobbleSongEnded()
         CoroutineScope(Dispatchers.IO).launch {
             val credentials = credentialStore.retrieve()
@@ -964,6 +1227,7 @@ class PlaybackService : MediaSessionService() {
             .setUri(Uri.parse(url))
             .setMediaMetadata(customMeta)
             .build()
+        localPlaybackMediaItem = mediaItem
 
         cachedArtworkBitmap = null
 
@@ -1004,8 +1268,13 @@ class PlaybackService : MediaSessionService() {
 
 
 
-    fun loadAndCacheArtwork(artworkUrl: String?, song: QueueSong? = null) {
+    fun loadAndCacheArtwork(
+        artworkUrl: String?,
+        song: QueueSong? = null,
+        coverArtIdOverride: String? = null
+    ) {
         val url = artworkUrl ?: return
+        val revision = ++artworkLoadRevision
         cachedArtworkBitmap = null
         serviceScope.launch(Dispatchers.IO) {
             try {
@@ -1013,7 +1282,7 @@ class PlaybackService : MediaSessionService() {
                     val filePath = url.substring(7)
                     BitmapFactory.decodeFile(filePath)
                 } else {
-                    val coverArtId = song?.coverArtId
+                    val coverArtId = song?.coverArtId ?: coverArtIdOverride ?: extractCoverArtId(url)
                     val credentials = credentialStore.retrieve()
                     if (!coverArtId.isNullOrEmpty() && credentials != null) {
                         try {
@@ -1037,6 +1306,7 @@ class PlaybackService : MediaSessionService() {
                 }
                 if (bitmap != null) {
                     withContext(Dispatchers.Main) {
+                        if (revision != artworkLoadRevision) return@withContext
                         cachedArtworkBitmap = bitmap
                         updateNotification()
                     }
@@ -1044,6 +1314,14 @@ class PlaybackService : MediaSessionService() {
             } catch (e: Exception) {
                 NativeLogger.warn("Failed to load artwork: ${e.message}", "playback-service")
             }
+        }
+    }
+
+    private fun extractCoverArtId(url: String): String? {
+        return try {
+            Uri.parse(url).getQueryParameter("id")
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -1133,6 +1411,124 @@ class PlaybackService : MediaSessionService() {
         persistence.markStateDirty()
     }
 
+    fun updateRemotePlaybackProjection(
+        metadata: MediaMetadata,
+        isPlaying: Boolean,
+        position: Double,
+        duration: Double,
+        isShuffleActive: Boolean,
+        repeatMode: String,
+        volume: Double?,
+        artworkUrl: String?,
+        coverArtId: String?,
+        songId: String?,
+        targetDeviceId: String?,
+        expectedGeneration: Int?
+    ) {
+        val normalizedSongId = songId?.takeIf { it.isNotEmpty() }
+        val previousSongId = remotePlaybackSongId
+        if (
+            previousSongId != null &&
+            normalizedSongId != null &&
+            previousSongId != normalizedSongId
+        ) {
+            forceRemoteProjectionProgress(normalizedSongId, 0.0)
+        }
+
+        isRemotePlaybackProjectionActive = true
+        remotePlaybackMetadata = metadata
+        remotePlaybackMediaItem = MediaItem.Builder()
+            .setMediaId("aonsoku-remote-playback")
+            .setMediaMetadata(metadata)
+            .build()
+        remotePlaybackIsPlaying = isPlaying
+        remotePlaybackSongId = normalizedSongId ?: remotePlaybackSongId
+        remotePlaybackPositionSeconds = remoteProjectionProgressSeconds(
+            normalizedSongId,
+            position.coerceAtLeast(0.0),
+        )
+        remotePlaybackDurationSeconds = duration.coerceAtLeast(0.0)
+        remotePlaybackIsShuffleActive = isShuffleActive
+        remotePlaybackRepeatMode = repeatMode
+        remotePlaybackVolume = volume
+        remoteControlTargetDeviceId = targetDeviceId
+        remoteControlExpectedGeneration = expectedGeneration
+        currentSongMetadata = metadata
+        projectRemoteMediaItemToPlayer()
+        val artworkKey = listOfNotNull(coverArtId, artworkUrl).joinToString("|")
+        if (remotePlaybackArtworkKey != artworkKey) {
+            remotePlaybackArtworkKey = artworkKey
+            artworkLoadRevision += 1
+            cachedArtworkBitmap = null
+            if (!artworkUrl.isNullOrEmpty()) {
+                loadAndCacheArtwork(
+                    artworkUrl,
+                    coverArtIdOverride = coverArtId,
+                )
+            }
+        }
+        updateNotification()
+        mediaSession?.setCustomLayout(getCustomLayoutButtons())
+    }
+
+    private fun projectRemoteMediaItemToPlayer() {
+        val currentPlayer = player ?: return
+        val remoteItem = remotePlaybackMediaItem ?: return
+        if (currentPlayer.mediaItemCount > 0) {
+            val currentIndex = currentPlayer.currentMediaItemIndex
+                .coerceIn(0, currentPlayer.mediaItemCount - 1)
+            val currentItem = currentPlayer.getMediaItemAt(currentIndex)
+            currentPlayer.replaceMediaItem(
+                currentIndex,
+                currentItem.buildUpon()
+                    .setMediaMetadata(remoteItem.mediaMetadata)
+                    .build()
+            )
+        } else {
+            currentPlayer.setMediaItem(remoteItem)
+        }
+    }
+
+    private fun restoreLocalMediaItemProjection() {
+        val currentPlayer = player ?: return
+        val localItem = localPlaybackMediaItem
+        if (localItem != null && currentPlayer.mediaItemCount > 0) {
+            val currentIndex = currentPlayer.currentMediaItemIndex
+                .coerceIn(0, currentPlayer.mediaItemCount - 1)
+            currentPlayer.replaceMediaItem(currentIndex, localItem)
+        } else if (localItem == null && currentPlayer.mediaItemCount > 0) {
+            currentPlayer.clearMediaItems()
+        }
+    }
+
+    fun clearRemotePlaybackProjection() {
+        if (!isRemotePlaybackProjectionActive) return
+        isRemotePlaybackProjectionActive = false
+        remotePlaybackMetadata = null
+        remotePlaybackMediaItem = null
+        remotePlaybackIsPlaying = false
+        remotePlaybackPositionSeconds = 0.0
+        remotePlaybackDurationSeconds = 0.0
+        remotePlaybackSongId = null
+        remoteProjectionProgressOverride = null
+        remotePlaybackIsShuffleActive = false
+        remotePlaybackRepeatMode = "off"
+        remotePlaybackVolume = null
+        remotePlaybackArtworkKey = null
+        remoteControlTargetDeviceId = null
+        remoteControlExpectedGeneration = null
+        currentSongMetadata = null
+        restoreLocalMediaItemProjection()
+        if (player?.isPlaying == true || isQueueEngineActive) {
+            updateNotification()
+            return
+        }
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        isForegroundStarted = false
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.cancel(NOTIFICATION_ID)
+    }
+
     fun clearQueueState() {
         isQueueEngineActive = false
         queueEngine.setContextQueue(emptyList(), 0, false, null, null, null)
@@ -1144,3 +1540,9 @@ class PlaybackService : MediaSessionService() {
         }
     }
 }
+
+private data class SnapshotProgressOverride(
+    val songId: String?,
+    val seconds: Double,
+    val createdAtMs: Long,
+)

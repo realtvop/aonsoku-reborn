@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useHaptic } from "@/app/hooks/use-haptic";
 
+const TOUCH_SYNTHETIC_CLICK_GUARD_MS = 700;
+
 interface UseTouchMenuGuardOptions {
   hapticOnLongPress?: boolean;
   longPressDuration?: number;
@@ -21,12 +23,20 @@ export function useTouchMenuGuard(options?: UseTouchMenuGuardOptions) {
   const openedByLongPress = useRef(false);
   const hasMoved = useRef(false);
   const allowOpen = useRef(false);
+  const suppressNextClick = useRef(false);
 
   const clearTimer = useCallback(() => {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
     }
+  }, []);
+
+  const suppressSyntheticClick = useCallback(() => {
+    suppressNextClick.current = true;
+    window.setTimeout(() => {
+      suppressNextClick.current = false;
+    }, TOUCH_SYNTHETIC_CLICK_GUARD_MS);
   }, []);
 
   useEffect(() => {
@@ -56,13 +66,20 @@ export function useTouchMenuGuard(options?: UseTouchMenuGuardOptions) {
       longPressTimer.current = setTimeout(() => {
         if (startPos.current && !hasMoved.current) {
           openedByLongPress.current = true;
+          suppressSyntheticClick();
           allowOpen.current = true;
           setOpen(true);
           if (hapticOnLongPress && hapticTrigger) hapticTrigger("medium");
         }
       }, longPressDuration);
     },
-    [clearTimer, hapticOnLongPress, hapticTrigger, longPressDuration],
+    [
+      clearTimer,
+      hapticOnLongPress,
+      hapticTrigger,
+      longPressDuration,
+      suppressSyntheticClick,
+    ],
   );
 
   const onPointerMove = useCallback(
@@ -92,10 +109,11 @@ export function useTouchMenuGuard(options?: UseTouchMenuGuardOptions) {
       if (openedByLongPress.current) return;
 
       e.stopPropagation();
+      suppressSyntheticClick();
       allowOpen.current = true;
       setOpen(true);
     },
-    [clearTimer, moveThreshold],
+    [clearTimer, moveThreshold, suppressSyntheticClick],
   );
 
   const onPointerCancel = useCallback(() => {
@@ -104,10 +122,8 @@ export function useTouchMenuGuard(options?: UseTouchMenuGuardOptions) {
   }, [clearTimer]);
 
   const onClick = useCallback((e: React.MouseEvent) => {
-    const isTouch =
-      e.nativeEvent instanceof PointerEvent &&
-      e.nativeEvent.pointerType === "touch";
-    if (isTouch) {
+    if (suppressNextClick.current) {
+      suppressNextClick.current = false;
       e.preventDefault();
       e.stopPropagation();
       return;

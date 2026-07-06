@@ -386,7 +386,7 @@ function setHandlers() {
         const state = usePlayerStore.getState();
         if (state.remoteControl.active && state.remoteControl.sendCommand) {
           state.remoteControl.sendCommand(LanControlMessageType.SEEK, {
-            time: details.seekTime,
+            seconds: details.seekTime,
           });
           return;
         }
@@ -398,7 +398,7 @@ function setHandlers() {
         const audioPlayerRef = state.playerState.audioPlayerRef;
         if (audioPlayerRef) {
           audioPlayerRef.currentTime = details.seekTime;
-          state.actions.setProgress(Math.floor(details.seekTime));
+          state.actions.setProgress(details.seekTime, true);
         }
       }
     });

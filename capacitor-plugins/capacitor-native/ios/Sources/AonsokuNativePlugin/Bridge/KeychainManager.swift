@@ -33,6 +33,42 @@ public final class KeychainManager {
     private static let service = "github.realtvop.aonsoku.credentials"
     private static let account = "server-credentials"
 
+    public static func set(_ value: String, forKey key: String, service: String) {
+        guard let data = value.data(using: .utf8) else { return }
+
+        let query = keychainQuery(forKey: key, service: service)
+        let attributes: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+        ]
+
+        let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound {
+            var newItem = query
+            newItem.merge(attributes) { _, new in new }
+            SecItemAdd(newItem as CFDictionary, nil)
+        }
+    }
+
+    public static func get(_ key: String, service: String) -> String? {
+        var query = keychainQuery(forKey: key, service: service)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess, let data = result as? Data else {
+            return nil
+        }
+
+        return String(data: data, encoding: .utf8)
+    }
+
+    public static func delete(_ key: String, service: String) {
+        let query = keychainQuery(forKey: key, service: service)
+        SecItemDelete(query as CFDictionary)
+    }
+
     public static func store(_ credentials: ServerCredentials) throws {
         let data = try JSONEncoder().encode(credentials)
 
@@ -103,6 +139,17 @@ public final class KeychainManager {
 
         let status = SecItemCopyMatching(query as CFDictionary, nil)
         return status == errSecSuccess
+    }
+
+    private static func keychainQuery(
+        forKey key: String,
+        service: String
+    ) -> [String: Any] {
+        return [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: key,
+        ]
     }
 }
 

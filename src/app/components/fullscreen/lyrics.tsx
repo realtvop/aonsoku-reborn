@@ -2,6 +2,10 @@ import type { LyricLine } from "@applemusic-like-lyrics/core";
 import type { LyricPlayerRef } from "@applemusic-like-lyrics/react";
 import { lazy, Suspense } from "react";
 import "@applemusic-like-lyrics/core/style.css";
+import {
+  useRemotePlaybackProjection,
+  useSmoothRemoteProgress,
+} from "@/app/components/remote-control/use-remote-playback-projection";
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
@@ -25,6 +29,7 @@ import {
 import { subsonic } from "@/service/subsonic";
 import { useIsOnline } from "@/store/cache.store";
 import {
+  useIsRemoteControlActive,
   useLyricsSettings,
   usePlayerActions,
   usePlayerIsPlaying,
@@ -152,7 +157,9 @@ function pickStructuredTracks(structured: IStructuredLyric[]): {
 }
 
 export function LyricsTab() {
-  const { currentSong } = usePlayerSonglist();
+  const { currentSong: localCurrentSong } = usePlayerSonglist();
+  const remoteProjection = useRemotePlaybackProjection();
+  const currentSong = remoteProjection.song ?? localCurrentSong;
   const { t } = useTranslation();
   const {
     showTranslation,
@@ -328,9 +335,20 @@ interface SyncedLyricsProps {
 
 function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
   const playerRef = usePlayerRef();
-  const isPlaying = usePlayerIsPlaying();
+  const localIsPlaying = usePlayerIsPlaying();
   const isScrubbing = usePlayerIsScrubbing();
-  const { setAreLyricsAligned } = usePlayerActions();
+  const { setAreLyricsAligned, setProgress } = usePlayerActions();
+  const isRemoteControlActive = useIsRemoteControlActive();
+  const remoteProjection = useRemotePlaybackProjection();
+  const smoothRemoteProgress = useSmoothRemoteProgress({
+    active: remoteProjection.active,
+    isPlaying: remoteProjection.isPlaying,
+    progress: remoteProjection.progress,
+    duration: remoteProjection.duration,
+  });
+  const isPlaying = remoteProjection.active
+    ? remoteProjection.isPlaying
+    : localIsPlaying;
   const [currentTime, setCurrentTime] = useState(0);
   const currentTimeRef = useRef(0);
   const [isTouchScrolling, setIsTouchScrolling] = useState(false);
@@ -366,6 +384,12 @@ function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
       },
     );
   }, []);
+
+  useEffect(() => {
+    if (!remoteProjection.active) return;
+    lastProgressRef.current = smoothRemoteProgress * 1000;
+    lastProgressTimeRef.current = performance.now();
+  }, [remoteProjection.active, smoothRemoteProgress]);
 
   useEffect(() => {
     isScrubbingRef.current = isScrubbing;
@@ -411,7 +435,11 @@ function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
     (lineIndex: number) => {
       const lyricLine = lyricLines[lineIndex];
 
-      if (!playerRef || !lyricLine || !Number.isFinite(lyricLine.startTime)) {
+      if (!lyricLine || !Number.isFinite(lyricLine.startTime)) {
+        return;
+      }
+
+      if (!playerRef && !isRemoteControlActive) {
         return;
       }
 
@@ -431,13 +459,17 @@ function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
         timestamp: now,
       };
 
-      playerRef.currentTime = lyricLine.startTime / 1000;
-      if (isPlaying) {
-        playerRef.play().catch((e) => {
-          if (e.name !== "AbortError") {
-            logger.warn("Lyric seek play failed", e);
-          }
-        });
+      const seekSeconds = lyricLine.startTime / 1000;
+      setProgress(seekSeconds, true);
+      if (!isRemoteControlActive && playerRef) {
+        playerRef.currentTime = seekSeconds;
+        if (isPlaying) {
+          playerRef.play().catch((e) => {
+            if (e.name !== "AbortError") {
+              logger.warn("Lyric seek play failed", e);
+            }
+          });
+        }
       }
 
       const player = getInternalLyricPlayer(lyricPlayerRef);
@@ -453,7 +485,7 @@ function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
       setCurrentTime(lyricLine.startTime);
       currentTimeRef.current = lyricLine.startTime;
     },
-    [isPlaying, lyricLines, playerRef],
+    [isPlaying, lyricLines, playerRef, isRemoteControlActive, setProgress],
   );
 
   const handleTouchStart = useCallback(
@@ -538,7 +570,8 @@ function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
   // Use requestAnimationFrame for smooth time updates
   useEffect(() => {
     const isNative = shouldUseNativePlaybackBackend();
-    if (!playerRef && !isNative) return;
+    const useStoreTime = isNative || isRemoteControlActive;
+    if (!playerRef && !useStoreTime) return;
 
     const updateTime = () => {
       if (isScrubbingRef.current) {
@@ -552,13 +585,8 @@ function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
       }
 
       let timeMs = 0;
-      if (isNative) {
-        if (isPlaying) {
-          const elapsed = performance.now() - lastProgressTimeRef.current;
-          timeMs = Math.floor(lastProgressRef.current + elapsed);
-        } else {
-          timeMs = Math.floor(lastProgressRef.current);
-        }
+      if (useStoreTime) {
+        timeMs = Math.floor(lastProgressRef.current);
       } else {
         timeMs = Math.floor((playerRef?.currentTime || 0) * 1000);
       }
@@ -592,7 +620,7 @@ function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
       clearTimeout(seekingTimerRef.current);
       clearTouchScrollBlurTimer();
     };
-  }, [clearTouchScrollBlurTimer, playerRef, isPlaying]);
+  }, [clearTouchScrollBlurTimer, playerRef, isRemoteControlActive]);
 
   return (
     <div
@@ -641,7 +669,9 @@ interface UnsyncedLyricsProps {
 }
 
 function UnsyncedLyrics({ lines, translationLines }: UnsyncedLyricsProps) {
-  const { currentSong } = usePlayerSonglist();
+  const { currentSong: localCurrentSong } = usePlayerSonglist();
+  const remoteProjection = useRemotePlaybackProjection();
+  const currentSong = remoteProjection.song ?? localCurrentSong;
   const { setAreLyricsAligned } = usePlayerActions();
   const lyricsBoxRef = useRef<HTMLDivElement>(null);
 

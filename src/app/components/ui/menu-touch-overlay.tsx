@@ -3,6 +3,7 @@ import * as React from "react";
 export const MenuCloseContext = React.createContext<(() => void) | null>(null);
 
 export const MENU_DISMISS_OVERLAY_ATTR = "data-menu-dismiss-overlay";
+const OPEN_GESTURE_CLICK_GUARD_MS = 700;
 
 export const MenuTouchOverlay = React.forwardRef<
   HTMLDivElement,
@@ -10,6 +11,8 @@ export const MenuTouchOverlay = React.forwardRef<
 >((props, ref) => {
   const { style, onPointerDown, onPointerUp, onClick, ...overlayProps } = props;
   const close = React.useContext(MenuCloseContext);
+  const mountedAtRef = React.useRef(Date.now());
+  const sawOverlayPointerDownRef = React.useRef(false);
 
   if (!close) return null;
 
@@ -28,6 +31,7 @@ export const MenuTouchOverlay = React.forwardRef<
         ...style,
       }}
       onPointerDown={(e) => {
+        sawOverlayPointerDownRef.current = true;
         e.preventDefault();
         e.stopPropagation();
         onPointerDown?.(e);
@@ -39,6 +43,13 @@ export const MenuTouchOverlay = React.forwardRef<
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
+        if (
+          !sawOverlayPointerDownRef.current &&
+          Date.now() - mountedAtRef.current < OPEN_GESTURE_CLICK_GUARD_MS
+        ) {
+          onClick?.(e);
+          return;
+        }
         React.startTransition(() => close());
         onClick?.(e);
       }}

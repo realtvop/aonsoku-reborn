@@ -4,11 +4,16 @@ import { useQueueSource } from "@/store/player.store";
 
 interface QueueSourceLabelProps {
   className?: string;
+  sourceName?: string | null;
 }
 
-export function QueueSourceLabel({ className }: QueueSourceLabelProps) {
+export function QueueSourceLabel({
+  className,
+  sourceName,
+}: QueueSourceLabelProps) {
   const { t } = useTranslation();
-  const queueSource = useQueueSource();
+  const localQueueSource = useQueueSource();
+  const queueSource = sourceName ?? localQueueSource;
 
   if (!queueSource) return null;
 

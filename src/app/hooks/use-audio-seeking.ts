@@ -43,13 +43,13 @@ export function useAudioSeeking({ audioRef }: UseAudioSeekingOptions) {
   const handleSeeked = useCallback(
     (amount: number) => {
       logger.debug("Seek completed:", amount);
-      setProgress(amount);
-      setLocalProgress(amount);
-      setIsLocalSeeking(false);
-      setIsScrubbing(false);
       if (!isRemoteControlActive && !getNativeQueueController()) {
         updateAudioCurrentTime(amount);
       }
+      setProgress(amount, true);
+      setLocalProgress(amount);
+      setIsLocalSeeking(false);
+      setIsScrubbing(false);
     },
     [
       isRemoteControlActive,

@@ -30,6 +30,19 @@ export interface NativeAudioMetadata {
   album?: string;
   duration?: number;
   artworkUrl?: string;
+  coverArtId?: string;
+}
+
+export interface NativeRemotePlaybackStateOptions {
+  metadata: NativeAudioMetadata;
+  isPlaying: boolean;
+  position: number;
+  duration: number;
+  isShuffleActive?: boolean;
+  repeatMode?: "off" | "one" | "all";
+  volume?: number;
+  targetDeviceId?: string;
+  expectedGeneration?: number;
 }
 
 export interface NativeAudioLoadOptions {
@@ -258,6 +271,14 @@ export interface NativeAudioRemoteCommandEvent {
   position?: number;
 }
 
+export interface NativeRemoteControlCommandEvent {
+  requestId?: string;
+  targetDeviceId?: string;
+  expectedGeneration?: number;
+  handledNatively?: boolean;
+  command: Record<string, unknown> & { type: string };
+}
+
 export interface NativeAudioInterruptionChangedEvent {
   requestId?: string;
   type: "began" | "ended";
@@ -350,6 +371,7 @@ export interface NativeAudioEvents {
   ended: NativeAudioEndedEvent;
   error: NativeAudioErrorEvent;
   remoteCommand: NativeAudioRemoteCommandEvent;
+  remoteControlCommand: NativeRemoteControlCommandEvent;
   interruptionChanged: NativeAudioInterruptionChangedEvent;
   routeChanged: NativeAudioRouteChangedEvent;
   queueStateChanged: NativeAudioQueueStateChangedEvent;
@@ -379,6 +401,10 @@ export interface AonsokuNativeAudioPlugin extends Plugin {
   skipToNext(): Promise<void>;
   skipToPrevious(): Promise<void>;
   updateMetadata(metadata: NativeAudioMetadata): Promise<void>;
+  updateRemotePlaybackState(
+    options: NativeRemotePlaybackStateOptions,
+  ): Promise<void>;
+  clearRemotePlaybackState(): Promise<void>;
   preload(options: { source: NativeAudioSource }): Promise<void>;
   clear(): Promise<void>;
   storeAudioFile(

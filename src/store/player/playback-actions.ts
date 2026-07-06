@@ -20,6 +20,16 @@ export function createPlaybackActions(shared: SharedDeps) {
 
   return {
     setPlayingState: (status: boolean) => {
+      if (isRemoteActive()) {
+        remoteSend(
+          status ? LanControlMessageType.PLAY : LanControlMessageType.PAUSE,
+        );
+        set((state) => {
+          state.playerState.isPlaying = status;
+        });
+        return;
+      }
+
       const nativeController = getNativeQueueController();
       if (nativeController) {
         if (status) {
@@ -34,17 +44,20 @@ export function createPlaybackActions(shared: SharedDeps) {
       logger.info(
         `[setPlayingState] ${prev} → ${status} | isRemote=${!!isRemoteActive()}`,
       );
-      if (isRemoteActive()) {
-        remoteSend(
-          status ? LanControlMessageType.PLAY : LanControlMessageType.PAUSE,
-        );
-      }
       set((state) => {
         state.playerState.isPlaying = status;
       });
     },
 
     togglePlayPause: () => {
+      if (isRemoteActive()) {
+        remoteSend(LanControlMessageType.PLAY_PAUSE);
+        set((state) => {
+          state.playerState.isPlaying = !state.playerState.isPlaying;
+        });
+        return;
+      }
+
       const nativeController = getNativeQueueController();
       if (nativeController) {
         nativeController.togglePlayPause();
@@ -60,6 +73,11 @@ export function createPlaybackActions(shared: SharedDeps) {
     },
 
     toggleLoop: () => {
+      if (isRemoteActive()) {
+        remoteSend(LanControlMessageType.TOGGLE_REPEAT);
+        return;
+      }
+
       const nativeController = getNativeQueueController();
       if (nativeController) {
         nativeController.toggleLoop();
@@ -87,18 +105,33 @@ export function createPlaybackActions(shared: SharedDeps) {
       });
     },
 
-    setProgress: (progress: number) => {
+    setProgress: (progress: number, isSeek?: boolean) => {
+      if (isRemoteActive()) {
+        remoteSend(LanControlMessageType.SEEK, {
+          seconds: progress,
+        });
+        set((state) => {
+          state.playerProgress.progress = progress;
+          if (isSeek) {
+            state.playerProgress.seekCount =
+              (state.playerProgress.seekCount ?? 0) + 1;
+          }
+        });
+        return;
+      }
+
       const nativeController = getNativeQueueController();
       if (nativeController) {
         nativeController.seek(progress);
         return;
       }
 
-      remoteSend(LanControlMessageType.SEEK, {
-        time: progress,
-      });
       set((state) => {
         state.playerProgress.progress = progress;
+        if (isSeek) {
+          state.playerProgress.seekCount =
+            (state.playerProgress.seekCount ?? 0) + 1;
+        }
       });
     },
 
@@ -117,6 +150,16 @@ export function createPlaybackActions(shared: SharedDeps) {
     },
 
     setVolume: (volume: number) => {
+      if (isRemoteActive()) {
+        remoteSend(LanControlMessageType.SET_VOLUME, {
+          volume,
+        });
+        set((state) => {
+          state.playerState.volume = volume;
+        });
+        return;
+      }
+
       const caps = getPlaybackCapabilities();
       if (!caps.canSetVolume) return;
       remoteSend(LanControlMessageType.SET_VOLUME, {

@@ -8,12 +8,17 @@ import {
   unregisterBackButtonHandler,
 } from "@/utils/back-button-registry";
 
+type DrawerProps = React.ComponentProps<typeof DrawerPrimitive.Root> & {
+  backButtonPriority?: number;
+};
+
 const Drawer = ({
   shouldScaleBackground = true,
+  backButtonPriority = 0,
   open,
   onOpenChange,
   ...props
-}: React.ComponentProps<typeof DrawerPrimitive.Root>) => {
+}: DrawerProps) => {
   React.useEffect(() => {
     if (!open || !onOpenChange) return;
 
@@ -22,11 +27,11 @@ const Drawer = ({
       return true;
     };
 
-    registerBackButtonHandler(handler);
+    registerBackButtonHandler(handler, { priority: backButtonPriority });
     return () => {
       unregisterBackButtonHandler(handler);
     };
-  }, [open, onOpenChange]);
+  }, [backButtonPriority, open, onOpenChange]);
 
   return (
     <DrawerPrimitive.Root

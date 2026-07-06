@@ -1,4 +1,8 @@
 import { PropsWithChildren, useEffect, useMemo, useState } from "react";
+import {
+  useRemotePlaybackProjection,
+  useSmoothRemoteProgress,
+} from "@/app/components/remote-control/use-remote-playback-projection";
 import { useCurrentLyricLine } from "@/app/hooks/use-current-lyric-line";
 import { usePlaybackControls } from "@/app/hooks/use-playback-controls";
 import { useSystemVolume } from "@/app/hooks/use-system-volume";
@@ -26,8 +30,8 @@ export function InternalMiniPlayerProvider({ children }: PropsWithChildren) {
     isBuffering,
     isTransitioning,
     isShuffleActive,
-    cannotSkipPrev,
     cannotSkipNext,
+    canUsePreviousControl,
     loopState,
     toggleShuffle,
     playPrevSong,
@@ -41,13 +45,32 @@ export function InternalMiniPlayerProvider({ children }: PropsWithChildren) {
   const currentSong = usePlayerStore((s) => s.songlist.currentSong);
   const playerState = usePlayerStore((s) => s.playerState);
   const progress = usePlayerProgress();
+  const remoteProjection = useRemotePlaybackProjection();
+  const smoothRemoteProgress = useSmoothRemoteProgress({
+    active: remoteProjection.active,
+    isPlaying: remoteProjection.isPlaying,
+    progress: remoteProjection.progress,
+    duration: remoteProjection.duration,
+  });
   const { currentLine } = useCurrentLyricLine();
   const { volume: systemVolume, supportsSystemVolumeControl } =
     useSystemVolume();
 
-  const displayVolume = supportsSystemVolumeControl
-    ? systemVolume
-    : playerState.volume;
+  const displaySong = remoteProjection.song ?? currentSong;
+  const displayProgress = remoteProjection.active
+    ? smoothRemoteProgress
+    : progress;
+  const displayDuration = remoteProjection.active
+    ? remoteProjection.duration
+    : (playerState.currentDuration ?? 0);
+  const displayVolume = remoteProjection.active
+    ? (remoteProjection.volume ?? playerState.volume)
+    : supportsSystemVolumeControl
+      ? systemVolume
+      : playerState.volume;
+  const isSongStarred = remoteProjection.active
+    ? typeof remoteProjection.song?.starred === "string"
+    : playerState.isSongStarred;
 
   const value = useMemo<MiniPlayerContextValue>(
     () => ({
@@ -57,28 +80,28 @@ export function InternalMiniPlayerProvider({ children }: PropsWithChildren) {
         isBuffering,
         shuffleActive: isShuffleActive,
         loopState,
-        hasPrev: !cannotSkipPrev,
+        hasPrev: canUsePreviousControl,
         hasNext: !cannotSkipNext,
-        isSongStarred: playerState.isSongStarred,
-        currentSong: currentSong
+        isSongStarred,
+        currentSong: displaySong
           ? {
-              id: currentSong.id,
-              title: currentSong.title,
-              artist: currentSong.artist,
-              artists: currentSong.artists?.map((a) => ({
+              id: displaySong.id,
+              title: displaySong.title,
+              artist: displaySong.artist,
+              artists: displaySong.artists?.map((a) => ({
                 id: a.id,
                 name: a.name,
               })),
-              coverArt: currentSong.coverArt,
-              albumId: currentSong.albumId,
+              coverArt: displaySong.coverArt,
+              albumId: displaySong.albumId,
             }
           : null,
-        progress,
-        duration: playerState.currentDuration ?? 0,
+        progress: displayProgress,
+        duration: displayDuration,
         volume: displayVolume,
         mediaType: playerState.mediaType as "song" | "radio",
         currentSongColor,
-        currentLine,
+        currentLine: remoteProjection.active ? null : currentLine,
       },
       actions: {
         togglePlayPause,
@@ -86,7 +109,7 @@ export function InternalMiniPlayerProvider({ children }: PropsWithChildren) {
         playPrevSong,
         toggleShuffle: () => toggleShuffle(),
         toggleLoop: () => toggleLoop(),
-        seek: (time) => setProgress(time),
+        seek: (time) => setProgress(time, true),
         setVolume: (v) => setVolume(v),
         starCurrentSong,
       },
@@ -96,15 +119,18 @@ export function InternalMiniPlayerProvider({ children }: PropsWithChildren) {
       isBuffering,
       isTransitioning,
       playerState,
+      isSongStarred,
       isShuffleActive,
       loopState,
-      cannotSkipPrev,
       cannotSkipNext,
-      currentSong,
-      progress,
+      canUsePreviousControl,
+      displaySong,
+      displayProgress,
+      displayDuration,
       currentSongColor,
       currentLine,
       displayVolume,
+      remoteProjection.active,
       togglePlayPause,
       playNextSong,
       playPrevSong,

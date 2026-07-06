@@ -6,6 +6,7 @@ import {
 } from "@/app/components/fallbacks/home-fallbacks";
 import { MobilePageHeader } from "@/app/components/header/mobile-page-header";
 import HomeHeader from "@/app/components/home/carousel/header";
+import { HomeDevicePlaybackOverview } from "@/app/components/remote-control/home-overview";
 import PinnedList from "@/app/components/home/pinned-list";
 import PreviewList from "@/app/components/home/preview-list";
 import {
@@ -95,6 +96,8 @@ export default function Home() {
           title={t("sidebar.home")}
           showUserDropdown
         />
+
+        <HomeDevicePlaybackOverview />
 
         {isFetching || isLoading ? (
           <HeaderFallback />

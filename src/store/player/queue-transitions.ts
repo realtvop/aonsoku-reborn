@@ -139,7 +139,12 @@ export function transitionPrevSong(
     return { ...baseTransition(cloneSonglist(songlist)), seekToStart: true };
   }
 
-  if (!hasPrevEffectiveSong(songlist)) return null;
+  if (!hasPrevEffectiveSong(songlist)) {
+    if (currentSong) {
+      return { ...baseTransition(cloneSonglist(songlist)), seekToStart: true };
+    }
+    return null;
+  }
 
   const next = cloneSonglist(songlist);
 
@@ -331,6 +336,7 @@ export function transitionHandleSongEnded(
   if (hasNext) {
     if (
       loopState === LoopState.All &&
+      !songlist.isInUserQueue &&
       userQueueRemaining === 0 &&
       songlist.contextQueue.songs.length <= 1
     ) {

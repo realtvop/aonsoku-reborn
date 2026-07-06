@@ -17,6 +17,7 @@ export interface StoreCredentialsOptions {
 export interface StoredCredentials {
   serverUrl: string;
   username: string;
+  password?: string;
   authType: "token" | "password";
   protocolVersion: string;
   serverType: string;

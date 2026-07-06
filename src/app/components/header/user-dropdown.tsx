@@ -1,6 +1,5 @@
 import {
   AlertTriangle,
-  Cast,
   Check,
   Info,
   Keyboard,
@@ -17,7 +16,7 @@ import { useNavigate } from "react-router-dom";
 
 import { AboutDialog } from "@/app/components/about/dialog";
 import { SyncPopoverContent } from "@/app/components/header/sync-progress-bar";
-import { RemoteControlDialog } from "@/app/components/remote-control/dialog";
+
 import { ShortcutsDialog } from "@/app/components/shortcuts/dialog";
 import {
   Avatar,
@@ -61,7 +60,7 @@ import {
   useLibraryCaching,
   useSyncState,
 } from "@/store/cache.store";
-import { useLanControlServerInfo } from "@/store/lanControl.store";
+
 import { isMacOS } from "@/utils/desktop";
 
 type SyncBadgeVariant = "offline" | "error" | "syncing" | "done" | null;
@@ -184,10 +183,10 @@ export function UserDropdown() {
   const isMobile = useIsMobile();
   const { status: swStatus, applyUpdate } = useSwUpdate();
   const { setOpenDialog } = useAppSettings();
-  const serverInfo = useLanControlServerInfo();
+
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
-  const [remoteControlOpen, setRemoteControlOpen] = useState(false);
+
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const badgeVariant = useSyncBadgeVariant();
@@ -205,7 +204,6 @@ export function UserDropdown() {
   useHotkeys("mod+/", () => setShortcutsOpen((prev) => !prev));
 
   const alignPosition = isMacOS ? "end" : "center";
-  const isServerRunning = serverInfo.running;
 
   return (
     <>
@@ -213,10 +211,6 @@ export function UserDropdown() {
 
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
-      <RemoteControlDialog
-        open={remoteControlOpen}
-        onOpenChange={setRemoteControlOpen}
-      />
 
       {isMobile ? (
         <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
@@ -259,17 +253,6 @@ export function UserDropdown() {
             <div className="border-t" />
 
             <div className="flex flex-col gap-1.5 px-4 pb-2">
-              {!isServerRunning && (
-                <DrawerClose asChild>
-                  <button
-                    onClick={() => setRemoteControlOpen(true)}
-                    className="flex items-center gap-3 rounded-md px-3 py-4 text-sm hover-supported:bg-accent w-full text-left"
-                  >
-                    <Cast className="h-4 w-4" />
-                    <span>{t("lanControl.remote.menu")}</span>
-                  </button>
-                </DrawerClose>
-              )}
               <DrawerClose asChild>
                 <button
                   onClick={handleSettingsClick}
@@ -362,12 +345,7 @@ export function UserDropdown() {
                 {stringifyShortcut(shortcutDialogKeys)}
               </DropdownMenuShortcut>
             </DropdownMenuItem>
-            {!isServerRunning && (
-              <DropdownMenuItem onClick={() => setRemoteControlOpen(true)}>
-                <Cast className="mr-2 h-4 w-4" />
-                <span>{t("lanControl.remote.menu")}</span>
-              </DropdownMenuItem>
-            )}
+
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleSettingsClick}>
               <Settings className="mr-2 h-4 w-4" />

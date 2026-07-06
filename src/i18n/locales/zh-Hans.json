@@ -175,7 +175,8 @@
         "list": "列表",
         "poster": "海报"
       }
-    }
+    },
+    "cancel": "取消"
   },
   "home": {
     "pinned": "已固定",
@@ -184,72 +185,7 @@
     "recentlyAdded": "最近添加",
     "recentlyPlayed": "最近播放"
   },
-  "lanControl": {
-    "remote": {
-      "actions": {
-        "connect": "连接",
-        "connecting": "正在连接…",
-        "disconnect": "断开连接",
-        "refresh": "刷新状态"
-      },
-      "address": "服务器地址",
-      "autoConnectFailed": "无法连接到远程设备，进入本地播放模式",
-      "clickToPlay": "点击播放",
-      "controls": {
-        "next": "下一首",
-        "pause": "暂停",
-        "play": "播放",
-        "previous": "上一首",
-        "repeat": "切换循环",
-        "shuffle": "切换随机播放"
-      },
-      "currentlyPlaying": "当前播放",
-      "description": "连接到 LAN 控制服务器并远程管理播放。",
-      "emptyArtist": "未知艺术家",
-      "emptyTitle": "暂无播放内容",
-      "ip": "IP 地址",
-      "items": "项",
-      "library": {
-        "albums": "专辑",
-        "back": "返回",
-        "loading": "加载中...",
-        "noAlbums": "没有可用的专辑",
-        "noPlaylists": "没有可用的播放列表",
-        "noResults": "未找到结果",
-        "playlists": "播放列表",
-        "search": "搜索",
-        "searchButton": "搜索",
-        "searchPlaceholder": "搜索歌曲、专辑...",
-        "searching": "搜索中...",
-        "songs": "歌曲"
-      },
-      "loadingSong": "加载中...",
-      "menu": "控制其他设备",
-      "nowPlaying": "正在播放",
-      "password": "访问验证码",
-      "playing": "播放中",
-      "port": "端口",
-      "queue": "播放队列",
-      "queueEmpty": "队列为空",
-      "serverRunning": "此设备当前正作为 LAN 控制服务器运行。当此设备处于服务器模式时，无法控制其他设备。",
-      "status": {
-        "authenticating": "验证中",
-        "connected": "已连接",
-        "connecting": "连接中",
-        "disconnected": "未连接",
-        "error": "错误",
-        "label": "状态"
-      },
-      "tabs": {
-        "control": "控制",
-        "library": "音乐库"
-      },
-      "title": "控制其他设备",
-      "unknownDevice": "未知设备",
-      "version": "版本 {{version}}",
-      "volume": "音量：{{volume}}%"
-    }
-  },
+
   "login": {
     "form": {
       "connect": "连接",
@@ -642,38 +578,7 @@
           "label": "最小化到系统托盘"
         }
       },
-      "lanControl": {
-        "address": {
-          "info": "可用的 LAN 控制访问服务器地址。",
-          "label": "服务器地址"
-        },
-        "addressCopied": "服务器地址已复制到剪贴板。",
-        "allowNavidromeAuth": {
-          "info": "启用使用 Navidrome 凭据进行身份验证。",
-          "label": "允许 Navidrome 身份验证"
-        },
-        "copyAddress": "复制地址",
-        "copyPassword": "复制密码",
-        "description": "管理 LAN 控制设置以进行远程访问。",
-        "enable": {
-          "info": "启用 LAN 控制以允许对此应用的远程访问。",
-          "label": "启用 LAN 控制"
-        },
-        "group": "LAN 控制",
-        "password": {
-          "info": "设置密码以安全访问 LAN 控制服务器。",
-          "label": "密码"
-        },
-        "passwordCopied": "密码已复制到剪贴板。",
-        "passwordRegenerated": "密码已成功重新生成。",
-        "port": {
-          "info": "指定 LAN 控制服务器的端口号。",
-          "label": "端口"
-        },
-        "regeneratePassword": "重新生成密码",
-        "serverError": "启动 LAN 控制服务器失败。",
-        "serverStarted": "LAN 控制服务器启动成功。"
-      },
+
       "updates": {
         "availableVersion": "版本 {{version}} 可用",
         "checkNow": {
@@ -717,7 +622,119 @@
       "language": "语言和地区",
       "privacy": "隐私和安全",
       "server": "服务器",
-      "storage": "离线体验"
+      "storage": "离线体验",
+      "cross-device": "跨设备"
+    },
+    "crossDevice": {
+      "title": "跨设备",
+      "description": "在不同设备间同步播放历史并继续播放。",
+      "setup": {
+        "title": "连接此设备",
+        "description": "在需要同步的每台设备上使用同一个协调服务器。",
+        "requirement": "当前音乐服务器凭据仅用于授权此设备。"
+      },
+      "serverUrl": {
+        "label": "协调服务器地址",
+        "info": "你的协调服务器 URL。"
+      },
+      "identityUrl": {
+        "label": "身份 URL",
+        "info": "你的 Navidrome/Subsonic 服务器 URL。"
+      },
+      "deviceName": {
+        "label": "设备名称",
+        "info": "用于识别的设备名称。",
+        "placeholder": "我的设备"
+      },
+      "connect": "连接",
+      "retry": "重试",
+      "status": "连接状态",
+      "statusInfo": "连接后，此设备可用于播放接力。",
+      "currentDevice": "当前设备",
+      "disconnectShort": "断开",
+      "connectionState": {
+        "label": "状态",
+        "disconnected": "未连接",
+        "connecting": "连接中",
+        "authenticating": "认证中",
+        "connected": "已连接",
+        "error": "错误"
+      },
+      "lastSync": {
+        "label": "上次同步"
+      },
+      "never": "从未",
+      "error": {
+        "label": "错误",
+        "missingFields": "请填写所有字段",
+        "connectFailed": "连接失败",
+        "disconnectedDescription": "协调服务器重新连接前，远程设备暂不可用。",
+        "unconfiguredTitle": "跨设备播放",
+        "unconfiguredDescription": "连接到协调服务器"
+      },
+      "disconnect": "断开此设备",
+      "connected": "已连接",
+      "disconnected": "已断开",
+      "devices": "已绑定设备",
+      "deviceCount": "{{count}} 台设备",
+      "devicesDescription": "为设备重命名以便识别，或撤销不再使用的会话。",
+      "device": {
+        "current": "当前设备",
+        "lastOnline": "上次在线 {{time}}",
+        "save": "保存",
+        "cancel": "取消",
+        "rename": "重命名",
+        "revoke": "撤销",
+        "renamed": "设备已重命名",
+        "revoked": "设备已撤销"
+      },
+      "deleteData": {
+        "label": "删除所有跨设备数据",
+        "info": "从协调服务器移除你的账户以及所有同步数据。"
+      },
+      "delete": "删除",
+      "deleteConfirm": {
+        "title": "删除所有跨设备数据？",
+        "description": "此操作不可撤销。"
+      },
+      "disconnectConfirm": {
+        "title": "断开此设备？",
+        "description": "这将停止在此设备上的跨设备同步。"
+      },
+      "revokeConfirm": {
+        "title": "撤销设备？",
+        "description": "确定要撤销对设备 {{name}} 的访问权限吗？"
+      },
+      "deleted": "跨设备数据已删除",
+      "toast": {
+        "relaySuccess": "接力成功！",
+        "relayFailed": "接力失败: {{code}}",
+        "exitRemoteControl": "已退出远程控制",
+        "remoteControlSuccess": "正在远程控制: {{name}}",
+        "preparingRelay": "正在准备接力...",
+        "sessionSuperseded": "此会话已被 {{deviceName}} 接管，本机已暂停"
+      },
+      "handoffError": {
+        "targetOffline": "设备已离线。",
+        "snapshotExpired": "这次播放快照太旧，无法继续播放。",
+        "handoffConflict": "另一次接力已经接管了这个会话。",
+        "sourceChanged": "来源设备在转移前已切换播放内容。",
+        "sourcePauseTimeout": "来源设备未能及时确认暂停。",
+        "unsupportedMedia": "这种媒体类型不能在其他设备上继续播放。",
+        "deviceRevoked": "此设备已不再允许使用跨设备同步。",
+        "protocolIncompatible": "请更新一个或多个设备上的 Aonsoku。",
+        "forbidden": "当前无法控制或转移此设备。",
+        "fallback": "接力失败: {{reason}}"
+      },
+      "playback": {
+        "fetchingSong": "正在获取歌曲...",
+        "unknownTrack": "未知曲目",
+        "exitControl": "退出控制",
+        "remoteControl": "远程控制",
+        "relay": "接力",
+        "peerDevice": "远程设备",
+        "controllingDevice": "正在控制 {{name}}"
+      }
     },
     "privacy": {
       "services": {

@@ -41,7 +41,8 @@
         "poster": "Poster"
       }
     },
-    "beta": "Beta"
+    "beta": "Beta",
+    "cancel": "Cancel"
   },
   "theme": {
     "label": "Theme",
@@ -609,7 +610,119 @@
       "desktop": "Desktop Application",
       "server": "Server",
       "privacy": "Privacy & Security",
-      "storage": "Offline Experience"
+      "storage": "Offline Experience",
+      "cross-device": "Cross-Device"
+    },
+    "crossDevice": {
+      "title": "Cross-Device",
+      "description": "Sync history and continue playback across your devices.",
+      "setup": {
+        "title": "Connect this device",
+        "description": "Use the same coordination server on every device you want to keep in sync.",
+        "requirement": "Your current music server credentials are used only to authorize this device."
+      },
+      "serverUrl": {
+        "label": "Coordination server URL",
+        "info": "URL of your coordination server."
+      },
+      "identityUrl": {
+        "label": "Identity URL",
+        "info": "Your Navidrome/Subsonic server URL."
+      },
+      "deviceName": {
+        "label": "Device name",
+        "info": "A friendly name for this device.",
+        "placeholder": "My device"
+      },
+      "connect": "Connect",
+      "retry": "Retry",
+      "status": "Connection status",
+      "statusInfo": "This device stays available for playback handoff while connected.",
+      "currentDevice": "Current device",
+      "disconnectShort": "Disconnect",
+      "connectionState": {
+        "label": "State",
+        "disconnected": "Disconnected",
+        "connecting": "Connecting",
+        "authenticating": "Authenticating",
+        "connected": "Connected",
+        "error": "Error"
+      },
+      "lastSync": {
+        "label": "Last sync"
+      },
+      "never": "Never",
+      "error": {
+        "label": "Error",
+        "missingFields": "Fill in all fields",
+        "connectFailed": "Connection failed",
+        "disconnectedDescription": "Remote devices are unavailable until the coordination server reconnects.",
+        "unconfiguredTitle": "Cross-device Playback",
+        "unconfiguredDescription": "Connect to coordination server"
+      },
+      "disconnect": "Disconnect this device",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "devices": "Bound devices",
+      "deviceCount": "{{count}} devices",
+      "devicesDescription": "Rename devices so they are easy to recognize, or revoke old sessions.",
+      "device": {
+        "current": "Current",
+        "lastOnline": "Last online {{time}}",
+        "save": "Save",
+        "cancel": "Cancel",
+        "rename": "Rename",
+        "revoke": "Revoke",
+        "renamed": "Device renamed",
+        "revoked": "Device revoked"
+      },
+      "deleteData": {
+        "label": "Delete all coordination data",
+        "info": "Remove your account and all synced data from the coordination server."
+      },
+      "delete": "Delete",
+      "deleteConfirm": {
+        "title": "Delete all coordination data?",
+        "description": "This action cannot be undone."
+      },
+      "disconnectConfirm": {
+        "title": "Disconnect this device?",
+        "description": "This will stop cross-device sync on this device."
+      },
+      "revokeConfirm": {
+        "title": "Revoke device?",
+        "description": "Are you sure you want to revoke access for {{name}}?"
+      },
+      "deleted": "Coordination data deleted",
+      "toast": {
+        "relaySuccess": "Handoff successful!",
+        "relayFailed": "Handoff failed: {{code}}",
+        "exitRemoteControl": "Exited remote control",
+        "remoteControlSuccess": "Remote controlling: {{name}}",
+        "preparingRelay": "Preparing handoff...",
+        "sessionSuperseded": "This session has been taken over by {{deviceName}}, playback paused."
+      },
+      "handoffError": {
+        "targetOffline": "The device went offline.",
+        "snapshotExpired": "That playback snapshot is too old to continue.",
+        "handoffConflict": "Another handoff already took this session.",
+        "sourceChanged": "The source changed before it could be transferred.",
+        "sourcePauseTimeout": "The source device did not confirm pause in time.",
+        "unsupportedMedia": "This media type cannot be continued on another device.",
+        "deviceRevoked": "This device is no longer allowed to use cross-device sync.",
+        "protocolIncompatible": "Update Aonsoku on one or more devices.",
+        "forbidden": "This device cannot be controlled or transferred right now.",
+        "fallback": "Handoff failed: {{reason}}"
+      },
+      "playback": {
+        "fetchingSong": "Fetching song...",
+        "unknownTrack": "Unknown track",
+        "exitControl": "Exit control",
+        "remoteControl": "Remote control",
+        "relay": "Handoff",
+        "peerDevice": "remote device",
+        "controllingDevice": "Controlling {{name}}"
+      }
     },
     "server": {
       "group": "Server",
@@ -991,107 +1104,10 @@
         "readyToInstall": "Ready to install (restart required)",
         "installNow": "Install and Restart",
         "updateError": "Update Check Failed"
-      },
-      "lanControl": {
-        "group": "LAN Control",
-        "description": "Manage LAN control settings for remote access.",
-        "enable": {
-          "label": "Enable LAN Control",
-          "info": "Turn on LAN control to allow remote access to this application."
-        },
-        "port": {
-          "label": "Port",
-          "info": "Specify the port number for the LAN control server."
-        },
-        "password": {
-          "label": "Password",
-          "info": "Set a password for secure access to the LAN control server."
-        },
-        "address": {
-          "label": "Server Addresses",
-          "info": "Available server addresses for LAN control access."
-        },
-        "allowNavidromeAuth": {
-          "label": "Allow Navidrome Authentication",
-          "info": "Enable authentication using Navidrome credentials."
-        },
-        "serverStarted": "LAN control server started successfully.",
-        "serverError": "Failed to start LAN control server.",
-        "passwordRegenerated": "Password regenerated successfully.",
-        "addressCopied": "Server address copied to clipboard.",
-        "passwordCopied": "Password copied to clipboard.",
-        "copyPassword": "Copy password",
-        "copyAddress": "Copy address",
-        "regeneratePassword": "Regenerate password"
       }
     }
   },
-  "lanControl": {
-    "remote": {
-      "menu": "Control other devices",
-      "title": "Control other devices",
-      "description": "Connect to a LAN control server and manage playback remotely.",
-      "serverRunning": "This device is currently running as a LAN Control server. You cannot control other devices while this device is in server mode.",
-      "address": "Server address",
-      "ip": "IP Address",
-      "port": "Port",
-      "password": "Access code",
-      "status": {
-        "label": "Status",
-        "connected": "Connected",
-        "connecting": "Connecting",
-        "authenticating": "Authenticating",
-        "error": "Error",
-        "disconnected": "Disconnected"
-      },
-      "actions": {
-        "connect": "Connect",
-        "connecting": "Connecting...",
-        "disconnect": "Disconnect",
-        "refresh": "Refresh state"
-      },
-      "nowPlaying": "Now playing",
-      "volume": "Volume: {{volume}}%",
-      "emptyTitle": "No track playing",
-      "emptyArtist": "Unknown artist",
-      "loadingSong": "Loading...",
-      "queue": "Playback queue",
-      "playing": "Playing",
-      "currentlyPlaying": "Currently playing",
-      "clickToPlay": "Click to play",
-      "tabs": {
-        "control": "Control",
-        "library": "Library"
-      },
-      "library": {
-        "search": "Search",
-        "albums": "Albums",
-        "playlists": "Playlists",
-        "songs": "Songs",
-        "searchPlaceholder": "Search songs, albums...",
-        "searchButton": "Search",
-        "searching": "Searching...",
-        "noResults": "No results found",
-        "loading": "Loading...",
-        "noAlbums": "No albums available",
-        "noPlaylists": "No playlists available",
-        "back": "Back"
-      },
-      "controls": {
-        "previous": "Previous",
-        "play": "Play",
-        "pause": "Pause",
-        "next": "Next",
-        "shuffle": "Toggle shuffle",
-        "repeat": "Toggle repeat"
-      },
-      "items": "items",
-      "queueEmpty": "Queue is empty",
-      "unknownDevice": "Unknown device",
-      "version": "v{{version}}",
-      "autoConnectFailed": "Failed to connect to remote device, entering local playback mode"
-    }
-  },
+
   "dayjs": {
     "relativeTime": {
       "future": "in %s",

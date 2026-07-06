@@ -1,13 +1,5 @@
 import { RpcPayload } from "../main/core/discordRpc";
 import { ISettingPayload } from "../main/core/settings";
-import type {
-  CurrentSongData,
-  LanControlConfig,
-  LanControlMessage,
-  LanControlServerInfo,
-  PlayerStateData,
-  QueueData,
-} from "./lanControlTypes";
 
 export enum IpcChannels {
   FullscreenStatus = "fullscreen-status",
@@ -33,17 +25,6 @@ export enum IpcChannels {
   SetAlwaysOnTop = "set-always-on-top",
   IsAlwaysOnTop = "is-always-on-top",
   FocusMainWindow = "focus-main-window",
-  // LAN Control
-  LanControlStart = "lan-control:start",
-  LanControlStop = "lan-control:stop",
-  LanControlGetInfo = "lan-control:get-info",
-  LanControlUpdateConfig = "lan-control:update-config",
-  LanControlBroadcastState = "lan-control:broadcast-state",
-  LanControlBroadcastSong = "lan-control:broadcast-song",
-  LanControlBroadcastQueue = "lan-control:broadcast-queue",
-  LanControlMessage = "lan-control:message",
-  LanControlRequestState = "lan-control:request-state",
-  LanControlVerifyNavidromeAuth = "lan-control:verify-navidrome-auth",
 }
 
 export type OverlayColors = {
@@ -96,20 +77,6 @@ export interface IAonsokuAPI {
   removeMiniPlayerStatusListener: () => void;
   setAlwaysOnTop: (isAlwaysOnTop: boolean) => void;
   isAlwaysOnTop: () => Promise<boolean>;
-  // LAN Control
-  lanControl: {
-    start: (config: LanControlConfig) => Promise<LanControlServerInfo>;
-    stop: () => Promise<void>;
-    getInfo: () => Promise<LanControlServerInfo>;
-    updateConfig: (config: LanControlConfig) => Promise<void>;
-    broadcastState: (state: PlayerStateData) => void;
-    broadcastSong: (song: CurrentSongData) => void;
-    broadcastQueue: (queue: QueueData) => void;
-    onMessage: (callback: (message: LanControlMessage) => void) => void;
-    onRequestState: (callback: () => void) => void;
-    removeMessageListener: () => void;
-    removeRequestStateListener: () => void;
-  };
   // App Update
   update: {
     checkForUpdates: () => Promise<void>;

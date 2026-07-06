@@ -6,6 +6,83 @@ import UIKit
 
 @objc(AonsokuNativeAudioPlugin)
 public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
+    private static weak var activeInstance: AonsokuNativeAudioPlugin?
+
+    internal static func executeRemoteControlCommandFromActive(_ command: [String: Any]) -> Bool {
+        guard let instance = activeInstance else {
+            return false
+        }
+        return instance.executeRemoteControlCommand(command)
+    }
+
+    internal static func getFullStateFromActive() -> [String: Any]? {
+        activeInstance?.currentFullState()
+    }
+
+    internal static func pauseAndGetFullStateFromActive() -> [String: Any]? {
+        activeInstance?.pauseAndGetCurrentFullState()
+    }
+
+    internal static func updateRemotePlaybackProjectionFromActive(
+        snapshot: [String: Any],
+        targetDeviceId: String,
+        expectedGeneration: Int
+    ) -> Bool {
+        guard let instance = activeInstance else {
+            return false
+        }
+        instance.updateRemotePlaybackProjection(
+            snapshot: snapshot,
+            targetDeviceId: targetDeviceId,
+            expectedGeneration: expectedGeneration
+        )
+        return true
+    }
+
+    internal static func clearRemotePlaybackProjectionFromActive() -> Bool {
+        guard let instance = activeInstance else {
+            return false
+        }
+        instance.clearRemotePlaybackProjection()
+        return true
+    }
+
+    internal static func prepareHandoffPlaybackFromActive(
+        snapshot: [String: Any],
+        autoplay: Bool,
+        completion: @escaping (Bool) -> Void
+    ) -> Bool {
+        guard let instance = activeInstance else {
+            return false
+        }
+        instance.prepareHandoffPlayback(snapshot: snapshot, autoplay: autoplay, completion: completion)
+        return true
+    }
+
+    internal static func isSupportedRemoteControlCommand(_ type: String) -> Bool {
+        [
+            "play",
+            "pause",
+            "toggle_play_pause",
+            "previous",
+            "next",
+            "seek",
+            "set_shuffle",
+            "set_repeat",
+            "set_volume",
+            "play_song",
+            "play_album",
+            "play_playlist",
+            "play_at_index",
+            "add_to_queue_next",
+            "add_to_queue_last",
+            "remove_from_queue",
+            "reorder_queue",
+            "clear_queue",
+            "toggle_like",
+        ].contains(type)
+    }
+
     public let identifier = "AonsokuNativeAudioPlugin"
     public let jsName = "AonsokuNativeAudio"
     public let pluginMethods: [CAPPluginMethod] = [
@@ -21,6 +98,8 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "skipToNext", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "skipToPrevious", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "updateMetadata", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "updateRemotePlaybackState", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "clearRemotePlaybackState", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "preload", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "clear", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "storeAudioFile", returnType: CAPPluginReturnPromise),
@@ -82,6 +161,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
     private var currentRequestId: String?
     private var playbackGeneration = 0
     private var currentMetadata = NativeAudioMetadata()
+    private var remotePlaybackProjection: NativeRemotePlaybackProjection?
     private var loadedDurationSeconds: Double?
     private var artworkTask: URLSessionDataTask?
     private var nowPlayingRevision = 0
@@ -111,6 +191,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
     private var isRecoveryReload = false
     private var bufferMismatchFirstSeen: Date?
     private var isInForeground = true
+    private var nextSnapshotProgressSeconds: Double?
     private let persistence = PlaybackStatePersistence(
         repository: PlaybackStateRepository(db: DatabaseManager.shared.dbPool)
     )
@@ -123,6 +204,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
 
     public override func load() {
         super.load()
+        Self.activeInstance = self
         queueEngine.delegate = self
         downloadManager.delegate = self
         recoveryController.delegate = self
@@ -141,11 +223,490 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     deinit {
+        if Self.activeInstance === self {
+            Self.activeInstance = nil
+        }
         unregisterRemoteCommands()
         removeLifecycleObservers()
         clearPlayer(sendIdleEvent: false, deactivateSession: true)
         volumeObservation?.invalidate()
         volumeSliderView?.removeFromSuperview()
+    }
+
+    private func executeRemoteControlCommand(_ command: [String: Any]) -> Bool {
+        guard let type = command["type"] as? String else {
+            return false
+        }
+
+        if !Self.isSupportedRemoteControlCommand(type) {
+            return false
+        }
+
+        if type == "play_song" {
+            guard let id = command["song_id"] as? String, !id.isEmpty else {
+                return false
+            }
+            playSongById(id)
+            return true
+        }
+
+        if type == "play_album" {
+            guard let id = command["album_id"] as? String, !id.isEmpty else {
+                return false
+            }
+            playAlbumById(
+                id,
+                index: command["index"] as? Int ?? 0,
+                shuffle: command["shuffle"] as? Bool ?? false
+            )
+            return true
+        }
+
+        if type == "play_playlist" {
+            guard let id = command["playlist_id"] as? String, !id.isEmpty else {
+                return false
+            }
+            playPlaylistById(
+                id,
+                index: command["index"] as? Int ?? 0,
+                shuffle: command["shuffle"] as? Bool ?? false
+            )
+            return true
+        }
+
+        if type == "play_at_index" ||
+            type == "add_to_queue_next" ||
+            type == "add_to_queue_last" {
+            let ids = stringArray(command["song_ids"])
+            guard !ids.isEmpty else {
+                return false
+            }
+            if type == "add_to_queue_next" || type == "add_to_queue_last" {
+                addSongIdsToQueue(
+                    ids: ids,
+                    position: type == "add_to_queue_next" ? "next" : "last"
+                )
+                return true
+            }
+            let index = command["index"] as? Int ?? 0
+            playSongIdsAtIndex(ids: ids, index: index)
+            return true
+        }
+
+        DispatchQueue.main.async {
+            switch type {
+            case "play":
+                do {
+                    try self.activateAudioSession()
+                    if self.player == nil,
+                       self.isQueueEngineActive,
+                       let song = self.queueEngine.currentSong {
+                        let startTime = self.savedRestoreTime
+                        self.savedRestoreTime = nil
+                        self.queueEngine.clearRestoredFlag()
+                        self.stateQueue.async {
+                            self.queueEngine.delegate?.queueEngine(
+                                self.queueEngine,
+                                loadSong: song,
+                                autoplay: true,
+                                startTime: startTime
+                            )
+                        }
+                    } else if self.isPlayerAtEnd {
+                        self.seekToStartAndPlay()
+                    } else {
+                        self.player?.play()
+                    }
+                    self.recoveryController.startProgressMonitoring(
+                        generation: self.playbackGeneration,
+                        sourceKind: self.recoverySourceKind()
+                    )
+                } catch {
+                    self.emitError(
+                        code: "remote_command_failed",
+                        message: error.localizedDescription
+                    )
+                }
+            case "pause":
+                self.recoveryController.reportUserPause()
+                self.player?.pause()
+                self.persistence.flushNow()
+            case "toggle_play_pause":
+                if self.player?.timeControlStatus == .playing {
+                    self.recoveryController.reportUserPause()
+                    self.player?.pause()
+                    self.persistence.flushNow()
+                } else {
+                    do {
+                        try self.activateAudioSession()
+                        if self.isPlayerAtEnd {
+                            self.seekToStartAndPlay()
+                        } else {
+                            self.player?.play()
+                        }
+                    } catch {
+                        self.emitError(
+                            code: "remote_command_failed",
+                            message: error.localizedDescription
+                        )
+                    }
+                }
+            case "previous":
+                if self.isQueueEngineActive {
+                    self.isQueueTransitioning = true
+                    let currentTime = self.player?.currentTime().seconds ?? 0
+                    self.stateQueue.async {
+                        self.queueEngine.skipToPrevious(currentTime: currentTime)
+                    }
+                }
+            case "next":
+                if self.isQueueEngineActive {
+                    self.isQueueTransitioning = true
+                    self.stateQueue.async {
+                        self.queueEngine.skipToNext()
+                    }
+                }
+            case "seek":
+                let seconds = max(0, self.numberValue(command["seconds"]) ?? 0)
+                self.isSeeking = true
+                self.player?.seek(
+                    to: self.makeTime(seconds),
+                    toleranceBefore: .zero,
+                    toleranceAfter: .zero
+                ) { [weak self] _ in
+                    self?.isSeeking = false
+                    self?.emitProgress()
+                    self?.updateNowPlayingPlaybackInfo()
+                    self?.persistence.updateProgress(seconds)
+                    self?.persistence.flushNow()
+                }
+            case "set_shuffle":
+                let enabled = command["enabled"] as? Bool ?? false
+                self.stateQueue.async {
+                    self.shuffleEnabled = enabled
+                    if self.isQueueEngineActive {
+                        self.queueEngine.setShuffleActive(enabled)
+                        self.persistence.markStateDirty()
+                    }
+                }
+            case "set_repeat":
+                let mode = command["mode"] as? String ?? "off"
+                self.stateQueue.async {
+                    self.repeatMode = mode
+                    if self.isQueueEngineActive,
+                       let loopState = LoopState(rawValue: mode) {
+                        self.queueEngine.setLoopState(loopState)
+                        self.persistence.markStateDirty()
+                    }
+                }
+            case "set_volume":
+                let volume = self.numberValue(command["volume"]) ?? 0.5
+                self.setSystemVolumeValue(volume)
+            case "clear_queue":
+                self.stateQueue.async {
+                    self.queueEngine.clearUserQueue()
+                    self.persistence.markStateDirty()
+                }
+            case "remove_from_queue":
+                let ids = Set(self.stringArray(command["song_ids"]))
+                guard !ids.isEmpty else { return }
+                self.stateQueue.async {
+                    let indices = self.queueEngine.userQueue.enumerated().compactMap { item in
+                        ids.contains(item.element.id) ? item.offset : nil
+                    }
+                    self.queueEngine.removeFromUserQueue(indices: indices)
+                    self.persistence.markStateDirty()
+                }
+            case "reorder_queue":
+                let from = command["from"] as? Int ?? -1
+                let to = command["to"] as? Int ?? -1
+                self.stateQueue.async {
+                    self.queueEngine.reorderContextQueue(fromIndex: from, toIndex: to)
+                    self.persistence.markStateDirty()
+                }
+            case "toggle_like":
+                self.toggleLikeForCurrentSong()
+            default:
+                break
+            }
+        }
+
+        return true
+    }
+
+    private func playSongById(_ id: String) {
+        playSongIdsAtIndex(ids: [id], index: 0)
+    }
+
+    private func playAlbumById(_ id: String, index: Int, shuffle: Bool) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let repo = AlbumRepository(db: DatabaseManager.shared.dbPool)
+                guard let result = try repo.getWithSongs(id), !result.songs.isEmpty else {
+                    return
+                }
+                self.playQueueSongsAtIndex(
+                    songs: result.songs.map { $0.toQueueSong() },
+                    index: index,
+                    shuffle: shuffle,
+                    sourceId: QueueSourceId(type: "album", id: id),
+                    sourceName: result.album.name
+                )
+            } catch {
+                NativeLogger.shared.warn(
+                    "Failed to execute native play_album: \(error.localizedDescription)",
+                    source: "Audio"
+                )
+            }
+        }
+    }
+
+    private func playPlaylistById(_ id: String, index: Int, shuffle: Bool) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let repo = PlaylistRepository(db: DatabaseManager.shared.dbPool)
+                guard let detail = try repo.getDetailById(id) else {
+                    return
+                }
+                let songs = try self.loadQueueSongs(ids: self.playlistEntrySongIds(detail.entriesJson))
+                guard !songs.isEmpty else {
+                    return
+                }
+                self.playQueueSongsAtIndex(
+                    songs: songs,
+                    index: index,
+                    shuffle: shuffle,
+                    sourceId: QueueSourceId(type: "playlist", id: id),
+                    sourceName: detail.name
+                )
+            } catch {
+                NativeLogger.shared.warn(
+                    "Failed to execute native play_playlist: \(error.localizedDescription)",
+                    source: "Audio"
+                )
+            }
+        }
+    }
+
+    private func addSongIdsToQueue(ids: [String], position: String) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let songs = try self.loadQueueSongs(ids: ids)
+                guard !songs.isEmpty else {
+                    return
+                }
+
+                self.stateQueue.async {
+                    self.queueEngine.addToUserQueue(
+                        songs: songs,
+                        position: position
+                    )
+                    self.persistence.markStateDirty()
+                }
+            } catch {
+                NativeLogger.shared.warn(
+                    "Failed to execute native add_to_queue: \(error.localizedDescription)",
+                    source: "Audio"
+                )
+            }
+        }
+    }
+
+    private func playSongIdsAtIndex(ids: [String], index: Int) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let songs = try self.loadQueueSongs(ids: ids)
+                guard !songs.isEmpty else {
+                    return
+                }
+                self.playQueueSongsAtIndex(
+                    songs: songs,
+                    index: index,
+                    shuffle: false,
+                    sourceId: nil,
+                    sourceName: nil
+                )
+            } catch {
+                NativeLogger.shared.warn(
+                    "Failed to execute native play_at_index: \(error.localizedDescription)",
+                    source: "Audio"
+                )
+            }
+        }
+    }
+
+    private func playQueueSongsAtIndex(
+        songs: [QueueSong],
+        index: Int,
+        shuffle: Bool,
+        sourceId: QueueSourceId?,
+        sourceName: String?
+    ) {
+        let clampedIndex = max(0, min(index, songs.count - 1))
+        self.stateQueue.async {
+            self.isQueueEngineActive = true
+            self.queueEngine.setContextQueue(
+                songs: songs,
+                currentIndex: clampedIndex,
+                autoplay: true,
+                startTime: nil,
+                sourceId: sourceId,
+                sourceName: sourceName
+            )
+            if shuffle {
+                self.queueEngine.setShuffleActive(true)
+            }
+            self.persistence.markStateDirty()
+        }
+    }
+
+    private func toggleLikeForCurrentSong() {
+        stateQueue.async {
+            guard let current = self.queueEngine.currentSong else {
+                return
+            }
+            let repo = SongRepository(db: DatabaseManager.shared.dbPool)
+            do {
+                let song = try repo.getById(current.id)
+                let nextStarredAt = song?.starredAt == nil ? Int(Date().timeIntervalSince1970) : nil
+                try repo.updateStarred(ids: [current.id], starred: nextStarredAt.map(String.init), starredAt: nextStarredAt)
+                DispatchQueue.main.async {
+                    MPRemoteCommandCenter.shared().likeCommand.isActive = nextStarredAt != nil
+                }
+            } catch {
+                NativeLogger.shared.warn(
+                    "Failed to execute native toggle_like: \(error.localizedDescription)",
+                    source: "Audio"
+                )
+            }
+        }
+    }
+
+    private func loadQueueSongs(ids: [String]) throws -> [QueueSong] {
+        let repo = SongRepository(db: DatabaseManager.shared.dbPool)
+        let records = try repo.getByIds(ids: ids)
+        let byId = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0) })
+        return ids.compactMap { byId[$0]?.toQueueSong() }
+    }
+
+    private func prepareHandoffPlayback(
+        snapshot: [String: Any],
+        autoplay: Bool,
+        completion: @escaping (Bool) -> Void
+    ) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let songId = snapshot["songId"] as? String, !songId.isEmpty else {
+                completion(false)
+                return
+            }
+
+            do {
+                let contextIds = self.stringArray(snapshot["contextQueue"])
+                var songs = try self.loadQueueSongs(ids: contextIds.isEmpty ? [songId] : contextIds)
+                if songs.isEmpty {
+                    songs = try self.loadQueueSongs(ids: [songId])
+                }
+                guard !songs.isEmpty else {
+                    completion(false)
+                    return
+                }
+
+                let snapshotIndex = snapshot["contextIndex"] as? Int ?? -1
+                let resolvedIndex = snapshotIndex >= 0
+                    ? snapshotIndex
+                    : (songs.firstIndex { $0.id == songId } ?? 0)
+                let progressSeconds = max(0, self.numberValue(snapshot["progressSeconds"]) ?? 0)
+                let repeatMode = snapshot["repeat"] as? String ?? "off"
+                let shuffle = snapshot["shuffle"] as? Bool ?? false
+                let sourceId = self.parseSnapshotSourceId(snapshot["sourceId"] as? String)
+                let sourceName = snapshot["sourceName"] as? String
+                let volume = self.numberValue(snapshot["volume"])
+
+                self.stateQueue.async {
+                    self.isQueueEngineActive = true
+                    if let loopState = LoopState(rawValue: repeatMode) {
+                        self.queueEngine.setLoopState(loopState)
+                        self.repeatMode = repeatMode
+                    }
+                    self.queueEngine.setContextQueue(
+                        songs: songs,
+                        currentIndex: resolvedIndex,
+                        autoplay: autoplay,
+                        startTime: progressSeconds,
+                        sourceId: sourceId,
+                        sourceName: sourceName
+                    )
+                    self.shuffleEnabled = shuffle
+                    self.queueEngine.setShuffleActive(shuffle)
+                    self.persistence.markStateDirty()
+                    if let volume {
+                        self.setSystemVolumeValue(volume)
+                    }
+                    completion(true)
+                }
+            } catch {
+                NativeLogger.shared.warn(
+                    "Failed to prepare native handoff playback: \(error.localizedDescription)",
+                    source: "Audio"
+                )
+                completion(false)
+            }
+        }
+    }
+
+    private func stringArray(_ value: Any?) -> [String] {
+        (value as? [String] ?? []).filter { !$0.isEmpty }
+    }
+
+    private func parseSnapshotSourceId(_ raw: String?) -> QueueSourceId? {
+        guard let raw, !raw.isEmpty else { return nil }
+        let parts = raw.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else {
+            return nil
+        }
+        switch parts[0] {
+        case "album", "playlist", "artist", "genre", "radio":
+            return QueueSourceId(type: parts[0], id: parts[1])
+        default:
+            return nil
+        }
+    }
+
+    private func playlistEntrySongIds(_ entriesJson: String) -> [String] {
+        guard let data = entriesJson.data(using: .utf8),
+              let entries = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            return []
+        }
+        return entries.compactMap { entry in
+            let id = entry["id"] as? String
+            return id?.isEmpty == false ? id : nil
+        }
+    }
+
+    private func setSystemVolumeValue(_ value: Double) {
+        let clampedValue = Float(min(max(value, 0.0), 1.0))
+        try? activateAudioSession()
+
+        resolveVolumeSlider { [weak self] slider in
+            guard let self else { return }
+            guard let slider else {
+                self.emitError(
+                    code: "volume_control_unavailable",
+                    message: "System volume control is unavailable."
+                )
+                return
+            }
+
+            slider.setValue(clampedValue, animated: false)
+            slider.sendActions(for: .touchUpInside)
+            slider.sendActions(for: .valueChanged)
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                guard let self else { return }
+                let volume = self.audioSession.outputVolume
+                self.notifyListeners("systemVolumeChanged", data: ["volume": volume])
+            }
+        }
     }
 
     @objc func load(_ call: CAPPluginCall) {
@@ -185,6 +746,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
                     self.currentSourceUrl = resolvedSource.url
                     self.currentRadioId = resolvedSource.radioId
                     self.currentRequestId = requestId
+                    self.remotePlaybackProjection = nil
                     self.currentMetadata = metadata
                     self.loadedDurationSeconds = metadata.duration
                     self.addObservers(for: item, player: player, generation: generation, requestId: requestId)
@@ -397,9 +959,117 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func updateMetadata(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
+            self.remotePlaybackProjection = nil
             self.currentMetadata = self.metadata(from: call)
             self.updateNowPlayingInfo()
             call.resolve()
+        }
+    }
+
+    @objc func updateRemotePlaybackState(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            let metadata = self.metadata(from: call.getObject("metadata"))
+            let position = max(0, self.numberValue(call.getValue("position")) ?? 0)
+            let duration = max(
+                0,
+                self.numberValue(call.getValue("duration")) ??
+                    metadata.duration ??
+                    0
+            )
+            self.remotePlaybackProjection = NativeRemotePlaybackProjection(
+                metadata: metadata,
+                isPlaying: call.getBool("isPlaying") ?? false,
+                position: position,
+                duration: duration,
+                isShuffleActive: call.getBool("isShuffleActive") ?? false,
+                repeatMode: call.getString("repeatMode") ?? "off",
+                volume: self.numberValue(call.getValue("volume")),
+                targetDeviceId: call.getString("targetDeviceId"),
+                expectedGeneration: call.getInt("expectedGeneration")
+            )
+            self.currentMetadata = metadata
+            self.updateNowPlayingInfo()
+            call.resolve()
+        }
+    }
+
+    @objc func clearRemotePlaybackState(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            self.remotePlaybackProjection = nil
+            if self.player != nil || self.isQueueEngineActive {
+                self.updateNowPlayingInfo()
+            } else {
+                self.clearNowPlayingInfo()
+            }
+            call.resolve()
+        }
+    }
+
+    private func updateRemotePlaybackProjection(
+        snapshot: [String: Any],
+        targetDeviceId: String,
+        expectedGeneration: Int
+    ) {
+        let songId = snapshot["songId"] as? String ?? ""
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let song = await self?.loadRemotePlaybackSong(songId: songId)
+            await MainActor.run { [weak self] in
+                self?.applyRemotePlaybackProjection(
+                    snapshot: snapshot,
+                    targetDeviceId: targetDeviceId,
+                    expectedGeneration: expectedGeneration,
+                    song: song
+                )
+            }
+        }
+    }
+
+    private func applyRemotePlaybackProjection(
+        snapshot: [String: Any],
+        targetDeviceId: String,
+        expectedGeneration: Int,
+        song: SongRecord?
+    ) {
+        let songId = snapshot["songId"] as? String ?? ""
+        let duration = max(
+            0,
+            self.numberValue(snapshot["durationSeconds"]) ?? 0
+        )
+        let metadata = song?.remotePlaybackMetadata()
+            ?? NativeAudioMetadata(
+                title: songId.isEmpty ? "Remote playback" : songId,
+                artist: snapshot["sourceName"] as? String,
+                album: nil,
+                duration: duration,
+                artworkUrl: nil,
+                coverArtId: nil
+            )
+        self.remotePlaybackProjection = NativeRemotePlaybackProjection(
+            metadata: metadata,
+            isPlaying: snapshot["isPlaying"] as? Bool ?? false,
+            position: max(
+                0,
+                self.numberValue(snapshot["progressSeconds"]) ?? 0
+            ),
+            duration: duration,
+            isShuffleActive: snapshot["shuffle"] as? Bool ?? false,
+            repeatMode: snapshot["repeat"] as? String ?? "off",
+            volume: self.numberValue(snapshot["volume"]),
+            targetDeviceId: targetDeviceId,
+            expectedGeneration: expectedGeneration
+        )
+        self.currentMetadata = metadata
+        self.updateNowPlayingInfo()
+    }
+
+    private func clearRemotePlaybackProjection() {
+        DispatchQueue.main.async {
+            self.remotePlaybackProjection = nil
+            if self.player != nil || self.isQueueEngineActive {
+                self.updateNowPlayingInfo()
+            } else {
+                self.clearNowPlayingInfo()
+            }
         }
     }
 
@@ -710,17 +1380,42 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func getFullState(_ call: CAPPluginCall) {
         stateQueue.async {
-            let currentTime = self.seconds(from: self.player?.currentTime() ?? .zero)
-            let duration = self.durationSeconds()
-            let isPlaying = self.player?.timeControlStatus == .playing
-
-            let state = self.queueEngine.getFullState(
-                currentTime: currentTime,
-                duration: duration,
-                isPlaying: isPlaying
-            )
-            call.resolve(state)
+            call.resolve(self.currentFullState() ?? [:])
         }
+    }
+
+    private func currentFullState() -> [String: Any]? {
+        let playerCurrentTime = self.seconds(from: self.player?.currentTime() ?? .zero)
+        let currentTime = self.consumeSnapshotProgressSeconds(
+            fallback: playerCurrentTime
+        )
+        let duration = self.durationSeconds()
+        let isPlaying = self.player?.timeControlStatus == .playing
+
+        return self.queueEngine.getFullState(
+            currentTime: currentTime,
+            duration: duration,
+            isPlaying: isPlaying
+        )
+    }
+
+    private func pauseAndGetCurrentFullState() -> [String: Any]? {
+        if Thread.isMainThread {
+            self.player?.pause()
+            self.persistence.flushNow()
+            return self.currentFullState()
+        }
+
+        var snapshot: [String: Any]?
+        let semaphore = DispatchSemaphore(value: 0)
+        DispatchQueue.main.async {
+            self.player?.pause()
+            self.persistence.flushNow()
+            snapshot = self.currentFullState()
+            semaphore.signal()
+        }
+        _ = semaphore.wait(timeout: .now() + .milliseconds(500))
+        return snapshot
     }
 
     @objc func resolveSongs(_ call: CAPPluginCall) {
@@ -1429,7 +2124,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             commandCenter.playCommand,
             commandCenter.playCommand.addTarget { [weak self] _ in
                 guard let self = self else { return .commandFailed }
-                if self.isQueueEngineActive {
+                if self.remotePlaybackProjection == nil && self.isQueueEngineActive {
                     try? self.activateAudioSession()
                     if self.isPlayerAtEnd {
                         self.seekToStartAndPlay()
@@ -1452,7 +2147,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             commandCenter.pauseCommand,
             commandCenter.pauseCommand.addTarget { [weak self] _ in
                 guard let self = self else { return .commandFailed }
-                if self.isQueueEngineActive {
+                if self.remotePlaybackProjection == nil && self.isQueueEngineActive {
                     self.recoveryController.reportUserPause()
                     self.player?.pause()
                 } else {
@@ -1467,7 +2162,9 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             commandCenter.togglePlayPauseCommand,
             commandCenter.togglePlayPauseCommand.addTarget { [weak self] _ in
                 guard let self = self else { return .commandFailed }
-                if self.isQueueEngineActive {
+                if let projection = self.remotePlaybackProjection {
+                    self.emitRemoteCommand(projection.isPlaying ? "pause" : "play")
+                } else if self.isQueueEngineActive {
                     if self.player?.timeControlStatus == .playing {
                         self.recoveryController.reportUserPause()
                         self.player?.pause()
@@ -1484,7 +2181,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
                         )
                     }
                 } else {
-                    self.emitRemoteCommand("togglePlayPause")
+                    self.emitRemoteCommand("play")
                 }
                 return .success
             }
@@ -1495,7 +2192,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             commandCenter.nextTrackCommand,
             commandCenter.nextTrackCommand.addTarget { [weak self] _ in
                 guard let self = self else { return .commandFailed }
-                if self.isQueueEngineActive {
+                if self.remotePlaybackProjection == nil && self.isQueueEngineActive {
                     DispatchQueue.main.async { self.isQueueTransitioning = true }
                     self.stateQueue.async {
                         self.queueEngine.skipToNext()
@@ -1512,7 +2209,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             commandCenter.previousTrackCommand,
             commandCenter.previousTrackCommand.addTarget { [weak self] _ in
                 guard let self = self else { return .commandFailed }
-                if self.isQueueEngineActive {
+                if self.remotePlaybackProjection == nil && self.isQueueEngineActive {
                     DispatchQueue.main.async { self.isQueueTransitioning = true }
                     let currentTime = self.player?.currentTime().seconds ?? 0
                     self.stateQueue.async {
@@ -1533,7 +2230,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
                     return .commandFailed
                 }
                 guard let self = self else { return .commandFailed }
-                if self.isQueueEngineActive {
+                if self.remotePlaybackProjection == nil && self.isQueueEngineActive {
                     self.isSeeking = true
                     self.player?.seek(to: self.makeTime(event.positionTime)) { [weak self] _ in
                         self?.isSeeking = false
@@ -1660,7 +2357,8 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             artist: call.getString("artist"),
             album: call.getString("album"),
             duration: positiveDuration(call.getDouble("duration")),
-            artworkUrl: call.getString("artworkUrl")
+            artworkUrl: call.getString("artworkUrl"),
+            coverArtId: call.getString("coverArtId")
         )
     }
 
@@ -1674,7 +2372,8 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             artist: object["artist"] as? String,
             album: object["album"] as? String,
             duration: positiveDuration(numberValue(object["duration"])),
-            artworkUrl: object["artworkUrl"] as? String
+            artworkUrl: object["artworkUrl"] as? String,
+            coverArtId: object["coverArtId"] as? String
         )
     }
 
@@ -1689,6 +2388,66 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         default:
             return nil
         }
+    }
+
+    private func intValue(_ value: Any?) -> Int? {
+        switch value {
+        case let value as Int:
+            return value
+        case let value as Double:
+            return Int(value)
+        case let value as NSNumber:
+            return value.intValue
+        case let value as String:
+            return Int(value)
+        default:
+            return nil
+        }
+    }
+
+    private func stringValue(_ value: Any?) -> String? {
+        guard let value else { return nil }
+        if value is NSNull {
+            return nil
+        }
+        if let value = value as? String {
+            return value.isEmpty ? nil : value
+        }
+        return "\(value)"
+    }
+
+    private func jsonString(_ value: Any?) -> String? {
+        guard let value, JSONSerialization.isValidJSONObject(value),
+              let data = try? JSONSerialization.data(withJSONObject: value) else {
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private func epochMilliseconds(_ iso: String?) -> Int? {
+        guard let iso, !iso.isEmpty else { return nil }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: iso) {
+            return Int(date.timeIntervalSince1970 * 1000)
+        }
+        formatter.formatOptions = [.withInternetDateTime]
+        if let date = formatter.date(from: iso) {
+            return Int(date.timeIntervalSince1970 * 1000)
+        }
+        return nil
+    }
+
+    private func consumeSnapshotProgressSeconds(fallback: Double) -> Double {
+        guard let value = nextSnapshotProgressSeconds else {
+            return fallback
+        }
+        nextSnapshotProgressSeconds = nil
+        return value
+    }
+
+    private func forceNextSnapshotProgress(_ seconds: Double) {
+        nextSnapshotProgressSeconds = max(0, seconds)
     }
 
     private func positiveDuration(_ duration: Double?) -> Double? {
@@ -1718,7 +2477,11 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
 
         if let artworkUrl = currentMetadata.artworkUrl {
-            loadNowPlayingArtwork(artworkUrl, revision: revision)
+            loadNowPlayingArtwork(
+                artworkUrl,
+                coverArtId: currentMetadata.coverArtId,
+                revision: revision
+            )
         }
     }
 
@@ -1740,6 +2503,25 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private func applyNowPlayingPlaybackFields(to info: inout [String: Any]) {
+        if let remotePlaybackProjection {
+            MPNowPlayingInfoCenter.default().playbackState =
+                remotePlaybackProjection.isPlaying ? .playing : .paused
+
+            if remotePlaybackProjection.duration > 0 {
+                info[MPMediaItemPropertyPlaybackDuration] =
+                    remotePlaybackProjection.duration
+            } else {
+                info.removeValue(forKey: MPMediaItemPropertyPlaybackDuration)
+            }
+
+            info[MPNowPlayingInfoPropertyElapsedPlaybackTime] =
+                remotePlaybackProjection.position
+            info[MPNowPlayingInfoPropertyPlaybackRate] =
+                remotePlaybackProjection.isPlaying ? 1.0 : 0.0
+            info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = 1.0
+            return
+        }
+
         let duration = durationSeconds()
         if duration > 0 {
             info[MPMediaItemPropertyPlaybackDuration] = duration
@@ -1753,16 +2535,22 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         let isActivelyPlaying = player?.timeControlStatus == .playing ||
             player?.timeControlStatus == .waitingToPlayAtSpecifiedRate ||
             isQueueTransitioning
+        MPNowPlayingInfoCenter.default().playbackState =
+            isActivelyPlaying ? .playing : .paused
         info[MPNowPlayingInfoPropertyPlaybackRate] = isActivelyPlaying ? 1.0 : 0.0
         info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = 1.0
     }
 
-    private func loadNowPlayingArtwork(_ urlString: String, revision: Int) {
-        var coverArtId: String?
+    private func loadNowPlayingArtwork(
+        _ urlString: String,
+        coverArtId explicitCoverArtId: String?,
+        revision: Int
+    ) {
+        var coverArtId = explicitCoverArtId
         if let components = URLComponents(string: urlString),
            components.scheme == "aonsoku-media",
            let queryItems = components.queryItems {
-            coverArtId = queryItems.first(where: { $0.name == "id" })?.value
+            coverArtId = coverArtId ?? queryItems.first(where: { $0.name == "id" })?.value
         }
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -1786,8 +2574,19 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
 
             guard let url = URL(string: urlString) else { return }
 
-            let task = URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+            let task = URLSession.shared.dataTask(with: url) { [weak self] data, response, _ in
                 guard let self, let data, let image = UIImage(data: data) else { return }
+                if let coverArtId, !coverArtId.isEmpty {
+                    let contentType = (response as? HTTPURLResponse)?
+                        .value(forHTTPHeaderField: "Content-Type") ?? "image/jpeg"
+                    _ = try? ImageCacheManager(db: DatabaseManager.shared.dbPool)
+                        .storeCoverImage(
+                            coverArtId: coverArtId,
+                            data: data,
+                            contentType: contentType,
+                            coverSize: "800"
+                        )
+                }
                 let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
                 DispatchQueue.main.async {
                     guard self.nowPlayingRevision == revision else { return }
@@ -1808,6 +2607,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         nowPlayingRevision += 1
         artworkTask?.cancel()
         artworkTask = nil
+        remotePlaybackProjection = nil
         currentMetadata = NativeAudioMetadata()
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
@@ -2629,6 +3429,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             "state": state,
         ], requestId: requestId))
         updateNowPlayingPlaybackInfo()
+        AonsokuNativeCoordinationPlugin.publishSnapshotFromActiveAudioState()
     }
 
     private func emitProgress(requestId: String? = nil) {
@@ -2761,7 +3562,61 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             data["position"] = position
         }
 
+        if let remoteControlCommand = buildRemoteControlCommand(command, position: position) {
+            var handledNatively = false
+            if let targetDeviceId = remotePlaybackProjection?.targetDeviceId {
+                handledNatively = AonsokuNativeCoordinationPlugin.sendCommandFromActive(
+                    targetDeviceId: targetDeviceId,
+                    expectedGeneration: remotePlaybackProjection?.expectedGeneration,
+                    command: remoteControlCommand
+                )
+            }
+            if !handledNatively {
+                NativeLogger.shared.warn(
+                    "Remote control command was not sent natively: \(remoteControlCommand["type"] ?? "unknown")",
+                    source: "Audio"
+                )
+            }
+            return
+        }
+
         notifyListeners("remoteCommand", data: data)
+    }
+
+    private func buildRemoteControlCommand(_ command: String, position: Double?) -> JSObject? {
+        guard let projection = remotePlaybackProjection else {
+            return nil
+        }
+
+        switch command {
+        case "play":
+            return ["type": "play"]
+        case "pause":
+            return ["type": "pause"]
+        case "togglePlayPause":
+            return ["type": "toggle_play_pause"]
+        case "next":
+            return ["type": "next"]
+        case "previous":
+            return ["type": "previous"]
+        case "seek":
+            guard let position else {
+                return nil
+            }
+            return [
+                "type": "seek",
+                "seconds": max(0, position),
+            ]
+        case "shuffle":
+            return [
+                "type": "set_shuffle",
+                "enabled": !projection.isShuffleActive,
+            ]
+        case "like":
+            return ["type": "toggle_like"]
+        default:
+            return nil
+        }
     }
 
     private func eventData(_ data: JSObject, requestId: String? = nil) -> JSObject {
@@ -2980,6 +3835,7 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             guard let self else { return }
             self.isSeeking = false
             self.player?.play()
+            self.forceNextSnapshotProgress(0)
             self.emitProgress()
             self.updateNowPlayingPlaybackInfo()
         }
@@ -2997,7 +3853,89 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             coverArtId = id
         }
         guard let id = coverArtId else { return nil }
-        return "aonsoku-media://getCoverArt?id=\(id)&size=300"
+        return "aonsoku-media://getCoverArt?id=\(id)&size=800"
+    }
+
+    private func loadRemotePlaybackSong(songId: String) async -> SongRecord? {
+        guard !songId.isEmpty else { return nil }
+
+        let repository = SongRepository(db: DatabaseManager.shared.dbPool)
+        if let song = try? repository.getById(songId) {
+            return song
+        }
+
+        guard let song = await fetchRemotePlaybackSong(songId: songId) else {
+            return nil
+        }
+
+        try? repository.upsert(song)
+        return song
+    }
+
+    private func fetchRemotePlaybackSong(songId: String) async -> SongRecord? {
+        guard let credentials = KeychainManager.retrieve() else {
+            return nil
+        }
+
+        do {
+            let response = try await SubsonicHTTPClient().request(
+                baseUrl: credentials.serverUrl,
+                path: "getSong.view",
+                credentials: credentials,
+                extraQuery: ["id": songId]
+            )
+            guard let item = response.data["song"] as? [String: Any] else {
+                return nil
+            }
+            return parseRemotePlaybackSong(item)
+        } catch {
+            NativeLogger.shared.warn(
+                "Failed to fetch remote playback song metadata: \(error.localizedDescription)",
+                source: "Audio"
+            )
+            return nil
+        }
+    }
+
+    private func parseRemotePlaybackSong(_ item: [String: Any]) -> SongRecord? {
+        guard let id = item["id"] as? String,
+              let title = item["title"] as? String else {
+            return nil
+        }
+
+        return SongRecord(
+            id: id,
+            parent: stringValue(item["parent"]),
+            title: title,
+            album: stringValue(item["album"]),
+            artist: stringValue(item["artist"]),
+            track: intValue(item["track"]),
+            year: intValue(item["year"]),
+            genre: stringValue(item["genre"]),
+            coverArt: stringValue(item["coverArt"]),
+            size: intValue(item["size"]),
+            contentType: stringValue(item["contentType"]),
+            suffix: stringValue(item["suffix"]),
+            duration: intValue(item["duration"]) ?? 0,
+            bitRate: intValue(item["bitRate"]),
+            path: stringValue(item["path"]),
+            playCount: intValue(item["playCount"]),
+            discNumber: intValue(item["discNumber"]),
+            created: stringValue(item["created"]),
+            albumId: stringValue(item["albumId"]),
+            artistId: stringValue(item["artistId"]),
+            played: stringValue(item["played"]),
+            starred: stringValue(item["starred"]),
+            starredAt: epochMilliseconds(stringValue(item["starred"])),
+            playedAt: epochMilliseconds(stringValue(item["played"])),
+            bpm: intValue(item["bpm"]),
+            comment: stringValue(item["comment"]),
+            sortName: stringValue(item["sortName"]),
+            mediaType: stringValue(item["mediaType"]),
+            musicBrainzId: stringValue(item["musicBrainzId"]),
+            genresJson: jsonString(item["genres"]),
+            replayGainJson: jsonString(item["replayGain"])
+        )
     }
 
     private func routeChangeReason(from notification: Notification) -> String {
@@ -3050,6 +3988,74 @@ private struct NativeAudioMetadata {
     var album: String?
     var duration: Double?
     var artworkUrl: String?
+    var coverArtId: String?
+}
+
+private struct NativeRemotePlaybackProjection {
+    var metadata: NativeAudioMetadata
+    var isPlaying: Bool
+    var position: Double
+    var duration: Double
+    var isShuffleActive: Bool
+    var repeatMode: String
+    var volume: Double?
+    var targetDeviceId: String?
+    var expectedGeneration: Int?
+}
+
+private extension SongRecord {
+    func toQueueSong() -> QueueSong {
+        QueueSong(from: [
+            "id": id,
+            "title": title,
+            "artist": artist ?? "",
+            "artistId": artistId as Any,
+            "album": album ?? "",
+            "albumId": albumId as Any,
+            "duration": Double(duration),
+            "coverArtId": (coverArt ?? albumId) as Any,
+            "streamUrl": nativeStreamUrl,
+        ])
+    }
+
+    func remotePlaybackMetadata() -> NativeAudioMetadata {
+        let coverArtId = remotePlaybackCoverArtId()
+        return NativeAudioMetadata(
+            title: title,
+            artist: artist,
+            album: album,
+            duration: Double(duration),
+            artworkUrl: coverArtId.map {
+                "aonsoku-media://getCoverArt?id=\($0)&size=800"
+            },
+            coverArtId: coverArtId
+        )
+    }
+
+    func remotePlaybackCoverArtId() -> String? {
+        let useAlbumCover = PreferencesManager.shared.getNestedBool(
+            store: "player_store",
+            path: ["settings", "coverArt", "useAlbumCoverForSongs"]
+        ) ?? false
+        if useAlbumCover, let albumId, !albumId.isEmpty {
+            return albumId
+        }
+        if let coverArt, !coverArt.isEmpty {
+            return coverArt
+        }
+        if let albumId, !albumId.isEmpty {
+            return albumId
+        }
+        return nil
+    }
+
+    var nativeStreamUrl: String {
+        var components = URLComponents()
+        components.scheme = "aonsoku-media"
+        components.host = "stream"
+        components.queryItems = [URLQueryItem(name: "id", value: id)]
+        return components.string ?? "aonsoku-media://stream?id=\(id)"
+    }
 }
 
 private struct NativeCachedAudioFile {
@@ -3193,12 +4199,14 @@ extension AonsokuNativeAudioPlugin: NativeQueueEngineDelegate {
 
     func queueEngine(_ engine: NativeQueueEngine, didAdvanceTo index: Int, songId: String, reason: QueueAdvanceReason) {
         persistence.markStateDirty()
+        forceNextSnapshotProgress(0)
         notifyListeners("queueStateChanged", data: [
             "currentIndex": index,
             "songId": songId,
             "reason": reason.rawValue,
             "isInUserQueue": engine.isInUserQueue,
         ])
+        AonsokuNativeCoordinationPlugin.publishSnapshotFromActiveAudioState()
     }
 
     func queueEngine(_ engine: NativeQueueEngine, didChangeContents reason: String) {
@@ -3206,6 +4214,7 @@ extension AonsokuNativeAudioPlugin: NativeQueueEngineDelegate {
         notifyListeners("queueContentsChanged", data: [
             "reason": reason,
         ])
+        AonsokuNativeCoordinationPlugin.publishSnapshotFromActiveAudioState()
     }
 
     func queueEngineDidExhaustQueue(_ engine: NativeQueueEngine) {
@@ -3215,6 +4224,7 @@ extension AonsokuNativeAudioPlugin: NativeQueueEngineDelegate {
                 songDurationSeconds: entry.timestamp
             )
         }
+        forceNextSnapshotProgress(0)
         DispatchQueue.main.async {
             self.isSeeking = true
             self.player?.pause()
@@ -3241,6 +4251,8 @@ extension AonsokuNativeAudioPlugin: NativeQueueEngineDelegate {
                 self.isSeeking = false
                 guard finished else { return }
                 player.play()
+                self.forceNextSnapshotProgress(0)
+                self.emitPlaybackState("playing")
                 self.stateQueue.async {
                     if let entry = self.scrobbleBuffer.stopTracking() {
                         self.scrobbleSubmitter.submitIfEligible(

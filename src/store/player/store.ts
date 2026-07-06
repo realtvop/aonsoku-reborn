@@ -20,7 +20,7 @@ import { createPlaybackActions } from "./playback-actions";
 import { createPlayerPersistOptions } from "./persistence";
 import { createQueueActions } from "./queue-actions";
 import { clearSonglistState } from "./queue-utils";
-import { createRemoteControlActions } from "./remote-control-actions";
+
 import { createSettingsActions } from "./settings-actions";
 import { createStarActions } from "./star-actions";
 import { createUiActions } from "./ui-actions";
@@ -111,7 +111,7 @@ export const usePlayerStore = createWithEqualityFn<IPlayerContext>()(
           const queueActions = createQueueActions(shared);
           const playbackActions = createPlaybackActions(shared);
           const uiActions = createUiActions(shared);
-          const remoteControlActions = createRemoteControlActions(shared);
+
           const starActions = createStarActions(shared);
           const settingsActions = createSettingsActions(shared);
 
@@ -125,7 +125,7 @@ export const usePlayerStore = createWithEqualityFn<IPlayerContext>()(
               ...queueActions,
               ...playbackActions,
               ...uiActions,
-              ...remoteControlActions,
+
               ...starActions,
               ...settingsActions,
             },

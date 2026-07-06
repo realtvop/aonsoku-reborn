@@ -2,6 +2,7 @@ import { clsx } from "clsx";
 import { AnimatePresence, motion } from "framer-motion";
 import { memo } from "react";
 import { CachedImage } from "@/app/components/cover-image/cached-image";
+import { useRemotePlaybackProjection } from "@/app/components/remote-control/use-remote-playback-projection";
 import { usePlayerStore } from "@/store/player.store";
 
 export const FullscreenSongArtwork = memo(function FullscreenSongArtwork({
@@ -16,17 +17,23 @@ export const FullscreenSongArtwork = memo(function FullscreenSongArtwork({
   const { albumId, coverArt, artist, title, id } = usePlayerStore(
     ({ songlist }) => songlist.currentSong,
   );
+  const remoteProjection = useRemotePlaybackProjection();
+  const displaySong = remoteProjection.song;
+  const displayAlbumId = displaySong?.albumId ?? albumId;
+  const displayCoverArt = displaySong?.coverArt ?? coverArt;
+  const displayArtist = displaySong?.artist ?? artist;
+  const displayTitle = displaySong?.title ?? title;
+  const displayId = displaySong?.id ?? id;
 
   return (
     <div
       className={clsx(
-        "relative aspect-square shrink bg-foreground/5 rounded-md overflow-hidden flex items-center justify-center transition-all duration-300 ease-in-out",
+        "relative aspect-square h-auto flex-none bg-foreground/5 rounded-md overflow-hidden flex items-center justify-center transition-all duration-300 ease-in-out",
         compact
-          ? "h-[min(260px,42svh,calc(100vw-2rem))]"
+          ? "w-[min(260px,42svh,calc(100vw-2rem),100%)]"
           : large
-            ? "h-[min(480px,85vw,60svh)]"
-            : "h-[clamp(280px,85vw,480px)]",
-        "w-auto max-w-full max-h-full",
+            ? "w-[min(480px,85vw,60svh,100%)]"
+            : "w-[min(clamp(280px,85vw,480px),100%)]",
       )}
     >
       {showTouchDragSurface && (
@@ -38,7 +45,7 @@ export const FullscreenSongArtwork = memo(function FullscreenSongArtwork({
       )}
       <AnimatePresence mode="wait">
         <motion.div
-          key={id ?? "no-song"}
+          key={displayId ?? "no-song"}
           initial={{ opacity: 0, scale: 0.92 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 1.05 }}
@@ -46,12 +53,12 @@ export const FullscreenSongArtwork = memo(function FullscreenSongArtwork({
           className="relative flex size-full items-center justify-center"
         >
           <CachedImage
-            coverArtId={coverArt}
+            coverArtId={displayCoverArt}
             coverArtType="song"
-            albumId={albumId}
+            albumId={displayAlbumId}
             coverArtSize="700"
             effect="opacity"
-            alt={`${artist} - ${title}`}
+            alt={`${displayArtist} - ${displayTitle}`}
             className="size-full object-cover rounded-md"
             wrapperClassName="size-full block overflow-hidden"
             width="100%"
@@ -67,15 +74,17 @@ export const CompactSongArtwork = memo(function CompactSongArtwork() {
   const { albumId, coverArt, artist, title } = usePlayerStore(
     ({ songlist }) => songlist.currentSong,
   );
+  const remoteProjection = useRemotePlaybackProjection();
+  const displaySong = remoteProjection.song;
 
   return (
     <CachedImage
-      coverArtId={coverArt}
+      coverArtId={displaySong?.coverArt ?? coverArt}
       coverArtType="song"
-      albumId={albumId}
+      albumId={displaySong?.albumId ?? albumId}
       coverArtSize="100"
       effect="opacity"
-      alt={`${artist} - ${title}`}
+      alt={`${displaySong?.artist ?? artist} - ${displaySong?.title ?? title}`}
       className="size-11 rounded object-cover"
       width="44"
       height="44"

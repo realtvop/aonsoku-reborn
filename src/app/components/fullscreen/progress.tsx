@@ -1,9 +1,14 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import {
+  useRemotePlaybackProjection,
+  useSmoothRemoteProgress,
+} from "@/app/components/remote-control/use-remote-playback-projection";
 import { ProgressSlider } from "@/app/components/ui/slider";
 import { useAudioSeeking } from "@/app/hooks/use-audio-seeking";
 import { useFullscreenContrast } from "@/app/hooks/use-fullscreen-contrast";
 import {
+  useIsRemoteControlActive,
   usePlayerBufferedProgress,
   usePlayerDuration,
   usePlayerIsBuffering,
@@ -24,6 +29,8 @@ export function FullscreenProgress({
   const audioPlayerRef = usePlayerRef();
   const currentDuration = usePlayerDuration();
   const isBuffering = usePlayerIsBuffering();
+  const isRemoteActive = useIsRemoteControlActive();
+  const remoteProjection = useRemotePlaybackProjection();
   const { t } = useTranslation();
   const contrast = useFullscreenContrast();
 
@@ -38,23 +45,36 @@ export function FullscreenProgress({
     handleSeeked,
   } = useAudioSeeking({ audioRef });
 
+  const smoothRemoteProgress = useSmoothRemoteProgress({
+    active: remoteProjection.active,
+    isPlaying: remoteProjection.isPlaying,
+    progress: remoteProjection.progress,
+    duration: remoteProjection.duration,
+  });
+
+  const effectiveProgress = remoteProjection.active
+    ? smoothRemoteProgress
+    : progress;
+  const effectiveDuration = remoteProjection.active
+    ? remoteProjection.duration
+    : currentDuration;
   const currentTime = convertSecondsToTime(
-    isSeeking ? localProgress : progress,
+    isSeeking ? localProgress : effectiveProgress,
   );
 
   const songDuration = useMemo(
-    () => convertSecondsToTime(currentDuration ?? 0),
-    [currentDuration],
+    () => convertSecondsToTime(effectiveDuration ?? 0),
+    [effectiveDuration],
   );
 
   const sliderProps = {
     variant: "secondary" as const,
     defaultValue: [0] as [number],
-    value: (isSeeking ? [localProgress] : [progress]) as [number],
-    max: currentDuration ?? 0,
+    value: (isSeeking ? [localProgress] : [effectiveProgress]) as [number],
+    max: effectiveDuration ?? 0,
     step: 1,
     isBuffering,
-    bufferedProgress,
+    bufferedProgress: isRemoteActive ? 0 : bufferedProgress,
     className: "w-full h-2 md:h-3",
     onValueChange: ([value]: [number]) => handleSeeking(value),
     onValueCommit: ([value]: [number]) => handleSeeked(value),

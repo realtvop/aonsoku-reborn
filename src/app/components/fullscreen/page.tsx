@@ -1,4 +1,11 @@
-import { memo, ReactNode, useCallback, useEffect, useRef } from "react";
+import {
+  memo,
+  ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   Drawer,
   DrawerContent,
@@ -39,11 +46,27 @@ export default function FullscreenMode({
   const { autoFullscreenEnabled } = useFullscreenPlayerSettings();
   const backdropStyle = useBackdropStyle();
   const drawerContentRef = useRef<HTMLDivElement>(null);
+  const [devicePanelOpen, setDevicePanelOpen] = useState(false);
+
   const mouseDrawerDragHandlers = useFullscreenMouseDrawerDrag({
     closeAnimationMs: DRAWER_CLOSE_ANIMATION_MS,
     drawerRef: drawerContentRef,
     open,
+    disabled: devicePanelOpen,
   });
+
+  useEffect(() => {
+    const handleOpen = () => setDevicePanelOpen(true);
+    const handleClose = () => setDevicePanelOpen(false);
+
+    window.addEventListener("device-panel-opened", handleOpen);
+    window.addEventListener("device-panel-closed", handleClose);
+
+    return () => {
+      window.removeEventListener("device-panel-opened", handleOpen);
+      window.removeEventListener("device-panel-closed", handleClose);
+    };
+  }, []);
 
   const { theme } = useTheme();
   const { currentSongColor, currentSongColorIntensity } = usePlayerStore(
@@ -241,7 +264,7 @@ export default function FullscreenMode({
     <Drawer
       fixed
       shouldScaleBackground={false}
-      dismissible={true}
+      dismissible={!devicePanelOpen}
       handleOnly={false}
       disablePreventScroll={true}
       modal={false}

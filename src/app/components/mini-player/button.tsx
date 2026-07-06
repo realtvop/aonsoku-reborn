@@ -3,6 +3,7 @@ import { PictureInPicture2Icon } from "lucide-react";
 import { memo, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/app/components/ui/button";
+import { useRemotePlaybackProjection } from "@/app/components/remote-control/use-remote-playback-projection";
 import { SimpleTooltip } from "@/app/components/ui/simple-tooltip";
 import { usePlayerCurrentList, usePlayerStore } from "@/store/player.store";
 import { usePipWindowOpen } from "@/store/player/selectors";
@@ -17,6 +18,7 @@ const MemoMiniPlayer = memo(MiniPlayer);
 function MiniPlayerButtonWeb() {
   const { t } = useTranslation();
   const currentList = usePlayerCurrentList();
+  const remoteProjection = useRemotePlaybackProjection();
   const pipWindowOpen = usePipWindowOpen();
   const documentPictureInPicture = window.documentPictureInPicture;
   const [pipWindow, setPipWindow] = useState<Window | null>(
@@ -78,7 +80,7 @@ function MiniPlayerButtonWeb() {
     }
   }, [pipWindowOpen]);
 
-  const disabled = currentList.length === 0;
+  const disabled = !remoteProjection.active && currentList.length === 0;
 
   const buttonTooltip = pipWindowOpen
     ? t("player.tooltips.miniPlayer.close")
@@ -114,6 +116,7 @@ function MiniPlayerButtonWeb() {
 function MiniPlayerButtonDesktop() {
   const { t } = useTranslation();
   const currentList = usePlayerCurrentList();
+  const remoteProjection = useRemotePlaybackProjection();
   const pipWindowOpen = usePipWindowOpen();
   const [isMiniPlayerOpen, setIsMiniPlayerOpen] = useState(false);
 
@@ -150,7 +153,7 @@ function MiniPlayerButtonDesktop() {
     }
   }, [pipWindowOpen, isMiniPlayerOpen]);
 
-  const disabled = currentList.length === 0;
+  const disabled = !remoteProjection.active && currentList.length === 0;
 
   const buttonTooltip =
     pipWindowOpen || isMiniPlayerOpen

@@ -1,12 +1,18 @@
-import { Pause, Play, SkipForward } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useRef } from "react";
+import { Loader2, Pause, Play, SkipForward } from "lucide-react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
+import { PlayerDeviceButton } from "@/app/components/remote-control/device-button";
+import { DevicePanel } from "@/app/components/remote-control/device-panel";
+import { useDevicePlaybackActions } from "@/app/components/remote-control/use-device-playback-actions";
+import { HandoffConfirmationDialog } from "@/app/components/remote-control/handoff-confirmation-dialog";
+import { useRemotePlaybackProjection } from "@/app/components/remote-control/use-remote-playback-projection";
 import { MiniPlayerButton } from "@/app/components/mini-player/button";
 import { RadioInfo } from "@/app/components/player/radio-info";
 import { TrackInfo } from "@/app/components/player/track-info";
 import { Button } from "@/app/components/ui/button";
 import { useAudioSource } from "@/app/hooks/use-audio-source";
+import { useCoordinationReconnectOnOpen } from "@/app/hooks/use-coordination-reconnect-on-open";
 import { usePlayHistory } from "@/app/hooks/use-play-history";
 import { usePlayerBreakpoint } from "@/app/hooks/use-player-breakpoint";
 import { usePreloadAudio } from "@/app/hooks/use-preload-audio";
@@ -23,6 +29,7 @@ import { openFullscreenPlayerWithHistory } from "@/routes/fullscreenRouter";
 import {
   useIsRemoteControlActive,
   usePlayerActions,
+  usePlayerIsBuffering,
   usePlayerIsPlaying,
   usePlayerIsTransitioning,
   usePlayerLoop,
@@ -68,6 +75,24 @@ const MemoAudioPlayer = memo(AudioPlayer);
 
 export function Player() {
   const { t } = useTranslation();
+  const [panelOpen, setPanelOpen] = useState(false);
+  const reconnectCoordinationOnOpen = useCoordinationReconnectOnOpen();
+  const deviceActions = useDevicePlaybackActions();
+
+  const handleDevicePanelOpenChange = useCallback(
+    (open: boolean) => {
+      setPanelOpen(open);
+      reconnectCoordinationOnOpen(open);
+    },
+    [reconnectCoordinationOnOpen],
+  );
+
+  useEffect(() => {
+    const handleOpen = () => handleDevicePanelOpenChange(true);
+    window.addEventListener("open-device-panel", handleOpen);
+    return () => window.removeEventListener("open-device-panel", handleOpen);
+  }, [handleDevicePanelOpenChange]);
+
   const radioLabel = t("radios.label");
   const audioRef = useRef<HTMLAudioElement>(null);
   const radioRef = useRef<HTMLAudioElement>(null);
@@ -95,6 +120,7 @@ export function Player() {
   const { replayGainType, replayGainPreAmp, replayGainDefaultGain } =
     useReplayGainState();
   const { hasNext } = usePlayerPrevAndNext();
+  const remoteProjection = useRemotePlaybackProjection();
 
   usePlayHistory();
   useScrobble();
@@ -102,7 +128,9 @@ export function Player() {
   useNativeForegroundSync();
   useSleepTimer();
 
+  const isBuffering = usePlayerIsBuffering();
   const isTransitioning = usePlayerIsTransitioning();
+  const isLoading = isBuffering || isTransitioning;
 
   useEffect(() => {
     if (!isTransitioning) return;
@@ -120,6 +148,16 @@ export function Player() {
 
   const song = currentList[currentSongIndex] ?? null;
   const radio = radioList[currentSongIndex];
+  const displaySong = remoteProjection.song ?? song;
+  const displayIsPlaying = remoteProjection.active
+    ? remoteProjection.isPlaying
+    : isPlaying;
+  const displayHasNext = remoteProjection.active
+    ? remoteProjection.hasNext
+    : hasNext;
+  const displayLoopState = remoteProjection.active
+    ? remoteProjection.loopState
+    : loopState;
   const songId = song?.id;
   const { source: audioSource, resolvedSongId } = useAudioSource(song?.id);
   const audioSrc = audioSource ? getAudioSourceUrl(audioSource) : "";
@@ -361,12 +399,16 @@ export function Player() {
       <div className="w-full h-full grid grid-cols-[1fr_auto] gap-3 px-3 md:grid-cols-player md:gap-2 md:px-4">
         {/* Track Info */}
         <div className="flex items-center gap-1 w-full min-w-0 md:gap-2">
-          {isSong && <MemoTrackInfo song={song} />}
-          {isRadio && <MemoRadioInfo radio={radio} />}
+          {(isSong || remoteProjection.active) && (
+            <MemoTrackInfo song={displaySong} />
+          )}
+          {!remoteProjection.active && isRadio && (
+            <MemoRadioInfo radio={radio} />
+          )}
         </div>
         {/* Main Controls */}
         <div className="hidden md:col-span-2 md:flex flex-col justify-center items-center px-4 gap-1">
-          <MemoPlayerControls song={song} radio={radio} />
+          <MemoPlayerControls song={displaySong} radio={radio} />
 
           {isSong && <MemoPlayerProgress audioRef={getAudioRef()} />}
         </div>
@@ -374,12 +416,14 @@ export function Player() {
         <div className="flex md:hidden items-center gap-0.5">
           <Button
             variant="ghost"
-            disabled={!song && !radio}
+            disabled={!displaySong && !radio}
             onClick={togglePlayPause}
-            data-testid={`player-button-${isPlaying ? "pause" : "play"}`}
+            data-testid={`player-button-${displayIsPlaying ? "pause" : "play"}`}
             className="size-11 p-0"
           >
-            {isPlaying ? (
+            {isLoading ? (
+              <Loader2 className="animate-spin text-foreground size-5" />
+            ) : displayIsPlaying ? (
               <Pause className="text-foreground fill-foreground size-5" />
             ) : (
               <Play className="text-foreground fill-foreground size-5" />
@@ -388,7 +432,8 @@ export function Player() {
           <Button
             variant="ghost"
             disabled={
-              (!song && !radio) || (!hasNext && loopState !== LoopState.All)
+              (!displaySong && !radio) ||
+              (!displayHasNext && displayLoopState !== LoopState.All)
             }
             onClick={playNextSong}
             data-testid="player-button-next-mobile"
@@ -414,6 +459,17 @@ export function Player() {
               audioRef={getAudioRef()}
               disabled={!song && !radio}
             />
+
+            {!isMobile && (
+              <DevicePanel
+                open={panelOpen}
+                onOpenChange={handleDevicePanelOpenChange}
+                actions={deviceActions}
+                trigger={
+                  <PlayerDeviceButton isActive={deviceActions.isControlling} />
+                }
+              />
+            )}
 
             {isSong && hasMiniPlayerSupport && <MemoMiniPlayerButton />}
           </div>
@@ -461,6 +517,14 @@ export function Player() {
           data-testid="player-radio-audio"
         />
       )}
+
+      <HandoffConfirmationDialog
+        open={deviceActions.isConfirmationOpen}
+        onOpenChange={deviceActions.setIsConfirmationOpen}
+        pendingDevice={deviceActions.pendingDevice}
+        onConfirm={deviceActions.confirmLocalReplacement}
+        onCancel={deviceActions.cancelPendingHandoff}
+      />
     </footer>
   );
 }

@@ -17,12 +17,7 @@ export const i18n = {
     },
     settings: {
       desktop: {
-        lanControl: {
-          enable: "Enable LAN Control",
-          port: "Port",
-          password: "Password",
-          allowNavidromeAuth: "Allow Navidrome Authentication",
-        },
+        lanControl: undefined,
       },
     },
   },
@@ -44,12 +39,7 @@ export const i18n = {
     },
     settings: {
       desktop: {
-        lanControl: {
-          enable: "启用局域网控制",
-          port: "端口",
-          password: "密码",
-          allowNavidromeAuth: "允许 Navidrome 认证",
-        },
+        lanControl: undefined,
       },
     },
   },

@@ -3,6 +3,16 @@ import { Capacitor } from "@capacitor/core";
 import { useEffect } from "react";
 import { useAppStore } from "@/store/app.store";
 
+const scrollDismissKeyboardSelector = "[data-scroll-dismiss-keyboard='true']";
+
+function shouldDismissKeyboardOnScroll(activeEl: Element | null) {
+  if (!(activeEl instanceof HTMLElement)) {
+    return false;
+  }
+
+  return activeEl.closest(scrollDismissKeyboardSelector) !== null;
+}
+
 export function KeyboardObserver() {
   const commandOpen = useAppStore((state) => state.command.open);
 
@@ -16,6 +26,8 @@ export function KeyboardObserver() {
         console.debug("[KeyboardObserver] setAccessoryBarVisible failed:", err);
       });
     }
+
+    const isAndroid = Capacitor.getPlatform() === "android";
 
     if (commandOpen) {
       return;
@@ -34,6 +46,10 @@ export function KeyboardObserver() {
     const onScrollOrTouch = () => {
       if (keyboardVisible) {
         const activeEl = document.activeElement;
+        if (isAndroid && !shouldDismissKeyboardOnScroll(activeEl)) {
+          return;
+        }
+
         if (
           activeEl instanceof HTMLInputElement ||
           activeEl instanceof HTMLTextAreaElement

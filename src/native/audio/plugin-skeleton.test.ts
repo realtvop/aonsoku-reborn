@@ -260,7 +260,6 @@ describe("Aonsoku native audio plugin skeleton", () => {
     for (const command of [
       '"play"',
       '"pause"',
-      '"togglePlayPause"',
       '"next"',
       '"previous"',
       '"seek"',

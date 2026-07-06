@@ -23,7 +23,9 @@ import com.getcapacitor.annotation.Permission
 import com.getcapacitor.annotation.PermissionCallback
 import github.realtvop.aonsoku.plugins.bridge.AndroidCredentialStore
 import github.realtvop.aonsoku.plugins.bridge.SubsonicHttpClient
+import github.realtvop.aonsoku.plugins.coordination.AonsokuNativeCoordinationPlugin
 import github.realtvop.aonsoku.plugins.data.db.AonsokuDatabase
+import github.realtvop.aonsoku.plugins.data.db.entity.SongEntity
 import github.realtvop.aonsoku.plugins.data.db.toJSObject
 import github.realtvop.aonsoku.plugins.debug.NativeLogger
 import github.realtvop.aonsoku.plugins.error.AonsokuNativeError
@@ -44,6 +46,8 @@ import kotlinx.coroutines.CompletableDeferred
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 @CapacitorPlugin(
     name = "AonsokuNativeAudio",
@@ -55,6 +59,84 @@ import java.io.File
     ]
 )
 class AudioPlugin : Plugin() {
+    companion object {
+        @JvmStatic
+        var isVolumeHUDDisabled: Boolean = false
+
+        @Volatile
+        private var activeInstance: AudioPlugin? = null
+
+        @JvmStatic
+        fun executeRemoteControlCommandFromActive(command: JSONObject): Boolean {
+            return activeInstance?.executeRemoteControlCommand(command) ?: false
+        }
+
+        @JvmStatic
+        fun getFullStateFromActive(): JSONObject? {
+            return activeInstance?.getCurrentFullState()
+        }
+
+        @JvmStatic
+        fun pauseAndGetFullStateFromActive(): JSONObject? {
+            return activeInstance?.pauseAndGetCurrentFullState()
+        }
+
+        @JvmStatic
+        fun updateRemotePlaybackProjectionFromActive(
+            snapshot: JSONObject,
+            targetDeviceId: String,
+            expectedGeneration: Int,
+        ): Boolean {
+            val instance = activeInstance ?: return false
+            instance.updateRemotePlaybackProjectionFromSnapshot(
+                snapshot,
+                targetDeviceId,
+                expectedGeneration,
+            )
+            return true
+        }
+
+        @JvmStatic
+        fun clearRemotePlaybackProjectionFromActive(): Boolean {
+            val instance = activeInstance ?: return false
+            instance.clearRemotePlaybackProjection()
+            return true
+        }
+
+        @JvmStatic
+        fun prepareHandoffPlaybackFromActive(
+            snapshot: JSONObject,
+            autoplay: Boolean,
+            completion: (Boolean) -> Unit,
+        ): Boolean {
+            val instance = activeInstance ?: return false
+            instance.prepareHandoffPlayback(snapshot, autoplay, completion)
+            return true
+        }
+
+        internal fun isSupportedRemoteControlCommand(type: String): Boolean {
+            return type == "play" ||
+                type == "pause" ||
+                type == "toggle_play_pause" ||
+                type == "previous" ||
+                type == "next" ||
+                type == "seek" ||
+                type == "set_shuffle" ||
+                type == "set_repeat" ||
+                type == "set_volume" ||
+                type == "play_song" ||
+                type == "play_album" ||
+                type == "play_playlist" ||
+                type == "play_at_index" ||
+                type == "add_to_queue_next" ||
+                type == "add_to_queue_last" ||
+                type == "remove_from_queue" ||
+                type == "reorder_queue" ||
+                type == "clear_queue" ||
+                type == "toggle_like"
+        }
+    }
+
     private val pluginName = "AudioPlugin"
     private val mainHandler = Handler(Looper.getMainLooper())
     private var playbackService: PlaybackService? = null
@@ -156,6 +238,14 @@ class AudioPlugin : Plugin() {
             emitRemoteCommand(command, position)
         }
 
+        override fun onRemoteControlCommand(
+            command: JSONObject,
+            targetDeviceId: String?,
+            expectedGeneration: Int?
+        ) {
+            emitRemoteControlCommand(command, targetDeviceId, expectedGeneration)
+        }
+
         override fun onQueueStateChanged(currentIndex: Int, songId: String, reason: String, isInUserQueue: Boolean) {
             val data = JSObject().apply {
                 put("currentIndex", currentIndex)
@@ -164,6 +254,7 @@ class AudioPlugin : Plugin() {
                 put("isInUserQueue", isInUserQueue)
             }
             notifyListeners("queueStateChanged", data)
+            AonsokuNativeCoordinationPlugin.publishSnapshotFromActiveAudioState()
         }
 
         override fun onQueueContentsChanged(reason: String) {
@@ -171,6 +262,7 @@ class AudioPlugin : Plugin() {
                 put("reason", reason)
             }
             notifyListeners("queueContentsChanged", data)
+            AonsokuNativeCoordinationPlugin.publishSnapshotFromActiveAudioState()
         }
 
         override fun onPlaybackStateChanged(state: String) {
@@ -226,6 +318,7 @@ class AudioPlugin : Plugin() {
 
     override fun load() {
         super.load()
+        activeInstance = this
         NativeLogger.info("AudioPlugin loaded, binding PlaybackService", "audio-plugin")
         bindPlaybackService()
         registerAudioFocusListener()
@@ -264,6 +357,9 @@ class AudioPlugin : Plugin() {
     }
 
     override fun handleOnDestroy() {
+        if (activeInstance === this) {
+            activeInstance = null
+        }
         playbackService?.removeListener(serviceListener)
         playbackService?.removeDownloadListener(downloadListener)
         if (isBound) {
@@ -278,6 +374,556 @@ class AudioPlugin : Plugin() {
         unregisterAudioDeviceCallback()
         pluginScope.cancel()
         super.handleOnDestroy()
+    }
+
+    private fun executeRemoteControlCommand(command: JSONObject): Boolean {
+        val type = command.optString("type", "")
+        if (!isSupportedRemoteControlCommand(type)) return false
+
+        val seekPosition = command.optDouble("seconds", Double.NaN)
+        val volume = command.optDouble("volume", Double.NaN)
+        if (type == "play_song") {
+            val id = command.optString("song_id", "")
+            if (id.isEmpty()) return false
+            playSongById(id)
+            return true
+        }
+
+        if (type == "play_album") {
+            val id = command.optString("album_id", "")
+            if (id.isEmpty()) return false
+            playAlbumById(id, command.optInt("index", 0), command.optBoolean("shuffle", false))
+            return true
+        }
+
+        if (type == "play_playlist") {
+            val id = command.optString("playlist_id", "")
+            if (id.isEmpty()) return false
+            playPlaylistById(id, command.optInt("index", 0), command.optBoolean("shuffle", false))
+            return true
+        }
+
+        if (type == "play_at_index" || type == "add_to_queue_next" || type == "add_to_queue_last") {
+            val ids = command.optStringArray("song_ids")
+            if (ids.isEmpty()) return false
+            if (type == "add_to_queue_next" || type == "add_to_queue_last") {
+                addSongIdsToQueue(ids, if (type == "add_to_queue_next") "next" else "last")
+                return true
+            }
+            playSongIdsAtIndex(ids, command.optInt("index", 0))
+            return true
+        }
+
+        pluginScope.launch {
+            try {
+                val service = awaitService()
+                mainHandler.post {
+                    val player = service.getPlayer()
+                    when (type) {
+                        "play" -> {
+                            service.savedRestoreTime = null
+                            service.queueEngine.clearRestoredFlag()
+                            requestAudioFocus()
+                            player?.play()
+                        }
+                        "pause" -> {
+                            player?.pause()
+                            service.persistence.flushNow()
+                        }
+                        "toggle_play_pause" -> {
+                            if (player?.isPlaying == true) {
+                                player.pause()
+                                service.persistence.flushNow()
+                            } else {
+                                service.savedRestoreTime = null
+                                service.queueEngine.clearRestoredFlag()
+                                requestAudioFocus()
+                                player?.play()
+                            }
+                        }
+                        "previous" -> {
+                            if (service.isQueueEngineActive) {
+                                val currentTime =
+                                    player?.currentPosition?.div(1000.0) ?: 0.0
+                                service.queueEngine.skipToPrevious(currentTime)
+                            }
+                        }
+                        "next" -> {
+                            if (service.isQueueEngineActive) {
+                                service.queueEngine.skipToNext()
+                            }
+                        }
+                        "seek" -> {
+                            if (!seekPosition.isNaN()) {
+                                val position = seekPosition.coerceAtLeast(0.0)
+                                player?.seekTo((position * 1000).toLong())
+                                service.persistence.updateProgress(position)
+                                service.persistence.flushNow()
+                            }
+                        }
+                        "set_shuffle" -> {
+                            service.setShuffle(command.optBoolean("enabled", false))
+                        }
+                        "set_repeat" -> {
+                            val mode = command.optString("mode", "off")
+                            service.setRepeatMode(mode)
+                        }
+                        "set_volume" -> {
+                            if (!volume.isNaN()) {
+                                setSystemVolumeValue(volume.coerceIn(0.0, 1.0))
+                            }
+                        }
+                        "clear_queue" -> {
+                            service.clearUserQueue()
+                        }
+                        "remove_from_queue" -> {
+                            val ids = command.optStringArray("song_ids").toSet()
+                            if (ids.isNotEmpty()) {
+                                val indices = service.queueEngine.userQueue
+                                    .mapIndexedNotNull { index, song ->
+                                        if (song.id in ids) index else null
+                                    }
+                                service.queueEngine.removeFromUserQueue(indices)
+                            }
+                        }
+                        "reorder_queue" -> {
+                            service.queueEngine.reorderContextQueue(
+                                command.optInt("from", -1),
+                                command.optInt("to", -1),
+                            )
+                        }
+                        "toggle_like" -> {
+                            val currentId = service.queueEngine.currentSong?.id
+                            if (currentId != null) toggleLikeForSong(currentId)
+                        }
+                    }
+                }
+            } catch (error: Throwable) {
+                NativeLogger.warn(
+                    "Failed to execute native remote command: ${error.message}",
+                    "audio-plugin",
+                )
+            }
+        }
+        return true
+    }
+
+    private fun getCurrentFullState(): JSONObject? {
+        val service = playbackService ?: return null
+        val player = service.getPlayer()
+        val playerCurrentTime = player?.currentPosition?.div(1000.0) ?: 0.0
+        val currentSongId = service.queueEngine.currentSong?.id
+        val currentTime = service.snapshotProgressSeconds(
+            currentSongId,
+            playerCurrentTime,
+        )
+        val duration = if (player != null && player.duration != C.TIME_UNSET) {
+            player.duration / 1000.0
+        } else {
+            0.0
+        }
+        val isPlaying = player?.isPlaying ?: false
+        return service.queueEngine.getFullState(currentTime, duration, isPlaying)
+    }
+
+    private fun pauseAndGetCurrentFullState(): JSONObject? {
+        var snapshot: JSONObject? = null
+        val capture = Runnable {
+            val service = playbackService ?: return@Runnable
+            service.getPlayer()?.pause()
+            service.persistence.flushNow()
+            snapshot = getCurrentFullState()
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            capture.run()
+            return snapshot
+        }
+
+        val latch = CountDownLatch(1)
+        mainHandler.post {
+            try {
+                capture.run()
+            } finally {
+                latch.countDown()
+            }
+        }
+        latch.await(500, TimeUnit.MILLISECONDS)
+        return snapshot
+    }
+
+    private fun prepareHandoffPlayback(
+        snapshot: JSONObject,
+        autoplay: Boolean,
+        completion: (Boolean) -> Unit,
+    ) {
+        pluginScope.launch {
+            try {
+                val songId = snapshot.optString("songId", "")
+                if (songId.isEmpty()) {
+                    completion(false)
+                    return@launch
+                }
+
+                val contextIds = snapshot.optStringArray("contextQueue")
+                    .ifEmpty { listOf(songId) }
+                val songs = loadQueueSongs(contextIds)
+                    .ifEmpty { loadQueueSongs(listOf(songId)) }
+                if (songs.isEmpty()) {
+                    completion(false)
+                    return@launch
+                }
+
+                val currentIndexFromSnapshot = snapshot.optInt("contextIndex", -1)
+                val currentIndex = if (currentIndexFromSnapshot >= 0) {
+                    currentIndexFromSnapshot
+                } else {
+                    songs.indexOfFirst { it.id == songId }
+                }.coerceAtLeast(0)
+                val progressSeconds = snapshot.optDouble("progressSeconds", 0.0)
+                    .takeIf { it.isFinite() }
+                    ?.coerceAtLeast(0.0)
+                    ?: 0.0
+                val repeatMode = snapshot.optString("repeat", "off")
+                val shuffle = snapshot.optBoolean("shuffle", false)
+                val sourceId = parseSnapshotSourceId(snapshot.optString("sourceId", ""))
+                val sourceName = snapshot.optString("sourceName")
+                    .takeIf { it.isNotEmpty() }
+
+                val service = awaitService()
+                mainHandler.post {
+                    try {
+                        service.setRepeatMode(repeatMode)
+                        service.setContextQueue(
+                            songs,
+                            currentIndex,
+                            autoplay,
+                            progressSeconds,
+                            sourceId,
+                            sourceName,
+                        )
+                        service.setShuffle(shuffle)
+                        val volume = snapshot.optDouble("volume", Double.NaN)
+                        if (!volume.isNaN()) setSystemVolumeValue(volume)
+                        completion(true)
+                    } catch (error: Throwable) {
+                        NativeLogger.warn(
+                            "Failed to apply native handoff snapshot: ${error.message}",
+                            "audio-plugin",
+                        )
+                        completion(false)
+                    }
+                }
+            } catch (error: Throwable) {
+                NativeLogger.warn(
+                    "Failed to prepare native handoff playback: ${error.message}",
+                    "audio-plugin",
+                )
+                completion(false)
+            }
+        }
+    }
+
+    private fun toggleLikeForSong(songId: String) {
+        pluginScope.launch {
+            try {
+                val nextActive = withContext(Dispatchers.IO) {
+                    val song = db.songDao().getById(songId)
+                    val nextStarred = if (song?.starredAt == null) {
+                        System.currentTimeMillis() / 1000
+                    } else {
+                        null
+                    }
+                    db.songDao().updateStarred(
+                        listOf(songId),
+                        nextStarred?.toString(),
+                        nextStarred,
+                    )
+                    nextStarred != null
+                }
+                val service = playbackService ?: return@launch
+                mainHandler.post {
+                    service.isLikeActive = nextActive
+                }
+            } catch (error: Throwable) {
+                NativeLogger.warn(
+                    "Failed to execute native toggle_like: ${error.message}",
+                    "audio-plugin",
+                )
+            }
+        }
+    }
+
+    private fun playSongById(id: String) {
+        playSongIdsAtIndex(listOf(id), 0)
+    }
+
+    private fun playAlbumById(id: String, index: Int, shuffle: Boolean) {
+        pluginScope.launch {
+            try {
+                val songs = withContext(Dispatchers.IO) {
+                    db.songDao().getByAlbumId(id).map { it.toQueueSong() }
+                }
+                if (songs.isEmpty()) return@launch
+                playQueueSongsAtIndex(
+                    songs,
+                    index,
+                    shuffle,
+                    QueueSourceId("album", id),
+                    songs.firstOrNull()?.album,
+                )
+            } catch (error: Throwable) {
+                NativeLogger.warn(
+                    "Failed to execute native play_album: ${error.message}",
+                    "audio-plugin",
+                )
+            }
+        }
+    }
+
+    private fun playPlaylistById(id: String, index: Int, shuffle: Boolean) {
+        pluginScope.launch {
+            try {
+                val songs = withContext(Dispatchers.IO) {
+                    val detail = db.playlistDao().getDetailById(id) ?: return@withContext emptyList()
+                    val ids = parsePlaylistEntrySongIds(detail.entriesJson)
+                    loadQueueSongs(ids)
+                }
+                if (songs.isEmpty()) return@launch
+                playQueueSongsAtIndex(
+                    songs,
+                    index,
+                    shuffle,
+                    QueueSourceId("playlist", id),
+                    null,
+                )
+            } catch (error: Throwable) {
+                NativeLogger.warn(
+                    "Failed to execute native play_playlist: ${error.message}",
+                    "audio-plugin",
+                )
+            }
+        }
+    }
+
+    private fun addSongIdsToQueue(ids: List<String>, position: String) {
+        pluginScope.launch {
+            try {
+                val songs = loadQueueSongs(ids)
+                if (songs.isEmpty()) return@launch
+
+                mainHandler.post {
+                    val service = playbackService ?: return@post
+                    service.addToUserQueue(songs, position)
+                }
+            } catch (error: Throwable) {
+                NativeLogger.warn(
+                    "Failed to execute native add_to_queue: ${error.message}",
+                    "audio-plugin",
+                )
+            }
+        }
+    }
+
+    private fun playSongIdsAtIndex(ids: List<String>, index: Int) {
+        pluginScope.launch {
+            try {
+                val songs = loadQueueSongs(ids)
+                if (songs.isEmpty()) return@launch
+                playQueueSongsAtIndex(songs, index, shuffle = false, sourceId = null, sourceName = null)
+            } catch (error: Throwable) {
+                NativeLogger.warn(
+                    "Failed to execute native play_at_index: ${error.message}",
+                    "audio-plugin",
+                )
+            }
+        }
+    }
+
+    private fun playQueueSongsAtIndex(
+        songs: List<QueueSong>,
+        index: Int,
+        shuffle: Boolean,
+        sourceId: QueueSourceId?,
+        sourceName: String?,
+    ) {
+        val clampedIndex = index.coerceIn(0, songs.size - 1)
+        mainHandler.post {
+            val service = playbackService ?: return@post
+            service.setContextQueue(
+                songs,
+                clampedIndex,
+                sourceId = sourceId,
+                sourceName = sourceName,
+                autoplay = true,
+                startTime = null,
+            )
+            if (shuffle) service.setShuffle(true)
+        }
+    }
+
+    private suspend fun loadQueueSongs(ids: List<String>): List<QueueSong> {
+        val records = withContext(Dispatchers.IO) {
+            db.songDao().getByIds(ids)
+        }
+        val byId = records.associateBy { it.id }
+        return ids.mapNotNull { byId[it]?.toQueueSong() }
+    }
+
+    private fun JSONObject.optStringArray(name: String): List<String> {
+        val array = optJSONArray(name) ?: return emptyList()
+        val values = mutableListOf<String>()
+        for (i in 0 until array.length()) {
+            val id = array.optString(i, "")
+            if (id.isNotEmpty()) values.add(id)
+        }
+        return values
+    }
+
+    private fun parseSnapshotSourceId(raw: String): QueueSourceId? {
+        if (raw.isEmpty()) return null
+        val separator = raw.indexOf(":")
+        if (separator <= 0 || separator >= raw.length - 1) return null
+        val type = raw.substring(0, separator)
+        val id = raw.substring(separator + 1)
+        return when (type) {
+            "album", "playlist", "artist", "genre", "radio" -> QueueSourceId(type, id)
+            else -> null
+        }
+    }
+
+    private fun parsePlaylistEntrySongIds(entriesJson: String): List<String> {
+        val entries = try {
+            JSONArray(entriesJson)
+        } catch (_: Throwable) {
+            return emptyList()
+        }
+        val ids = mutableListOf<String>()
+        for (i in 0 until entries.length()) {
+            val id = entries.optJSONObject(i)?.optString("id", "") ?: ""
+            if (id.isNotEmpty()) ids.add(id)
+        }
+        return ids
+    }
+
+    private fun SongEntity.toQueueSong(): QueueSong {
+        val coverArtId = coverArt ?: albumId
+        return QueueSong(
+            id = id,
+            title = title,
+            artist = artist ?: "",
+            artistId = artistId,
+            album = album ?: "",
+            albumId = albumId,
+            duration = duration.toDouble(),
+            coverArtId = coverArtId,
+            streamUrl = Uri.Builder()
+                .scheme("aonsoku-media")
+                .authority("stream")
+                .appendQueryParameter("id", id)
+                .build()
+                .toString(),
+            cachedFileUri = null,
+        )
+    }
+
+    private fun SongEntity.toRemotePlaybackMetadata(): MediaMetadata {
+        val builder = MediaMetadata.Builder()
+            .setTitle(title)
+            .setArtist(artist)
+            .setAlbumTitle(album)
+        if (duration > 0) {
+            builder.setDurationMs(duration * 1000L)
+        }
+        remotePlaybackArtworkUrl()?.let { artworkUrl ->
+            builder.setArtworkUri(Uri.parse(artworkUrl))
+        }
+        return builder.build()
+    }
+
+    private fun SongEntity.remotePlaybackCoverArtId(): String? =
+        coverArt ?: albumId
+
+    private fun SongEntity.remotePlaybackArtworkUrl(): String? {
+        val coverArtId = remotePlaybackCoverArtId() ?: return null
+        return NativeSourceResolver(context).resolveCoverArtUrl(coverArtId, 800)
+    }
+
+    private suspend fun loadRemotePlaybackSong(songId: String): SongEntity? =
+        withContext(Dispatchers.IO) {
+            db.songDao().getById(songId) ?: fetchRemotePlaybackSong(songId)
+        }
+
+    private suspend fun fetchRemotePlaybackSong(songId: String): SongEntity? {
+        val credentials = credentialStore.retrieve() ?: return null
+        return try {
+            val response = httpClient.request(
+                baseUrl = credentials.serverUrl,
+                path = "getSong.view",
+                credentials = credentials,
+                extraQuery = mapOf("id" to songId),
+            )
+            val song = parseRemotePlaybackSong(
+                response.data.optJSONObject("song"),
+            ) ?: return null
+            db.songDao().upsert(song)
+            song
+        } catch (error: Throwable) {
+            NativeLogger.warn(
+                "Failed to fetch remote playback song metadata: ${error.message}",
+                "audio-plugin",
+            )
+            null
+        }
+    }
+
+    private fun parseRemotePlaybackSong(item: JSONObject?): SongEntity? {
+        if (item == null) return null
+        val id = item.optNullableString("id") ?: return null
+        val title = item.optNullableString("title") ?: return null
+        return SongEntity(
+            id = id,
+            parent = item.optNullableString("parent"),
+            title = title,
+            album = item.optNullableString("album"),
+            artist = item.optNullableString("artist"),
+            track = if (item.has("track")) item.optInt("track") else null,
+            year = if (item.has("year")) item.optInt("year") else null,
+            genre = item.optNullableString("genre"),
+            coverArt = item.optNullableString("coverArt"),
+            size = if (item.has("size")) item.optLong("size") else null,
+            contentType = item.optNullableString("contentType"),
+            suffix = item.optNullableString("suffix"),
+            duration = item.optInt("duration", 0),
+            bitRate = if (item.has("bitRate")) item.optInt("bitRate") else null,
+            path = item.optNullableString("path"),
+            playCount = if (item.has("playCount")) item.optInt("playCount") else null,
+            discNumber = if (item.has("discNumber")) item.optInt("discNumber") else null,
+            created = item.optNullableString("created"),
+            albumId = item.optNullableString("albumId"),
+            artistId = item.optNullableString("artistId"),
+            played = item.optNullableString("played"),
+            starred = item.optNullableString("starred"),
+            bpm = if (item.has("bpm")) item.optInt("bpm") else null,
+            comment = item.optNullableString("comment"),
+            sortName = item.optNullableString("sortName"),
+            mediaType = item.optNullableString("type"),
+            musicBrainzId = item.optNullableString("musicBrainzId"),
+            genresJson = item.optJSONArray("genres")?.toString(),
+            replayGainJson = item.optJSONObject("replayGain")?.toString(),
+        )
+    }
+
+    private fun JSONObject.optNullableString(name: String): String? =
+        if (has(name) && !isNull(name)) optString(name).takeIf { it.isNotBlank() } else null
+
+    private fun setSystemVolumeValue(value: Double) {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val targetVolume = (value * max).toInt()
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVolume, 0)
+        notifyListeners("systemVolumeChanged", JSObject().apply {
+            put("volume", getSystemVolumePercentage())
+        })
     }
 
     private fun bindPlaybackService() {
@@ -667,6 +1313,7 @@ class AudioPlugin : Plugin() {
             put("requestId", requestId ?: JSONObject.NULL)
         }
         notifyListeners("playbackStateChanged", data)
+        AonsokuNativeCoordinationPlugin.publishSnapshotFromActiveAudioState()
     }
 
     private fun emitRemoteCommand(command: String, position: Double? = null) {
@@ -678,6 +1325,26 @@ class AudioPlugin : Plugin() {
             put("requestId", currentRequestId ?: JSONObject.NULL)
         }
         notifyListeners("remoteCommand", data)
+    }
+
+    private fun emitRemoteControlCommand(
+        command: JSONObject,
+        targetDeviceId: String?,
+        expectedGeneration: Int?
+    ) {
+        val handledNatively =
+            targetDeviceId != null &&
+                AonsokuNativeCoordinationPlugin.sendCommandFromActive(
+                    targetDeviceId,
+                    expectedGeneration,
+                    command,
+                )
+        if (!handledNatively) {
+            NativeLogger.warn(
+                "Remote control command was not sent natively: ${command.optString("type")}",
+                "audio-plugin",
+            )
+        }
     }
 
     private fun checkAndRequestNotificationPermission(call: PluginCall, onDone: () -> Unit) {
@@ -1015,6 +1682,139 @@ class AudioPlugin : Plugin() {
                 }
             } catch (_: TimeoutCancellationException) {
                 call.reject("Playback service is not ready (timeout)")
+            }
+        }
+    }
+
+    @PluginMethod
+    fun updateRemotePlaybackState(call: PluginCall) {
+        val metadataObject = call.getObject("metadata")
+        val title = metadataObject?.getString("title")
+        val artist = metadataObject?.getString("artist")
+        val album = metadataObject?.getString("album")
+        val artworkUrl = metadataObject?.getString("artworkUrl")
+        val coverArtId = metadataObject?.getString("coverArtId")
+        val duration = call.getDouble("duration") ?: metadataObject?.optDouble("duration", 0.0) ?: 0.0
+        val position = call.getDouble("position") ?: 0.0
+        val isPlaying = call.getBoolean("isPlaying") ?: false
+        val isShuffleActive = call.getBoolean("isShuffleActive") ?: false
+        val repeatMode = call.getString("repeatMode") ?: "off"
+        val volume = call.getDouble("volume")
+        val targetDeviceId = call.getString("targetDeviceId")
+        val expectedGeneration = call.getInt("expectedGeneration")
+
+        pluginScope.launch {
+            try {
+                val service = awaitService()
+                mainHandler.post {
+                    val metadataBuilder = MediaMetadata.Builder()
+                        .setTitle(title)
+                        .setArtist(artist)
+                        .setAlbumTitle(album)
+                    if (duration > 0) {
+                        metadataBuilder.setDurationMs((duration * 1000).toLong())
+                    }
+                    if (artworkUrl != null) {
+                        metadataBuilder.setArtworkUri(Uri.parse(artworkUrl))
+                    }
+                    service.updateRemotePlaybackProjection(
+                        metadataBuilder.build(),
+                        isPlaying,
+                        position,
+                        duration,
+                        isShuffleActive,
+                        repeatMode,
+                        volume,
+                        artworkUrl,
+                        coverArtId,
+                        null,
+                        targetDeviceId,
+                        expectedGeneration,
+                    )
+                    call.resolve()
+                }
+            } catch (_: TimeoutCancellationException) {
+                call.reject("Playback service is not ready (timeout)")
+            }
+        }
+    }
+
+    @PluginMethod
+    fun clearRemotePlaybackState(call: PluginCall) {
+        pluginScope.launch {
+            try {
+                val service = awaitService()
+                mainHandler.post {
+                    service.clearRemotePlaybackProjection()
+                    call.resolve()
+                }
+            } catch (_: TimeoutCancellationException) {
+                call.reject("Playback service is not ready (timeout)")
+            }
+        }
+    }
+
+    private fun updateRemotePlaybackProjectionFromSnapshot(
+        snapshot: JSONObject,
+        targetDeviceId: String,
+        expectedGeneration: Int,
+    ) {
+        pluginScope.launch {
+            val songId = snapshot.optString("songId", "")
+            val song = if (songId.isNotEmpty()) {
+                loadRemotePlaybackSong(songId)
+            } else {
+                null
+            }
+            val service = try {
+                awaitService()
+            } catch (_: TimeoutCancellationException) {
+                return@launch
+            }
+            mainHandler.post {
+                val duration = snapshot.optDouble("durationSeconds", 0.0)
+                val metadata = song?.toRemotePlaybackMetadata()
+                    ?: MediaMetadata.Builder()
+                        .setTitle(songId.ifEmpty { "Remote playback" })
+                        .setArtist(snapshot.optString("sourceName", ""))
+                        .setDurationMs(
+                            (duration.coerceAtLeast(0.0) * 1000).toLong(),
+                        )
+                        .build()
+                val volume = if (snapshot.has("volume") && !snapshot.isNull("volume")) {
+                    snapshot.optDouble("volume")
+                } else {
+                    null
+                }
+                val artworkUrl = song?.remotePlaybackArtworkUrl()
+                val coverArtId = song?.remotePlaybackCoverArtId()
+                service.updateRemotePlaybackProjection(
+                    metadata,
+                    snapshot.optBoolean("isPlaying", false),
+                    snapshot.optDouble("progressSeconds", 0.0),
+                    duration,
+                    snapshot.optBoolean("shuffle", false),
+                    snapshot.optString("repeat", "off"),
+                    volume,
+                    artworkUrl,
+                    coverArtId,
+                    songId,
+                    targetDeviceId,
+                    expectedGeneration,
+                )
+            }
+        }
+    }
+
+    private fun clearRemotePlaybackProjection() {
+        pluginScope.launch {
+            val service = try {
+                awaitService()
+            } catch (_: TimeoutCancellationException) {
+                return@launch
+            }
+            mainHandler.post {
+                service.clearRemotePlaybackProjection()
             }
         }
     }
@@ -1632,10 +2432,7 @@ class AudioPlugin : Plugin() {
             call.reject("Missing value parameter")
             return
         }
-        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-        val targetVolume = (value * max).toInt()
-        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVolume, 0)
+        setSystemVolumeValue(value)
 
         val actualVolume = getSystemVolumePercentage()
         call.resolve(JSObject().apply {
@@ -1697,10 +2494,5 @@ class AudioPlugin : Plugin() {
                 call.reject("Playback service is not ready (timeout)")
             }
         }
-    }
-
-    companion object {
-        @JvmStatic
-        var isVolumeHUDDisabled: Boolean = false
     }
 }
