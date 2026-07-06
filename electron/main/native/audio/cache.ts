@@ -37,9 +37,20 @@ export class DesktopAudioFileStore {
     dataBase64: string;
     contentType: string;
   }): Promise<NativeAudioCachedAudioFile> {
+    return this.storeAudioBuffer({
+      songId: options.songId,
+      data: decodeAudioBase64(options.dataBase64),
+      contentType: options.contentType,
+    });
+  }
+
+  async storeAudioBuffer(options: {
+    songId: string;
+    data: Buffer;
+    contentType: string;
+  }): Promise<NativeAudioCachedAudioFile> {
     validateSongId(options.songId);
 
-    const data = decodeAudioBase64(options.dataBase64);
     const directory = await this.#resolveCacheDirectory({ create: true });
     await this.deleteAudioFile(options.songId);
 
@@ -52,8 +63,36 @@ export class DesktopAudioFileStore {
       `${fileName}.${process.pid}.${Date.now()}.tmp`,
     );
 
-    await fs.writeFile(tempPath, data);
+    await fs.writeFile(tempPath, options.data);
     await fs.rename(tempPath, filePath);
+
+    const metadata: DesktopAudioCacheMetadata = {
+      songId: options.songId,
+      fileName,
+      contentType,
+      lastModifiedAt: Date.now(),
+    };
+    await this.#writeMetadata(options.songId, metadata, directory);
+
+    return this.#toCachedAudioFile(options.songId, filePath, metadata);
+  }
+
+  async storeAudioFileFromPath(options: {
+    songId: string;
+    filePath: string;
+    contentType: string;
+  }): Promise<NativeAudioCachedAudioFile> {
+    validateSongId(options.songId);
+
+    const directory = await this.#resolveCacheDirectory({ create: true });
+    await this.deleteAudioFile(options.songId);
+
+    const contentType = options.contentType || "audio/mpeg";
+    const cacheId = audioCacheId(options.songId);
+    const fileName = `${cacheId}.${fileExtensionForContentType(contentType)}`;
+    const filePath = path.join(directory, fileName);
+
+    await moveFile(options.filePath, filePath);
 
     const metadata: DesktopAudioCacheMetadata = {
       songId: options.songId,
@@ -294,5 +333,22 @@ async function pathExists(targetPath: string): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+async function moveFile(sourcePath: string, destinationPath: string) {
+  try {
+    await fs.rename(sourcePath, destinationPath);
+  } catch (error) {
+    const code =
+      typeof error === "object" && error !== null && "code" in error
+        ? error.code
+        : null;
+    if (code !== "EXDEV") {
+      throw error;
+    }
+
+    await fs.copyFile(sourcePath, destinationPath);
+    await fs.rm(sourcePath, { force: true });
   }
 }

@@ -3,7 +3,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { NativeAudioMetadata } from "@aonsoku/audio-contract";
+import type {
+  NativeAudioEvents,
+  NativeAudioMetadata,
+} from "@aonsoku/audio-contract";
 import { audioCacheDirectoryFromUserDataPath, audioCacheId } from "./cache";
 import { NativeAudioService } from "./service";
 import type {
@@ -52,6 +55,8 @@ describe("NativeAudioService", () => {
   });
 
   afterEach(async () => {
+    service.destroy();
+    vi.restoreAllMocks();
     await fs.rm(audioCacheDirectory, { force: true, recursive: true });
   });
 
@@ -264,6 +269,202 @@ describe("NativeAudioService", () => {
     expect(
       audioCacheDirectoryFromUserDataPath(path.join("tmp", "user-data")),
     ).toBe(path.join("tmp", "user-data", "AudioCache"));
+  });
+
+  it("downloads audio files with progress and completion events", async () => {
+    const songId = "song-download";
+    const body = Buffer.from("downloaded audio bytes");
+    const fetchMock = mockAudioFetch({
+      body,
+      contentType: "audio/ogg",
+    });
+    const events: unknown[] = [];
+    service.onEvent((event) => events.push(event));
+
+    await service.load({
+      requestId: "request-download",
+      source: {
+        kind: "stream",
+        url: `https://server/rest/stream?id=${songId}`,
+        songId,
+      },
+    });
+
+    const completedPromise = waitForServiceEvent(
+      service,
+      "downloadCompleted",
+      (event) => event.songId === songId,
+    );
+
+    await service.downloadAudioFile({
+      songId,
+      maxBitRate: 128,
+      format: "opus",
+    });
+
+    const completed = await completedPromise;
+    const requestedUrl = String(fetchMock.mock.calls[0]?.[0]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(requestedUrl).toContain("id=song-download");
+    expect(requestedUrl).toContain("estimateContentLength=true");
+    expect(requestedUrl).toContain("maxBitRate=128");
+    expect(requestedUrl).toContain("format=opus");
+    expect(completed).toEqual({
+      songId,
+      uri: expect.stringMatching(/^file:/u),
+      contentType: "audio/ogg",
+      sizeBytes: body.byteLength,
+    });
+    expect(events).toContainEqual({
+      eventName: "downloadProgress",
+      event: {
+        songId,
+        loaded: body.byteLength,
+        total: body.byteLength,
+      },
+    });
+    await expect(service.resolveAudioFile({ songId })).resolves.toEqual({
+      file: {
+        songId,
+        uri: completed.uri,
+        contentType: "audio/ogg",
+        sizeBytes: body.byteLength,
+        lastModifiedAt: expect.any(Number),
+      },
+    });
+    expect(await fs.readFile(fileURLToPath(completed.uri), "utf8")).toBe(
+      "downloaded audio bytes",
+    );
+  });
+
+  it("emits downloadFailed when a desktop audio download fails", async () => {
+    const songId = "song-failed";
+    mockAudioFetch({
+      statusCode: 500,
+      body: Buffer.from("server failed"),
+    });
+
+    await service.load({
+      source: {
+        kind: "stream",
+        url: `https://server/rest/stream?id=${songId}`,
+        songId,
+      },
+    });
+
+    const failedPromise = waitForServiceEvent(
+      service,
+      "downloadFailed",
+      (event) => event.songId === songId,
+    );
+
+    await service.downloadAudioFile({ songId });
+
+    await expect(failedPromise).resolves.toEqual({
+      songId,
+      error: "HTTP 500",
+    });
+    await expect(service.resolveAudioFile({ songId })).resolves.toEqual({
+      file: null,
+    });
+  });
+
+  it("cancels active audio downloads without completing or failing them", async () => {
+    const songId = "song-cancel";
+    mockSlowAudioFetch({
+      body: Buffer.from("slow downloaded audio bytes"),
+      contentType: "audio/mpeg",
+      chunkDelayMs: 50,
+    });
+    const events: unknown[] = [];
+    service.onEvent((event) => events.push(event));
+
+    await service.load({
+      source: {
+        kind: "stream",
+        url: `https://server/rest/stream?id=${songId}`,
+        songId,
+      },
+    });
+
+    const progressPromise = waitForServiceEvent(
+      service,
+      "downloadProgress",
+      (event) => event.songId === songId,
+    );
+
+    await service.downloadAudioFile({ songId });
+    await progressPromise;
+    await service.cancelDownload({ songId });
+    await delay(150);
+
+    expect(events).not.toContainEqual(
+      expect.objectContaining({ eventName: "downloadCompleted" }),
+    );
+    expect(events).not.toContainEqual(
+      expect.objectContaining({ eventName: "downloadFailed" }),
+    );
+    await expect(service.resolveAudioFile({ songId })).resolves.toEqual({
+      file: null,
+    });
+  });
+
+  it("emits streamCacheCompleted for the opt-in loaded stream cache path", async () => {
+    const songId = "song-background-cache";
+    const body = Buffer.from("background cached audio");
+    mockAudioFetch({
+      body,
+      contentType: "audio/flac",
+    });
+    const backgroundService = new NativeAudioService({
+      engine,
+      audioCacheDirectory,
+      cacheLoadedStreams: true,
+    });
+    const events: unknown[] = [];
+    backgroundService.onEvent((event) => events.push(event));
+
+    try {
+      const completedPromise = waitForServiceEvent(
+        backgroundService,
+        "streamCacheCompleted",
+        (event) => event.songId === songId,
+      );
+
+      await backgroundService.load({
+        source: {
+          kind: "stream",
+          url: `https://server/rest/stream?id=${songId}`,
+          songId,
+        },
+      });
+
+      const completed = await completedPromise;
+
+      expect(completed).toEqual({
+        songId,
+        uri: expect.stringMatching(/^file:/u),
+        contentType: "audio/flac",
+        sizeBytes: body.byteLength,
+      });
+      expect(events).not.toContainEqual(
+        expect.objectContaining({ eventName: "downloadProgress" }),
+      );
+      await expect(
+        backgroundService.resolveAudioFile({ songId }),
+      ).resolves.toEqual({
+        file: {
+          songId,
+          uri: completed.uri,
+          contentType: "audio/flac",
+          sizeBytes: body.byteLength,
+          lastModifiedAt: expect.any(Number),
+        },
+      });
+    } finally {
+      backgroundService.destroy();
+    }
   });
 
   it("forwards base engine events with the active request id", async () => {
@@ -503,3 +704,100 @@ describe("NativeAudioService", () => {
     ]);
   });
 });
+
+function mockAudioFetch(options: {
+  body: Buffer;
+  statusCode?: number;
+  contentType?: string;
+}) {
+  return vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(new Uint8Array(options.body), {
+      status: options.statusCode ?? 200,
+      headers: {
+        "content-length": options.body.byteLength.toString(),
+        "content-type": options.contentType ?? "audio/mpeg",
+      },
+    }),
+  );
+}
+
+function mockSlowAudioFetch(options: {
+  body: Buffer;
+  contentType: string;
+  chunkDelayMs: number;
+}) {
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async (_, init) => {
+    const signal = init?.signal;
+    const chunkSize = Math.max(1, Math.ceil(options.body.byteLength / 3));
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        let offset = 0;
+
+        const enqueueNextChunk = () => {
+          if (signal?.aborted) {
+            controller.error(new Error("Download cancelled."));
+            return;
+          }
+
+          if (offset >= options.body.byteLength) {
+            controller.close();
+            return;
+          }
+
+          const nextOffset = Math.min(
+            offset + chunkSize,
+            options.body.byteLength,
+          );
+          controller.enqueue(options.body.subarray(offset, nextOffset));
+          offset = nextOffset;
+          timer = setTimeout(enqueueNextChunk, options.chunkDelayMs);
+        };
+
+        signal?.addEventListener("abort", () => {
+          if (timer) clearTimeout(timer);
+          controller.error(new Error("Download cancelled."));
+        });
+
+        enqueueNextChunk();
+      },
+    });
+
+    return new Response(stream, {
+      status: 200,
+      headers: {
+        "content-length": options.body.byteLength.toString(),
+        "content-type": options.contentType,
+      },
+    });
+  });
+}
+
+function waitForServiceEvent<TEvent extends keyof NativeAudioEvents>(
+  service: NativeAudioService,
+  eventName: TEvent,
+  predicate?: (event: NativeAudioEvents[TEvent]) => boolean,
+): Promise<NativeAudioEvents[TEvent]> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      unsubscribe();
+      reject(new Error(`Timed out waiting for ${eventName}.`));
+    }, 1_000);
+
+    const unsubscribe = service.onEvent((payload) => {
+      if (payload.eventName !== eventName) return;
+
+      const event = payload.event as NativeAudioEvents[TEvent];
+      if (predicate && !predicate(event)) return;
+
+      clearTimeout(timeout);
+      unsubscribe();
+      resolve(event);
+    });
+  });
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

@@ -37,6 +37,10 @@ import type {
   NativeUpdateContextQueueOptions,
 } from "@aonsoku/audio-contract";
 import { DesktopAudioFileStore } from "./cache";
+import {
+  DesktopAudioDownloadManager,
+  type DesktopAudioDownloadCompletionEventName,
+} from "./download";
 import { MpvAudioEngine } from "./mpv";
 import {
   DesktopNativeAudioUnsupportedSourceError,
@@ -60,6 +64,19 @@ export interface NativeAudioServiceOptions {
   engine?: DesktopAudioEngine;
   audioFileStore?: DesktopAudioFileStore;
   audioCacheDirectory?: string | (() => string | Promise<string>);
+  downloadUrlResolver?: DesktopAudioDownloadUrlResolver;
+  cacheLoadedStreams?: boolean;
+}
+
+export type DesktopAudioDownloadUrlResolver = (
+  options: NativeDownloadAudioFileOptions,
+) => string | null | Promise<string | null>;
+
+interface StartDownloadOptions extends NativeDownloadAudioFileOptions {
+  completionEventName: DesktopAudioDownloadCompletionEventName;
+  reportProgress: boolean;
+  reportFailure: boolean;
+  skipIfCached?: boolean;
 }
 
 export interface NativeAudioControlState {
@@ -73,7 +90,11 @@ export interface NativeAudioControlState {
 export class NativeAudioService implements AonsokuAudioApi {
   readonly #engine: DesktopAudioEngine;
   readonly #audioFiles: DesktopAudioFileStore;
+  readonly #downloadManager: DesktopAudioDownloadManager;
+  readonly #downloadUrlResolver: DesktopAudioDownloadUrlResolver | null;
+  readonly #cacheLoadedStreams: boolean;
   readonly #listeners = new Set<NativeAudioServiceEventListener>();
+  readonly #streamUrlsBySongId = new Map<string, string>();
   #requestId: string | undefined;
   #queueRequestSequence = 0;
   #queueItems: NativeAudioQueueItem[] = [];
@@ -92,10 +113,20 @@ export class NativeAudioService implements AonsokuAudioApi {
       new DesktopAudioFileStore({
         cacheDirectory: options.audioCacheDirectory,
       });
+    this.#downloadUrlResolver = options.downloadUrlResolver ?? null;
+    this.#cacheLoadedStreams = options.cacheLoadedStreams ?? false;
+    this.#downloadManager = new DesktopAudioDownloadManager({
+      audioFiles: this.#audioFiles,
+      onProgress: (event) => this.#emit("downloadProgress", event),
+      onCompleted: (eventName, event) =>
+        this.#emitDownloadCompleted(eventName, event),
+      onFailed: (event) => this.#emit("downloadFailed", event),
+    });
     this.#engine.onEvent((event) => this.#handleEngineEvent(event));
   }
 
   async load(options: NativeAudioLoadOptions): Promise<void> {
+    this.#rememberDownloadableSource(options.source);
     this.#requestId = options.requestId;
     this.#currentSource = {
       source: options.source,
@@ -111,6 +142,7 @@ export class NativeAudioService implements AonsokuAudioApi {
         autoplay: options.autoplay,
         startTime: options.startTime,
       });
+      this.#startBackgroundStreamCache(options.source);
     } catch (error) {
       this.#emitFailure(error);
       throw error;
@@ -166,6 +198,10 @@ export class NativeAudioService implements AonsokuAudioApi {
   }
 
   async setQueue(options: NativeAudioQueueOptions): Promise<void> {
+    for (const item of options.items) {
+      this.#rememberDownloadableSource(item.source);
+    }
+
     this.#queueItems = [...options.items];
     this.#contextSongs = [];
     this.#queueIndex = normalizeQueueIndex(options.index, this.#queueItems);
@@ -288,6 +324,7 @@ export class NativeAudioService implements AonsokuAudioApi {
   }
 
   async setContextQueue(options: NativeSetContextQueueOptions): Promise<void> {
+    this.#rememberQueueSongs(options.songs);
     this.#contextSongs = [...options.songs];
     this.#queueItems = options.songs.map(nativeQueueSongToQueueItem);
     this.#queueIndex = normalizeQueueIndex(
@@ -311,6 +348,7 @@ export class NativeAudioService implements AonsokuAudioApi {
   }
 
   updateContextQueue(options: NativeUpdateContextQueueOptions): Promise<void> {
+    this.#rememberQueueSongs(options.songs);
     this.#contextSongs = [...options.songs];
     this.#queueItems = options.songs.map(nativeQueueSongToQueueItem);
     this.#queueIndex = normalizeQueueIndex(
@@ -390,12 +428,23 @@ export class NativeAudioService implements AonsokuAudioApi {
     return this.notImplemented("clearScrobbleBuffer");
   }
 
-  downloadAudioFile(_options: NativeDownloadAudioFileOptions): Promise<void> {
-    return this.notImplemented("downloadAudioFile");
+  downloadAudioFile(options: NativeDownloadAudioFileOptions): Promise<void> {
+    return this.#startDownload({
+      ...options,
+      completionEventName: "downloadCompleted",
+      reportProgress: true,
+      reportFailure: true,
+    });
   }
 
-  cancelDownload(_options?: NativeCancelDownloadOptions): Promise<void> {
-    return this.notImplemented("cancelDownload");
+  cancelDownload(options?: NativeCancelDownloadOptions): Promise<void> {
+    if (options?.songId) {
+      this.#downloadManager.cancel(options.songId);
+    } else {
+      this.#downloadManager.cancelAll();
+    }
+
+    return Promise.resolve();
   }
 
   setSystemVolume(
@@ -437,6 +486,7 @@ export class NativeAudioService implements AonsokuAudioApi {
   }
 
   destroy(): Promise<void> | void {
+    this.#downloadManager.cancelAll();
     return this.#engine.destroy?.();
   }
 
@@ -566,6 +616,93 @@ export class NativeAudioService implements AonsokuAudioApi {
     }
   }
 
+  #emitDownloadCompleted(
+    eventName: DesktopAudioDownloadCompletionEventName,
+    event:
+      | NativeAudioEvents["downloadCompleted"]
+      | NativeAudioEvents["streamCacheCompleted"],
+  ): void {
+    if (eventName === "downloadCompleted") {
+      this.#emit("downloadCompleted", event);
+      return;
+    }
+
+    this.#emit("streamCacheCompleted", event);
+  }
+
+  async #startDownload(options: StartDownloadOptions): Promise<void> {
+    if (!options.songId) {
+      throw new Error("Missing songId for desktop audio download.");
+    }
+
+    try {
+      const url = await this.#resolveDownloadUrl(options);
+      if (!url) {
+        throw new Error(
+          `No desktop audio stream URL is available for song ${options.songId}.`,
+        );
+      }
+
+      this.#downloadManager.download({
+        songId: options.songId,
+        url,
+        completionEventName: options.completionEventName,
+        reportProgress: options.reportProgress,
+        reportFailure: options.reportFailure,
+        skipIfCached: options.skipIfCached,
+      });
+    } catch (error) {
+      if (!options.reportFailure) return;
+
+      this.#emit("downloadFailed", {
+        songId: options.songId,
+        error: error instanceof Error ? error.message : "Download failed.",
+      });
+    }
+  }
+
+  async #resolveDownloadUrl(
+    options: NativeDownloadAudioFileOptions,
+  ): Promise<string | null> {
+    const resolvedByOption = await this.#downloadUrlResolver?.(options);
+    const sourceUrl =
+      resolvedByOption ?? this.#streamUrlsBySongId.get(options.songId);
+
+    if (!sourceUrl) return null;
+
+    return prepareDownloadUrl(sourceUrl, options);
+  }
+
+  #startBackgroundStreamCache(source: NativeAudioSource): void {
+    if (
+      !this.#cacheLoadedStreams ||
+      source.kind !== "stream" ||
+      !source.songId
+    ) {
+      return;
+    }
+
+    this.#startDownload({
+      songId: source.songId,
+      completionEventName: "streamCacheCompleted",
+      reportProgress: false,
+      reportFailure: false,
+      skipIfCached: true,
+    }).catch(() => undefined);
+  }
+
+  #rememberDownloadableSource(source: NativeAudioSource): void {
+    if (source.kind !== "stream" || !source.songId) return;
+
+    this.#streamUrlsBySongId.set(source.songId, source.url);
+  }
+
+  #rememberQueueSongs(songs: NativeQueueSong[]): void {
+    for (const song of songs) {
+      this.#streamUrlsBySongId.set(song.id, song.streamUrl);
+    }
+  }
+
   private notImplemented<T>(method: keyof AonsokuAudioApi): Promise<T> {
     return Promise.reject(new DesktopNativeAudioNotImplementedError(method));
   }
@@ -665,4 +802,27 @@ function getQueueItemId(item: NativeAudioQueueItem): string | null {
     case "radio":
       return item.source.radioId ?? null;
   }
+}
+
+function prepareDownloadUrl(
+  sourceUrl: string,
+  options: NativeDownloadAudioFileOptions,
+): string {
+  const url = new URL(sourceUrl);
+
+  if (!url.searchParams.has("id")) {
+    url.searchParams.set("id", options.songId);
+  }
+
+  url.searchParams.set("estimateContentLength", "true");
+
+  if (options.maxBitRate !== undefined) {
+    url.searchParams.set("maxBitRate", options.maxBitRate.toString());
+  }
+
+  if (options.format) {
+    url.searchParams.set("format", options.format);
+  }
+
+  return url.toString();
 }
