@@ -85,7 +85,7 @@ export function setupIpcEvents(window: BrowserWindow | null) {
   ipcMain.removeAllListeners();
 
   setupMiniPlayerIpc();
-  setupDesktopNativeAudioIpc();
+  setupDesktopNativeAudioIpc(window);
 
   ipcMain.on(IpcChannels.ToggleFullscreen, (_, isFullscreen: boolean) => {
     window.setFullScreen(isFullscreen);

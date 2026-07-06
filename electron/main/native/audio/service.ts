@@ -3,6 +3,7 @@ import type {
   NativeAudioCachedAudioFile,
   NativeAudioClearFilesResult,
   NativeAudioDeleteFileResult,
+  NativeAudioEvents,
   NativeAudioFileOptions,
   NativeAudioFileSizeResult,
   NativeAudioLoadOptions,
@@ -32,6 +33,17 @@ import type {
   NativeSystemVolumeResult,
   NativeUpdateContextQueueOptions,
 } from "@aonsoku/audio-contract";
+import { MpvAudioEngine } from "./mpv";
+import {
+  DesktopNativeAudioUnsupportedSourceError,
+  resolveNativeAudioSource,
+} from "./source";
+import type {
+  DesktopAudioEngine,
+  DesktopAudioEngineEvent,
+  NativeAudioServiceEvent,
+  NativeAudioServiceEventListener,
+} from "./types";
 
 export class DesktopNativeAudioNotImplementedError extends Error {
   constructor(method: keyof AonsokuAudioApi) {
@@ -40,25 +52,70 @@ export class DesktopNativeAudioNotImplementedError extends Error {
   }
 }
 
-export class DesktopNativeAudioService implements AonsokuAudioApi {
-  load(_options: NativeAudioLoadOptions): Promise<void> {
-    return this.notImplemented("load");
+export interface NativeAudioServiceOptions {
+  engine?: DesktopAudioEngine;
+}
+
+export class NativeAudioService implements AonsokuAudioApi {
+  readonly #engine: DesktopAudioEngine;
+  readonly #listeners = new Set<NativeAudioServiceEventListener>();
+  #requestId: string | undefined;
+
+  constructor(options: NativeAudioServiceOptions = {}) {
+    this.#engine = options.engine ?? new MpvAudioEngine();
+    this.#engine.onEvent((event) => this.#handleEngineEvent(event));
   }
 
-  play(): Promise<void> {
-    return this.notImplemented("play");
+  async load(options: NativeAudioLoadOptions): Promise<void> {
+    this.#requestId = options.requestId;
+
+    try {
+      await this.#engine.load({
+        source: resolveNativeAudioSource(options.source),
+        metadata: options.metadata,
+        autoplay: options.autoplay,
+        startTime: options.startTime,
+      });
+    } catch (error) {
+      this.#emitFailure(error);
+      throw error;
+    }
   }
 
-  pause(): Promise<void> {
-    return this.notImplemented("pause");
+  async play(): Promise<void> {
+    try {
+      await this.#engine.play();
+    } catch (error) {
+      this.#emitFailure(error);
+      throw error;
+    }
   }
 
-  stop(): Promise<void> {
-    return this.notImplemented("stop");
+  async pause(): Promise<void> {
+    try {
+      await this.#engine.pause();
+    } catch (error) {
+      this.#emitFailure(error);
+      throw error;
+    }
   }
 
-  seek(_options: NativeAudioSeekOptions): Promise<void> {
-    return this.notImplemented("seek");
+  async stop(): Promise<void> {
+    try {
+      await this.#engine.stop();
+    } catch (error) {
+      this.#emitFailure(error);
+      throw error;
+    }
+  }
+
+  async seek(options: NativeAudioSeekOptions): Promise<void> {
+    try {
+      await this.#engine.seek(Math.max(0, options.position));
+    } catch (error) {
+      this.#emitFailure(error);
+      throw error;
+    }
   }
 
   setRepeatMode(_options: NativeAudioRepeatModeOptions): Promise<void> {
@@ -85,8 +142,13 @@ export class DesktopNativeAudioService implements AonsokuAudioApi {
     return this.notImplemented("skipToPrevious");
   }
 
-  updateMetadata(_metadata: NativeAudioMetadata): Promise<void> {
-    return this.notImplemented("updateMetadata");
+  async updateMetadata(metadata: NativeAudioMetadata): Promise<void> {
+    try {
+      await this.#engine.updateMetadata(metadata);
+    } catch (error) {
+      this.#emitFailure(error);
+      throw error;
+    }
   }
 
   updateRemotePlaybackState(
@@ -103,8 +165,14 @@ export class DesktopNativeAudioService implements AonsokuAudioApi {
     return this.notImplemented("preload");
   }
 
-  clear(): Promise<void> {
-    return this.notImplemented("clear");
+  async clear(): Promise<void> {
+    try {
+      await this.#engine.clear();
+      this.#requestId = undefined;
+    } catch (error) {
+      this.#emitFailure(error);
+      throw error;
+    }
   }
 
   storeAudioFile(
@@ -221,7 +289,111 @@ export class DesktopNativeAudioService implements AonsokuAudioApi {
     return this.notImplemented("getSleepTimerRemaining");
   }
 
+  onEvent(listener: NativeAudioServiceEventListener): () => void {
+    this.#listeners.add(listener);
+
+    return () => {
+      this.#listeners.delete(listener);
+    };
+  }
+
+  destroy(): Promise<void> | void {
+    return this.#engine.destroy?.();
+  }
+
+  #handleEngineEvent(event: DesktopAudioEngineEvent): void {
+    switch (event.type) {
+      case "playbackStateChanged":
+        this.#emit("playbackStateChanged", {
+          requestId: this.#requestId,
+          state: event.state,
+        });
+        break;
+      case "progress":
+        this.#emit("progress", {
+          requestId: this.#requestId,
+          currentTime: event.currentTime,
+          duration: event.duration,
+          bufferedTime: event.bufferedTime,
+        });
+        break;
+      case "durationChanged":
+        this.#emit("durationChanged", {
+          requestId: this.#requestId,
+          duration: event.duration,
+        });
+        break;
+      case "bufferingChanged":
+        this.#emit("bufferingChanged", {
+          requestId: this.#requestId,
+          isBuffering: event.isBuffering,
+        });
+        break;
+      case "ended":
+        this.#emit("ended", {
+          requestId: this.#requestId,
+          reason: event.reason,
+        });
+        break;
+      case "error":
+        this.#emit("error", {
+          requestId: this.#requestId,
+          code: event.code,
+          message: event.message,
+        });
+        break;
+    }
+  }
+
+  #emitFailure(error: unknown): void {
+    this.#emit("playbackStateChanged", {
+      requestId: this.#requestId,
+      state: "failed",
+    });
+    this.#emit("error", {
+      requestId: this.#requestId,
+      ...toNativeAudioErrorEvent(error),
+    });
+  }
+
+  #emit<TEvent extends keyof NativeAudioEvents>(
+    eventName: TEvent,
+    event: NativeAudioEvents[TEvent],
+  ): void {
+    const payload = {
+      eventName,
+      event,
+    } as NativeAudioServiceEvent;
+
+    for (const listener of this.#listeners) {
+      listener(payload);
+    }
+  }
+
   private notImplemented<T>(method: keyof AonsokuAudioApi): Promise<T> {
     return Promise.reject(new DesktopNativeAudioNotImplementedError(method));
   }
+}
+
+export class DesktopNativeAudioService extends NativeAudioService {}
+
+function toNativeAudioErrorEvent(
+  error: unknown,
+): Omit<NativeAudioEvents["error"], "requestId"> {
+  if (error instanceof DesktopNativeAudioUnsupportedSourceError) {
+    return {
+      code: error.code,
+      message: error.message,
+    };
+  }
+
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+    };
+  }
+
+  return {
+    message: "Desktop native audio failed.",
+  };
 }

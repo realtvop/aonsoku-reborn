@@ -4,7 +4,7 @@ import type {
   NativeAudioEvents,
 } from "@aonsoku/audio-contract";
 import { BrowserWindow, ipcMain } from "electron";
-import { DesktopNativeAudioService } from "./service";
+import { NativeAudioService } from "./service";
 
 export const DESKTOP_NATIVE_AUDIO_INVOKE_CHANNEL =
   "aonsoku-native-audio:invoke";
@@ -25,14 +25,28 @@ export type DesktopNativeAudioEventPayload<
   event: NativeAudioEvents[TEvent];
 };
 
-const desktopNativeAudioService = new DesktopNativeAudioService();
+export const desktopNativeAudioService = new NativeAudioService();
+let unsubscribeFromNativeAudioEvents: (() => void) | null = null;
 
 type DesktopNativeAudioServiceMethod = (
   ...args: Parameters<AonsokuAudioApi[keyof AonsokuAudioApi]>
 ) => ReturnType<AonsokuAudioApi[keyof AonsokuAudioApi]>;
 
-export function setupDesktopNativeAudioIpc(): void {
+export function setupDesktopNativeAudioIpc(window?: BrowserWindow | null): void {
   ipcMain.removeHandler(DESKTOP_NATIVE_AUDIO_INVOKE_CHANNEL);
+  unsubscribeFromNativeAudioEvents?.();
+  unsubscribeFromNativeAudioEvents = desktopNativeAudioService.onEvent(
+    ({ eventName, event }) => {
+      const windows =
+        window && !window.isDestroyed()
+          ? [window]
+          : BrowserWindow.getAllWindows();
+
+      for (const target of windows) {
+        sendDesktopNativeAudioEvent(target, eventName, event);
+      }
+    },
+  );
   ipcMain.handle(
     DESKTOP_NATIVE_AUDIO_INVOKE_CHANNEL,
     async (_, payload: DesktopNativeAudioInvokePayload) => {
