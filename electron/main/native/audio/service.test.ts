@@ -9,6 +9,7 @@ import type {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { audioCacheDirectoryFromUserDataPath, audioCacheId } from "./cache";
 import { NativeAudioService } from "./service";
+import type { DesktopSystemAudioAdapter } from "./system-adapter";
 import type {
   DesktopAudioEngine,
   DesktopAudioEngineEvent,
@@ -615,6 +616,114 @@ describe("NativeAudioService", () => {
     });
   });
 
+  it("delegates desktop system controls through the system adapter", async () => {
+    const systemAudioAdapter = createFakeSystemAudioAdapter();
+    const systemService = new NativeAudioService({
+      engine,
+      audioCacheDirectory,
+      systemAudioAdapter,
+    });
+    const events: unknown[] = [];
+    systemService.onEvent((event) => events.push(event));
+
+    try {
+      await expect(
+        systemService.setSystemVolume({ value: 1.5 }),
+      ).resolves.toEqual({
+        volume: 0.75,
+      });
+      await expect(systemService.getSystemVolume()).resolves.toEqual({
+        volume: 0.75,
+      });
+      await systemService.setVolumeHUDEnabled({ enabled: false });
+      await systemService.setLikeActive({ active: true });
+
+      expect(systemAudioAdapter.setSystemVolume).toHaveBeenCalledWith(1);
+      expect(systemAudioAdapter.getSystemVolume).toHaveBeenCalledTimes(1);
+      expect(systemAudioAdapter.setVolumeHUDEnabled).toHaveBeenCalledWith(
+        false,
+      );
+      expect(systemAudioAdapter.setLikeActive).toHaveBeenCalledWith(true);
+      expect(events).toContainEqual({
+        eventName: "systemVolumeChanged",
+        event: {
+          volume: 0.75,
+        },
+      });
+    } finally {
+      systemService.destroy();
+    }
+  });
+
+  it("routes media commands to remote-control events while projecting remote playback", async () => {
+    const events: unknown[] = [];
+    service.onEvent((event) => events.push(event));
+
+    await service.updateRemotePlaybackState({
+      metadata: {
+        title: "Remote song",
+        artist: "Remote artist",
+        duration: 180,
+      },
+      isPlaying: true,
+      position: 12,
+      duration: 180,
+      isShuffleActive: true,
+      repeatMode: "all",
+      volume: 0.5,
+      targetDeviceId: "device-target",
+      expectedGeneration: 7,
+    });
+
+    await expect(service.handleRemoteCommand("play")).resolves.toBe(true);
+    service.emitRemoteCommand("shuffle");
+    service.emitRemoteCommand("seek", { position: -4 });
+
+    expect(engine.play).not.toHaveBeenCalled();
+    expect(events).toContainEqual({
+      eventName: "remoteControlCommand",
+      event: {
+        requestId: undefined,
+        targetDeviceId: "device-target",
+        expectedGeneration: 7,
+        handledNatively: false,
+        command: { type: "play" },
+      },
+    });
+    expect(events).toContainEqual({
+      eventName: "remoteControlCommand",
+      event: {
+        requestId: undefined,
+        targetDeviceId: "device-target",
+        expectedGeneration: 7,
+        handledNatively: false,
+        command: { type: "set_shuffle", enabled: false },
+      },
+    });
+    expect(events).toContainEqual({
+      eventName: "remoteControlCommand",
+      event: {
+        requestId: undefined,
+        targetDeviceId: "device-target",
+        expectedGeneration: 7,
+        handledNatively: false,
+        command: { type: "seek", seconds: 0 },
+      },
+    });
+
+    events.length = 0;
+    await service.clearRemotePlaybackState();
+    service.emitRemoteCommand("next");
+
+    expect(events).toContainEqual({
+      eventName: "remoteCommand",
+      event: {
+        requestId: undefined,
+        command: "next",
+      },
+    });
+  });
+
   it("tracks native queue controls and skips through queued songs", async () => {
     const events: unknown[] = [];
     service.onEvent((event) => events.push(event));
@@ -1147,6 +1256,20 @@ function mockSlowAudioFetch(options: {
       },
     });
   });
+}
+
+function createFakeSystemAudioAdapter(): DesktopSystemAudioAdapter & {
+  setSystemVolume: ReturnType<typeof vi.fn>;
+  getSystemVolume: ReturnType<typeof vi.fn>;
+  setVolumeHUDEnabled: ReturnType<typeof vi.fn>;
+  setLikeActive: ReturnType<typeof vi.fn>;
+} {
+  return {
+    setSystemVolume: vi.fn(async () => ({ volume: 0.75 })),
+    getSystemVolume: vi.fn(async () => ({ volume: 0.75 })),
+    setVolumeHUDEnabled: vi.fn(async () => {}),
+    setLikeActive: vi.fn(async () => {}),
+  };
 }
 
 function waitForServiceEvent<TEvent extends keyof NativeAudioEvents>(

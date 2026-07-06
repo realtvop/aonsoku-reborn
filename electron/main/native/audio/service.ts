@@ -13,6 +13,7 @@ import type {
   NativeAudioQueueOptions,
   NativeAudioRemoteCommand,
   NativeAudioRepeatModeOptions,
+  NativeRemoteControlCommandEvent,
   NativeAudioResolveFileResult,
   NativeAudioSeekOptions,
   NativeAudioShuffleOptions,
@@ -51,6 +52,10 @@ import {
   DesktopNativeAudioUnsupportedSourceError,
   resolveNativeAudioSource,
 } from "./source";
+import {
+  createDesktopSystemAudioAdapter,
+  type DesktopSystemAudioAdapter,
+} from "./system-adapter";
 import type {
   DesktopAudioEngine,
   DesktopAudioEngineEvent,
@@ -71,6 +76,7 @@ export interface NativeAudioServiceOptions {
   audioCacheDirectory?: string | (() => string | Promise<string>);
   downloadUrlResolver?: DesktopAudioDownloadUrlResolver;
   cacheLoadedStreams?: boolean;
+  systemAudioAdapter?: DesktopSystemAudioAdapter;
 }
 
 export type DesktopAudioDownloadUrlResolver = (
@@ -98,6 +104,7 @@ export class NativeAudioService implements AonsokuAudioApi {
   readonly #downloadManager: DesktopAudioDownloadManager;
   readonly #downloadUrlResolver: DesktopAudioDownloadUrlResolver | null;
   readonly #cacheLoadedStreams: boolean;
+  readonly #systemAudio: DesktopSystemAudioAdapter;
   readonly #listeners = new Set<NativeAudioServiceEventListener>();
   readonly #streamUrlsBySongId = new Map<string, string>();
   readonly #queueEngine = new DesktopQueueEngine();
@@ -111,6 +118,7 @@ export class NativeAudioService implements AonsokuAudioApi {
   #currentTime = 0;
   #duration = 0;
   #currentSource: NativeAudioQueueItem | null = null;
+  #remotePlaybackState: NativeRemotePlaybackStateOptions | null = null;
 
   constructor(options: NativeAudioServiceOptions = {}) {
     this.#engine = options.engine ?? createDesktopAudioEngine();
@@ -121,6 +129,8 @@ export class NativeAudioService implements AonsokuAudioApi {
       });
     this.#downloadUrlResolver = options.downloadUrlResolver ?? null;
     this.#cacheLoadedStreams = options.cacheLoadedStreams ?? false;
+    this.#systemAudio =
+      options.systemAudioAdapter ?? createDesktopSystemAudioAdapter();
     this.#downloadManager = new DesktopAudioDownloadManager({
       audioFiles: this.#audioFiles,
       onProgress: (event) => this.#emit("downloadProgress", event),
@@ -265,13 +275,24 @@ export class NativeAudioService implements AonsokuAudioApi {
   }
 
   updateRemotePlaybackState(
-    _options: NativeRemotePlaybackStateOptions,
+    options: NativeRemotePlaybackStateOptions,
   ): Promise<void> {
-    return this.notImplemented("updateRemotePlaybackState");
+    this.#remotePlaybackState = {
+      ...options,
+      metadata: { ...options.metadata },
+      position: Math.max(0, options.position),
+      duration: Math.max(0, options.duration),
+      volume:
+        typeof options.volume === "number"
+          ? clampUnitVolume(options.volume)
+          : undefined,
+    };
+    return Promise.resolve();
   }
 
   clearRemotePlaybackState(): Promise<void> {
-    return this.notImplemented("clearRemotePlaybackState");
+    this.#remotePlaybackState = null;
+    return Promise.resolve();
   }
 
   preload(_options: { source: NativeAudioSource }): Promise<void> {
@@ -422,22 +443,26 @@ export class NativeAudioService implements AonsokuAudioApi {
     return Promise.resolve();
   }
 
-  setSystemVolume(
-    _options: NativeSetSystemVolumeOptions,
+  async setSystemVolume(
+    options: NativeSetSystemVolumeOptions,
   ): Promise<NativeSystemVolumeResult> {
-    return this.notImplemented("setSystemVolume");
+    const result = await this.#systemAudio.setSystemVolume(
+      clampUnitVolume(options.value),
+    );
+    this.#emit("systemVolumeChanged", result);
+    return result;
   }
 
   getSystemVolume(): Promise<NativeSystemVolumeResult> {
-    return this.notImplemented("getSystemVolume");
+    return this.#systemAudio.getSystemVolume();
   }
 
-  setVolumeHUDEnabled(_options: { enabled: boolean }): Promise<void> {
-    return Promise.resolve();
+  setVolumeHUDEnabled(options: { enabled: boolean }): Promise<void> {
+    return this.#systemAudio.setVolumeHUDEnabled(options.enabled);
   }
 
-  setLikeActive(_options: { active: boolean }): Promise<void> {
-    return Promise.resolve();
+  setLikeActive(options: { active: boolean }): Promise<void> {
+    return this.#systemAudio.setLikeActive(options.active);
   }
 
   setSleepTimer(options: NativeSetSleepTimerOptions): Promise<void> {
@@ -487,7 +512,12 @@ export class NativeAudioService implements AonsokuAudioApi {
   destroy(): Promise<void> | void {
     this.#downloadManager.cancelAll();
     this.#cancelSleepTimerInternal();
-    return this.#engine.destroy?.();
+    const engineDestroyed = this.#engine.destroy?.();
+    const systemDestroyed = this.#systemAudio.destroy?.();
+
+    if (engineDestroyed || systemDestroyed) {
+      return Promise.all([engineDestroyed, systemDestroyed]).then(() => {});
+    }
   }
 
   getControlState(): NativeAudioControlState {
@@ -505,6 +535,10 @@ export class NativeAudioService implements AonsokuAudioApi {
   async handleRemoteCommand(
     command: NativeAudioRemoteCommand,
   ): Promise<boolean> {
+    if (this.#emitRemoteControlCommandForNativeCommand(command)) {
+      return true;
+    }
+
     switch (command) {
       case "play":
         if (!this.#currentSource) return false;
@@ -535,9 +569,41 @@ export class NativeAudioService implements AonsokuAudioApi {
     }
   }
 
-  emitRemoteCommand(command: NativeAudioRemoteCommand): void {
+  emitRemoteCommand(
+    command: NativeAudioRemoteCommand,
+    options: { position?: number } = {},
+  ): void {
+    if (
+      this.#emitRemoteControlCommandForNativeCommand(command, options.position)
+    ) {
+      return;
+    }
+
     this.#emit("remoteCommand", {
       requestId: this.#requestId,
+      command,
+      ...(typeof options.position === "number"
+        ? { position: options.position }
+        : {}),
+    });
+  }
+
+  emitRemoteControlCommand(
+    command: NativeRemoteControlCommandEvent["command"],
+    options: {
+      targetDeviceId?: string;
+      expectedGeneration?: number;
+      handledNatively?: boolean;
+    } = {},
+  ): void {
+    this.#emit("remoteControlCommand", {
+      requestId: this.#requestId,
+      targetDeviceId:
+        options.targetDeviceId ?? this.#remotePlaybackState?.targetDeviceId,
+      expectedGeneration:
+        options.expectedGeneration ??
+        this.#remotePlaybackState?.expectedGeneration,
+      handledNatively: options.handledNatively ?? false,
       command,
     });
   }
@@ -780,6 +846,49 @@ export class NativeAudioService implements AonsokuAudioApi {
     return this.#queueEngine.contextSongs.length > 0;
   }
 
+  #emitRemoteControlCommandForNativeCommand(
+    command: NativeAudioRemoteCommand,
+    position?: number,
+  ): boolean {
+    const remoteCommand = this.#buildRemoteControlCommand(command, position);
+    if (!remoteCommand) return false;
+
+    this.emitRemoteControlCommand(remoteCommand);
+    return true;
+  }
+
+  #buildRemoteControlCommand(
+    command: NativeAudioRemoteCommand,
+    position?: number,
+  ): NativeRemoteControlCommandEvent["command"] | null {
+    const projection = this.#remotePlaybackState;
+    if (!projection) return null;
+
+    switch (command) {
+      case "play":
+        return { type: "play" };
+      case "pause":
+        return { type: "pause" };
+      case "togglePlayPause":
+        return { type: "toggle_play_pause" };
+      case "next":
+        return { type: "next" };
+      case "previous":
+        return { type: "previous" };
+      case "seek":
+        return typeof position === "number" && Number.isFinite(position)
+          ? { type: "seek", seconds: Math.max(0, position) }
+          : null;
+      case "shuffle":
+        return {
+          type: "set_shuffle",
+          enabled: !projection.isShuffleActive,
+        };
+      case "like":
+        return { type: "toggle_like" };
+    }
+  }
+
   private notImplemented<T>(method: keyof AonsokuAudioApi): Promise<T> {
     return Promise.reject(new DesktopNativeAudioNotImplementedError(method));
   }
@@ -984,4 +1093,9 @@ function prepareDownloadUrl(
   }
 
   return url.toString();
+}
+
+function clampUnitVolume(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.max(0, Math.min(1, value));
 }
