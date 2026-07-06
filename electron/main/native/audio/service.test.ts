@@ -252,4 +252,130 @@ describe("NativeAudioService", () => {
       title: "Updated title",
     });
   });
+
+  it("tracks native queue controls and skips through queued songs", async () => {
+    const events: unknown[] = [];
+    service.onEvent((event) => events.push(event));
+
+    await service.setContextQueue({
+      songs: [
+        {
+          id: "song-1",
+          title: "First",
+          artist: "Artist",
+          album: "Album",
+          duration: 100,
+          streamUrl: "https://server/rest/stream?id=song-1",
+        },
+        {
+          id: "song-2",
+          title: "Second",
+          artist: "Artist",
+          album: "Album",
+          duration: 120,
+          streamUrl: "https://server/rest/stream?id=song-2",
+        },
+      ],
+      currentIndex: 0,
+      autoplay: true,
+    });
+
+    expect(service.getControlState()).toEqual({
+      isPlaying: false,
+      hasCurrent: true,
+      hasNativeQueue: true,
+      hasPrevious: false,
+      hasNext: true,
+    });
+    expect(engine.load).toHaveBeenLastCalledWith({
+      source: {
+        kind: "stream",
+        target: "https://server/rest/stream?id=song-1",
+      },
+      metadata: {
+        title: "First",
+        artist: "Artist",
+        album: "Album",
+        duration: 100,
+        artworkUrl: undefined,
+      },
+      autoplay: true,
+      startTime: undefined,
+    });
+
+    await expect(service.handleRemoteCommand("next")).resolves.toBe(true);
+
+    expect(service.getControlState()).toEqual({
+      isPlaying: false,
+      hasCurrent: true,
+      hasNativeQueue: true,
+      hasPrevious: true,
+      hasNext: false,
+    });
+    expect(engine.load).toHaveBeenLastCalledWith({
+      source: {
+        kind: "stream",
+        target: "https://server/rest/stream?id=song-2",
+      },
+      metadata: {
+        title: "Second",
+        artist: "Artist",
+        album: "Album",
+        duration: 120,
+        artworkUrl: undefined,
+      },
+      autoplay: true,
+      startTime: undefined,
+    });
+    expect(events).toContainEqual({
+      eventName: "queueStateChanged",
+      event: {
+        requestId: "desktop-native-queue-2",
+        currentIndex: 1,
+        songId: "song-2",
+        reason: "next",
+        isInUserQueue: false,
+      },
+    });
+  });
+
+  it("handles play toggles natively only after audio is loaded", async () => {
+    await expect(
+      service.handleRemoteCommand("togglePlayPause"),
+    ).resolves.toBe(false);
+
+    await service.load({
+      requestId: "request-1",
+      source: {
+        kind: "stream",
+        url: "https://server/rest/stream?id=song-1",
+      },
+    });
+    engine.emit({
+      type: "playbackStateChanged",
+      state: "playing",
+    });
+
+    await expect(
+      service.handleRemoteCommand("togglePlayPause"),
+    ).resolves.toBe(true);
+    expect(engine.pause).toHaveBeenCalledTimes(1);
+  });
+
+  it("emits contract remote commands for renderer fallback", () => {
+    const events: unknown[] = [];
+    service.onEvent((event) => events.push(event));
+
+    service.emitRemoteCommand("previous");
+
+    expect(events).toEqual([
+      {
+        eventName: "remoteCommand",
+        event: {
+          requestId: undefined,
+          command: "previous",
+        },
+      },
+    ]);
+  });
 });
