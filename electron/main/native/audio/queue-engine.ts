@@ -94,7 +94,10 @@ export class DesktopQueueEngine {
   }
 
   get #maxShuffleHistory(): number {
-    return Math.max(20, Math.min(Math.floor(this.contextSongs.length / 2), 200));
+    return Math.max(
+      20,
+      Math.min(Math.floor(this.contextSongs.length / 2), 200),
+    );
   }
 
   get #maxShuffleStartHistory(): number {
@@ -118,7 +121,7 @@ export class DesktopQueueEngine {
     this.isRestored = false;
   }
 
-  setContextQueue(options: NativeSetContextQueueOptions): void {
+  async setContextQueue(options: NativeSetContextQueueOptions): Promise<void> {
     this.contextSongs = copySongs(options.songs);
     this.originalContextSongs = [];
     this.currentIndex = normalizeSongIndex(
@@ -141,7 +144,7 @@ export class DesktopQueueEngine {
 
     const song = this.currentSong;
     if (song) {
-      this.delegate?.queueEngineLoadSong(
+      await this.delegate?.queueEngineLoadSong(
         this,
         song,
         options.autoplay ?? true,
@@ -150,7 +153,10 @@ export class DesktopQueueEngine {
     }
   }
 
-  updateContextQueue(songs: NativeQueueSong[], currentIndex: number): void {
+  async updateContextQueue(
+    songs: NativeQueueSong[],
+    currentIndex: number,
+  ): Promise<void> {
     const previousSongId = this.currentSong?.id ?? null;
 
     this.contextSongs = copySongs(songs);
@@ -163,8 +169,8 @@ export class DesktopQueueEngine {
     if (previousSongId !== (song?.id ?? null)) {
       if (!song) return;
 
-      this.delegate?.queueEngineLoadSong(this, song, true, undefined);
-      this.delegate?.queueEngineDidAdvanceTo(
+      await this.delegate?.queueEngineLoadSong(this, song, true, undefined);
+      await this.delegate?.queueEngineDidAdvanceTo(
         this,
         this.currentIndex,
         song.id,
@@ -173,7 +179,7 @@ export class DesktopQueueEngine {
       return;
     }
 
-    this.delegate?.queueEngineDidChangeContents(this, "queue-edit");
+    await this.delegate?.queueEngineDidChangeContents(this, "queue-edit");
   }
 
   reorderContextQueue(fromIndex: number, toIndex: number): void {
@@ -234,7 +240,7 @@ export class DesktopQueueEngine {
     this.delegate?.queueEngineDidChangeContents(this, "queue-edit");
   }
 
-  playAtIndex(index: number, startTime?: number): void {
+  async playAtIndex(index: number, startTime?: number): Promise<void> {
     if (!isValidIndex(index, this.contextSongs)) return;
 
     this.isInUserQueue = false;
@@ -243,8 +249,8 @@ export class DesktopQueueEngine {
     const song = this.currentSong;
     if (!song) return;
 
-    this.delegate?.queueEngineLoadSong(this, song, true, startTime);
-    this.delegate?.queueEngineDidAdvanceTo(
+    await this.delegate?.queueEngineLoadSong(this, song, true, startTime);
+    await this.delegate?.queueEngineDidAdvanceTo(
       this,
       this.currentIndex,
       song.id,
@@ -252,40 +258,40 @@ export class DesktopQueueEngine {
     );
   }
 
-  handleEnded(): void {
+  async handleEnded(): Promise<void> {
     if (this.loopState === "one") {
       const userQueueRemaining = this.isInUserQueue
         ? this.userQueue.length - 1
         : this.userQueue.length;
       if (userQueueRemaining > 0) {
-        this.#advanceToNext("ended");
+        await this.#advanceToNext("ended");
         return;
       }
 
       const song = this.currentSong;
       if (song) {
-        this.delegate?.queueEngineSeekToStart(this, song);
+        await this.delegate?.queueEngineSeekToStart(this, song);
       }
       return;
     }
 
-    this.#advanceToNext("ended");
+    await this.#advanceToNext("ended");
   }
 
-  skipToNext(): void {
-    this.#advanceToNext("next");
+  async skipToNext(): Promise<void> {
+    await this.#advanceToNext("next");
   }
 
-  skipToPrevious(currentTime = 0): void {
+  async skipToPrevious(currentTime = 0): Promise<void> {
     if (currentTime > PREVIOUS_SEEK_THRESHOLD_SECONDS) {
       const song = this.currentSong;
       if (song) {
-        this.delegate?.queueEngineSeekToStart(this, song);
+        await this.delegate?.queueEngineSeekToStart(this, song);
       }
       return;
     }
 
-    this.#advanceToPrevious();
+    await this.#advanceToPrevious();
   }
 
   setShuffleActive(active: boolean): void {
@@ -330,7 +336,7 @@ export class DesktopQueueEngine {
     };
   }
 
-  #advanceToNext(reason: DesktopQueueAdvanceReason): void {
+  async #advanceToNext(reason: DesktopQueueAdvanceReason): Promise<void> {
     if (this.isInUserQueue) {
       const updatedQueue = copySongs(this.userQueue);
       const consumed = updatedQueue.shift();
@@ -344,7 +350,7 @@ export class DesktopQueueEngine {
       }
 
       if (this.userQueue.length > 0) {
-        this.#notifyAdvance(reason);
+        await this.#notifyAdvance(reason);
         return;
       }
 
@@ -354,7 +360,7 @@ export class DesktopQueueEngine {
       } else if (this.loopState === "all") {
         this.#wrapToStart();
       }
-      this.#notifyAdvance(reason);
+      await this.#notifyAdvance(reason);
       return;
     }
 
@@ -362,7 +368,7 @@ export class DesktopQueueEngine {
       const current = this.currentSong;
       if (current) this.#pushShuffleHistory(current.id);
       this.isInUserQueue = true;
-      this.#notifyAdvance(reason);
+      await this.#notifyAdvance(reason);
       return;
     }
 
@@ -371,20 +377,20 @@ export class DesktopQueueEngine {
 
     if (this.currentIndex < this.contextSongs.length - 1) {
       this.currentIndex += 1;
-      this.#notifyAdvance(reason);
+      await this.#notifyAdvance(reason);
       return;
     }
 
     if (this.loopState === "all") {
       this.#wrapToStart();
-      this.#notifyAdvance(reason);
+      await this.#notifyAdvance(reason);
       return;
     }
 
-    this.delegate?.queueEngineDidExhaustQueue(this);
+    await this.delegate?.queueEngineDidExhaustQueue(this);
   }
 
-  #advanceToPrevious(): void {
+  async #advanceToPrevious(): Promise<void> {
     if (this.playedUserQueueHistory.length > 0) {
       const updatedHistory = copySongs(this.playedUserQueueHistory);
       const restored = updatedHistory.pop();
@@ -400,19 +406,19 @@ export class DesktopQueueEngine {
         this.currentIndex -= 1;
       }
 
-      this.#notifyAdvance("previous");
+      await this.#notifyAdvance("previous");
       return;
     }
 
     if (this.isInUserQueue) {
       this.isInUserQueue = false;
-      this.#notifyAdvance("previous");
+      await this.#notifyAdvance("previous");
       return;
     }
 
     if (this.currentIndex > 0) {
       this.currentIndex -= 1;
-      this.#notifyAdvance("previous");
+      await this.#notifyAdvance("previous");
     }
   }
 
@@ -422,12 +428,12 @@ export class DesktopQueueEngine {
     this.#reshuffleForWrap(lastPlayedId);
   }
 
-  #notifyAdvance(reason: DesktopQueueAdvanceReason): void {
+  async #notifyAdvance(reason: DesktopQueueAdvanceReason): Promise<void> {
     const song = this.currentSong;
     if (!song) return;
 
-    this.delegate?.queueEngineLoadSong(this, song, true, undefined);
-    this.delegate?.queueEngineDidAdvanceTo(
+    await this.delegate?.queueEngineLoadSong(this, song, true, undefined);
+    await this.delegate?.queueEngineDidAdvanceTo(
       this,
       this.currentIndex,
       song.id,
@@ -453,11 +459,7 @@ export class DesktopQueueEngine {
     if (upcoming.length > 0) {
       this.contextSongs = [
         ...this.contextSongs.slice(0, this.currentIndex + 1),
-        ...shuffleWithGapAvoidance(
-          upcoming,
-          this.shuffleHistory,
-          this.#random,
-        ),
+        ...shuffleWithGapAvoidance(upcoming, this.shuffleHistory, this.#random),
       ];
     }
 

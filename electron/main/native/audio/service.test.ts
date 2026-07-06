@@ -2,11 +2,11 @@ import { promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   NativeAudioEvents,
   NativeAudioMetadata,
 } from "@aonsoku/audio-contract";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { audioCacheDirectoryFromUserDataPath, audioCacheId } from "./cache";
 import { NativeAudioService } from "./service";
 import type {
@@ -701,6 +701,182 @@ describe("NativeAudioService", () => {
     });
   });
 
+  it("bridges context and user queue edits through full native state", async () => {
+    const events: unknown[] = [];
+    service.onEvent((event) => events.push(event));
+
+    await service.setContextQueue({
+      songs: [queueSong("1"), queueSong("2"), queueSong("3")],
+      currentIndex: 0,
+      sourceId: { type: "playlist", id: "playlist-1" },
+      sourceName: "Playlist One",
+      repeatMode: "all",
+    });
+    await service.addToUserQueue({
+      songs: [queueSong("A"), queueSong("B")],
+      position: "next",
+    });
+
+    await service.skipToNext();
+    await service.skipToNext();
+    await service.skipToNext();
+    await service.playAtIndex({ index: 2, startTime: 9 });
+
+    expect(engine.load).toHaveBeenLastCalledWith({
+      source: {
+        kind: "stream",
+        target: "https://server/rest/stream?id=3",
+      },
+      metadata: {
+        title: "Title 3",
+        artist: "Artist",
+        album: "Album",
+        duration: 100,
+        artworkUrl: "cover-3",
+      },
+      autoplay: true,
+      startTime: 9,
+    });
+    await expect(service.getFullState()).resolves.toMatchObject({
+      contextQueue: {
+        currentIndex: 2,
+        sourceId: { type: "playlist", id: "playlist-1" },
+        sourceName: "Playlist One",
+      },
+      userQueue: [],
+      playedUserQueueHistory: [
+        expect.objectContaining({ id: "A" }),
+        expect.objectContaining({ id: "B" }),
+      ],
+      isInUserQueue: false,
+      isShuffleActive: false,
+      loopState: "all",
+      currentSongId: "3",
+    });
+    expect(events).toContainEqual({
+      eventName: "queueStateChanged",
+      event: {
+        requestId: "desktop-native-queue-5",
+        currentIndex: 2,
+        songId: "3",
+        reason: "skip",
+        isInUserQueue: false,
+      },
+    });
+    expect(events).toContainEqual({
+      eventName: "queueContentsChanged",
+      event: {
+        requestId: "desktop-native-queue-1",
+        reason: "queue-edit",
+      },
+    });
+  });
+
+  it("bridges queue reordering, user queue removal, and shuffle events", async () => {
+    const events: unknown[] = [];
+    service.onEvent((event) => events.push(event));
+
+    await service.setContextQueue({
+      songs: [queueSong("1"), queueSong("2"), queueSong("3")],
+      currentIndex: 0,
+    });
+    await service.reorderContextQueue({ fromIndex: 0, toIndex: 2 });
+    await service.addToUserQueue({
+      songs: [queueSong("A"), queueSong("B")],
+      position: "last",
+    });
+    await service.removeFromUserQueue({ indices: [0] });
+    await service.setShuffle({ enabled: true });
+    await service.setShuffle({ enabled: false });
+    await service.clearUserQueue();
+
+    await expect(service.getFullState()).resolves.toMatchObject({
+      contextQueue: {
+        songs: [
+          expect.objectContaining({ id: "2" }),
+          expect.objectContaining({ id: "3" }),
+          expect.objectContaining({ id: "1" }),
+        ],
+      },
+      userQueue: [],
+      isShuffleActive: false,
+      shuffleHistory: [],
+    });
+    expect(events).toContainEqual({
+      eventName: "queueContentsChanged",
+      event: {
+        requestId: "desktop-native-queue-1",
+        reason: "shuffle",
+      },
+    });
+    expect(events).toContainEqual({
+      eventName: "queueContentsChanged",
+      event: {
+        requestId: "desktop-native-queue-1",
+        reason: "unshuffle",
+      },
+    });
+  });
+
+  it("uses the queue engine for ended, repeat all, and repeat one", async () => {
+    await service.setContextQueue({
+      songs: [queueSong("1"), queueSong("2")],
+      currentIndex: 1,
+    });
+    await service.setRepeatMode({ mode: "all" });
+
+    const wrappedPromise = waitForServiceEvent(
+      service,
+      "queueStateChanged",
+      (event) => event.reason === "ended" && event.songId === "1",
+    );
+
+    engine.emit({ type: "ended", reason: "finished" });
+
+    await expect(wrappedPromise).resolves.toEqual({
+      requestId: "desktop-native-queue-2",
+      currentIndex: 0,
+      songId: "1",
+      reason: "ended",
+      isInUserQueue: false,
+    });
+    expect(engine.load).toHaveBeenLastCalledWith({
+      source: {
+        kind: "stream",
+        target: "https://server/rest/stream?id=1",
+      },
+      metadata: {
+        title: "Title 1",
+        artist: "Artist",
+        album: "Album",
+        duration: 100,
+        artworkUrl: "cover-1",
+      },
+      autoplay: true,
+      startTime: undefined,
+    });
+
+    await service.setRepeatMode({ mode: "one" });
+    engine.emit({ type: "ended", reason: "finished" });
+    await delay(0);
+
+    expect(engine.seek).toHaveBeenLastCalledWith(0);
+    expect(engine.play).toHaveBeenCalledTimes(1);
+
+    await service.setRepeatMode({ mode: "off" });
+    await service.playAtIndex({ index: 1 });
+
+    const endedPromise = waitForServiceEvent(service, "ended");
+    engine.emit({ type: "ended", reason: "finished" });
+
+    await expect(endedPromise).resolves.toEqual({
+      requestId: "desktop-native-queue-3",
+      reason: "finished",
+    });
+    expect(engine.pause).toHaveBeenCalledTimes(1);
+    expect(engine.seek).toHaveBeenLastCalledWith(0);
+  });
+
   it("handles play toggles natively only after audio is loaded", async () => {
     await expect(service.handleRemoteCommand("togglePlayPause")).resolves.toBe(
       false,
@@ -837,4 +1013,16 @@ function waitForServiceEvent<TEvent extends keyof NativeAudioEvents>(
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function queueSong(id: string) {
+  return {
+    id,
+    title: `Title ${id}`,
+    artist: "Artist",
+    album: "Album",
+    duration: 100,
+    coverArtId: `cover-${id}`,
+    streamUrl: `https://server/rest/stream?id=${id}`,
+  };
 }
