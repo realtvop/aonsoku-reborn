@@ -14,8 +14,17 @@
       "cflags_cc": ["-std=c++17"],
       "xcode_settings": {
         "CLANG_CXX_LANGUAGE_STANDARD": "c++17",
-        "MACOSX_DEPLOYMENT_TARGET": "11.0"
-      }
+        "MACOSX_DEPLOYMENT_TARGET": "11.0",
+        "LD_RUNPATH_SEARCH_PATHS": ["@loader_path"]
+      },
+      "conditions": [
+        [
+          "OS=='linux'",
+          {
+            "ldflags": ["-Wl,-rpath,$$ORIGIN"]
+          }
+        ]
+      ]
     }
   ]
 }

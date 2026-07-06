@@ -41,3 +41,4 @@ coverage/
 .build/
 .swiftpm/
 electron/main/native/audio/libmpv/build/
+resources/native-audio/*/
