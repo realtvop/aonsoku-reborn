@@ -1,7 +1,7 @@
 {
   "name": "@aonsoku/capacitor-native",
   "version": "0.0.0",
-  "description": "Unified Capacitor native plugin for Aonsoku iOS — bridge, data, and audio.",
+  "description": "Unified Capacitor native plugin for Aonsoku iOS/Android — bridge, data, audio, preferences, and coordination.",
   "type": "module",
   "main": "src/index.ts",
   "module": "src/index.ts",
