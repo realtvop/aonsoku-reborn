@@ -229,7 +229,10 @@ Key files:
   `electron/main/native-audio/` path re-exports the new implementation for
   compatibility. Desktop native playback requires the libmpv addon and dynamic
   library to be available; missing native pieces fail playback with a visible
-  `libmpv-unavailable` error while cache/download APIs remain usable. See
+  `libmpv-unavailable` error while cache/download APIs remain usable. The
+  Electron service includes a desktop queue engine aligned with the mobile
+  native plugin contract for context/user queues, shuffle/repeat, full-state
+  export, scrobble buffering, and sleep timers. See
   `docs/native-audio-libmpv.md` for build, smoke-test, and packaging details.
 - `src/player/queue-controller/` — queue management
   (`web-controller` / `native-controller`).
