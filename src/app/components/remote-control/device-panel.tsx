@@ -4,6 +4,7 @@ import {
   RefreshCw,
   Settings,
   WifiOff,
+  Link,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -138,6 +139,17 @@ function DevicePanelContent({
     connectionState === "connecting" ||
     connectionState === "reconnecting";
 
+  const handleGoToSettings = () => {
+    onOpenChange(false);
+    if (isMobile) {
+      navigate(ROUTES.MOBILE.SETTINGS);
+    } else {
+      setOpenDialog(true);
+      setCurrentPage("cross-device");
+    }
+  };
+
+
   useEffect(() => {
     if (!isMobile || activeSnapPoint !== 1) {
       setHasOverflow(false);
@@ -244,18 +256,51 @@ function DevicePanelContent({
     </div>
   );
 
-  const handleGoToSettings = () => {
-    onOpenChange(false);
-    if (isMobile) {
-      navigate(ROUTES.MOBILE.SETTINGS);
-    } else {
-      setOpenDialog(true);
-      setCurrentPage("cross-device");
-    }
-  };
+  const unconfiguredContent = (
+    <div className="flex flex-col gap-5 p-5">
+      <ThisDeviceSection
+        model={models.thisDevice}
+        isControlling={actions.isControlling}
+        onExitControl={actions.exitRemoteControl}
+      />
+
+      <div className="flex flex-col gap-3 px-1">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Link className="w-4 h-4 text-primary flex-shrink-0" />
+          <h3 className="font-semibold text-sm text-foreground">
+            {t("settings.crossDevice.error.unconfiguredTitle", {
+              defaultValue: "Cross-device Playback",
+            })}
+          </h3>
+        </div>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          {t("settings.crossDevice.error.unconfiguredDescription", {
+            defaultValue: "Connect to coordination server",
+          })}
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleGoToSettings}
+          className="self-start text-xs font-semibold gap-1.5"
+        >
+          <Settings className="w-3.5 h-3.5" />
+          {t("settings.crossDevice.connect", {
+            defaultValue: "Configure Settings",
+          })}
+        </Button>
+      </div>
+    </div>
+  );
+
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden text-left">
+    <div
+      className={cn(
+        "flex flex-col h-full w-full text-left",
+        !isMobile && "overflow-hidden",
+      )}
+    >
       {/* Custom Header (Reusable across Sheet and Popover) */}
       {isMobile ? (
         <>
@@ -313,14 +358,14 @@ function DevicePanelContent({
       )}
 
       {/* Main List Scroll Area */}
-      <div className="flex-1 overflow-hidden">
+      <div className={cn("flex-1", isMobile ? "min-h-0" : "overflow-hidden")}>
         {!isConnected && deviceId ? (
           isMobile ? (
             <div
               ref={scrollRef}
               className={cn(
-                "h-full",
-                hasOverflow ? "overflow-y-auto" : "overflow-hidden",
+                "h-auto max-h-full",
+                hasOverflow ? "overflow-y-auto" : "",
               )}
             >
               {disconnectedConfiguredContent}
@@ -330,42 +375,28 @@ function DevicePanelContent({
               {disconnectedConfiguredContent}
             </ScrollArea>
           )
-        ) : !isConnected || !deviceId ? (
-          <div className="flex flex-col items-center justify-center h-full p-8 text-center gap-4">
-            <div className="p-4 rounded-full bg-muted/50 border border-border/30">
-              <WifiOff className="w-8 h-8 text-muted-foreground/60" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <h3 className="font-semibold text-xs text-foreground">
-                {t("settings.crossDevice.disconnected", {
-                  defaultValue: "Not connected",
-                })}
-              </h3>
-              <p className="text-[11px] text-muted-foreground max-w-xs leading-relaxed">
-                {t("settings.crossDevice.error.missingFields", {
-                  defaultValue:
-                    "Connect your device in Settings to sync and control playback across devices.",
-                })}
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleGoToSettings}
-              className="mt-2 text-xs font-semibold gap-1.5"
+        ) : !deviceId ? (
+          isMobile ? (
+            <div
+              ref={scrollRef}
+              className={cn(
+                "h-auto max-h-full",
+                hasOverflow ? "overflow-y-auto" : "",
+              )}
             >
-              <Settings className="w-3.5 h-3.5" />
-              {t("settings.crossDevice.connect", {
-                defaultValue: "Configure Settings",
-              })}
-            </Button>
-          </div>
+              {unconfiguredContent}
+            </div>
+          ) : (
+            <ScrollArea className="h-full">
+              {unconfiguredContent}
+            </ScrollArea>
+          )
         ) : isMobile ? (
           <div
             ref={scrollRef}
             className={cn(
-              "h-full",
-              hasOverflow ? "overflow-y-auto" : "overflow-hidden",
+              "h-auto max-h-full",
+              hasOverflow ? "overflow-y-auto" : "",
             )}
           >
             {sectionsContent}

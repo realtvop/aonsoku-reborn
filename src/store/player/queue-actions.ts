@@ -18,8 +18,8 @@ import { logger } from "@/utils/logger";
 import {
   getMaxShuffleHistory,
   getMaxShuffleStartHistory,
-  pushToHistory,
   pickRandomStartIndex,
+  pushToHistory,
 } from "@/utils/songListFunctions";
 import { transitionHandleSongEnded } from "./queue-transitions";
 import {
@@ -788,12 +788,16 @@ export function createQueueActions(shared: SharedDeps) {
 
       const currentSong = getCurrentSong(get().songlist);
       const progress = get().playerProgress.progress;
-      const willSeekToStart = !!(currentSong && progress > PREV_SEEK_THRESHOLD);
+      const hasPrev = hasPrevEffectiveSong(get().songlist);
+      const willSeekToStart = !!(
+        currentSong &&
+        (progress > PREV_SEEK_THRESHOLD || !hasPrev)
+      );
       logger.info(
-        `[playPrevSong] progress=${progress} | willSeekToStart=${willSeekToStart} | hasPrev=${hasPrevEffectiveSong(get().songlist)} | songId=${currentSong?.id}`,
+        `[playPrevSong] progress=${progress} | willSeekToStart=${willSeekToStart} | hasPrev=${hasPrev} | songId=${currentSong?.id}`,
       );
 
-      if (currentSong && progress > PREV_SEEK_THRESHOLD) {
+      if (willSeekToStart) {
         set((state) => {
           state.playerProgress.progress = 0;
           state.playerProgress.bufferedProgress = 0;
@@ -810,7 +814,7 @@ export function createQueueActions(shared: SharedDeps) {
       if (now - lastPrevSongTime < PREV_SONG_DEBOUNCE_MS) return;
       lastPrevSongTime = now;
 
-      if (!hasPrevEffectiveSong(get().songlist)) return;
+      if (!hasPrev) return;
 
       const { isInUserQueue, playedUserQueueHistory, contextQueue } =
         get().songlist;

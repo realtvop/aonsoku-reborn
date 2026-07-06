@@ -1,6 +1,7 @@
 import { useRemotePlaybackProjection } from "@/app/components/remote-control/use-remote-playback-projection";
 import {
   usePlayerActions,
+  usePlayerCurrentSong,
   usePlayerIsBuffering,
   usePlayerIsPlaying,
   usePlayerIsTransitioning,
@@ -17,6 +18,7 @@ export function usePlaybackControls() {
   const isTransitioning = usePlayerIsTransitioning();
   const isShuffleActive = usePlayerShuffle();
   const loopState = usePlayerLoop();
+  const currentSong = usePlayerCurrentSong();
   const { hasPrev, hasNext } = usePlayerPrevAndNext();
   const {
     isPlayingOneSong,
@@ -42,6 +44,9 @@ export function usePlaybackControls() {
   const effectiveHasNext = remoteProjection.active
     ? remoteProjection.hasNext
     : hasNext;
+  const canUsePreviousControl = remoteProjection.active
+    ? remoteProjection.hasPrev
+    : Boolean(currentSong);
 
   const cannotSkipNext =
     !effectiveHasNext && effectiveLoopState !== LoopState.All;
@@ -58,6 +63,7 @@ export function usePlaybackControls() {
     loopState: effectiveLoopState,
     hasPrev: effectiveHasPrev,
     hasNext: effectiveHasNext,
+    canUsePreviousControl,
     cannotSkipNext,
     cannotSkipPrev,
     isLoopOff,

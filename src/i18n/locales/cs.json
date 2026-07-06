@@ -136,7 +136,7 @@
     "queueHistory": "Historie",
     "queueRepeating": "Opakování",
     "switchButton": "Přepnout na velký přehrávač",
-    "selectLyrics": "Vybrat text"
+    "selectLyrics": "Nastavení textu"
   },
   "generic": {
     "beta": "Beta",
@@ -1107,10 +1107,10 @@
   },
   "lyrics": {
     "customSelect": {
-      "title": "Vybrat text",
+      "title": "Nastavení textu",
       "subtitle": "{{title}} od {{artist}}",
       "noSong": "Nepřehrává se žádná skladba.",
-      "serverDisabled": "Vlastní server textů není povolen.",
+      "serverDisabled": "Použijte vlastní službu textů k výběru dalších textů",
       "empty": "Nebyly nalezeny žádné vlastní kandidátní texty.",
       "searchTitle": "Název skladby",
       "searchArtist": "Interpret",

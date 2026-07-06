@@ -185,7 +185,7 @@ export function LyricsTab() {
     path,
   } = currentSong || {};
   const songDurationMs = duration ? duration * 1000 : undefined;
-  const selectedCustomLyricsKey = currentSong
+  const selectedCustomLyricsEntry = currentSong
     ? getSelectedCustomLyrics(
         selectedCustomLyrics,
         getCustomLyricsSongKey({
@@ -195,8 +195,10 @@ export function LyricsTab() {
           duration: currentSong.duration,
           path: currentSong.path,
         }),
-      )?.key
+      )
     : undefined;
+  const selectedCustomLyricsKey = selectedCustomLyricsEntry?.key;
+  const lyricsDisabled = selectedCustomLyricsEntry?.disabled === true;
   const isOnline = useIsOnline();
   const lyricsSettingsKey = [
     sourcePriority.join(","),
@@ -237,7 +239,7 @@ export function LyricsTab() {
   // Priority: structured (synced) > structured (unsynced)
   //           > /getLyrics (LRC) > /getLyrics (plain)
   const resolved: ResolvedLyrics | null = useMemo(() => {
-    if (!currentSong) return null;
+    if (!currentSong || lyricsDisabled) return null;
     // Priority 1 & 2: Structured lyrics
     if (structuredLyrics && structuredLyrics.length > 0) {
       const { primary, translation } = pickStructuredTracks(structuredLyrics);
@@ -290,7 +292,14 @@ export function LyricsTab() {
     }
 
     return null;
-  }, [structuredLyrics, lyrics, showTranslation, songDurationMs, currentSong]);
+  }, [
+    structuredLyrics,
+    lyrics,
+    showTranslation,
+    songDurationMs,
+    currentSong,
+    lyricsDisabled,
+  ]);
 
   const noLyricsFound = t("fullscreen.noLyrics");
   const loadingLyrics = t("fullscreen.loadingLyrics");

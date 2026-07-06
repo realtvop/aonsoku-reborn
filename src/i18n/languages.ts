@@ -5,6 +5,7 @@ import es from "./locales/es.json";
 import fr from "./locales/fr.json";
 import frCa from "./locales/fr-CA.json";
 import it from "./locales/it.json";
+import ja from "./locales/ja.json";
 import ko from "./locales/ko.json";
 import ml from "./locales/ml.json";
 import pl from "./locales/pl.json";
@@ -24,6 +25,7 @@ export const resources = {
   fr: { translation: fr },
   "fr-CA": { translation: frCa },
   it: { translation: it },
+  ja: { translation: ja },
   ko: { translation: ko },
   ml: { translation: ml },
   pl: { translation: pl },
@@ -78,6 +80,12 @@ export const languages = [
     langCode: "it",
     flag: "IT",
     dayjsLocale: "it",
+  },
+  {
+    nativeName: "日本語",
+    langCode: "ja",
+    flag: "JP",
+    dayjsLocale: "ja",
   },
   {
     nativeName: "한국어",

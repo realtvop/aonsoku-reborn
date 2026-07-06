@@ -127,6 +127,8 @@ pub struct Config {
     /// per interval. Authoritative state transitions (Offline/Transferred/
     /// generation bumps) flush immediately regardless of this interval.
     pub snapshot_flush_interval: std::time::Duration,
+    /// Restricted Subsonic/Navidrome instance hosts/domains. If empty, all hosts are allowed.
+    pub allowed_hosts: Vec<String>,
 }
 
 impl Config {
@@ -257,6 +259,7 @@ impl Config {
             snapshot_flush_interval: std::time::Duration::from_secs(
                 realtime.snapshot_flush_interval_seconds.unwrap_or(30),
             ),
+            allowed_hosts: auth.allowed_hosts.unwrap_or_default(),
         }
     }
 
@@ -298,6 +301,15 @@ impl FileConfig {
         if let Ok(value) = std::env::var("AONSOKU_COORD_DEPLOYMENT") {
             server.deployment = Some(parse_deployment_mode(&value)?);
         }
+        let auth = self.auth.get_or_insert_with(AuthConfig::default);
+        if let Ok(value) = std::env::var("AONSOKU_COORD_ALLOWED_HOSTS") {
+            let hosts: Vec<String> = value
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            auth.allowed_hosts = Some(hosts);
+        }
         Ok(())
     }
 }
@@ -331,6 +343,7 @@ struct AuthConfig {
     refresh_token_max_age_seconds: Option<u64>,
     ws_ticket_ttl_seconds: Option<u64>,
     challenge_ttl_seconds: Option<u64>,
+    allowed_hosts: Option<Vec<String>>,
 }
 
 #[derive(Debug, Default, Deserialize)]

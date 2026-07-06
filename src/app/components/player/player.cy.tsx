@@ -48,7 +48,7 @@ describe('Player Component', () => {
 
       cy.getByTestId('player-button-prev')
         .should('be.visible')
-        .and('have.attr', 'disabled', 'disabled')
+        .and('not.have.attr', 'disabled')
 
       cy.getByTestId('player-button-next')
         .should('be.visible')
@@ -73,7 +73,7 @@ describe('Player Component', () => {
 
       cy.getByTestId('player-button-prev')
         .should('be.visible')
-        .and('have.attr', 'disabled', 'disabled')
+        .and('not.have.attr', 'disabled')
 
       cy.getByTestId('player-button-next')
         .should('be.visible')

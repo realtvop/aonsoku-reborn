@@ -135,7 +135,7 @@
     "queueHistory": "Cronologia",
     "queueRepeating": "Ripetizione",
     "switchButton": "Passa a Riproduttore Grande",
-    "selectLyrics": "Seleziona testo"
+    "selectLyrics": "Impostazioni testo"
   },
   "generic": {
     "beta": "Beta",
@@ -1098,10 +1098,10 @@
   },
   "lyrics": {
     "customSelect": {
-      "title": "Seleziona testo",
+      "title": "Impostazioni testo",
       "subtitle": "{{title}} di {{artist}}",
       "noSong": "Nessun brano in riproduzione.",
-      "serverDisabled": "Il server personalizzato dei testi non è abilitato.",
+      "serverDisabled": "Usa un servizio di testi personalizzato per scegliere altri testi",
       "empty": "Nessun testo personalizzato trovato.",
       "searchTitle": "Titolo del brano",
       "searchArtist": "Artista",

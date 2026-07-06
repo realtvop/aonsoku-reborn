@@ -136,7 +136,7 @@
     "queueHistory": "Historia",
     "queueRepeating": "Powtarzanie",
     "switchButton": "Przełącz na Duży Odtwarzacz",
-    "selectLyrics": "Wybierz tekst"
+    "selectLyrics": "Ustawienia tekstu"
   },
   "generic": {
     "beta": "Beta",
@@ -1107,10 +1107,10 @@
   },
   "lyrics": {
     "customSelect": {
-      "title": "Wybierz tekst",
+      "title": "Ustawienia tekstu",
       "subtitle": "{{title}} wykonawcy {{artist}}",
       "noSong": "Nie jest odtwarzany żaden utwór.",
-      "serverDisabled": "Niestandardowy serwer tekstów nie jest włączony.",
+      "serverDisabled": "Użyj niestandardowej usługi tekstów, aby wybrać więcej tekstów",
       "empty": "Nie znaleziono niestandardowych propozycji tekstów.",
       "searchTitle": "Tytuł utworu",
       "searchArtist": "Wykonawca",

@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::api::extract::Authenticated;
 use crate::auth::sign_access_token;
 use crate::errors::{ApiError, CoordinationError, ErrorCode};
-use crate::identity::{canonicalise_username, normalise_identity_url};
+use crate::identity::{canonicalise_username, normalise_identity_url, is_identity_allowed};
 use crate::server::AppState;
 use crate::storage::repository::{
     AccountRepository, ChallengeRepository, DeviceRepository, TicketRepository,
@@ -31,6 +31,12 @@ pub async fn post_challenge(
 ) -> Result<Json<ChallengeResponse>, (StatusCode, Json<ApiError>)> {
     let normalised = normalise_identity_url(&body.identity_url, state.config.ssrf.allow_http)
         .map_err(map_err)?;
+    if !is_identity_allowed(&state.config.allowed_hosts, &normalised) {
+        return Err(map_err(CoordinationError::new(
+            ErrorCode::InvalidIdentity,
+            "identity URL host is not in the allowed list",
+        )));
+    }
     let canonical_user = canonicalise_username(&body.username);
     if canonical_user.is_empty() {
         return Err(map_err(CoordinationError::new(
@@ -72,6 +78,12 @@ pub async fn post_register(
     let request_normalised =
         normalise_identity_url(&body.identity_url, state.config.ssrf.allow_http)
             .map_err(map_err)?;
+    if !is_identity_allowed(&state.config.allowed_hosts, &request_normalised) {
+        return Err(map_err(CoordinationError::new(
+            ErrorCode::InvalidIdentity,
+            "identity URL host is not in the allowed list",
+        )));
+    }
     let request_canonical = canonicalise_username(&body.username);
     if request_normalised != consumed.normalised_identity {
         return Err(map_err(CoordinationError::new(
@@ -293,6 +305,12 @@ async fn recover_refresh_token(
     // lookup; the request body must agree.
     let request_normalised =
         normalise_identity_url(identity_url, state.config.ssrf.allow_http).map_err(map_err)?;
+    if !is_identity_allowed(&state.config.allowed_hosts, &request_normalised) {
+        return Err(map_err(CoordinationError::new(
+            ErrorCode::InvalidIdentity,
+            "identity URL host is not in the allowed list",
+        )));
+    }
     let request_canonical = canonicalise_username(username);
     if request_normalised != consumed.normalised_identity {
         return Err(map_err(CoordinationError::new(

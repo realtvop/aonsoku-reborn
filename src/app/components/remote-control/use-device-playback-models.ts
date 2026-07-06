@@ -75,10 +75,12 @@ export function deriveDevicePlaybackModels({
   const modelDevices =
     currentDeviceId && !devices.some((device) => device.id === currentDeviceId)
       ? [fallbackCurrentDevice(currentDeviceId), ...devices]
-      : devices;
+      : !currentDeviceId
+        ? [fallbackCurrentDevice("local-device"), ...devices]
+        : devices;
 
   for (const device of modelDevices) {
-    const isSelf = device.id === currentDeviceId;
+    const isSelf = device.id === currentDeviceId || device.platform === "local";
     const snapshotData = deviceSnapshots[device.id];
     const snapshot = snapshotData?.snapshot ?? null;
     const isOnline = snapshotData?.isOnline ?? false;

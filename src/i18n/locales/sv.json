@@ -134,7 +134,7 @@
     "queueHistory": "Historik",
     "queueRepeating": "Upprepar",
     "switchButton": "Byt till storspelare",
-    "selectLyrics": "Välj text"
+    "selectLyrics": "Textinställningar"
   },
   "generic": {
     "beta": "Beta",
@@ -1089,10 +1089,10 @@
   },
   "lyrics": {
     "customSelect": {
-      "title": "Välj text",
+      "title": "Textinställningar",
       "subtitle": "{{title}} av {{artist}}",
       "noSong": "Ingen låt spelas.",
-      "serverDisabled": "Anpassad textserver är inte aktiverad.",
+      "serverDisabled": "Använd en anpassad texttjänst för att välja fler texter",
       "empty": "Inga anpassade textkandidater hittades.",
       "searchTitle": "Låttitel",
       "searchArtist": "Artist",

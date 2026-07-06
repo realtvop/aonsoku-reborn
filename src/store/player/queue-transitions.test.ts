@@ -227,9 +227,20 @@ describe("transitionPrevSong", () => {
     expect(result!.songlist.contextQueue.currentIndex).toBe(0);
   });
 
-  it("returns null when there is no previous song", () => {
+  it("seeks to start when there is no previous song", () => {
     const songlist = makeSonglist({
       contextQueue: makeContextQueue([makeSong("a")], 0),
+      playedUserQueueHistory: [],
+    });
+    const result = transitionPrevSong(songlist, 0, LoopState.Off);
+    expect(result).not.toBeNull();
+    expect(result!.seekToStart).toBe(true);
+    expect(result!.songlist.contextQueue.currentIndex).toBe(0);
+  });
+
+  it("returns null when there is no current song", () => {
+    const songlist = makeSonglist({
+      contextQueue: makeContextQueue([], 0),
       playedUserQueueHistory: [],
     });
     const result = transitionPrevSong(songlist, 0, LoopState.Off);
