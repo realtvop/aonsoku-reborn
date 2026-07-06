@@ -159,6 +159,43 @@ describe("NativeAudioService", () => {
     ]);
   });
 
+  it("preserves coded engine failures in error events", async () => {
+    const events: unknown[] = [];
+    service.onEvent((event) => events.push(event));
+    const error = Object.assign(new Error("libmpv addon is missing"), {
+      code: "libmpv-unavailable",
+    });
+    engine.load.mockRejectedValueOnce(error);
+
+    await expect(
+      service.load({
+        requestId: "request-libmpv",
+        source: {
+          kind: "stream",
+          url: "https://server/rest/stream?id=song-1",
+        },
+      }),
+    ).rejects.toThrow("libmpv addon is missing");
+
+    expect(events).toEqual([
+      {
+        eventName: "playbackStateChanged",
+        event: {
+          requestId: "request-libmpv",
+          state: "failed",
+        },
+      },
+      {
+        eventName: "error",
+        event: {
+          requestId: "request-libmpv",
+          code: "libmpv-unavailable",
+          message: "libmpv addon is missing",
+        },
+      },
+    ]);
+  });
+
   it("stores, resolves, sizes, deletes, and loads cached audio files", async () => {
     const songId = "song/cache-1";
     const data = Buffer.from("cached audio bytes");

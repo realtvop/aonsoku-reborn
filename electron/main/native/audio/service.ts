@@ -41,7 +41,7 @@ import {
   DesktopAudioDownloadManager,
   type DesktopAudioDownloadCompletionEventName,
 } from "./download";
-import { MpvAudioEngine } from "./mpv";
+import { createDesktopAudioEngine } from "./engine-factory";
 import {
   DesktopNativeAudioUnsupportedSourceError,
   resolveNativeAudioSource,
@@ -107,7 +107,7 @@ export class NativeAudioService implements AonsokuAudioApi {
   #currentSource: NativeAudioQueueItem | null = null;
 
   constructor(options: NativeAudioServiceOptions = {}) {
-    this.#engine = options.engine ?? new MpvAudioEngine();
+    this.#engine = options.engine ?? createDesktopAudioEngine();
     this.#audioFiles =
       options.audioFileStore ??
       new DesktopAudioFileStore({
@@ -750,7 +750,10 @@ function toNativeAudioErrorEvent(
   }
 
   if (error instanceof Error) {
+    const code = getErrorCode(error);
+
     return {
+      ...(code ? { code } : {}),
       message: error.message,
     };
   }
@@ -758,6 +761,14 @@ function toNativeAudioErrorEvent(
   return {
     message: "Desktop native audio failed.",
   };
+}
+
+function getErrorCode(error: Error): string | undefined {
+  const maybeErrorWithCode = error as Error & { code?: unknown };
+
+  return typeof maybeErrorWithCode.code === "string"
+    ? maybeErrorWithCode.code
+    : undefined;
 }
 
 function normalizeQueueIndex(
