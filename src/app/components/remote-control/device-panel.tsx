@@ -295,7 +295,12 @@ function DevicePanelContent({
 
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden text-left">
+    <div
+      className={cn(
+        "flex flex-col h-full w-full text-left",
+        !isMobile && "overflow-hidden",
+      )}
+    >
       {/* Custom Header (Reusable across Sheet and Popover) */}
       {isMobile ? (
         <>
@@ -353,14 +358,14 @@ function DevicePanelContent({
       )}
 
       {/* Main List Scroll Area */}
-      <div className="flex-1 overflow-hidden">
+      <div className={cn("flex-1", isMobile ? "min-h-0" : "overflow-hidden")}>
         {!isConnected && deviceId ? (
           isMobile ? (
             <div
               ref={scrollRef}
               className={cn(
-                "h-full",
-                hasOverflow ? "overflow-y-auto" : "overflow-hidden",
+                "h-auto max-h-full",
+                hasOverflow ? "overflow-y-auto" : "",
               )}
             >
               {disconnectedConfiguredContent}
@@ -375,8 +380,8 @@ function DevicePanelContent({
             <div
               ref={scrollRef}
               className={cn(
-                "h-full",
-                hasOverflow ? "overflow-y-auto" : "overflow-hidden",
+                "h-auto max-h-full",
+                hasOverflow ? "overflow-y-auto" : "",
               )}
             >
               {unconfiguredContent}
@@ -390,8 +395,8 @@ function DevicePanelContent({
           <div
             ref={scrollRef}
             className={cn(
-              "h-full",
-              hasOverflow ? "overflow-y-auto" : "overflow-hidden",
+              "h-auto max-h-full",
+              hasOverflow ? "overflow-y-auto" : "",
             )}
           >
             {sectionsContent}
