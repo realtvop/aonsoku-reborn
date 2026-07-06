@@ -48,6 +48,10 @@ cd coordination-server && cargo run --bin aonsoku-coordination-server
 # Android native plugin
 cd android && ./gradlew :aonsoku-capacitor-native:compileDebugKotlin
 cd android && ./gradlew :aonsoku-capacitor-native:testDebugUnitTest
+
+# Electron desktop native audio
+pnpm native-audio:build   # Build the Node-API libmpv addon
+pnpm native-audio:smoke   # Load libmpv and play a generated WAV fixture
 ```
 
 ## Architecture
@@ -219,10 +223,14 @@ Key files:
 - `electron/preload/native-audio.ts` and `electron/main/native/audio/` —
   desktop bridge IPC plus a minimal Node.js `NativeAudioService`
   implementing the base `@aonsoku/audio-contract` playback methods through an
-  mpv subprocess with JSON IPC. The legacy `electron/main/native-audio/` path
-  re-exports the new implementation for compatibility. Desktop native playback
-  currently requires `mpv` to be available on the host PATH; unsupported
-  sources such as `blob` fail explicitly.
+  embedded libmpv backend. `engine-factory.ts` creates `LibMpvAudioEngine`
+  through the `MpvPlayer` boundary and the Node-API addon in
+  `electron/main/native/audio/libmpv/`. The legacy
+  `electron/main/native-audio/` path re-exports the new implementation for
+  compatibility. Desktop native playback requires the libmpv addon and dynamic
+  library to be available; missing native pieces fail playback with a visible
+  `libmpv-unavailable` error while cache/download APIs remain usable. See
+  `docs/native-audio-libmpv.md` for build, smoke-test, and packaging details.
 - `src/player/queue-controller/` — queue management
   (`web-controller` / `native-controller`).
 - `src/store/player/playback-actions.ts` — runtime-aware action dispatch.

@@ -82,6 +82,8 @@
 
 - Node.js
 - pnpm, npm or yarn
+- libmpv development files for Electron desktop native audio; see
+  [Desktop Native Audio libmpv Backend](./docs/native-audio-libmpv.md)
 
 ### Installation
 
