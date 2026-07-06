@@ -10,7 +10,11 @@ const repoRoot = path.resolve(scriptDirectory, "../..");
 const options = parseArgs(process.argv.slice(2));
 const platform =
   options.platform ?? process.env.AONSOKU_LIBMPV_PLATFORM ?? process.platform;
-const arch = options.arch ?? process.env.AONSOKU_LIBMPV_ARCH ?? process.arch;
+const arch =
+  options.arch ??
+  process.env.AONSOKU_LIBMPV_ARCH ??
+  process.env.ARCH ??
+  process.arch;
 const platformKey = `${platform}-${arch}`;
 const resourcesRoot = path.resolve(
   repoRoot,
