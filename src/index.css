@@ -551,6 +551,38 @@ svg#bars .eq-bar--4 {
   mix-blend-mode: normal;
 }
 
+/*
+ * Three-row layout for lyrics with a romaji/romaja track.
+ * AMLL renders each line as: main (original), translated, roman.
+ * Reorder to romaji (top) / original (middle) / translation (bottom).
+ *
+ * Scope to the line elements only (`_lyricLine_*`) so the interlude-dots
+ * element — a sibling that would otherwise be forced into a column and
+ * have its dots reordered — is left untouched.
+ */
+.lrc-box[data-romaji="true"] .amll-lyric-player > div[class*="_lyricLine_"] {
+  display: flex;
+  flex-direction: column;
+}
+.lrc-box[data-romaji="true"]
+  .amll-lyric-player
+  > div[class*="_lyricLine_"]
+  > *:nth-child(1) {
+  order: 2; /* original */
+}
+.lrc-box[data-romaji="true"]
+  .amll-lyric-player
+  > div[class*="_lyricLine_"]
+  > *:nth-child(2) {
+  order: 3; /* translation */
+}
+.lrc-box[data-romaji="true"]
+  .amll-lyric-player
+  > div[class*="_lyricLine_"]
+  > *:nth-child(3) {
+  order: 1; /* romaji */
+}
+
 /* Disable all animations when seeking */
 .lrc-box[data-seeking="true"] .amll-lyric-player * {
   transition: none !important;

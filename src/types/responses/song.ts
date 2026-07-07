@@ -16,6 +16,11 @@ export interface ILyric {
   artist?: string;
   title?: string;
   value?: string;
+  /**
+   * Optional romanization (romaji/romaja) LRC track aligned by timestamp
+   * to `value`. Present only for custom-server lyrics that provide it.
+   */
+  romaji?: string;
 }
 
 export interface IContributor {

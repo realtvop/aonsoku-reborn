@@ -59,6 +59,8 @@ const LyricPlayer = lazy(() =>
 type ResolvedSynced = {
   type: "synced";
   lyricLines: LyricLine[];
+  /** True when lines carry a romaji/romaja track and need the 3-row layout. */
+  hasRomaji?: boolean;
 };
 
 type ResolvedUnsynced = {
@@ -278,10 +280,16 @@ export function LyricsTab() {
     // Priority 3 & 4: /getLyrics result
     if (lyrics?.value) {
       if (areLyricsSynced(lyrics.value)) {
-        // Priority 3: LRC synced
+        // Priority 3: LRC synced (custom servers may attach a romaji track)
+        const hasRomaji = !!lyrics.romaji?.trim();
         return {
           type: "synced",
-          lyricLines: convertLrcToAMLL(lyrics.value, songDurationMs),
+          lyricLines: convertLrcToAMLL(
+            lyrics.value,
+            songDurationMs,
+            lyrics.romaji,
+          ),
+          hasRomaji,
         };
       }
 
@@ -323,6 +331,7 @@ export function LyricsTab() {
       <SyncedLyrics
         lyricLines={resolved.lyricLines}
         offsetMs={lyricsOffsetMs}
+        hasRomaji={resolved.hasRomaji}
       />
     );
   }
@@ -338,9 +347,10 @@ export function LyricsTab() {
 interface SyncedLyricsProps {
   lyricLines: LyricLine[];
   offsetMs: number;
+  hasRomaji?: boolean;
 }
 
-function SyncedLyrics({ lyricLines, offsetMs }: SyncedLyricsProps) {
+function SyncedLyrics({ lyricLines, offsetMs, hasRomaji }: SyncedLyricsProps) {
   const playerRef = usePlayerRef();
   const localIsPlaying = usePlayerIsPlaying();
   const isScrubbing = usePlayerIsScrubbing();
@@ -644,6 +654,7 @@ function SyncedLyrics({ lyricLines, offsetMs }: SyncedLyricsProps) {
       ref={containerRef}
       className="w-full h-full text-left lrc-box"
       data-vaul-no-drag
+      data-romaji={hasRomaji ? "true" : undefined}
       data-seeking={isSeekingState}
       data-scrubbing={isScrubbing}
       onClick={(e) => e.stopPropagation()}

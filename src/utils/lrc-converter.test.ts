@@ -98,6 +98,38 @@ describe("convertLrcToAMLL", () => {
     expect(result[0].translatedLyric).toBe("Hola");
     expect(result[1].words[0].word).toBe("World");
   });
+
+  it("leaves romanLyric empty without a romaji track", () => {
+    const lrc = "[00:00.00]こんにちは\n[00:05.00]世界";
+    const result = convertLrcToAMLL(lrc);
+    expect(result[0].romanLyric).toBe("");
+    expect(result[1].romanLyric).toBe("");
+  });
+
+  it("maps a romaji track onto romanLyric by timestamp", () => {
+    const lrc = "[00:00.00]こんにちは\n[00:05.00]世界";
+    const romaji = "[00:00.00]konnichiwa\n[00:05.00]sekai";
+    const result = convertLrcToAMLL(lrc, undefined, romaji);
+    expect(result[0].romanLyric).toBe("konnichiwa");
+    expect(result[1].romanLyric).toBe("sekai");
+  });
+
+  it("keeps romaji alongside inline translations", () => {
+    const lrc = "[00:01.00]こんにちは\n[00:01.00]你好\n[00:05.00]世界";
+    const romaji = "[00:01.00]konnichiwa\n[00:05.00]sekai";
+    const result = convertLrcToAMLL(lrc, undefined, romaji);
+    expect(result).toHaveLength(2);
+    expect(result[0].words[0].word).toBe("こんにちは");
+    expect(result[0].translatedLyric).toBe("你好");
+    expect(result[0].romanLyric).toBe("konnichiwa");
+    expect(result[1].romanLyric).toBe("sekai");
+  });
+
+  it("ignores a blank romaji track", () => {
+    const lrc = "[00:00.00]世界";
+    const result = convertLrcToAMLL(lrc, undefined, "   ");
+    expect(result[0].romanLyric).toBe("");
+  });
 });
 
 describe("buildTranslationMap", () => {

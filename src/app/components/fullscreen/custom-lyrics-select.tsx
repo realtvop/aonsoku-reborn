@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Eye, EyeOff, Music2, Search } from "lucide-react";
+import { Check, Eye, EyeOff, Languages, Music2, Search } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
@@ -141,6 +141,7 @@ export function CustomLyricsSelect({ onBack }: CustomLyricsSelectProps) {
         title: candidate.title || submittedSearch.title || songData.title,
         artist: candidate.artist || submittedSearch.artist || songData.artist,
         lyrics,
+        romaji: candidate.romaji?.trim() || undefined,
       });
     } catch {
       toast.error(t("lyrics.customSelect.saveError"));
@@ -361,6 +362,7 @@ export function CustomLyricsSelect({ onBack }: CustomLyricsSelectProps) {
                 );
                 const selected = candidateKey === selectedLyrics?.key;
                 const preview = getLyricsPreview(candidate.lyrics);
+                const hasRomaji = !!candidate.romaji?.trim();
 
                 return (
                   <div
@@ -372,9 +374,17 @@ export function CustomLyricsSelect({ onBack }: CustomLyricsSelectProps) {
                   >
                     <div className="flex min-w-0 flex-col items-start justify-between gap-3 p-4 sm:flex-row">
                       <div className="min-w-0 space-y-1">
-                        <h3 className="truncate text-base font-semibold">
-                          {candidate.title || currentSong.title}
-                        </h3>
+                        <div className="flex min-w-0 items-center gap-2">
+                          <h3 className="truncate text-base font-semibold">
+                            {candidate.title || currentSong.title}
+                          </h3>
+                          {hasRomaji && (
+                            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-foreground/10 px-2 py-0.5 text-[10px] font-medium text-foreground/70">
+                              <Languages className="size-3" />
+                              {t("lyrics.customSelect.hasRomaji")}
+                            </span>
+                          )}
+                        </div>
                         <p className="truncate text-sm text-foreground/60">
                           {candidate.artist || currentSong.artist}
                         </p>

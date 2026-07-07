@@ -111,11 +111,22 @@ export function createInitialSettings(set: SetFn): IPlayerContext["settings"] {
       },
       selectedCustomLyrics: {},
       setSelectedCustomLyrics: async (songKey, selection) => {
-        const { lyrics: body, ...meta } = selection;
+        const { lyrics: body, romaji, ...meta } = selection;
         if (body) {
           try {
-            const { setCustomLyricsBody } = await import("@/service/lyrics");
+            const {
+              setCustomLyricsBody,
+              setCustomLyricsRomajiBody,
+              deleteCustomLyricsRomajiBody,
+            } = await import("@/service/lyrics");
             await setCustomLyricsBody(songKey, body);
+            // Keep the romaji track in sync with the chosen lyrics: persist
+            // it when present, otherwise drop any stale romaji for this song.
+            if (romaji?.trim()) {
+              await setCustomLyricsRomajiBody(songKey, romaji);
+            } else {
+              await deleteCustomLyricsRomajiBody(songKey);
+            }
           } catch (err) {
             logger.warn("[player] Failed to persist custom lyrics body:", err);
             throw err;

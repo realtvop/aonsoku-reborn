@@ -109,6 +109,8 @@ export interface SelectedCustomLyrics {
 
 export interface SelectedCustomLyricsInput extends SelectedCustomLyrics {
   lyrics: string;
+  /** Optional romanization track persisted alongside the lyrics body. */
+  romaji?: string;
 }
 
 export const MAX_SELECTED_CUSTOM_LYRICS = 50;
