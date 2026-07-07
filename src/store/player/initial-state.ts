@@ -123,7 +123,13 @@ export function createInitialSettings(set: SetFn): IPlayerContext["settings"] {
         }
         set((state) => {
           state.settings.lyrics.selectedCustomLyrics ||= {};
-          state.settings.lyrics.selectedCustomLyrics[songKey] = meta;
+          // Preserve any manual timing offset already set for this song.
+          const previousOffset =
+            state.settings.lyrics.selectedCustomLyrics[songKey]?.offset;
+          state.settings.lyrics.selectedCustomLyrics[songKey] = {
+            ...meta,
+            ...(previousOffset !== undefined ? { offset: previousOffset } : {}),
+          };
         });
       },
       setSongLyricsDisabled: async (songKey, disabled) => {
@@ -143,6 +149,31 @@ export function createInitialSettings(set: SetFn): IPlayerContext["settings"] {
           } else {
             delete state.settings.lyrics.selectedCustomLyrics[songKey];
           }
+        });
+      },
+      setSongLyricsOffset: (songKey, offset) => {
+        set((state) => {
+          state.settings.lyrics.selectedCustomLyrics ||= {};
+          const existing = state.settings.lyrics.selectedCustomLyrics[songKey];
+          if (offset === 0) {
+            if (!existing) return;
+            // Drop the whole entry when it only held the offset.
+            const { offset: _offset, ...rest } = existing;
+            if (
+              Object.keys(rest).length === 0 ||
+              (!rest.key && !rest.disabled)
+            ) {
+              delete state.settings.lyrics.selectedCustomLyrics[songKey];
+            } else {
+              state.settings.lyrics.selectedCustomLyrics[songKey] = rest;
+            }
+            return;
+          }
+          state.settings.lyrics.selectedCustomLyrics[songKey] = {
+            key: existing?.key ?? "",
+            ...existing,
+            offset,
+          };
         });
       },
     },

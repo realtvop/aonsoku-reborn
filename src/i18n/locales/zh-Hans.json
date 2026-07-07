@@ -158,7 +158,10 @@
       "lyricsId": "ID：{{id}}",
       "noPreview": "暂无预览。",
       "disableLyrics": "关闭歌词",
-      "lyricsDisabled": "已关闭歌词"
+      "lyricsDisabled": "已关闭歌词",
+      "offsetLabel": "歌词偏移",
+      "offsetReset": "重置",
+      "offsetHint": "正值使歌词延后"
     }
   },
   "generic": {
