@@ -30,9 +30,14 @@ export function stripCustomLyricsBodies(
     trimmed
       .filter(([_, v]) => v != null)
       .map(([k, v]) => {
-        if ("lyrics" in v) {
-          const { lyrics: _lyrics, ...meta } = v as SelectedCustomLyrics & {
+        if ("lyrics" in v || "romaji" in v) {
+          const {
+            lyrics: _lyrics,
+            romaji: _romaji,
+            ...meta
+          } = v as SelectedCustomLyrics & {
             lyrics?: string;
+            romaji?: string;
           };
           return [k, meta];
         }

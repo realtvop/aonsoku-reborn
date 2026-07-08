@@ -13,6 +13,7 @@ import { logger } from "@/utils/logger";
 import { checkServerType } from "@/utils/servers";
 
 export const CUSTOM_LYRICS_IDB_PREFIX = "custom-lyrics:";
+export const CUSTOM_LYRICS_ROMAJI_IDB_PREFIX = "custom-lyrics-romaji:";
 export const CUSTOM_LYRICS_DB_NAME = "aonsoku-custom-lyrics";
 export const CUSTOM_LYRICS_STORE_NAME = "lyrics";
 
@@ -60,15 +61,52 @@ export async function setCustomLyricsBody(
   await setCustomLyricsBodyWithRetry(idbKey, lyrics);
 }
 
+export async function getCustomLyricsRomajiBody(
+  songKey: string,
+): Promise<string | undefined> {
+  const idbKey = `${CUSTOM_LYRICS_ROMAJI_IDB_PREFIX}${songKey}`;
+
+  try {
+    return await get<string>(idbKey, customLyricsStore);
+  } catch (err) {
+    logger.warn("[lyrics] Failed to read custom romaji body from IDB:", err);
+    return undefined;
+  }
+}
+
+export async function setCustomLyricsRomajiBody(
+  songKey: string,
+  romaji: string,
+): Promise<void> {
+  const idbKey = `${CUSTOM_LYRICS_ROMAJI_IDB_PREFIX}${songKey}`;
+  await setCustomLyricsBodyWithRetry(idbKey, romaji);
+}
+
+export async function deleteCustomLyricsRomajiBody(
+  songKey: string,
+): Promise<void> {
+  await del(
+    `${CUSTOM_LYRICS_ROMAJI_IDB_PREFIX}${songKey}`,
+    customLyricsStore,
+  ).catch((err) => {
+    logger.warn("[lyrics] Failed to delete custom romaji body:", err);
+  });
+}
+
 export function deleteCustomLyricsBodies(songKeys: string[]): Promise<void[]> {
   return Promise.all(
-    songKeys.map((key) =>
+    songKeys.flatMap((key) => [
       del(`${CUSTOM_LYRICS_IDB_PREFIX}${key}`, customLyricsStore).catch(
         (err) => {
           logger.warn("[lyrics] Failed to delete custom lyrics body:", err);
         },
       ),
-    ),
+      del(`${CUSTOM_LYRICS_ROMAJI_IDB_PREFIX}${key}`, customLyricsStore).catch(
+        (err) => {
+          logger.warn("[lyrics] Failed to delete custom romaji body:", err);
+        },
+      ),
+    ]),
   );
 }
 
@@ -90,6 +128,11 @@ export interface CustomLyricsCandidate {
   title?: string;
   artist?: string;
   lyrics?: string;
+  /**
+   * Optional romanization (romaji/romaja) track for Japanese/Korean lyrics,
+   * aligned by timestamp to `lyrics`. Empty/absent for other languages.
+   */
+  romaji?: string;
 }
 
 export function getSelectedCustomLyrics(
@@ -262,10 +305,12 @@ async function getLyricsFromCustomServer(
   if (selectedCustomLyrics?.key) {
     const body = await getCustomLyricsBody(songKey);
     if (body) {
+      const romaji = await getCustomLyricsRomajiBody(songKey);
       return {
         artist: selectedCustomLyrics.artist || artist,
         title: selectedCustomLyrics.title || title,
         value: formatLyrics(body),
+        romaji: romaji ? formatLyrics(romaji) : undefined,
       };
     }
   }
@@ -314,6 +359,7 @@ async function getLyricsFromCustomServer(
         artist: item.artist || artist,
         title: item.title || title,
         value: item.lyrics ? formatLyrics(item.lyrics) : "",
+        romaji: item.romaji?.trim() ? formatLyrics(item.romaji) : undefined,
       };
     }
 

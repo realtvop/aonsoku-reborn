@@ -158,7 +158,11 @@
       "lyricsId": "ID：{{id}}",
       "noPreview": "暂无预览。",
       "disableLyrics": "关闭歌词",
-      "lyricsDisabled": "已关闭歌词"
+      "lyricsDisabled": "已关闭歌词",
+      "offsetLabel": "歌词偏移",
+      "offsetReset": "重置",
+      "offsetHint": "正值使歌词延后",
+      "hasRomaji": "罗马音"
     }
   },
   "generic": {
@@ -185,7 +189,6 @@
     "recentlyAdded": "最近添加",
     "recentlyPlayed": "最近播放"
   },
-
   "login": {
     "form": {
       "connect": "连接",
@@ -578,7 +581,6 @@
           "label": "最小化到系统托盘"
         }
       },
-
       "updates": {
         "availableVersion": "版本 {{version}} 可用",
         "checkNow": {

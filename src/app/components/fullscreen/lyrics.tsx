@@ -2,10 +2,6 @@ import type { LyricLine } from "@applemusic-like-lyrics/core";
 import type { LyricPlayerRef } from "@applemusic-like-lyrics/react";
 import { lazy, Suspense } from "react";
 import "@applemusic-like-lyrics/core/style.css";
-import {
-  useRemotePlaybackProjection,
-  useSmoothRemoteProgress,
-} from "@/app/components/remote-control/use-remote-playback-projection";
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
@@ -19,9 +15,14 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  useRemotePlaybackProjection,
+  useSmoothRemoteProgress,
+} from "@/app/components/remote-control/use-remote-playback-projection";
+import {
   ScrollArea,
   scrollAreaViewportSelector,
 } from "@/app/components/ui/scroll-area";
+import { shouldUseNativePlaybackBackend } from "@/player/playback";
 import {
   getCustomLyricsSongKey,
   getSelectedCustomLyrics,
@@ -48,7 +49,6 @@ import {
   LRC_TIMESTAMP_REGEX,
 } from "@/utils/lrc-converter";
 import { queryKeys } from "@/utils/queryKeys";
-import { shouldUseNativePlaybackBackend } from "@/player/playback";
 
 const LyricPlayer = lazy(() =>
   import("@applemusic-like-lyrics/react").then((m) => ({
@@ -59,6 +59,8 @@ const LyricPlayer = lazy(() =>
 type ResolvedSynced = {
   type: "synced";
   lyricLines: LyricLine[];
+  /** True when lines carry a romaji/romaja track and need the 3-row layout. */
+  hasRomaji?: boolean;
 };
 
 type ResolvedUnsynced = {
@@ -199,6 +201,7 @@ export function LyricsTab() {
     : undefined;
   const selectedCustomLyricsKey = selectedCustomLyricsEntry?.key;
   const lyricsDisabled = selectedCustomLyricsEntry?.disabled === true;
+  const lyricsOffsetMs = (selectedCustomLyricsEntry?.offset ?? 0) * 1000;
   const isOnline = useIsOnline();
   const lyricsSettingsKey = [
     sourcePriority.join(","),
@@ -277,10 +280,16 @@ export function LyricsTab() {
     // Priority 3 & 4: /getLyrics result
     if (lyrics?.value) {
       if (areLyricsSynced(lyrics.value)) {
-        // Priority 3: LRC synced
+        // Priority 3: LRC synced (custom servers may attach a romaji track)
+        const hasRomaji = !!lyrics.romaji?.trim();
         return {
           type: "synced",
-          lyricLines: convertLrcToAMLL(lyrics.value, songDurationMs),
+          lyricLines: convertLrcToAMLL(
+            lyrics.value,
+            songDurationMs,
+            lyrics.romaji,
+          ),
+          hasRomaji,
         };
       }
 
@@ -318,7 +327,13 @@ export function LyricsTab() {
   }
 
   if (resolved.type === "synced") {
-    return <SyncedLyrics lyricLines={resolved.lyricLines} />;
+    return (
+      <SyncedLyrics
+        lyricLines={resolved.lyricLines}
+        offsetMs={lyricsOffsetMs}
+        hasRomaji={resolved.hasRomaji}
+      />
+    );
   }
 
   return (
@@ -331,9 +346,11 @@ export function LyricsTab() {
 
 interface SyncedLyricsProps {
   lyricLines: LyricLine[];
+  offsetMs: number;
+  hasRomaji?: boolean;
 }
 
-function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
+function SyncedLyrics({ lyricLines, offsetMs, hasRomaji }: SyncedLyricsProps) {
   const playerRef = usePlayerRef();
   const localIsPlaying = usePlayerIsPlaying();
   const isScrubbing = usePlayerIsScrubbing();
@@ -351,6 +368,10 @@ function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
     : localIsPlaying;
   const [currentTime, setCurrentTime] = useState(0);
   const currentTimeRef = useRef(0);
+  // Keep the latest offset in a ref so the rAF loop reads it without
+  // re-subscribing to the animation frame on every offset change.
+  const offsetMsRef = useRef(offsetMs);
+  offsetMsRef.current = offsetMs;
   const [isTouchScrolling, setIsTouchScrolling] = useState(false);
   const animationFrameRef = useRef<number>();
   const isTouchScrollingRef = useRef(false);
@@ -459,7 +480,9 @@ function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
         timestamp: now,
       };
 
-      const seekSeconds = lyricLine.startTime / 1000;
+      // The lyric line time lives on the (offset-adjusted) lyric timeline;
+      // translate it back to the real audio timeline before seeking.
+      const seekSeconds = (lyricLine.startTime + offsetMsRef.current) / 1000;
       setProgress(seekSeconds, true);
       if (!isRemoteControlActive && playerRef) {
         playerRef.currentTime = seekSeconds;
@@ -575,7 +598,9 @@ function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
 
     const updateTime = () => {
       if (isScrubbingRef.current) {
-        const timeMs = Math.floor(scrubbingProgressRef.current * 1000);
+        const timeMs = Math.floor(
+          scrubbingProgressRef.current * 1000 - offsetMsRef.current,
+        );
         if (currentTimeRef.current !== timeMs) {
           currentTimeRef.current = timeMs;
           setCurrentTime(timeMs);
@@ -586,9 +611,11 @@ function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
 
       let timeMs = 0;
       if (useStoreTime) {
-        timeMs = Math.floor(lastProgressRef.current);
+        timeMs = Math.floor(lastProgressRef.current - offsetMsRef.current);
       } else {
-        timeMs = Math.floor((playerRef?.currentTime || 0) * 1000);
+        timeMs = Math.floor(
+          (playerRef?.currentTime || 0) * 1000 - offsetMsRef.current,
+        );
       }
 
       if (currentTimeRef.current !== timeMs) {
@@ -627,6 +654,7 @@ function SyncedLyrics({ lyricLines }: SyncedLyricsProps) {
       ref={containerRef}
       className="w-full h-full text-left lrc-box"
       data-vaul-no-drag
+      data-romaji={hasRomaji ? "true" : undefined}
       data-seeking={isSeekingState}
       data-scrubbing={isScrubbing}
       onClick={(e) => e.stopPropagation()}

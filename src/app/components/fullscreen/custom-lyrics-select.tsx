@@ -1,13 +1,14 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Eye, EyeOff, Music2, Search } from "lucide-react";
+import { Check, Eye, EyeOff, Languages, Music2, Search } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
-import { Button } from "@/app/components/ui/button";
 import { useRemotePlaybackProjection } from "@/app/components/remote-control/use-remote-playback-projection";
+import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { Label } from "@/app/components/ui/label";
 import { ScrollArea } from "@/app/components/ui/scroll-area";
+import { Slider } from "@/app/components/ui/slider";
 import { cn } from "@/lib/utils";
 import type { CustomLyricsCandidate } from "@/service/lyrics";
 import {
@@ -21,10 +22,21 @@ import {
   usePlayerActions,
   usePlayerSonglist,
 } from "@/store/player.store";
+import {
+  LYRICS_OFFSET_MAX,
+  LYRICS_OFFSET_MIN,
+  LYRICS_OFFSET_STEP,
+} from "@/types/playerContext";
 import { queryKeys } from "@/utils/queryKeys";
 
 function getLyricsPreview(lyrics?: string) {
   return lyrics?.trim() || "";
+}
+
+function formatOffset(offset: number) {
+  const rounded = Math.round(offset * 10) / 10;
+  const prefix = rounded > 0 ? "+" : "";
+  return `${prefix}${rounded.toFixed(1)}s`;
 }
 
 interface CustomLyricsSelectProps {
@@ -44,6 +56,7 @@ export function CustomLyricsSelect({ onBack }: CustomLyricsSelectProps) {
     selectedCustomLyrics,
     setSelectedCustomLyrics,
     setSongLyricsDisabled,
+    setSongLyricsOffset,
   } = useLyricsSettings();
 
   const { artist, title, album, duration, path } = currentSong || {};
@@ -52,6 +65,7 @@ export function CustomLyricsSelect({ onBack }: CustomLyricsSelectProps) {
   const songKey = songData ? getCustomLyricsSongKey(songData) : "";
   const selectedLyrics = getSelectedCustomLyrics(selectedCustomLyrics, songKey);
   const lyricsDisabled = selectedLyrics?.disabled === true;
+  const lyricsOffset = selectedLyrics?.offset ?? 0;
   const [searchTitle, setSearchTitle] = useState("");
   const [searchArtist, setSearchArtist] = useState("");
   const [submittedSearch, setSubmittedSearch] = useState({
@@ -127,6 +141,7 @@ export function CustomLyricsSelect({ onBack }: CustomLyricsSelectProps) {
         title: candidate.title || submittedSearch.title || songData.title,
         artist: candidate.artist || submittedSearch.artist || songData.artist,
         lyrics,
+        romaji: candidate.romaji?.trim() || undefined,
       });
     } catch {
       toast.error(t("lyrics.customSelect.saveError"));
@@ -135,6 +150,16 @@ export function CustomLyricsSelect({ onBack }: CustomLyricsSelectProps) {
 
     queryClient.invalidateQueries({ queryKey: queryKeys.lyrics.plain });
     onBack();
+  }
+
+  function handleOffsetChange(values: number[]) {
+    if (!songData) return;
+    const raw = values[0] ?? 0;
+    const clamped = Math.min(
+      LYRICS_OFFSET_MAX,
+      Math.max(LYRICS_OFFSET_MIN, raw),
+    );
+    setSongLyricsOffset(songKey, Math.round(clamped * 10) / 10);
   }
 
   async function handleToggleDisabled() {
@@ -249,6 +274,46 @@ export function CustomLyricsSelect({ onBack }: CustomLyricsSelectProps) {
         </div>
       )}
 
+      {currentSong && (
+        <div className="mb-3 ml-2 mr-6 shrink-0 rounded-2xl border border-border bg-muted/30 p-3 backdrop-blur-xl">
+          <div className="flex items-center justify-between gap-3">
+            <Label className="text-xs text-foreground/60">
+              {t("lyrics.customSelect.offsetLabel")}
+            </Label>
+            <div className="flex items-center gap-2">
+              <span className="min-w-12 text-right font-mono text-sm tabular-nums text-foreground/80">
+                {formatOffset(lyricsOffset)}
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 rounded-full border border-border bg-muted/30 px-3 text-xs backdrop-blur-md hover:bg-muted/50"
+                disabled={lyricsDisabled || lyricsOffset === 0}
+                onClick={() => handleOffsetChange([0])}
+              >
+                {t("lyrics.customSelect.offsetReset")}
+              </Button>
+            </div>
+          </div>
+          <div className="mt-3 px-1">
+            <Slider
+              variant="secondary"
+              min={LYRICS_OFFSET_MIN}
+              max={LYRICS_OFFSET_MAX}
+              step={LYRICS_OFFSET_STEP}
+              value={[lyricsOffset]}
+              disabled={lyricsDisabled}
+              onValueChange={handleOffsetChange}
+            />
+          </div>
+          <div className="mt-2 flex justify-between text-[10px] text-foreground/40">
+            <span>{formatOffset(LYRICS_OFFSET_MIN)}</span>
+            <span>{t("lyrics.customSelect.offsetHint")}</span>
+            <span>{formatOffset(LYRICS_OFFSET_MAX)}</span>
+          </div>
+        </div>
+      )}
+
       <div className="min-h-0 flex-1 px-2 pb-3">
         {!currentSong && (
           <EmptyState
@@ -297,6 +362,7 @@ export function CustomLyricsSelect({ onBack }: CustomLyricsSelectProps) {
                 );
                 const selected = candidateKey === selectedLyrics?.key;
                 const preview = getLyricsPreview(candidate.lyrics);
+                const hasRomaji = !!candidate.romaji?.trim();
 
                 return (
                   <div
@@ -308,9 +374,17 @@ export function CustomLyricsSelect({ onBack }: CustomLyricsSelectProps) {
                   >
                     <div className="flex min-w-0 flex-col items-start justify-between gap-3 p-4 sm:flex-row">
                       <div className="min-w-0 space-y-1">
-                        <h3 className="truncate text-base font-semibold">
-                          {candidate.title || currentSong.title}
-                        </h3>
+                        <div className="flex min-w-0 items-center gap-2">
+                          <h3 className="truncate text-base font-semibold">
+                            {candidate.title || currentSong.title}
+                          </h3>
+                          {hasRomaji && (
+                            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-foreground/10 px-2 py-0.5 text-[10px] font-medium text-foreground/70">
+                              <Languages className="size-3" />
+                              {t("lyrics.customSelect.hasRomaji")}
+                            </span>
+                          )}
+                        </div>
                         <p className="truncate text-sm text-foreground/60">
                           {candidate.artist || currentSong.artist}
                         </p>

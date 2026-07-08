@@ -92,12 +92,31 @@ function extractInlineTranslations(
 }
 
 /**
+ * Build a timestamp → romanization map from a romaji/romaja LRC track.
+ * The romanization is expected to share timestamps with the main lyrics.
+ */
+function buildRomanMap(romajiContent: string): Map<number, string> {
+  const map = new Map<number, string>();
+  for (const line of romajiContent.split("\n")) {
+    const parsed = parseLrcLine(line);
+    if (parsed && parsed.content) {
+      map.set(parsed.timestamp, parsed.content);
+    }
+  }
+  return map;
+}
+
+/**
  * Convert LRC format lyrics to AMLL LyricLine[] format.
  * Automatically detects inline dual-timestamp translations.
+ *
+ * When a `romajiContent` LRC track is provided, each main line is matched to
+ * its romanization by timestamp and exposed through `romanLyric`.
  */
 export function convertLrcToAMLL(
   lrcContent: string,
   songDurationMs?: number,
+  romajiContent?: string,
 ): LyricLine[] {
   const lines = lrcContent.split("\n");
   const parsedLines: { timestamp: number; content: string }[] = [];
@@ -115,6 +134,9 @@ export function convertLrcToAMLL(
   const finalLines = extracted.mainLines;
   const translationMap =
     extracted.translations.size > 0 ? extracted.translations : undefined;
+  const romanMap = romajiContent?.trim()
+    ? buildRomanMap(romajiContent)
+    : undefined;
 
   return finalLines.map((line, index, arr): LyricLine => {
     const endTime =
@@ -135,7 +157,7 @@ export function convertLrcToAMLL(
       startTime: line.timestamp,
       endTime: endTime,
       translatedLyric: translationMap?.get(line.timestamp) ?? "",
-      romanLyric: "",
+      romanLyric: romanMap?.get(line.timestamp) ?? "",
       isBG: false,
       isDuet: false,
     };

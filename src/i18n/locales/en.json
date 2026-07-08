@@ -332,7 +332,11 @@
       "lyricsId": "ID: {{id}}",
       "noPreview": "No preview available.",
       "disableLyrics": "Turn off lyrics",
-      "lyricsDisabled": "Lyrics off"
+      "lyricsDisabled": "Lyrics off",
+      "offsetLabel": "Lyrics offset",
+      "offsetReset": "Reset",
+      "offsetHint": "Positive delays the lyrics",
+      "hasRomaji": "Romaji"
     }
   },
   "logout": {
@@ -1107,7 +1111,6 @@
       }
     }
   },
-
   "dayjs": {
     "relativeTime": {
       "future": "in %s",
