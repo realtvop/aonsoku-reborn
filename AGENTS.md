@@ -249,9 +249,11 @@ Key files:
   parity, but it controls only the embedded player/libmpv volume and must not
   change the user's OS output volume. See `docs/native-audio-libmpv.md` for
   build, smoke-test, packaging, diagnostics, and release details.
-  On macOS, the Node-API addon also publishes active libmpv playback directly
-  through `MPNowPlayingInfoCenter`; do not rely on the renderer Web Media
-  Session for desktop native-audio registration.
+  The Node-API addon publishes active libmpv playback directly to each desktop
+  system media surface: `MPNowPlayingInfoCenter` on macOS, SMTC on Windows,
+  and MPRIS2 over the session D-Bus on Linux. Do not rely on the renderer Web
+  Media Session for desktop native-audio registration. Linux builds require
+  the system `dbus-1` development package in addition to libmpv headers.
 - `src/player/queue-controller/` — queue management
   (`web-controller` / `native-controller`). Runtimes with native playback
   support, including Electron when the desktop bridge is available, attempt the

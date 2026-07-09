@@ -25,15 +25,34 @@
             "link_settings": {
               "libraries": ["-framework Foundation", "-framework MediaPlayer"]
             }
-          },
+          }
+        ],
+        [
+          "OS=='win'",
           {
-            "sources": ["src/system_media_session_stub.cc"]
+            "sources": ["src/system_media_session_win.cc"],
+            "libraries": ["windowsapp.lib"],
+            "defines": ["WINVER=0x0A00", "_WIN32_WINNT=0x0A00"],
+            "msvs_settings": {
+              "VCCLCompilerTool": {
+                "AdditionalOptions": ["/std:c++17"]
+              }
+            }
           }
         ],
         [
           "OS=='linux'",
           {
+            "sources": ["src/system_media_session_linux.cc"],
+            "cflags": ["<!@(pkg-config --cflags dbus-1)"],
+            "libraries": ["<!@(pkg-config --libs dbus-1)"],
             "ldflags": ["-Wl,-rpath,$$ORIGIN"]
+          }
+        ],
+        [
+          "OS!='mac' and OS!='win' and OS!='linux'",
+          {
+            "sources": ["src/system_media_session_stub.cc"]
           }
         ]
       ]
