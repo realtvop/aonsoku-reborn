@@ -118,6 +118,7 @@ export function createInitialSettings(set: SetFn): IPlayerContext["settings"] {
               setCustomLyricsBody,
               setCustomLyricsRomajiBody,
               deleteCustomLyricsRomajiBody,
+              clearCachedLyricsForSong,
             } = await import("@/service/lyrics");
             await setCustomLyricsBody(songKey, body);
             // Keep the romaji track in sync with the chosen lyrics: persist
@@ -127,6 +128,10 @@ export function createInitialSettings(set: SetFn): IPlayerContext["settings"] {
             } else {
               await deleteCustomLyricsRomajiBody(songKey);
             }
+            // The backend may have updated the lyrics behind the same
+            // candidate id, so drop any stale getLyrics cache for this song
+            // to force a re-read of the freshly written body.
+            await clearCachedLyricsForSong(songKey);
           } catch (err) {
             logger.warn("[player] Failed to persist custom lyrics body:", err);
             throw err;
