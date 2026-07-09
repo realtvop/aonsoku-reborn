@@ -1,4 +1,4 @@
-import { createStore, del, get, set } from "idb-keyval";
+import { createStore, del, get, keys, set } from "idb-keyval";
 import { httpClient } from "@/api/httpClient";
 import { usePlayerStore } from "@/store/player.store";
 import type { LyricsSource, SelectedCustomLyrics } from "@/types/playerContext";
@@ -108,6 +108,31 @@ export function deleteCustomLyricsBodies(songKeys: string[]): Promise<void[]> {
       ),
     ]),
   );
+}
+
+/**
+ * Drop every cached `getLyrics` result for a song from the default idb-keyval
+ * store. The cache key is keyed on the selected custom-lyrics id, so re-picking
+ * the same candidate would otherwise short-circuit on a stale value and never
+ * re-read the freshly written custom-lyrics body. `songKey` encodes
+ * path/artist/title/album (see {@link getCustomLyricsSongKey}); we match on the
+ * artist/title/album prefix so every duration/path/source/type variant for the
+ * song is invalidated.
+ */
+export async function clearCachedLyricsForSong(songKey: string): Promise<void> {
+  const [, artist = "", title = "", album = ""] = songKey.split("\u001f");
+  const prefix = `${["lyrics", artist, title, album].join(":")}:`;
+
+  try {
+    const allKeys = await keys();
+    await Promise.all(
+      allKeys
+        .filter((key) => typeof key === "string" && key.startsWith(prefix))
+        .map((key) => del(key)),
+    );
+  } catch (err) {
+    logger.warn("[lyrics] Failed to clear cached lyrics for song:", err);
+  }
 }
 
 export interface GetLyricsData {
