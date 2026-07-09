@@ -460,8 +460,25 @@ export class NativeAudioService implements AonsokuAudioApi {
     );
   }
 
-  resolveSongs(_options: { ids: string[] }): Promise<NativeResolveSongsResult> {
-    return this.notImplemented("resolveSongs");
+  resolveSongs(options: { ids: string[] }): Promise<NativeResolveSongsResult> {
+    const snapshots = new Map<string, Record<string, unknown>>();
+    const songs = [
+      ...this.#queueEngine.contextSongs,
+      ...this.#queueEngine.userQueue,
+      ...this.#queueEngine.originalContextSongs,
+      ...this.#queueEngine.originalUserSongs,
+      ...this.#queueEngine.playedUserQueueHistory,
+    ];
+    for (const song of songs) {
+      if (song.song) snapshots.set(song.id, { ...song.song });
+    }
+
+    return Promise.resolve({
+      songs: options.ids.flatMap((id) => {
+        const song = snapshots.get(id);
+        return song ? [song] : [];
+      }),
+    });
   }
 
   getScrobbleBuffer(): Promise<NativeScrobbleBufferResult> {

@@ -40,8 +40,6 @@ describe("desktop native audio IPC method binding", () => {
           args: [{ ids: [] }],
         },
       ),
-    ).rejects.toThrow(
-      "Desktop native audio bridge method resolveSongs is not implemented.",
-    );
+    ).resolves.toEqual({ songs: [] });
   });
 });

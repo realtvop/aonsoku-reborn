@@ -127,6 +127,8 @@ export interface NativeQueueSong {
   coverArtId?: string;
   streamUrl: string;
   cachedFileUri?: string;
+  /** Full renderer-side song snapshot used for offline queue restoration. */
+  song?: Record<string, unknown>;
 }
 
 export interface NativeSetContextQueueOptions {

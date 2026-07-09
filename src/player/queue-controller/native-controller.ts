@@ -59,6 +59,7 @@ function songToNativeQueueSong(song: ISong): NativeQueueSong {
     duration: song.duration,
     coverArtId: getSongCoverArtId(song),
     streamUrl: getSongStreamUrl(song.id),
+    song: { ...song },
   };
 }
 
