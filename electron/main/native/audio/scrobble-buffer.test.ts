@@ -17,11 +17,15 @@ describe("DesktopScrobbleBuffer persistence", () => {
     now += 2_500;
     first.stopTracking();
 
-    expect(JSON.parse(readFileSync(path.join(directory, "scrobble-buffer.json"), "utf8"))).toEqual([
-      { songId: "song-1", playedDurationMs: 2500, timestamp: 1000 },
-    ]);
     expect(
-      new DesktopScrobbleBuffer({ storageDirectory: directory }).getScrobbleBuffer(),
+      JSON.parse(
+        readFileSync(path.join(directory, "scrobble-buffer.json"), "utf8"),
+      ),
+    ).toEqual([{ songId: "song-1", playedDurationMs: 2500, timestamp: 1000 }]);
+    expect(
+      new DesktopScrobbleBuffer({
+        storageDirectory: directory,
+      }).getScrobbleBuffer(),
     ).toEqual({
       entries: [{ songId: "song-1", playedDurationMs: 2500, timestamp: 1000 }],
     });

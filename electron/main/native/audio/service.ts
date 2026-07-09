@@ -43,12 +43,12 @@ import {
   DesktopAudioDownloadManager,
 } from "./download";
 import { createDesktopAudioEngine } from "./engine-factory";
+import { DesktopPlaybackStateStore } from "./playback-state-store";
 import {
   type DesktopQueueContentsReason,
   DesktopQueueEngine,
 } from "./queue-engine";
 import { DesktopScrobbleBuffer } from "./scrobble-buffer";
-import { DesktopPlaybackStateStore } from "./playback-state-store";
 import {
   DesktopNativeAudioUnsupportedSourceError,
   resolveNativeAudioSource,
@@ -174,7 +174,7 @@ export class NativeAudioService implements AonsokuAudioApi {
     this.#unsubscribeFromEngine = this.#engine.onEvent((event) =>
       this.#handleEngineEvent(event),
     );
-    void this.#restorePlaybackState();
+    this.#restorePlaybackState().catch((error) => this.#emitFailure(error));
     this.#scheduleStartupAvailabilityCheck();
   }
 

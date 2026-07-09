@@ -1,4 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import type { NativeFullState } from "@aonsoku/audio-contract";
 import { getDefaultDesktopScrobbleStorageDirectory } from "./scrobble-buffer";
@@ -60,7 +66,9 @@ function isNativeFullState(value: unknown): value is NativeFullState {
     Array.isArray(state.playedUserQueueHistory) &&
     typeof state.isInUserQueue === "boolean" &&
     typeof state.isShuffleActive === "boolean" &&
-    (state.loopState === "off" || state.loopState === "one" || state.loopState === "all") &&
+    (state.loopState === "off" ||
+      state.loopState === "one" ||
+      state.loopState === "all") &&
     typeof state.currentTime === "number" &&
     typeof state.duration === "number"
   );
