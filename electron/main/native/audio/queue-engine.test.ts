@@ -66,6 +66,21 @@ describe("DesktopQueueEngine", () => {
     });
   });
 
+  it("restores an exported queue as a cold-start native state", async () => {
+    await engine.setContextQueue({
+      songs: [song("1"), song("2")],
+      currentIndex: 1,
+      repeatMode: "all",
+    });
+    engine.addToUserQueue([song("A")], "last");
+    engine.restoreState(engine.getFullState(fullStateOptions()));
+
+    expect(engine.currentSong?.id).toBe("2");
+    expect(engine.userQueue.map((item) => item.id)).toEqual(["A"]);
+    expect(engine.isRestored).toBe(true);
+    expect(engine.getFullState(fullStateOptions()).loopState).toBe("all");
+  });
+
   it("updates context queue contents or advances when the current song changes", async () => {
     await engine.setContextQueue({
       songs: [song("1"), song("2")],

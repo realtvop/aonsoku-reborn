@@ -336,6 +336,26 @@ export class DesktopQueueEngine {
     };
   }
 
+  restoreState(state: NativeFullState): void {
+    this.contextSongs = copySongs(state.contextQueue.songs);
+    this.currentIndex = normalizeSongIndex(
+      state.contextQueue.currentIndex,
+      this.contextSongs,
+    );
+    this.sourceId = state.contextQueue.sourceId;
+    this.sourceName = state.contextQueue.sourceName;
+    this.userQueue = copySongs(state.userQueue);
+    this.originalContextSongs = copySongs(state.originalContextSongs);
+    this.originalUserSongs = copySongs(state.originalUserSongs);
+    this.shuffleHistory = [...state.shuffleHistory];
+    this.shuffleStartHistory = [...state.shuffleStartHistory];
+    this.playedUserQueueHistory = copySongs(state.playedUserQueueHistory);
+    this.isInUserQueue = state.isInUserQueue && this.userQueue.length > 0;
+    this.isShuffleActive = state.isShuffleActive;
+    this.loopState = state.loopState;
+    this.isRestored = this.contextSongs.length > 0;
+  }
+
   async #advanceToNext(reason: DesktopQueueAdvanceReason): Promise<void> {
     if (this.isInUserQueue) {
       const updatedQueue = copySongs(this.userQueue);
