@@ -174,7 +174,7 @@ export class NativeAudioService implements AonsokuAudioApi {
     this.#unsubscribeFromEngine = this.#engine.onEvent((event) =>
       this.#handleEngineEvent(event),
     );
-    this.#restorePlaybackState();
+    void this.#restorePlaybackState();
     this.#scheduleStartupAvailabilityCheck();
   }
 
@@ -439,7 +439,7 @@ export class NativeAudioService implements AonsokuAudioApi {
     );
   }
 
-  #restorePlaybackState(): void {
+  async #restorePlaybackState(): Promise<void> {
     const state = this.#playbackStateStore.load();
     if (!state) return;
 
@@ -448,6 +448,16 @@ export class NativeAudioService implements AonsokuAudioApi {
     this.#duration = Math.max(0, state.duration);
     const song = this.#queueEngine.currentSong;
     this.#currentSource = song ? nativeQueueSongToQueueItem(song) : null;
+    if (!song) return;
+
+    try {
+      await this.#loadQueueSong(song, {
+        autoplay: false,
+        startTime: this.#currentTime,
+      });
+    } catch (error) {
+      this.#emitFailure(error);
+    }
   }
 
   #persistPlaybackState(): void {
