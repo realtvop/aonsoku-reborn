@@ -1,6 +1,8 @@
 #include <mpv/client.h>
 #include <node_api.h>
 
+#include "system_media_session.h"
+
 #include <atomic>
 #include <clocale>
 #include <cstdint>
@@ -82,6 +84,47 @@ bool ReadString(napi_env env, napi_value value, std::string* output) {
 
   output->assign(buffer.data(), copied);
   return true;
+}
+
+bool ReadOptionalStringProperty(napi_env env, napi_value object,
+                                const char* name, std::string* output) {
+  bool has_property = false;
+  if (napi_has_named_property(env, object, name, &has_property) != napi_ok ||
+      !has_property) {
+    return true;
+  }
+
+  napi_value value;
+  if (napi_get_named_property(env, object, name, &value) != napi_ok) {
+    return false;
+  }
+
+  napi_valuetype type;
+  if (napi_typeof(env, value, &type) != napi_ok || type == napi_undefined ||
+      type == napi_null) {
+    return true;
+  }
+
+  return ReadString(env, value, output);
+}
+
+bool ReadOptionalNumberProperty(napi_env env, napi_value object,
+                                const char* name, double* output) {
+  bool has_property = false;
+  if (napi_has_named_property(env, object, name, &has_property) != napi_ok ||
+      !has_property) {
+    return true;
+  }
+
+  napi_value value;
+  napi_valuetype type;
+  if (napi_get_named_property(env, object, name, &value) != napi_ok ||
+      napi_typeof(env, value, &type) != napi_ok || type == napi_undefined ||
+      type == napi_null) {
+    return true;
+  }
+
+  return type == napi_number && napi_get_value_double(env, value, output) == napi_ok;
 }
 
 PlayerState* UnwrapPlayer(napi_env env, napi_callback_info info,
@@ -338,6 +381,8 @@ void FinalizePlayer(napi_env env, void* data, void* /*hint*/) {
     napi_release_threadsafe_function(state->tsfn, napi_tsfn_abort);
     state->tsfn = nullptr;
   }
+
+  ClearSystemMediaSession();
 
   delete state;
 }
@@ -608,6 +653,63 @@ napi_value ObserveProperty(napi_env env, napi_callback_info info) {
   return Undefined(env);
 }
 
+napi_value UpdateSystemMediaSession(napi_env env, napi_callback_info info) {
+  size_t argc = 2;
+  napi_value argv[2];
+  PlayerState* state = UnwrapPlayer(env, info, argc, argv);
+  if (state == nullptr) return nullptr;
+
+  napi_valuetype metadata_type;
+  napi_valuetype options_type;
+  if (argc < 2 || napi_typeof(env, argv[0], &metadata_type) != napi_ok ||
+      napi_typeof(env, argv[1], &options_type) != napi_ok ||
+      metadata_type != napi_object || options_type != napi_object) {
+    ThrowError(env, "libmpv-invalid-system-media-session",
+               "updateSystemMediaSession expects metadata and state objects.");
+    return nullptr;
+  }
+
+  SystemMediaSessionMetadata metadata;
+  if (!ReadOptionalStringProperty(env, argv[0], "title", &metadata.title) ||
+      !ReadOptionalStringProperty(env, argv[0], "artist", &metadata.artist) ||
+      !ReadOptionalStringProperty(env, argv[0], "album", &metadata.album) ||
+      !ReadOptionalNumberProperty(env, argv[1], "duration", &metadata.duration)) {
+    ThrowError(env, "libmpv-invalid-system-media-session",
+               "System media session metadata is invalid.");
+    return nullptr;
+  }
+
+  std::string state_name;
+  double position = 0;
+  if (!ReadOptionalStringProperty(env, argv[1], "state", &state_name) ||
+      !ReadOptionalNumberProperty(env, argv[1], "position", &position)) {
+    ThrowError(env, "libmpv-invalid-system-media-session",
+               "System media session state is invalid.");
+    return nullptr;
+  }
+
+  SystemMediaSessionPlaybackState playback_state =
+      SystemMediaSessionPlaybackState::kPaused;
+  if (state_name == "playing") {
+    playback_state = SystemMediaSessionPlaybackState::kPlaying;
+  } else if (state_name == "stopped") {
+    playback_state = SystemMediaSessionPlaybackState::kStopped;
+  }
+
+  UpdateSystemMediaSession(metadata, playback_state, position);
+  return Undefined(env);
+}
+
+napi_value ClearSystemMediaSession(napi_env env, napi_callback_info info) {
+  size_t argc = 0;
+  napi_value argv[1];
+  PlayerState* state = UnwrapPlayer(env, info, argc, argv);
+  if (state == nullptr) return nullptr;
+
+  ClearSystemMediaSession();
+  return Undefined(env);
+}
+
 napi_value Destroy(napi_env env, napi_callback_info info) {
   size_t argc = 0;
   napi_value argv[1];
@@ -641,6 +743,8 @@ napi_value Destroy(napi_env env, napi_callback_info info) {
     napi_release_threadsafe_function(state->tsfn, napi_tsfn_abort);
     state->tsfn = nullptr;
   }
+
+  ClearSystemMediaSession();
 
   return Undefined(env);
 }
@@ -683,6 +787,8 @@ napi_value CreatePlayer(napi_env env, napi_callback_info /*info*/) {
   DefineMethod(env, object, "command", Command);
   DefineMethod(env, object, "setProperty", SetProperty);
   DefineMethod(env, object, "observeProperty", ObserveProperty);
+  DefineMethod(env, object, "updateSystemMediaSession", UpdateSystemMediaSession);
+  DefineMethod(env, object, "clearSystemMediaSession", ClearSystemMediaSession);
   DefineMethod(env, object, "destroy", Destroy);
 
   return object;

@@ -1,3 +1,4 @@
+import type { NativeAudioMetadata } from "@aonsoku/audio-contract";
 import { describe, expect, it, vi } from "vitest";
 import { LibMpvAudioEngine } from "./libmpv-engine";
 import type {
@@ -21,6 +22,17 @@ class FakeMpvPlayer implements MpvPlayer {
   readonly observeProperty = vi.fn(
     async (_name: string, _format: MpvPropertyFormat) => {},
   );
+  readonly updateSystemMediaSession = vi.fn(
+    async (
+      _metadata: NativeAudioMetadata,
+      _options: {
+        state: "playing" | "paused" | "stopped";
+        position: number;
+        duration: number;
+      },
+    ) => {},
+  );
+  readonly clearSystemMediaSession = vi.fn(async () => {});
   readonly destroy = vi.fn(async () => {});
   readonly listeners = new Set<MpvPlayerEventListener>();
 
@@ -161,6 +173,51 @@ describe("LibMpvAudioEngine", () => {
       { type: "playbackStateChanged", state: "ended" },
       { type: "ended", reason: "finished" },
     ]);
+  });
+
+  it("registers loaded native playback with the system media session", async () => {
+    const { engine, player } = createHarness();
+
+    await engine.load({
+      source: {
+        kind: "stream",
+        target: "https://server/rest/stream?id=song-1",
+      },
+      metadata: {
+        title: "Track",
+        artist: "Artist",
+        album: "Album",
+        duration: 123,
+      },
+      autoplay: true,
+      startTime: 12,
+    });
+    player.emit({ type: "file-loaded" });
+
+    expect(player.updateSystemMediaSession).toHaveBeenLastCalledWith(
+      {
+        title: "Track",
+        artist: "Artist",
+        album: "Album",
+        duration: 123,
+      },
+      {
+        state: "playing",
+        position: 12,
+        duration: 123,
+      },
+    );
+
+    await engine.pause();
+
+    expect(player.updateSystemMediaSession).toHaveBeenLastCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ state: "paused" }),
+    );
+
+    await engine.stop();
+
+    expect(player.clearSystemMediaSession).toHaveBeenCalledOnce();
   });
 
   it("suppresses libmpv stop events caused by repeat load and explicit stop", async () => {

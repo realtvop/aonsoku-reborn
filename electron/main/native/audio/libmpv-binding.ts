@@ -34,6 +34,15 @@ export interface NativeMpvPlayerBinding {
   command(args: readonly string[]): void;
   setProperty(name: string, value: MpvPropertyValue): void;
   observeProperty(name: string, format: MpvPropertyFormat): void;
+  updateSystemMediaSession(
+    metadata: NativeAudioMetadata,
+    options: {
+      state: "playing" | "paused" | "stopped";
+      position: number;
+      duration: number;
+    },
+  ): void;
+  clearSystemMediaSession(): void;
   destroy(): void;
 }
 
@@ -199,6 +208,21 @@ class NativeMpvPlayerAdapter implements MpvPlayer {
 
   observeProperty(name: string, format: MpvPropertyFormat): void {
     this.#native.observeProperty(name, format);
+  }
+
+  updateSystemMediaSession(
+    metadata: NativeAudioMetadata,
+    options: {
+      state: "playing" | "paused" | "stopped";
+      position: number;
+      duration: number;
+    },
+  ): void {
+    this.#native.updateSystemMediaSession(metadata, options);
+  }
+
+  clearSystemMediaSession(): void {
+    this.#native.clearSystemMediaSession();
   }
 
   onEvent(listener: MpvPlayerEventListener): () => void {

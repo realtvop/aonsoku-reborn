@@ -58,6 +58,7 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
   #unsubscribeFromPlayer: (() => void) | null = null;
   #currentTime = 0;
   #duration = 0;
+  #metadata: NativeAudioMetadata = {};
   #isPaused = true;
   #hasLoadedSource = false;
   #ignoreNextStopEnd = false;
@@ -74,6 +75,7 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
     this.#hasLoadedSource = false;
     this.#currentTime = Math.max(0, options.startTime ?? 0);
     this.#duration = normalizeSeconds(options.metadata?.duration);
+    this.#metadata = options.metadata ?? {};
     this.#isPaused = options.autoplay !== true;
     this.#emit({ type: "playbackStateChanged", state: "loading" });
     this.#emit({ type: "bufferingChanged", isBuffering: true });
@@ -91,6 +93,7 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
     const player = await this.#ensureStarted();
     this.#isPaused = false;
     await this.#setProperty(player, "pause", false);
+    await this.#updateSystemMediaSession("playing");
     this.#emit({ type: "playbackStateChanged", state: "playing" });
   }
 
@@ -98,6 +101,7 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
     const player = await this.#ensureStarted();
     this.#isPaused = true;
     await this.#setProperty(player, "pause", true);
+    await this.#updateSystemMediaSession("paused");
     this.#emit({ type: "playbackStateChanged", state: "paused" });
   }
 
@@ -106,6 +110,7 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
 
     this.#ignoreNextStopEnd = true;
     await this.#command(this.#player, ["stop"]);
+    await this.#player.clearSystemMediaSession();
     this.#hasLoadedSource = false;
     this.#currentTime = 0;
     this.#emit({ type: "playbackStateChanged", state: "stopped" });
@@ -139,6 +144,8 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
     this.#currentTime = 0;
     this.#duration = 0;
     this.#isPaused = true;
+    this.#metadata = {};
+    await this.#player?.clearSystemMediaSession();
     this.#emit({ type: "bufferingChanged", isBuffering: false });
     this.#emit({ type: "playbackStateChanged", state: "idle" });
   }
@@ -146,11 +153,14 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
   async updateMetadata(metadata: NativeAudioMetadata): Promise<void> {
     if (!this.#player) return;
 
+    this.#metadata = metadata;
+
     await this.#setProperty(
       this.#player,
       "force-media-title",
       metadata.title ?? "",
     );
+    await this.#updateSystemMediaSession(this.#isPaused ? "paused" : "playing");
   }
 
   onEvent(listener: DesktopAudioEngineEventListener): () => void {
@@ -238,6 +248,7 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
           type: "playbackStateChanged",
           state: this.#isPaused ? "paused" : "playing",
         });
+        this.#syncSystemMediaSession(this.#isPaused ? "paused" : "playing");
         this.#emitProgress();
         break;
       case "playback-restart":
@@ -253,6 +264,7 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
         this.#emitError(event.code ?? "mpv-error", event.message);
         break;
       case "shutdown":
+        this.#clearSystemMediaSession();
         this.#player = null;
         this.#hasLoadedSource = false;
         break;
@@ -266,6 +278,7 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
     }
 
     this.#hasLoadedSource = false;
+    this.#clearSystemMediaSession();
     this.#emit({ type: "bufferingChanged", isBuffering: false });
 
     if (event.reason === "eof") {
@@ -313,6 +326,7 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
           type: "playbackStateChanged",
           state: this.#isPaused ? "paused" : "playing",
         });
+        this.#syncSystemMediaSession(this.#isPaused ? "paused" : "playing");
         break;
       case "paused-for-cache":
         if (typeof event.data === "boolean") {
@@ -372,6 +386,26 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
 
   #emit(event: DesktopAudioEngineEvent): void {
     this.#events.emit("event", event);
+  }
+
+  async #updateSystemMediaSession(
+    state: "playing" | "paused" | "stopped",
+  ): Promise<void> {
+    if (!this.#player || !this.#hasLoadedSource) return;
+
+    await this.#player.updateSystemMediaSession(this.#metadata, {
+      state,
+      position: this.#currentTime,
+      duration: this.#duration,
+    });
+  }
+
+  #syncSystemMediaSession(state: "playing" | "paused" | "stopped"): void {
+    this.#updateSystemMediaSession(state).catch(() => {});
+  }
+
+  #clearSystemMediaSession(): void {
+    Promise.resolve(this.#player?.clearSystemMediaSession()).catch(() => {});
   }
 }
 

@@ -19,6 +19,18 @@
       },
       "conditions": [
         [
+          "OS=='mac'",
+          {
+            "sources": ["src/system_media_session.mm"],
+            "link_settings": {
+              "libraries": ["-framework Foundation", "-framework MediaPlayer"]
+            }
+          },
+          {
+            "sources": ["src/system_media_session_stub.cc"]
+          }
+        ],
+        [
           "OS=='linux'",
           {
             "ldflags": ["-Wl,-rpath,$$ORIGIN"]
