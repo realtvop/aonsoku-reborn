@@ -167,7 +167,7 @@ export function CachedImage({
   coverArtId,
   coverArtType = "album",
   coverArtSize = "300",
-  cacheArtSize = "700",
+  cacheArtSize,
   albumId,
   src: directSrc,
   autoCache = true,
@@ -189,7 +189,7 @@ export function CachedImage({
     coverArtId,
     coverArtType,
     albumId,
-    cacheArtSize,
+    cacheArtSize: cacheArtSize ?? coverArtSize,
     autoCache,
   });
   const [failedNetworkSrc, setFailedNetworkSrc] = useState<string | null>(null);
