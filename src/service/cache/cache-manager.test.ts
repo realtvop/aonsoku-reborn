@@ -885,6 +885,32 @@ describe("cacheManager", () => {
     expect(cacheStorageMock.put).not.toHaveBeenCalled();
   });
 
+  it("limits concurrent cover downloads on cache miss", async () => {
+    let activeFetches = 0;
+    let maxActiveFetches = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      activeFetches++;
+      maxActiveFetches = Math.max(maxActiveFetches, activeFetches);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      activeFetches--;
+      return {
+        ok: true,
+        blob: () => Promise.resolve(new Blob(["cover"], { type: "image/jpeg" })),
+      } as Response;
+    });
+
+    const { cacheManager } = await import("./cache-manager");
+    await Promise.all(
+      Array.from({ length: 8 }, (_, index) =>
+        cacheManager.cacheCover(`cover-miss-${index}`, "300"),
+      ),
+    );
+
+    expect(maxActiveFetches).toBeLessThanOrEqual(4);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(8);
+    expect(cacheStorageMock.put).toHaveBeenCalledTimes(8);
+  });
+
   it("isDownloadQueued checks both queue and in-flight status", async () => {
     audioCacheServiceMock.isQueued.mockReturnValue(true);
     audioCacheServiceMock.isInFlight.mockReturnValue(false);

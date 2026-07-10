@@ -112,6 +112,33 @@ function refreshCacheStats(): void {
   });
 }
 
+class AsyncLimiter {
+  private active = 0;
+  private queue: Array<() => void> = [];
+
+  constructor(private readonly limit: number) {}
+
+  run<T>(task: () => Promise<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const start = () => {
+        this.active++;
+        task()
+          .then(resolve, reject)
+          .finally(() => {
+            this.active--;
+            this.queue.shift()?.();
+          });
+      };
+
+      if (this.active < this.limit) {
+        start();
+      } else {
+        this.queue.push(start);
+      }
+    });
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════
 //  CacheManager — strategy / orchestration layer (main thread only)
 // ═══════════════════════════════════════════════════════════════════
@@ -121,6 +148,7 @@ class CacheManager {
   private cacheCoverInflight = new Map<string, Promise<void>>();
   private nativeCoverUrlCache = new Map<string, string>();
   private nativeCoverUrlInflight = new Map<string, Promise<string | null>>();
+  private coverDownloadLimiter = new AsyncLimiter(4);
 
   isDownloadQueued(songId: string): boolean {
     return (
@@ -258,7 +286,9 @@ class CacheManager {
         return;
       }
 
-      const result = await adapter.downloadCoverImage(coverArtId, size);
+      const result = await this.coverDownloadLimiter.run(() =>
+        adapter.downloadCoverImage(coverArtId, size),
+      );
       if (!result) return;
       this.rememberNativeCoverUrl(coverArtId, convertFileSrc(result.uri));
 
@@ -288,10 +318,12 @@ class CacheManager {
     const url = getCoverArtUrl(coverArtId, "album", size);
     if (url.startsWith("/default_")) return;
 
-    const response = await fetch(url);
-    if (!response.ok) return;
-
-    const blob = await response.blob();
+    const blob = await this.coverDownloadLimiter.run(async () => {
+      const response = await fetch(url);
+      if (!response.ok) return null;
+      return response.blob();
+    });
+    if (!blob) return;
 
     if (existing) {
       await cacheStorage.delete(key);
