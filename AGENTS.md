@@ -283,7 +283,15 @@ Key files:
   reception there is a follow-up. The addon reads `artworkUrl` from
   `NativeAudioMetadata`: on macOS it asynchronously fetches the image and sets
   `MPMediaItemArtwork` (cached per-URL, stale downloads are ignored); on Linux
-  it exposes `mpris:artUrl`. Windows artwork is not yet set. Linux builds require
+  it exposes `mpris:artUrl`. The platform HTTP clients (NSURLSession, D-Bus
+  MPRIS clients) cannot resolve the renderer's `aonsoku-media://` custom
+  protocol, so `electron/main/core/events.ts` wires an `artworkUrlResolver`
+  into the desktop audio service that translates `aonsoku-media://getCoverArt`
+  URLs (renderer-driven loads) and bare cover-art ids (queue-driven loads) into
+  authenticated Subsonic HTTP URLs before metadata reaches the engine. The
+  service also re-syncs the system media session's elapsed time after a seek
+  so the Now Playing scrubber stays accurate between play/pause updates.
+  Windows artwork is not yet set. Linux builds require
   the system `dbus-1` development package in addition to libmpv headers.
 - `src/player/queue-controller/` — queue management
   (`web-controller` / `native-controller`). Runtimes with native playback

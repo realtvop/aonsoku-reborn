@@ -30,10 +30,13 @@ export type DesktopNativeAudioEventPayload<
 
 let streamUrlResolver = (url: string): string => url;
 let downloadUrlResolver: DesktopAudioDownloadUrlResolver = () => null;
+let artworkUrlResolver = (artworkUrl: string | undefined): string | undefined =>
+  artworkUrl;
 
 export const desktopNativeAudioService = new NativeAudioService({
   streamUrlResolver: (url) => streamUrlResolver(url),
   downloadUrlResolver: (options) => downloadUrlResolver(options),
+  artworkUrlResolver: (artworkUrl) => artworkUrlResolver(artworkUrl),
 });
 let unsubscribeFromNativeAudioEvents: (() => void) | null = null;
 
@@ -46,11 +49,15 @@ export function setupDesktopNativeAudioIpc(
   networking?: {
     streamUrlResolver: (url: string) => string;
     downloadUrlResolver: DesktopAudioDownloadUrlResolver;
+    artworkUrlResolver?: (artworkUrl: string | undefined) => string | undefined;
   },
 ): void {
   if (networking) {
     streamUrlResolver = networking.streamUrlResolver;
     downloadUrlResolver = networking.downloadUrlResolver;
+    if (networking.artworkUrlResolver) {
+      artworkUrlResolver = networking.artworkUrlResolver;
+    }
   }
   ipcMain.removeHandler(DESKTOP_NATIVE_AUDIO_INVOKE_CHANNEL);
   unsubscribeFromNativeAudioEvents?.();

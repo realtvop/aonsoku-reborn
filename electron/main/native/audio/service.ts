@@ -78,6 +78,7 @@ export interface NativeAudioServiceOptions {
   audioCacheDirectory?: string | (() => string | Promise<string>);
   downloadUrlResolver?: DesktopAudioDownloadUrlResolver;
   streamUrlResolver?: (url: string) => string;
+  artworkUrlResolver?: (artworkUrl: string | undefined) => string | undefined;
   cacheLoadedStreams?: boolean;
   systemAudioAdapter?: DesktopSystemAudioAdapter;
   playbackStateStore?: DesktopPlaybackStateStore;
@@ -108,6 +109,9 @@ export class NativeAudioService implements AonsokuAudioApi {
   readonly #downloadManager: DesktopAudioDownloadManager;
   readonly #downloadUrlResolver: DesktopAudioDownloadUrlResolver | null;
   readonly #streamUrlResolver: (url: string) => string;
+  readonly #artworkUrlResolver: (
+    artworkUrl: string | undefined,
+  ) => string | undefined;
   readonly #cacheLoadedStreams: boolean;
   readonly #systemAudio: DesktopSystemAudioAdapter;
   readonly #listeners = new Set<NativeAudioServiceEventListener>();
@@ -141,6 +145,7 @@ export class NativeAudioService implements AonsokuAudioApi {
       });
     this.#downloadUrlResolver = options.downloadUrlResolver ?? null;
     this.#streamUrlResolver = options.streamUrlResolver ?? ((url) => url);
+    this.#artworkUrlResolver = options.artworkUrlResolver ?? ((url) => url);
     this.#cacheLoadedStreams = options.cacheLoadedStreams ?? false;
     this.#systemAudio =
       options.systemAudioAdapter ?? createDesktopSystemAudioAdapter();
@@ -198,7 +203,7 @@ export class NativeAudioService implements AonsokuAudioApi {
           options.source,
           this.#streamUrlResolver,
         ),
-        metadata: options.metadata,
+        metadata: this.#normalizeMetadata(options.metadata),
         autoplay: options.autoplay,
         startTime: options.startTime,
       });
@@ -295,7 +300,7 @@ export class NativeAudioService implements AonsokuAudioApi {
 
   async updateMetadata(metadata: NativeAudioMetadata): Promise<void> {
     try {
-      await this.#engine.updateMetadata(metadata);
+      await this.#engine.updateMetadata(this.#normalizeMetadata(metadata));
     } catch (error) {
       this.#emitFailure(error);
       throw error;
@@ -763,6 +768,31 @@ export class NativeAudioService implements AonsokuAudioApi {
       requestId: this.#requestId,
       ...toNativeAudioErrorEvent(error),
     });
+  }
+
+  // The renderer addresses cover art through the `aonsoku-media://` custom
+  // protocol (or, for queue-driven loads, a bare cover-art id), but the native
+  // macOS/Linux system media session downloads artwork with platform HTTP
+  // stacks (NSURLSession / D-Bus clients) that cannot resolve that scheme.
+  // Normalize the artwork reference into an authenticated Subsonic HTTP URL
+  // before handing metadata to the playback engine so the system media session
+  // can fetch it. Falls back to the original value when no resolver is wired.
+  #normalizeMetadata(
+    metadata: NativeAudioMetadata | undefined,
+  ): NativeAudioMetadata | undefined {
+    if (!metadata) return metadata;
+    const resolved = this.#resolveArtworkUrl(metadata.artworkUrl);
+    if (resolved === metadata.artworkUrl) return metadata;
+    return { ...metadata, artworkUrl: resolved };
+  }
+
+  #resolveArtworkUrl(artworkUrl: string | undefined): string | undefined {
+    if (!artworkUrl) return artworkUrl;
+    try {
+      return this.#artworkUrlResolver(artworkUrl);
+    } catch {
+      return undefined;
+    }
   }
 
   #scheduleStartupAvailabilityCheck(): void {

@@ -65,6 +65,115 @@ describe("NativeAudioService", () => {
     await fs.rm(audioCacheDirectory, { force: true, recursive: true });
   });
 
+  it("resolves artwork URLs through the artworkUrlResolver before loading", async () => {
+    const resolvingEngine = new FakeAudioEngine();
+    const resolvingService = new NativeAudioService({
+      engine: resolvingEngine,
+      audioCacheDirectory,
+      artworkUrlResolver: (artworkUrl) => {
+        if (!artworkUrl) return undefined;
+        if (artworkUrl.startsWith("aonsoku-media://")) {
+          const parsed = new URL(artworkUrl);
+          return `https://server/rest/getCoverArt.view?id=${parsed.searchParams.get("id")}`;
+        }
+        return `https://server/rest/getCoverArt.view?id=${artworkUrl}`;
+      },
+    });
+
+    try {
+      await resolvingService.load({
+        source: {
+          kind: "stream",
+          url: "https://server/rest/stream?id=song-1",
+          songId: "song-1",
+        },
+        metadata: {
+          title: "Track",
+          duration: 123,
+          artworkUrl: "aonsoku-media://getCoverArt?id=art-1&size=300",
+        },
+        autoplay: true,
+      });
+
+      expect(resolvingEngine.load).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          metadata: {
+            title: "Track",
+            duration: 123,
+            artworkUrl: "https://server/rest/getCoverArt.view?id=art-1",
+          },
+        }),
+      );
+
+      await resolvingService.updateMetadata({
+        title: "Track 2",
+        artworkUrl: "mf-1234",
+      });
+
+      expect(resolvingEngine.updateMetadata).toHaveBeenLastCalledWith({
+        title: "Track 2",
+        artworkUrl: "https://server/rest/getCoverArt.view?id=mf-1234",
+      });
+    } finally {
+      resolvingService.destroy();
+    }
+  });
+
+  it("passes metadata through unchanged when no artworkUrlResolver is wired", async () => {
+    await service.load({
+      source: {
+        kind: "stream",
+        url: "https://server/rest/stream?id=song-1",
+        songId: "song-1",
+      },
+      metadata: {
+        title: "Track",
+        artworkUrl: "aonsoku-media://getCoverArt?id=art-1",
+      },
+      autoplay: true,
+    });
+
+    expect(engine.load).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        metadata: {
+          title: "Track",
+          artworkUrl: "aonsoku-media://getCoverArt?id=art-1",
+        },
+      }),
+    );
+  });
+
+  it("drops artwork when the artworkUrlResolver throws", async () => {
+    const resolvingEngine = new FakeAudioEngine();
+    const resolvingService = new NativeAudioService({
+      engine: resolvingEngine,
+      audioCacheDirectory,
+      artworkUrlResolver: () => {
+        throw new Error("missing_credentials");
+      },
+    });
+
+    try {
+      await resolvingService.load({
+        source: {
+          kind: "stream",
+          url: "https://server/rest/stream?id=song-1",
+          songId: "song-1",
+        },
+        metadata: { title: "Track", artworkUrl: "mf-1234" },
+        autoplay: true,
+      });
+
+      expect(resolvingEngine.load).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          metadata: { title: "Track", artworkUrl: undefined },
+        }),
+      );
+    } finally {
+      resolvingService.destroy();
+    }
+  });
+
   it("loads stream, radio, and native-file sources through the engine", async () => {
     await service.load({
       requestId: "request-stream",

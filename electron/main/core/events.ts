@@ -102,6 +102,44 @@ export function setupIpcEvents(window: BrowserWindow | null) {
       .getMediaUrl("/stream.view", Object.fromEntries(parsed.searchParams))
       .toString();
   };
+  // The native system media session (libmpv addon on macOS, MPRIS on Linux)
+  // downloads cover art with platform HTTP clients that cannot resolve the
+  // renderer's `aonsoku-media://` custom protocol. Translate cover-art
+  // references (either `aonsoku-media://getCoverArt?id=...` URLs from renderer
+  // loads or bare cover-art ids from queue-driven loads) into authenticated
+  // Subsonic HTTP URLs the platform clients can fetch.
+  const resolveDesktopArtworkUrl = (
+    artworkUrl: string | undefined,
+  ): string | undefined => {
+    if (!artworkUrl) return undefined;
+    try {
+      if (artworkUrl.startsWith("aonsoku-media://")) {
+        const parsed = new URL(artworkUrl);
+        const operation = parsed.hostname || parsed.pathname.replace(/^\//, "");
+        if (operation !== "getCoverArt") return undefined;
+        return desktopNativeBridgeService
+          .getMediaUrl(
+            "/getCoverArt.view",
+            Object.fromEntries(parsed.searchParams),
+          )
+          .toString();
+      }
+      // Queue-driven loads store the raw cover-art id without a scheme.
+      if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(artworkUrl)) {
+        return desktopNativeBridgeService
+          .getMediaUrl("/getCoverArt.view", {
+            id: artworkUrl,
+            size: "300",
+          })
+          .toString();
+      }
+      return artworkUrl;
+    } catch {
+      // No credentials / unsupported reference: leave artwork unset rather than
+      // surfacing a broken URL to the platform media session.
+      return undefined;
+    }
+  };
   setupDesktopNativeAudioIpc(window, {
     streamUrlResolver: resolveDesktopMediaUrl,
     downloadUrlResolver: ({ songId, maxBitRate, format }) =>
@@ -112,6 +150,7 @@ export function setupIpcEvents(window: BrowserWindow | null) {
           ...(format ? { format } : {}),
         })
         .toString(),
+    artworkUrlResolver: resolveDesktopArtworkUrl,
   });
   setupDesktopNativeBridgeIpc();
   setupDesktopNativeDataIpc(window);

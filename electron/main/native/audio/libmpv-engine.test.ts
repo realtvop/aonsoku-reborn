@@ -222,6 +222,42 @@ describe("LibMpvAudioEngine", () => {
     expect(player.clearSystemMediaSession).toHaveBeenCalledOnce();
   });
 
+  it("syncs the system media session elapsed time after a seek", async () => {
+    const { engine, player } = createHarness();
+
+    await engine.load({
+      source: {
+        kind: "stream",
+        target: "https://server/rest/stream?id=song-1",
+      },
+      metadata: {
+        title: "Track",
+        artist: "Artist",
+        album: "Album",
+        duration: 123,
+        artworkUrl: "https://server/rest/getCoverArt?id=art-1",
+      },
+      autoplay: true,
+      startTime: 0,
+    });
+    player.emit({ type: "file-loaded" });
+
+    await engine.seek(42);
+
+    expect(player.updateSystemMediaSession).toHaveBeenLastCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ state: "playing", position: 42 }),
+    );
+
+    await engine.pause();
+    await engine.seek(7);
+
+    expect(player.updateSystemMediaSession).toHaveBeenLastCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ state: "paused", position: 7 }),
+    );
+  });
+
   it("suppresses libmpv stop events caused by repeat load and explicit stop", async () => {
     const { engine, events, player } = createHarness();
 

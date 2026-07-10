@@ -130,6 +130,12 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
       "exact",
     ]);
     this.#emitProgress();
+    // Keep the system media session's elapsed playback time in sync after a
+    // seek. macOS extrapolates the displayed position from the last reported
+    // elapsed time + playback rate, so without this the Now Playing scrubber
+    // would keep advancing from the pre-seek position until the next
+    // play/pause/file-loaded update.
+    this.#syncSystemMediaSession(this.#isPaused ? "paused" : "playing");
   }
 
   async setVolume(value: number): Promise<void> {
