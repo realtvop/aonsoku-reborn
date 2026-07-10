@@ -65,7 +65,7 @@ function useCoverArtCacheLookup({
     async function loadCache() {
       for (const key of cacheKeys) {
         try {
-          const url = await cacheManager.getCachedCoverUrl(key);
+          const url = await cacheManager.getCachedCoverUrl(key, cacheArtSize);
           if (url) {
             if (cancelled) {
               URL.revokeObjectURL(url);

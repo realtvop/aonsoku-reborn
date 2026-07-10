@@ -191,6 +191,58 @@ describe("cacheManager", () => {
     expect(url).toBeTruthy();
   });
 
+  it("returns higher-quality cached covers for lower-size requests", async () => {
+    const blob = new Blob(["cover"], { type: "image/jpeg" });
+    cacheStorageMock.get.mockImplementation(async (key: string) => {
+      if (key === "cover:cover-high") return blob;
+      return null;
+    });
+
+    useCacheIndexStore.setState({
+      items: {
+        "cover:cover-high": {
+          id: "cover-high",
+          type: "cover",
+          source: "explicit",
+          coverSize: "700",
+          sizeBytes: blob.size,
+          cachedAt: 1,
+          lastAccessedAt: 1,
+        },
+      },
+      loaded: true,
+    });
+
+    const { cacheManager } = await import("./cache-manager");
+    const url = await cacheManager.getCachedCoverUrl("cover-high", "100");
+
+    expect(url).toBeTruthy();
+    expect(cacheStorageMock.get).toHaveBeenCalledWith("cover:cover-high");
+  });
+
+  it("does not satisfy higher-size requests with smaller cached covers", async () => {
+    useCacheIndexStore.setState({
+      items: {
+        "cover:cover-small": {
+          id: "cover-small",
+          type: "cover",
+          source: "explicit",
+          coverSize: "100",
+          sizeBytes: 5,
+          cachedAt: 1,
+          lastAccessedAt: 1,
+        },
+      },
+      loaded: true,
+    });
+
+    const { cacheManager } = await import("./cache-manager");
+    const url = await cacheManager.getCachedCoverUrl("cover-small", "700");
+
+    expect(url).toBeNull();
+    expect(cacheStorageMock.get).not.toHaveBeenCalled();
+  });
+
   it("returns cached cover URL even when index is empty (blob exists in Cache API)", async () => {
     const blob = new Blob(["cover"], { type: "image/jpeg" });
     cacheStorageMock.get.mockImplementation(async (key: string) => {

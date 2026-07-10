@@ -112,6 +112,21 @@ function refreshCacheStats(): void {
   });
 }
 
+function isCoverSizeAtLeast(
+  cachedSize: string | undefined,
+  requestedSize: string | undefined,
+): boolean {
+  if (!requestedSize) return true;
+
+  const requested = Number(requestedSize);
+  if (!Number.isFinite(requested) || requested <= 0) return true;
+
+  const cached = Number(cachedSize);
+  if (!Number.isFinite(cached) || cached <= 0) return true;
+
+  return cached >= requested;
+}
+
 class AsyncLimiter {
   private active = 0;
   private queue: Array<() => void> = [];
@@ -146,7 +161,10 @@ class AsyncLimiter {
 class CacheManager {
   private statsTimer: ReturnType<typeof setTimeout> | null = null;
   private cacheCoverInflight = new Map<string, Promise<void>>();
-  private nativeCoverUrlCache = new Map<string, string>();
+  private nativeCoverUrlCache = new Map<
+    string,
+    { url: string; coverSize?: string }
+  >();
   private nativeCoverUrlInflight = new Map<string, Promise<string | null>>();
   private coverDownloadLimiter = new AsyncLimiter(4);
 
@@ -290,7 +308,7 @@ class CacheManager {
         adapter.downloadCoverImage(coverArtId, size),
       );
       if (!result) return;
-      this.rememberNativeCoverUrl(coverArtId, convertFileSrc(result.uri));
+      this.rememberNativeCoverUrl(coverArtId, convertFileSrc(result.uri), size);
 
       const meta: CachedItemMeta = {
         id: coverArtId,
@@ -353,24 +371,32 @@ class CacheManager {
    * **Callers must call `URL.revokeObjectURL()` on the returned string
    * when they are done with it to avoid leaking memory.**
    */
-  async getCachedCoverUrl(coverArtId: string): Promise<string | null> {
+  async getCachedCoverUrl(
+    coverArtId: string,
+    requestedSize?: string,
+  ): Promise<string | null> {
     const key = coverKey(coverArtId);
 
     if (isNativeImageCacheAdapterAvailable()) {
       const cachedUrl = this.nativeCoverUrlCache.get(coverArtId);
-      if (cachedUrl) {
+      if (
+        cachedUrl &&
+        isCoverSizeAtLeast(cachedUrl.coverSize, requestedSize)
+      ) {
         getCacheIndexActions().touchItem(key);
-        return cachedUrl;
+        return cachedUrl.url;
       }
 
       const inflight = this.nativeCoverUrlInflight.get(coverArtId);
       if (inflight) return inflight;
 
-      const resolve = this.resolveNativeCachedCoverUrl(coverArtId, key).finally(
-        () => {
+      const resolve = this.resolveNativeCachedCoverUrl(
+        coverArtId,
+        key,
+        requestedSize,
+      ).finally(() => {
           this.nativeCoverUrlInflight.delete(coverArtId);
-        },
-      );
+        });
       this.nativeCoverUrlInflight.set(coverArtId, resolve);
       return resolve;
     }
@@ -379,6 +405,14 @@ class CacheManager {
     // the async Cache API lookup.
     const { loaded } = useCacheIndexStore.getState();
     if (loaded && !isCoverCached(coverArtId)) return null;
+    const indexedCoverSize = getCacheIndexItems()[key]?.coverSize;
+    if (
+      loaded &&
+      isCoverCached(coverArtId) &&
+      !isCoverSizeAtLeast(indexedCoverSize, requestedSize)
+    ) {
+      return null;
+    }
 
     // Slow path: read Cache API directly for the startup case where
     // the in-memory index has not finished loading from IDB yet.
@@ -430,6 +464,7 @@ class CacheManager {
   private async resolveNativeCachedCoverUrl(
     coverArtId: string,
     key: string,
+    requestedSize?: string,
   ): Promise<string | null> {
     const adapter = getNativeImageCacheAdapter();
     const result = await adapter.resolveCoverImage(coverArtId);
@@ -438,6 +473,11 @@ class CacheManager {
       if (isCoverCached(coverArtId)) {
         getCacheIndexActions().removeItem(key);
       }
+      return null;
+    }
+
+    const coverSize = result.coverSize ?? getCacheIndexItems()[key]?.coverSize;
+    if (!isCoverSizeAtLeast(coverSize, requestedSize)) {
       return null;
     }
 
@@ -473,12 +513,20 @@ class CacheManager {
       getCacheIndexActions().touchItem(key);
     }
 
-    return this.rememberNativeCoverUrl(coverArtId, convertFileSrc(result.uri));
+    return this.rememberNativeCoverUrl(
+      coverArtId,
+      convertFileSrc(result.uri),
+      coverSize,
+    );
   }
 
-  private rememberNativeCoverUrl(coverArtId: string, url: string): string {
+  private rememberNativeCoverUrl(
+    coverArtId: string,
+    url: string,
+    coverSize?: string,
+  ): string {
     this.nativeCoverUrlCache.delete(coverArtId);
-    this.nativeCoverUrlCache.set(coverArtId, url);
+    this.nativeCoverUrlCache.set(coverArtId, { url, coverSize });
 
     if (this.nativeCoverUrlCache.size > 500) {
       const oldest = this.nativeCoverUrlCache.keys().next().value;
