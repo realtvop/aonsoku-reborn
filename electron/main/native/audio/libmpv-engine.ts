@@ -458,9 +458,22 @@ function toLibMpvError(code: string, error: unknown): LibMpvAudioEngineError {
   return new LibMpvAudioEngineError(code, message);
 }
 
-export async function initializeLibMpvPlayer(player: MpvPlayer): Promise<void> {
+export interface InitializeLibMpvPlayerOptions {
+  // When false, the player is initialized without claiming the system media
+  // command handler. The throwaway availability-check player uses this so it
+  // cannot clobber the real playback player's handler.
+  registerSystemMediaSession?: boolean;
+}
+
+export async function initializeLibMpvPlayer(
+  player: MpvPlayer,
+  options: InitializeLibMpvPlayerOptions = {},
+): Promise<void> {
   try {
-    await player.initialize({ options: LIBMPV_ENGINE_OPTIONS });
+    await player.initialize({
+      options: LIBMPV_ENGINE_OPTIONS,
+      registerSystemMediaSession: options.registerSystemMediaSession ?? true,
+    });
   } catch (error) {
     throw toLibMpvError("mpv-init-failed", error);
   }
@@ -486,7 +499,10 @@ export async function verifyLibMpvPlayer(
   }
 
   try {
-    await initializeLibMpvPlayer(player);
+    // The verification player is throwaway; it must not register (and on
+    // destroy clear) the global system media command handler, or it races
+    // with the real playback player and leaves macOS commands undelivered.
+    await initializeLibMpvPlayer(player, { registerSystemMediaSession: false });
   } finally {
     await destroyMpvPlayerSafely(player);
   }

@@ -1,6 +1,6 @@
 import type { NativeAudioMetadata } from "@aonsoku/audio-contract";
 import { describe, expect, it, vi } from "vitest";
-import { LibMpvAudioEngine } from "./libmpv-engine";
+import { LibMpvAudioEngine, verifyLibMpvPlayer } from "./libmpv-engine";
 import type {
   MpvPlayer,
   MpvPlayerEvent,
@@ -89,6 +89,7 @@ describe("LibMpvAudioEngine", () => {
         terminal: "no",
         vid: "no",
       },
+      registerSystemMediaSession: true,
     });
     expect(player.observeProperty.mock.calls).toEqual([
       ["time-pos", "number"],
@@ -480,5 +481,21 @@ describe("LibMpvAudioEngine", () => {
     });
 
     expect(events).toEqual([]);
+  });
+});
+
+describe("verifyLibMpvPlayer", () => {
+  it("initializes the throwaway player without claiming the system media command handler", async () => {
+    const player = new FakeMpvPlayer();
+    await verifyLibMpvPlayer(() => player);
+
+    expect(player.initialize).toHaveBeenCalledWith({
+      options: expect.objectContaining({
+        "audio-display": "no",
+        vid: "no",
+      }),
+      registerSystemMediaSession: false,
+    });
+    expect(player.destroy).toHaveBeenCalled();
   });
 });

@@ -128,6 +128,28 @@ bool ReadOptionalNumberProperty(napi_env env, napi_value object,
   return type == napi_number && napi_get_value_double(env, value, output) == napi_ok;
 }
 
+bool ReadOptionalBooleanProperty(napi_env env, napi_value object,
+                                const char* name, bool default_value,
+                                bool* output) {
+  *output = default_value;
+  bool has_property = false;
+  if (napi_has_named_property(env, object, name, &has_property) != napi_ok ||
+      !has_property) {
+    return true;
+  }
+
+  napi_value value;
+  napi_valuetype type;
+  if (napi_get_named_property(env, object, name, &value) != napi_ok ||
+      napi_typeof(env, value, &type) != napi_ok || type == napi_undefined ||
+      type == napi_null) {
+    return true;
+  }
+
+  if (type != napi_boolean) return false;
+  return napi_get_value_bool(env, value, output) == napi_ok;
+}
+
 PlayerState* UnwrapPlayer(napi_env env, napi_callback_info info,
                           size_t argc, napi_value* argv) {
   napi_value self;
@@ -552,7 +574,25 @@ napi_value Initialize(napi_env env, napi_callback_info info) {
     state->running.store(true);
   }
 
-  SetSystemMediaCommandHandler(&SystemMediaCommandDispatcher, state);
+  // Only the long-lived playback player should own the system media command
+  // handler. The availability check creates a throwaway player that races
+  // with the real one; if it also registered/cleared the global handler it
+  // would clobber it (and its destroy would null it out), leaving macOS
+  // Control Center commands with handler=0x0 and never delivered to JS.
+  bool register_system_media_session = true;
+  if (argc >= 1) {
+    if (!ReadOptionalBooleanProperty(env, argv[0], "registerSystemMediaSession",
+                                      true, &register_system_media_session)) {
+      mpv_terminate_destroy(handle);
+      ThrowError(env, "libmpv-invalid-options",
+                 "registerSystemMediaSession must be a boolean.");
+      return nullptr;
+    }
+  }
+
+  if (register_system_media_session) {
+    SetSystemMediaCommandHandler(&SystemMediaCommandDispatcher, state);
+  }
 
   state->event_thread = std::thread(EventLoop, state);
 

@@ -42,6 +42,10 @@ export type MpvPlayerEventListener = (event: MpvPlayerEvent) => void;
 
 export interface MpvPlayerInitializeOptions {
   options: Record<string, string>;
+  // When false, the native player will not register itself as the system media
+  // command handler. Used by the throwaway availability-check player so it
+  // cannot clobber the real playback player's handler.
+  registerSystemMediaSession?: boolean;
 }
 
 export interface MpvPlayer {
