@@ -44,7 +44,7 @@ languages.forEach((lang) => {
 const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 dayjs.tz.setDefault(browserTimezone);
 
-const savedLang = localStorage.getItem("i18nextLng") || "en-US";
+const savedLang = i18n.resolvedLanguage || i18n.language || "en-US";
 dayjs.locale(getDayJsLocale(savedLang));
 
 i18n.on("languageChanged", (lang: string) => {

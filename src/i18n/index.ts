@@ -10,6 +10,9 @@ i18n
   .init({
     debug: isDev,
     fallbackLng: "en-US",
+    detection: {
+      caches: [],
+    },
     interpolation: {
       escapeValue: false,
     },
