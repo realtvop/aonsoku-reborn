@@ -188,6 +188,7 @@ describe("LibMpvAudioEngine", () => {
         artist: "Artist",
         album: "Album",
         duration: 123,
+        artworkUrl: "https://server/rest/getCoverArt?id=art-1",
       },
       autoplay: true,
       startTime: 12,
@@ -200,6 +201,7 @@ describe("LibMpvAudioEngine", () => {
         artist: "Artist",
         album: "Album",
         duration: 123,
+        artworkUrl: "https://server/rest/getCoverArt?id=art-1",
       },
       {
         state: "playing",

@@ -712,6 +712,8 @@ napi_value UpdateSystemMediaSession(napi_env env, napi_callback_info info) {
   if (!ReadOptionalStringProperty(env, argv[0], "title", &metadata.title) ||
       !ReadOptionalStringProperty(env, argv[0], "artist", &metadata.artist) ||
       !ReadOptionalStringProperty(env, argv[0], "album", &metadata.album) ||
+      !ReadOptionalStringProperty(env, argv[0], "artworkUrl",
+                                  &metadata.artwork_url) ||
       !ReadOptionalNumberProperty(env, argv[1], "duration", &metadata.duration)) {
     ThrowError(env, "libmpv-invalid-system-media-session",
                "System media session metadata is invalid.");

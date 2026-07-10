@@ -6,6 +6,7 @@ struct SystemMediaSessionMetadata {
   std::string title;
   std::string artist;
   std::string album;
+  std::string artwork_url;
   double duration = 0;
 };
 

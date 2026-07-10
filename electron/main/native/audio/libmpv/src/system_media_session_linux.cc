@@ -142,6 +142,9 @@ void AppendMetadata(DBusMessageIter* dictionary,
   AppendStringVariant(dictionary, "xesam:title", metadata.title);
   AppendStringArrayVariant(dictionary, "xesam:artist", metadata.artist);
   AppendStringVariant(dictionary, "xesam:album", metadata.album);
+  if (!metadata.artwork_url.empty()) {
+    AppendStringVariant(dictionary, "mpris:artUrl", metadata.artwork_url);
+  }
   if (metadata.duration > 0) {
     AppendInt64Variant(dictionary, "mpris:length",
                        static_cast<int64_t>(metadata.duration * 1'000'000));

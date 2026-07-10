@@ -265,7 +265,10 @@ Key files:
   `remoteCommand` events, reusing the same IPC path the renderer handles for
   native remote commands (and remote-control projection when a remote device is
   active). Windows/Linux currently register for display only; system command
-  reception there is a follow-up. Linux builds require
+  reception there is a follow-up. The addon reads `artworkUrl` from
+  `NativeAudioMetadata`: on macOS it asynchronously fetches the image and sets
+  `MPMediaItemArtwork` (cached per-URL, stale downloads are ignored); on Linux
+  it exposes `mpris:artUrl`. Windows artwork is not yet set. Linux builds require
   the system `dbus-1` development package in addition to libmpv headers.
 - `src/player/queue-controller/` — queue management
   (`web-controller` / `native-controller`). Runtimes with native playback

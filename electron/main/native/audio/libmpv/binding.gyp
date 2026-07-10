@@ -23,7 +23,11 @@
           {
             "sources": ["src/system_media_session.mm"],
             "link_settings": {
-              "libraries": ["-framework Foundation", "-framework MediaPlayer"]
+              "libraries": [
+                "-framework AppKit",
+                "-framework Foundation",
+                "-framework MediaPlayer",
+              ],
             }
           }
         ],
