@@ -290,8 +290,11 @@ Key files:
   -> main-process round-trip. `like`/`shuffle` still forward to the renderer as
   `remoteCommand` events (their state is owned there), and remote-control
   projection routes commands to the controlled device instead of acting
-  locally. Windows/Linux currently register for display only; system command
-  reception there is a follow-up. The addon reads `artworkUrl` from
+  locally. Windows routes SMTC transport buttons (play/pause/next/previous)
+  back to JS the same way, but the classic `SystemMediaTransportControls`
+  API has no seek/scrubber command, so Windows position changes are
+  display-only; Linux currently registers for display only and system
+  command reception there is a follow-up. The addon reads `artworkUrl` from
   `NativeAudioMetadata`: on macOS it asynchronously fetches the image and sets
   `MPMediaItemArtwork` (cached per-URL, stale downloads are ignored); on Linux
   it exposes `mpris:artUrl`. The platform HTTP clients (NSURLSession, D-Bus
