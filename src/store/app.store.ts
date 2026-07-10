@@ -6,7 +6,10 @@ import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
 import { pingServer } from "@/api/pingServer";
 import { queryServerInfo } from "@/api/queryServerInfo";
-import { isNativeBridgeAvailable } from "@/native/bridge/facade";
+import {
+  getNativeBridge,
+  isNativeBridgeAvailable,
+} from "@/native/bridge/facade";
 import { createNativeStorage } from "@/store/native-storage";
 import {
   ActiveServerType,
@@ -111,10 +114,7 @@ async function syncCredentialsToKeychain(data: IAppContext["data"]) {
   }
 
   try {
-    const { AonsokuNativeBridge } = await import(
-      "@aonsoku/capacitor-native/bridge"
-    );
-    await AonsokuNativeBridge.storeCredentials({
+    await getNativeBridge().storeCredentials({
       serverUrl: data.url,
       username: data.username,
       password: data.password,
@@ -348,10 +348,7 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
               }
 
               if (isNativeBridgeAvailable()) {
-                const { AonsokuNativeBridge } = await import(
-                  "@aonsoku/capacitor-native/bridge"
-                );
-                const result = await AonsokuNativeBridge.login({
+                const result = await getNativeBridge().login({
                   url: primaryUrl,
                   fallbackUrl: normalizedFallbackUrl || undefined,
                   username,
@@ -530,11 +527,7 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
             },
             removeConfig: () => {
               if (isNativeBridgeAvailable()) {
-                import("@aonsoku/capacitor-native/bridge").then(
-                  ({ AonsokuNativeBridge }) => {
-                    AonsokuNativeBridge.clearCredentials();
-                  },
-                );
+                getNativeBridge().clearCredentials();
               }
 
               set((state) => {

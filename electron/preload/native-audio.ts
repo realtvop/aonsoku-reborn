@@ -5,11 +5,16 @@ import type {
   NativeAudioEvents,
 } from "@aonsoku/audio-contract";
 import { ipcRenderer } from "electron";
-import {
-  DESKTOP_NATIVE_AUDIO_EVENT_CHANNEL,
-  DESKTOP_NATIVE_AUDIO_INVOKE_CHANNEL,
-  type DesktopNativeAudioInvokePayload,
-} from "../main/native/audio/ipc";
+
+const DESKTOP_NATIVE_AUDIO_INVOKE_CHANNEL = "aonsoku-native-audio:invoke";
+const DESKTOP_NATIVE_AUDIO_EVENT_CHANNEL = "aonsoku-native-audio:event";
+
+type DesktopNativeAudioInvokePayload<
+  TMethod extends keyof AonsokuAudioApi = keyof AonsokuAudioApi,
+> = {
+  method: TMethod;
+  args: Parameters<AonsokuAudioApi[TMethod]>;
+};
 
 // All native-audio events are multiplexed over a single IPC channel. Every
 // subscriber used to register its own ipcRenderer listener for that channel,

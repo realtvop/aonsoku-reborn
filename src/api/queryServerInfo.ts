@@ -9,7 +9,11 @@ export async function queryServerInfo(url: string) {
     try {
       return await nativeBridge.plugin.queryServerInfo({ url });
     } catch {
-      // Fall back to the browser probe so web-compatible servers still work.
+      return {
+        protocolVersion: "1.16.0",
+        protocolVersionNumber: 1160,
+        serverType: "subsonic",
+      };
     }
   }
 

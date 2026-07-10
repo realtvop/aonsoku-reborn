@@ -4,7 +4,10 @@ import type {
   NativeAudioEvents,
 } from "@aonsoku/audio-contract";
 import { BrowserWindow, ipcMain } from "electron";
-import { NativeAudioService } from "./service";
+import {
+  type DesktopAudioDownloadUrlResolver,
+  NativeAudioService,
+} from "./service";
 
 export const DESKTOP_NATIVE_AUDIO_INVOKE_CHANNEL =
   "aonsoku-native-audio:invoke";
@@ -25,7 +28,13 @@ export type DesktopNativeAudioEventPayload<
   event: NativeAudioEvents[TEvent];
 };
 
-export const desktopNativeAudioService = new NativeAudioService();
+let streamUrlResolver = (url: string): string => url;
+let downloadUrlResolver: DesktopAudioDownloadUrlResolver = () => null;
+
+export const desktopNativeAudioService = new NativeAudioService({
+  streamUrlResolver: (url) => streamUrlResolver(url),
+  downloadUrlResolver: (options) => downloadUrlResolver(options),
+});
 let unsubscribeFromNativeAudioEvents: (() => void) | null = null;
 
 type DesktopNativeAudioServiceMethod = (
@@ -34,7 +43,15 @@ type DesktopNativeAudioServiceMethod = (
 
 export function setupDesktopNativeAudioIpc(
   window?: BrowserWindow | null,
+  networking?: {
+    streamUrlResolver: (url: string) => string;
+    downloadUrlResolver: DesktopAudioDownloadUrlResolver;
+  },
 ): void {
+  if (networking) {
+    streamUrlResolver = networking.streamUrlResolver;
+    downloadUrlResolver = networking.downloadUrlResolver;
+  }
   ipcMain.removeHandler(DESKTOP_NATIVE_AUDIO_INVOKE_CHANNEL);
   unsubscribeFromNativeAudioEvents?.();
   unsubscribeFromNativeAudioEvents = desktopNativeAudioService.onEvent(

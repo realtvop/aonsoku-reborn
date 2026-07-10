@@ -5,9 +5,13 @@ import {
   OverlayColors,
   PlayerStatePayload,
 } from "../../preload/types";
-import { setupDesktopNativeAudioIpc } from "../native/audio/ipc";
 import { getIsQuitting } from "../index";
 import { setupMiniPlayerIpc } from "../mini-player";
+import { setupDesktopNativeAudioIpc } from "../native/audio/ipc";
+import {
+  desktopNativeBridgeService,
+  setupDesktopNativeBridgeIpc,
+} from "../native/bridge/ipc";
 import { tray, updateTray } from "../tray";
 import { colorsState } from "./colors";
 import {
@@ -86,7 +90,28 @@ export function setupIpcEvents(window: BrowserWindow | null) {
   ipcMain.removeAllListeners();
 
   setupMiniPlayerIpc();
-  setupDesktopNativeAudioIpc(window);
+  const resolveDesktopMediaUrl = (url: string): string => {
+    if (!url.startsWith("aonsoku-media://")) return url;
+    const parsed = new URL(url);
+    if ((parsed.hostname || parsed.pathname.replace(/^\//, "")) !== "stream") {
+      throw new Error(`Unsupported desktop media source: ${url}`);
+    }
+    return desktopNativeBridgeService
+      .getMediaUrl("/stream.view", Object.fromEntries(parsed.searchParams))
+      .toString();
+  };
+  setupDesktopNativeAudioIpc(window, {
+    streamUrlResolver: resolveDesktopMediaUrl,
+    downloadUrlResolver: ({ songId, maxBitRate, format }) =>
+      desktopNativeBridgeService
+        .getMediaUrl("/stream.view", {
+          id: songId,
+          ...(maxBitRate ? { maxBitRate } : {}),
+          ...(format ? { format } : {}),
+        })
+        .toString(),
+  });
+  setupDesktopNativeBridgeIpc();
   setupDesktopPlaybackControlChrome(() => {
     setTaskbarButtons();
     updateTray();

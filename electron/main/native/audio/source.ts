@@ -13,12 +13,13 @@ export class DesktopNativeAudioUnsupportedSourceError extends Error {
 
 export function resolveNativeAudioSource(
   source: NativeAudioSource,
+  streamUrlResolver: (url: string) => string = (url) => url,
 ): ResolvedNativeAudioSource {
   switch (source.kind) {
     case "stream":
       return {
         kind: "stream",
-        target: source.url,
+        target: streamUrlResolver(source.url),
       };
     case "radio":
       return {

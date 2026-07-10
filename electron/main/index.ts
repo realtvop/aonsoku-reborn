@@ -5,7 +5,13 @@ import { updateElectronApp } from "update-electron-app";
 import { createAppMenu } from "./core/menu";
 import { destroyMiniPlayerWindow } from "./mini-player";
 import { destroyDesktopNativeAudioService } from "./native/audio/ipc";
+import {
+  registerDesktopMediaScheme,
+  setupDesktopMediaProtocol,
+} from "./native/media-protocol";
 import { createWindow, mainWindow } from "./window";
+
+registerDesktopMediaScheme();
 
 let isQuitting = false;
 
@@ -30,6 +36,8 @@ if (!instanceLock) {
 
   app.whenReady().then(() => {
     electronApp.setAppUserModelId("com.realtvop.aonsoku");
+
+    setupDesktopMediaProtocol();
 
     createWindow();
   });

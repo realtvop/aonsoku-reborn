@@ -77,6 +77,7 @@ export interface NativeAudioServiceOptions {
   audioFileStore?: DesktopAudioFileStore;
   audioCacheDirectory?: string | (() => string | Promise<string>);
   downloadUrlResolver?: DesktopAudioDownloadUrlResolver;
+  streamUrlResolver?: (url: string) => string;
   cacheLoadedStreams?: boolean;
   systemAudioAdapter?: DesktopSystemAudioAdapter;
   playbackStateStore?: DesktopPlaybackStateStore;
@@ -106,6 +107,7 @@ export class NativeAudioService implements AonsokuAudioApi {
   readonly #audioFiles: DesktopAudioFileStore;
   readonly #downloadManager: DesktopAudioDownloadManager;
   readonly #downloadUrlResolver: DesktopAudioDownloadUrlResolver | null;
+  readonly #streamUrlResolver: (url: string) => string;
   readonly #cacheLoadedStreams: boolean;
   readonly #systemAudio: DesktopSystemAudioAdapter;
   readonly #listeners = new Set<NativeAudioServiceEventListener>();
@@ -138,6 +140,7 @@ export class NativeAudioService implements AonsokuAudioApi {
         cacheDirectory: options.audioCacheDirectory,
       });
     this.#downloadUrlResolver = options.downloadUrlResolver ?? null;
+    this.#streamUrlResolver = options.streamUrlResolver ?? ((url) => url);
     this.#cacheLoadedStreams = options.cacheLoadedStreams ?? false;
     this.#systemAudio =
       options.systemAudioAdapter ?? createDesktopSystemAudioAdapter();
@@ -191,7 +194,10 @@ export class NativeAudioService implements AonsokuAudioApi {
 
     try {
       await this.#engine.load({
-        source: resolveNativeAudioSource(options.source),
+        source: resolveNativeAudioSource(
+          options.source,
+          this.#streamUrlResolver,
+        ),
         metadata: options.metadata,
         autoplay: options.autoplay,
         startTime: options.startTime,

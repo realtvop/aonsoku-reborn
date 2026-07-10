@@ -1,4 +1,4 @@
-import { AonsokuNativeBridge } from "@aonsoku/capacitor-native/bridge";
+import { getNativeBridge } from "@/native/bridge/facade";
 import { AppRequestError } from "./errors";
 import type { FetchOptions } from "./httpClient";
 
@@ -17,7 +17,7 @@ export async function nativeHttpClient<T>(
   }
 
   try {
-    const response = await AonsokuNativeBridge.request({
+    const response = await getNativeBridge().request({
       path,
       method: (options.method as "GET" | "POST" | "PUT" | "DELETE") ?? "GET",
       query,
