@@ -563,6 +563,66 @@ describe("NativeAudioService", () => {
     );
   });
 
+  it("downloads audio files from the desktop URL resolver without a loaded stream", async () => {
+    const songId = "song-resolved-download";
+    const body = Buffer.from("resolved downloaded audio bytes");
+    const fetchMock = mockAudioFetch({
+      body,
+      contentType: "audio/mpeg",
+    });
+    const resolvingService = new NativeAudioService({
+      engine,
+      audioCacheDirectory,
+      cacheLoadedStreams: false,
+      downloadUrlResolver: ({ songId, maxBitRate, format }) => {
+        const url = new URL("https://server/rest/stream.view");
+        url.searchParams.set("id", songId);
+        if (maxBitRate !== undefined) {
+          url.searchParams.set("maxBitRate", maxBitRate.toString());
+        }
+        if (format) {
+          url.searchParams.set("format", format);
+        }
+        return url.toString();
+      },
+    });
+
+    try {
+      const completedPromise = waitForServiceEvent(
+        resolvingService,
+        "downloadCompleted",
+        (event) => event.songId === songId,
+      );
+
+      await resolvingService.downloadAudioFile({
+        songId,
+        maxBitRate: 192,
+        format: "mp3",
+      });
+
+      const completed = await completedPromise;
+      const requestedUrl = String(fetchMock.mock.calls[0]?.[0]);
+
+      expect(requestedUrl).toContain("id=song-resolved-download");
+      expect(requestedUrl).toContain("estimateContentLength=true");
+      expect(requestedUrl).toContain("maxBitRate=192");
+      expect(requestedUrl).toContain("format=mp3");
+      await expect(
+        resolvingService.resolveAudioFile({ songId }),
+      ).resolves.toEqual({
+        file: {
+          songId,
+          uri: completed.uri,
+          contentType: "audio/mpeg",
+          sizeBytes: body.byteLength,
+          lastModifiedAt: expect.any(Number),
+        },
+      });
+    } finally {
+      resolvingService.destroy();
+    }
+  });
+
   it("emits downloadFailed when a desktop audio download fails", async () => {
     const songId = "song-failed";
     mockAudioFetch({
