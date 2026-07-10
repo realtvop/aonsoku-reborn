@@ -9,8 +9,10 @@ interface ScrollingTitleProps {
 const SCROLL_SPEED = 30;
 const INITIAL_DELAY = 2;
 const PAUSE_DURATION = 3;
+const EDGE_EASE_DURATION = 0.35;
 const TEXT_GAP = 80;
 const FADE_WIDTH = 20;
+const MIN_LINEAR_DISTANCE = 1;
 
 const MASK_STYLE = {
   left: -FADE_WIDTH,
@@ -20,11 +22,29 @@ const MASK_STYLE = {
 
 function createScrollAnimation(scrollDistance: number) {
   const duration = scrollDistance / SCROLL_SPEED;
+  const edgeDuration = Math.min(EDGE_EASE_DURATION, duration / 2);
+  const edgeDistance = Math.min(
+    SCROLL_SPEED * edgeDuration,
+    scrollDistance / 2,
+  );
+  const linearDistance = scrollDistance - edgeDistance * 2;
+
+  if (linearDistance <= MIN_LINEAR_DISTANCE) {
+    return {
+      x: [0, -scrollDistance],
+      transition: {
+        duration,
+        ease: "easeInOut",
+      } as const,
+    };
+  }
+
   return {
-    x: [0, -scrollDistance],
+    x: [0, -edgeDistance, -(scrollDistance - edgeDistance), -scrollDistance],
     transition: {
       duration,
-      ease: "linear",
+      times: [0, edgeDuration / duration, 1 - edgeDuration / duration, 1],
+      ease: ["easeIn", "linear", "easeOut"],
     } as const,
   };
 }
