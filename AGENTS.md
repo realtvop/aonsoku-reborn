@@ -174,10 +174,31 @@ coordination behavior together.
 
 ### Routing
 
-React Router v6 uses hash routing. Route constants live in
+React Router v6 uses hash routing (data router via `createHashRouter` in
+`src/routes/router.tsx`). Route constants live in
 `src/routes/routesList.ts`. Auth is enforced via loaders
 (`protectedLoader.ts`, `loginLoader.ts`) — always use named route constants from
 `ROUTES` rather than hardcoded strings.
+
+The base layout's page outlet (`src/app/layout/main.tsx`) uses
+`KeepAliveOutlet` (`src/app/layout/keep-alive-outlet.tsx`) instead of a plain
+`<Outlet />`. Previously-visited route subtrees are kept mounted but hidden
+(`display: none`) and toggled back to `display: contents` when revisited, so
+returning to a page (especially the pinned home page) instantly shows the
+already-loaded cover-art images and preserved component state instead of
+re-fetching/re-mounting. To keep cached pages correct while hidden, each cached
+subtree is re-wrapped in a frozen `UNSAFE_LocationContext.Provider` holding the
+location it had when last active; the per-route `RouteContext` (params/matches)
+is already embedded in the element returned by `useOutlet()`. Freezing only
+`LocationContext` is sufficient because no cached page subtree reads volatile
+global data-router state (`useMatches`/`useNavigation`/`useNavigationType` are
+only used outside the cached outlet, e.g. in the header). Scroll position is
+saved per cached route and restored on return; fresh pages scroll to the top
+(this replaces the old route-change `scrollPageToTop` effect in `main.tsx`).
+`KeepAliveOutlet` is configured with `exclude={["error"]}` and `pin={["home"]}`
+and an LRU cap; when adding new routes that must always remount, add their id to
+`exclude`, and avoid `useSearchParams`/`useLocation`/`useMatch` reading the live
+location from inside a cached subtree unless the freeze above is extended.
 
 ### Component Patterns
 

@@ -1,20 +1,14 @@
 import { useEffect } from "react";
-import { Location, Outlet, useLocation } from "react-router-dom";
 import { useIsXl } from "@/app/hooks/use-is-xl";
+import { KeepAliveOutlet } from "@/app/layout/keep-alive-outlet";
 import { cn } from "@/lib/utils";
 import { useMainDrawerState } from "@/store/player.store";
 import { useSidebar } from "@/store/ui.store";
-import { scrollPageToTop } from "@/utils/scrollPageToTop";
 
 export function MainRoutes() {
-  const { pathname } = useLocation() as Location;
   const { isCollapsed } = useSidebar();
   const { mainDrawerState, closeDrawer } = useMainDrawerState();
   const isXl = useIsXl();
-
-  useEffect(() => {
-    if (pathname) scrollPageToTop();
-  }, [pathname]);
 
   // Auto-close right panel when resizing below xl
   useEffect(() => {
@@ -23,6 +17,9 @@ export function MainRoutes() {
     }
   }, [isXl, mainDrawerState, closeDrawer]);
 
+  // Page scroll-to-top on navigation is intentionally NOT handled here anymore:
+  // KeepAliveOutlet restores each cached page's own scroll position and only
+  // scrolls fresh pages to the top.
   return (
     <main
       className={cn(
@@ -34,7 +31,7 @@ export function MainRoutes() {
       )}
     >
       <div className="w-full">
-        <Outlet />
+        <KeepAliveOutlet exclude={["error"]} pin={["home"]} />
       </div>
     </main>
   );
