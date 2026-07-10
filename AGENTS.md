@@ -90,6 +90,20 @@ and IndexedDB helpers in `src/store/idb.ts`. Offline-capable UI paths generally
 go through `src/lib/offlineQueryClient.ts`, which tries IDB/native data before
 network when an offline function is available.
 
+Playback state restore is owned by the runtime that owns playback. When the
+native playback backend is active (`shouldUseNativePlaybackBackend()`, i.e.
+Capacitor iOS/Android or Electron with the desktop native-audio bridge), the
+native layer is the single source of truth for the restored queue and progress:
+`src/store/player/persistence.ts` skips the renderer-side IDB songlist rehydrate
+so `syncFromNative()` (`src/player/queue-controller/native-controller.ts`) sees an
+empty renderer songlist, takes the cold-start branch, sets
+`nativeDrivenTransition`, and the `AudioSrcChange` effect in
+`src/app/components/player/audio.tsx` skips re-issuing `load()`. The Electron
+main process restores position itself in
+`electron/main/native/audio/service.ts` `#restorePlaybackState()` (persisted via
+`playback-state.json`). The web/Electron-fallback path still rehydrates the
+songlist from IDB and drives `load()` + `pendingResumePosition` from the renderer.
+
 ### Sync Architecture
 
 Metadata/library sync is runtime-specific:
