@@ -1,6 +1,9 @@
 import type { PersistStorage, StorageValue } from "zustand/middleware";
 import type { AonsokuNativePreferencesPlugin } from "@aonsoku/capacitor-native/preferences";
-import { isNativePreferencesAvailable } from "@/native/preferences/facade";
+import {
+  getNativePreferences,
+  isNativePreferencesAvailable,
+} from "@/native/preferences/facade";
 
 let nativePrefsCache: Record<string, string> | null = null;
 let cacheReady = false;
@@ -10,17 +13,12 @@ const pendingReads: Array<() => void> = [];
 export async function initNativePrefsCache(): Promise<void> {
   if (!isNativePreferencesAvailable()) return;
 
-  const { AonsokuNativePreferences } = await import(
-    "@aonsoku/capacitor-native/preferences"
-  );
-  pluginRef = AonsokuNativePreferences;
+  pluginRef = getNativePreferences();
 
   const { migrateToNativeStorageIfNeeded } = await import(
     "@/store/native-migration"
   );
-  nativePrefsCache = await migrateToNativeStorageIfNeeded(
-    AonsokuNativePreferences,
-  );
+  nativePrefsCache = await migrateToNativeStorageIfNeeded(pluginRef);
   cacheReady = true;
   for (const resolve of pendingReads) resolve();
   pendingReads.length = 0;

@@ -5,6 +5,7 @@ import omit from "lodash/omit";
 import { shallow } from "zustand/shallow";
 import type { IPlayerContext, ISongList } from "@/types/playerContext";
 import { isNativePreferencesAvailable } from "@/native/preferences/facade";
+import { AonsokuNativePreferences } from "@/native/preferences/facade";
 import {
   createNativeStorage,
   getNativePrefsPlugin,
@@ -108,9 +109,6 @@ async function loadSonglistFromStorage(getStore: () => PlayerStoreApi) {
   let value: ISongList | undefined;
 
   if (isNativePreferencesAvailable()) {
-    const { AonsokuNativePreferences } = await import(
-      "@aonsoku/capacitor-native/preferences"
-    );
     const result = await AonsokuNativePreferences.getQueueState();
     if (result.state) {
       try {

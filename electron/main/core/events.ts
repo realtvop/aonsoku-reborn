@@ -14,6 +14,7 @@ import {
 } from "../native/bridge/ipc";
 import { setupDesktopNativeCoordinationIpc } from "../native/coordination/ipc";
 import { setupDesktopNativeDataIpc } from "../native/data/ipc";
+import { setupDesktopNativePreferencesIpc } from "../native/preferences/ipc";
 import { tray, updateTray } from "../tray";
 import { colorsState } from "./colors";
 import {
@@ -154,6 +155,7 @@ export function setupIpcEvents(window: BrowserWindow | null) {
   });
   setupDesktopNativeBridgeIpc();
   setupDesktopNativeDataIpc(window);
+  setupDesktopNativePreferencesIpc();
   setupDesktopNativeCoordinationIpc(window);
   setupDesktopPlaybackControlChrome(() => {
     setTaskbarButtons();
