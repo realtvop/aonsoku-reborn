@@ -277,9 +277,10 @@ export function CachedImage({
           className={`${props.className ?? ""} bg-skeleton transition-opacity duration-300`}
           crossOrigin={props.crossOrigin}
           data-testid={props["data-testid"]}
+          decoding="async"
           height={props.height}
           id={props.id}
-          loading={props.loading}
+          loading={props.loading ?? "lazy"}
           onError={handleError}
           onLoad={handleLoad}
           src={cachedSrc}
