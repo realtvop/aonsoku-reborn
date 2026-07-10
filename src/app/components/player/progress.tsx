@@ -70,7 +70,7 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
           value={isLocalSeeking ? [localProgress] : [progress]}
           max={currentDuration ?? 0}
           step={1}
-          className="cursor-pointer w-[32rem]"
+          className="cursor-pointer w-[32rem] before:-top-1.5 before:-bottom-1.5"
           isBuffering={isBuffering}
           bufferedProgress={isRemoteActive ? 0 : bufferedProgress}
           onValueChange={([value]) => handleSeeking(value)}
@@ -83,7 +83,7 @@ export function PlayerProgress({ audioRef }: PlayerProgressProps) {
           max={100}
           step={1}
           disabled={true}
-          className="cursor-pointer w-[32rem] pointer-events-none"
+          className="cursor-pointer w-[32rem] pointer-events-none before:-top-1.5 before:-bottom-1.5"
         />
       )}
       <small
