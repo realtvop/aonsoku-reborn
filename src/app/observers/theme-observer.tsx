@@ -108,6 +108,7 @@ export function ThemeObserver() {
   const darkTheme = useThemeStore((s) => s.darkTheme);
   const currentTheme = useThemeStore((s) => s.theme);
   const materialYouEnabled = useThemeStore((s) => s.materialYouEnabled);
+  const usePointerCursors = useThemeStore((s) => s.usePointerCursors);
 
   const updateTheme = useCallback(() => {
     const resolved = resolveTheme(themeMode, lightTheme, darkTheme);
@@ -142,6 +143,15 @@ export function ThemeObserver() {
   useLayoutEffect(() => {
     applyTheme(currentTheme);
   }, [currentTheme]);
+
+  useLayoutEffect(() => {
+    const root = window.document.documentElement;
+    if (usePointerCursors) {
+      root.classList.remove("no-pointer-cursors");
+    } else {
+      root.classList.add("no-pointer-cursors");
+    }
+  }, [usePointerCursors]);
 
   useLayoutEffect(() => {
     const root = window.document.documentElement;
