@@ -72,13 +72,8 @@ final class ImageCacheManager {
         }
 
         let directory = try ImageCacheUtils.cacheDirectoryURL(createIfNeeded: true)
-        let fileName = "\(ImageCacheUtils.cacheId(for: coverArtId)).jpg"
-        let fileURL = directory.appendingPathComponent(fileName, isDirectory: false)
 
-        // Remove existing file before downloading
-        if FileManager.default.fileExists(atPath: fileURL.path) {
-            try? FileManager.default.removeItem(at: fileURL)
-        }
+        removeCoverImageFiles(cacheId: ImageCacheUtils.cacheId(for: coverArtId), in: directory)
 
         let url = try buildCoverArtURL(credentials: credentials, coverArtId: coverArtId, size: size)
         let (data, response) = try await session.data(from: url)
@@ -92,10 +87,6 @@ final class ImageCacheManager {
         let ext = ImageCacheUtils.fileExtension(for: contentType)
         let finalFileName = "\(ImageCacheUtils.cacheId(for: coverArtId)).\(ext)"
         let finalFileURL = directory.appendingPathComponent(finalFileName, isDirectory: false)
-
-        if finalFileURL.path != fileURL.path {
-            try? FileManager.default.removeItem(at: finalFileURL)
-        }
 
         try data.write(to: finalFileURL, options: [.atomic])
 
@@ -125,9 +116,7 @@ final class ImageCacheManager {
         let fileName = "\(ImageCacheUtils.cacheId(for: coverArtId)).\(ext)"
         let fileURL = directory.appendingPathComponent(fileName, isDirectory: false)
 
-        if FileManager.default.fileExists(atPath: fileURL.path) {
-            try FileManager.default.removeItem(at: fileURL)
-        }
+        removeCoverImageFiles(cacheId: ImageCacheUtils.cacheId(for: coverArtId), in: directory)
 
         try data.write(to: fileURL, options: [.atomic])
 
@@ -187,16 +176,7 @@ final class ImageCacheManager {
         }
 
         let cacheId = ImageCacheUtils.cacheId(for: coverArtId)
-        let urls = try FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: nil
-        )
-
-        var deleted = false
-        for url in urls where url.lastPathComponent.hasPrefix("\(cacheId).") {
-            try FileManager.default.removeItem(at: url)
-            deleted = true
-        }
+        let deleted = removeCoverImageFiles(cacheId: cacheId, in: directory)
 
         let key = "cover:\(coverArtId)"
         let repo = CacheMetaRepository(db: db)
@@ -296,10 +276,24 @@ final class ImageCacheManager {
     }
 
     private func findCoverImageURL(cacheId: String, in directory: URL) throws -> URL? {
-        let urls = try FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: nil
-        )
-        return urls.first { $0.lastPathComponent.hasPrefix("\(cacheId).") }
+        ImageCacheUtils.cachedImageExtensions
+            .map { directory.appendingPathComponent("\(cacheId).\($0)", isDirectory: false) }
+            .first { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
+    @discardableResult
+    private func removeCoverImageFiles(cacheId: String, in directory: URL) -> Bool {
+        var deleted = false
+        for ext in ImageCacheUtils.cachedImageExtensions {
+            let url = directory.appendingPathComponent("\(cacheId).\(ext)", isDirectory: false)
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                continue
+            }
+            do {
+                try FileManager.default.removeItem(at: url)
+                deleted = true
+            } catch {}
+        }
+        return deleted
     }
 }

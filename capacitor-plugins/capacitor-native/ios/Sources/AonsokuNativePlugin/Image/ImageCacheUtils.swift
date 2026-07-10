@@ -3,6 +3,7 @@ import Foundation
 enum ImageCacheUtils {
     static let appSupportSubdirectory = "Aonsoku"
     static let cacheDirectoryName = "ImageCache"
+    static let cachedImageExtensions = ["jpg", "png", "webp", "gif"]
 
     static func cacheId(for coverArtId: String) -> String {
         Data(coverArtId.utf8)

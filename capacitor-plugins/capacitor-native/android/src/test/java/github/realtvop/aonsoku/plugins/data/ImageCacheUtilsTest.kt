@@ -11,6 +11,7 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.MockedStatic
 import org.mockito.Mockito
+import java.nio.file.Files
 
 class ImageCacheUtilsTest {
     private lateinit var mockedBase64: MockedStatic<Base64>
@@ -82,5 +83,37 @@ class ImageCacheUtilsTest {
     @Test
     fun fileExtensionStripsParameters() {
         assertEquals("jpg", ImageCacheUtils.fileExtension(forContentType = "image/jpeg; charset=utf-8"))
+    }
+
+    @Test
+    fun coverImageFileFindsKnownExtensionsWithoutDirectoryScan() {
+        val dir = Files.createTempDirectory("aonsoku-cover-test").toFile()
+        try {
+            val cacheId = ImageCacheUtils.cacheId(forCoverArtId = "cover-1")
+            val expected = dir.resolve("$cacheId.webp")
+            expected.writeText("cover")
+
+            assertEquals(expected, ImageCacheUtils.coverImageFile(dir, cacheId))
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun deleteCoverImageFilesRemovesKnownExtensions() {
+        val dir = Files.createTempDirectory("aonsoku-cover-test").toFile()
+        try {
+            val cacheId = ImageCacheUtils.cacheId(forCoverArtId = "cover-2")
+            val jpg = dir.resolve("$cacheId.jpg")
+            val png = dir.resolve("$cacheId.png")
+            jpg.writeText("jpg")
+            png.writeText("png")
+
+            assertTrue(ImageCacheUtils.deleteCoverImageFiles(dir, cacheId))
+            assertFalse(jpg.exists())
+            assertFalse(png.exists())
+        } finally {
+            dir.deleteRecursively()
+        }
     }
 }
