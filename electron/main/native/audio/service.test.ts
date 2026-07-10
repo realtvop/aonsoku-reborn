@@ -56,7 +56,11 @@ describe("NativeAudioService", () => {
       path.join(tmpdir(), "aonsoku-audio-service-"),
     );
     engine = new FakeAudioEngine();
-    service = new NativeAudioService({ engine, audioCacheDirectory });
+    service = new NativeAudioService({
+      engine,
+      audioCacheDirectory,
+      cacheLoadedStreams: false,
+    });
   });
 
   afterEach(async () => {
@@ -70,6 +74,7 @@ describe("NativeAudioService", () => {
     const resolvingService = new NativeAudioService({
       engine: resolvingEngine,
       audioCacheDirectory,
+      cacheLoadedStreams: false,
       artworkUrlResolver: (artworkUrl) => {
         if (!artworkUrl) return undefined;
         if (artworkUrl.startsWith("aonsoku-media://")) {
@@ -148,6 +153,7 @@ describe("NativeAudioService", () => {
     const resolvingService = new NativeAudioService({
       engine: resolvingEngine,
       audioCacheDirectory,
+      cacheLoadedStreams: false,
       artworkUrlResolver: () => {
         throw new Error("missing_credentials");
       },
@@ -629,7 +635,7 @@ describe("NativeAudioService", () => {
     });
   });
 
-  it("emits streamCacheCompleted for the opt-in loaded stream cache path", async () => {
+  it("emits streamCacheCompleted for the default loaded stream cache path", async () => {
     const songId = "song-background-cache";
     const body = Buffer.from("background cached audio");
     mockAudioFetch({
@@ -639,7 +645,6 @@ describe("NativeAudioService", () => {
     const backgroundService = new NativeAudioService({
       engine,
       audioCacheDirectory,
-      cacheLoadedStreams: true,
     });
     const events: unknown[] = [];
     backgroundService.onEvent((event) => events.push(event));

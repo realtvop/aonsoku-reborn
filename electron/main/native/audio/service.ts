@@ -146,7 +146,7 @@ export class NativeAudioService implements AonsokuAudioApi {
     this.#downloadUrlResolver = options.downloadUrlResolver ?? null;
     this.#streamUrlResolver = options.streamUrlResolver ?? ((url) => url);
     this.#artworkUrlResolver = options.artworkUrlResolver ?? ((url) => url);
-    this.#cacheLoadedStreams = options.cacheLoadedStreams ?? false;
+    this.#cacheLoadedStreams = options.cacheLoadedStreams ?? true;
     this.#systemAudio =
       options.systemAudioAdapter ?? createDesktopSystemAudioAdapter();
     this.#playbackStateStore =
