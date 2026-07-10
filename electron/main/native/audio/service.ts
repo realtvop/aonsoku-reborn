@@ -693,9 +693,6 @@ export class NativeAudioService implements AonsokuAudioApi {
     command: NativeAudioRemoteCommand,
     position?: number,
   ): Promise<void> {
-    console.error(
-      `[aonsoku-media] service handling system command: command=${command} position=${position ?? "-"}`,
-    );
     if (this.#emitRemoteControlCommandForNativeCommand(command, position)) {
       return;
     }
