@@ -73,19 +73,6 @@ MediaPlaybackStatus ToPlaybackStatus(SystemMediaSessionPlaybackState state) {
   return MediaPlaybackStatus::Closed;
 }
 
-void SetSystemMediaCommandHandler(SystemMediaCommandHandler handler,
-                                  void* context) {
-  g_command_context.store(context, std::memory_order_release);
-  g_command_handler.store(handler, std::memory_order_release);
-}
-
-void ClearSystemMediaCommandHandler(void* context) {
-  void* current = g_command_context.load(std::memory_order_acquire);
-  if (current != context) return;
-  g_command_handler.store(nullptr, std::memory_order_release);
-  g_command_context.store(nullptr, std::memory_order_release);
-}
-
 bool EnsureControls() {
   if (g_initialized) return g_controls != nullptr;
 
@@ -123,6 +110,25 @@ bool EnsureControls() {
 }
 
 }  // namespace
+
+// Declared in system_media_session.h and called from aonsoku_libmpv.cc (a
+// separate translation unit), so these must have external linkage. They are
+// intentionally defined OUTSIDE the anonymous namespace above; defining them
+// inside it (internal linkage) would leave them undefined to the addon linker.
+// They reference the anonymous-namespace atomics, which are visible here via
+// the anonymous namespace's implicit using-directive.
+void SetSystemMediaCommandHandler(SystemMediaCommandHandler handler,
+                                  void* context) {
+  g_command_context.store(context, std::memory_order_release);
+  g_command_handler.store(handler, std::memory_order_release);
+}
+
+void ClearSystemMediaCommandHandler(void* context) {
+  void* current = g_command_context.load(std::memory_order_acquire);
+  if (current != context) return;
+  g_command_handler.store(nullptr, std::memory_order_release);
+  g_command_context.store(nullptr, std::memory_order_release);
+}
 
 void UpdateSystemMediaSession(const SystemMediaSessionMetadata& metadata,
                               SystemMediaSessionPlaybackState state,
