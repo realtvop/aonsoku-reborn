@@ -254,7 +254,18 @@ Key files:
   The Node-API addon publishes active libmpv playback directly to each desktop
   system media surface: `MPNowPlayingInfoCenter` on macOS, SMTC on Windows,
   and MPRIS2 over the session D-Bus on Linux. Do not rely on the renderer Web
-  Media Session for desktop native-audio registration. Linux builds require
+  Media Session for desktop native-audio registration; the renderer disables
+  `navigator.mediaSession` via `shouldUseNativePlaybackBackend()`
+  (`src/utils/setMediaSession.ts`) whenever the native backend owns the system
+  media session, so the addon/plugin is the single source of truth. On macOS the
+  addon also registers `MPRemoteCommandCenter` handlers (required for Control
+  Center / Now Playing visibility and media-key routing) and forwards system
+  media commands back to JS as `system-media-command` events; these flow
+  through `LibMpvAudioEngine` → `NativeAudioService.emitRemoteCommand` as
+  `remoteCommand` events, reusing the same IPC path the renderer handles for
+  native remote commands (and remote-control projection when a remote device is
+  active). Windows/Linux currently register for display only; system command
+  reception there is a follow-up. Linux builds require
   the system `dbus-1` development package in addition to libmpv headers.
 - `src/player/queue-controller/` — queue management
   (`web-controller` / `native-controller`). Runtimes with native playback
