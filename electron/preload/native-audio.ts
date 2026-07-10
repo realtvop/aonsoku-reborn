@@ -8,9 +8,68 @@ import { ipcRenderer } from "electron";
 import {
   DESKTOP_NATIVE_AUDIO_EVENT_CHANNEL,
   DESKTOP_NATIVE_AUDIO_INVOKE_CHANNEL,
-  type DesktopNativeAudioEventPayload,
   type DesktopNativeAudioInvokePayload,
 } from "../main/native/audio/ipc";
+
+// All native-audio events are multiplexed over a single IPC channel. Every
+// subscriber used to register its own ipcRenderer listener for that channel,
+// so the listener count grew with the number of subscribers (backend + queue
+// controller + remote-command observer + cache adapter + system volume ...)
+// and tripped MaxListenersExceededWarning, plus every event was dispatched to
+// every subscriber's wrapper. Instead, install a single dispatcher that fans
+// events out to per-eventName listener sets, so the ipcRenderer listener count
+// is always 1 regardless of how many subscribers exist.
+type NativeAudioListenerFunc = (event: unknown) => void;
+const nativeAudioListeners = new Map<
+  NativeAudioEventName,
+  Set<NativeAudioListenerFunc>
+>();
+let nativeAudioDispatcherInstalled = false;
+let nativeAudioDispatcher:
+  | ((
+      event: unknown,
+      payload: { eventName: NativeAudioEventName; event: unknown } | undefined,
+    ) => void)
+  | null = null;
+
+function ensureNativeAudioDispatcher(): void {
+  if (nativeAudioDispatcherInstalled) return;
+  nativeAudioDispatcherInstalled = true;
+
+  const dispatcher = (
+    _event: unknown,
+    payload: { eventName: NativeAudioEventName; event: unknown } | undefined,
+  ) => {
+    if (!payload) return;
+    const listeners = nativeAudioListeners.get(payload.eventName);
+    if (!listeners) return;
+
+    for (const listener of listeners) {
+      try {
+        listener(payload.event);
+      } catch (error) {
+        // A failing listener must not break delivery to the others.
+        console.error("[aonsoku-native-audio] listener threw:", error);
+      }
+    }
+  };
+
+  nativeAudioDispatcher = dispatcher;
+  ipcRenderer.on(DESKTOP_NATIVE_AUDIO_EVENT_CHANNEL, dispatcher);
+}
+
+/** @internal Test-only: detaches the dispatcher and clears listener sets. */
+export function __resetNativeAudioDispatcherForTest(): void {
+  if (nativeAudioDispatcher !== null) {
+    ipcRenderer.removeListener(
+      DESKTOP_NATIVE_AUDIO_EVENT_CHANNEL,
+      nativeAudioDispatcher,
+    );
+    nativeAudioDispatcher = null;
+  }
+  nativeAudioDispatcherInstalled = false;
+  nativeAudioListeners.clear();
+}
 
 function invokeNativeAudio<TMethod extends keyof AonsokuAudioApi>(
   method: TMethod,
@@ -39,18 +98,15 @@ export const aonsokuNativeAudioBridge: AonsokuAudioBridge = {
   updateMetadata: (metadata) => invokeNativeAudio("updateMetadata", metadata),
   updateRemotePlaybackState: (options) =>
     invokeNativeAudio("updateRemotePlaybackState", options),
-  clearRemotePlaybackState: () =>
-    invokeNativeAudio("clearRemotePlaybackState"),
+  clearRemotePlaybackState: () => invokeNativeAudio("clearRemotePlaybackState"),
   preload: (options) => invokeNativeAudio("preload", options),
   clear: () => invokeNativeAudio("clear"),
   storeAudioFile: (options) => invokeNativeAudio("storeAudioFile", options),
   resolveAudioFile: (options) => invokeNativeAudio("resolveAudioFile", options),
-  getAudioFileSize: (options) =>
-    invokeNativeAudio("getAudioFileSize", options),
+  getAudioFileSize: (options) => invokeNativeAudio("getAudioFileSize", options),
   deleteAudioFile: (options) => invokeNativeAudio("deleteAudioFile", options),
   clearAudioFiles: () => invokeNativeAudio("clearAudioFiles"),
-  setContextQueue: (options) =>
-    invokeNativeAudio("setContextQueue", options),
+  setContextQueue: (options) => invokeNativeAudio("setContextQueue", options),
   updateContextQueue: (options) =>
     invokeNativeAudio("updateContextQueue", options),
   reorderContextQueue: (options) =>
@@ -79,23 +135,25 @@ export const aonsokuNativeAudioBridge: AonsokuAudioBridge = {
     eventName: TEvent,
     listenerFunc: (event: NativeAudioEvents[TEvent]) => void,
   ) => {
-    const wrappedListener = (
-      _event: Electron.IpcRendererEvent,
-      payload: DesktopNativeAudioEventPayload<TEvent>,
-    ) => {
-      if (payload.eventName !== eventName) return;
+    ensureNativeAudioDispatcher();
 
-      listenerFunc(payload.event);
-    };
+    let listeners = nativeAudioListeners.get(eventName);
+    if (!listeners) {
+      listeners = new Set<NativeAudioListenerFunc>();
+      nativeAudioListeners.set(eventName, listeners);
+    }
 
-    ipcRenderer.on(DESKTOP_NATIVE_AUDIO_EVENT_CHANNEL, wrappedListener);
+    const listener = listenerFunc as NativeAudioListenerFunc;
+    listeners.add(listener);
 
     return {
       remove: () => {
-        ipcRenderer.removeListener(
-          DESKTOP_NATIVE_AUDIO_EVENT_CHANNEL,
-          wrappedListener,
-        );
+        const current = nativeAudioListeners.get(eventName);
+        if (!current) return;
+        current.delete(listener);
+        if (current.size === 0) {
+          nativeAudioListeners.delete(eventName);
+        }
       },
     };
   },
