@@ -2,6 +2,7 @@ import type {
   NativeAudioEventName,
   NativeAudioEvents,
   NativeAudioMetadata,
+  NativeAudioRemoteCommand,
 } from "@aonsoku/audio-contract";
 
 export type NativeAudioServiceEvent = {
@@ -42,6 +43,11 @@ export type DesktopAudioEngineEvent =
       type: "error";
       code?: string;
       message: string;
+    }
+  | {
+      type: "systemMediaCommand";
+      command: NativeAudioRemoteCommand;
+      position?: number;
     };
 
 export type DesktopAudioEngineEventListener = (

@@ -28,6 +28,11 @@ export type MpvPlayerEvent =
       type: "shutdown";
     }
   | {
+      type: "system-media-command";
+      name: string;
+      data: MpvPropertyValue;
+    }
+  | {
       type: "error";
       code?: string;
       message: string;

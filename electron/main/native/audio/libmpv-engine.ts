@@ -1,5 +1,8 @@
 import { EventEmitter } from "node:events";
-import type { NativeAudioMetadata } from "@aonsoku/audio-contract";
+import type {
+  NativeAudioMetadata,
+  NativeAudioRemoteCommand,
+} from "@aonsoku/audio-contract";
 import type {
   MpvPlayer,
   MpvPlayerEvent,
@@ -263,6 +266,9 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
       case "error":
         this.#emitError(event.code ?? "mpv-error", event.message);
         break;
+      case "system-media-command":
+        this.#handleSystemMediaCommand(event);
+        break;
       case "shutdown":
         this.#clearSystemMediaSession();
         this.#player = null;
@@ -376,6 +382,26 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
     });
   }
 
+  #handleSystemMediaCommand(
+    event: Extract<MpvPlayerEvent, { type: "system-media-command" }>,
+  ): void {
+    if (this.#destroyed) return;
+
+    const command = event.name as NativeAudioRemoteCommand;
+    if (!isSupportedSystemMediaCommand(command)) return;
+
+    const position =
+      typeof event.data === "number" && Number.isFinite(event.data)
+        ? event.data
+        : undefined;
+
+    this.#emit({
+      type: "systemMediaCommand",
+      command,
+      ...(position !== undefined ? { position } : {}),
+    });
+  }
+
   #emitError(code: string, message: string): void {
     this.#emit({
       type: "error",
@@ -469,4 +495,15 @@ function normalizeSeconds(value: unknown): number {
 function clampUnitVolume(value: number): number {
   if (!Number.isFinite(value)) return 1;
   return Math.max(0, Math.min(1, value));
+}
+
+const SUPPORTED_SYSTEM_MEDIA_COMMANDS: ReadonlySet<NativeAudioRemoteCommand> =
+  new Set(["play", "pause", "togglePlayPause", "next", "previous", "seek"]);
+
+function isSupportedSystemMediaCommand(
+  command: string,
+): command is NativeAudioRemoteCommand {
+  return SUPPORTED_SYSTEM_MEDIA_COMMANDS.has(
+    command as NativeAudioRemoteCommand,
+  );
 }

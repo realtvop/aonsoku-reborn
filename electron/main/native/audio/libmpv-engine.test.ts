@@ -390,4 +390,57 @@ describe("LibMpvAudioEngine", () => {
       { type: "bufferingChanged", isBuffering: true },
     ]);
   });
+
+  it("forwards system media commands as engine events", async () => {
+    const { engine, events, player } = createHarness();
+
+    await engine.load({
+      source: {
+        kind: "stream",
+        target: "https://server/rest/stream?id=song-1",
+      },
+      autoplay: true,
+    });
+    events.length = 0;
+
+    player.emit({ type: "system-media-command", name: "play", data: null });
+    player.emit({
+      type: "system-media-command",
+      name: "togglePlayPause",
+      data: null,
+    });
+    player.emit({ type: "system-media-command", name: "seek", data: 42.5 });
+
+    expect(events).toEqual([
+      { type: "systemMediaCommand", command: "play" },
+      { type: "systemMediaCommand", command: "togglePlayPause" },
+      { type: "systemMediaCommand", command: "seek", position: 42.5 },
+    ]);
+  });
+
+  it("ignores unsupported system media command names", async () => {
+    const { engine, events, player } = createHarness();
+
+    await engine.load({
+      source: {
+        kind: "stream",
+        target: "https://server/rest/stream?id=song-1",
+      },
+      autoplay: true,
+    });
+    events.length = 0;
+
+    player.emit({
+      type: "system-media-command",
+      name: "like",
+      data: null,
+    });
+    player.emit({
+      type: "system-media-command",
+      name: "unknown",
+      data: null,
+    });
+
+    expect(events).toEqual([]);
+  });
 });

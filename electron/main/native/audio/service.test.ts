@@ -795,6 +795,47 @@ describe("NativeAudioService", () => {
     });
   });
 
+  it("forwards system media command events as remote commands", async () => {
+    const events: unknown[] = [];
+    service.onEvent((event) => events.push(event));
+
+    await service.load({
+      requestId: "request-system-command",
+      source: {
+        kind: "stream",
+        url: "https://server/rest/stream?id=song-1",
+        songId: "song-1",
+      },
+      metadata: { title: "Track", duration: 100 },
+      autoplay: true,
+    });
+
+    events.length = 0;
+    engine.emit({ type: "systemMediaCommand", command: "togglePlayPause" });
+    engine.emit({ type: "systemMediaCommand", command: "next" });
+    engine.emit({ type: "systemMediaCommand", command: "seek", position: 33 });
+
+    expect(events).toContainEqual({
+      eventName: "remoteCommand",
+      event: {
+        requestId: "request-system-command",
+        command: "togglePlayPause",
+      },
+    });
+    expect(events).toContainEqual({
+      eventName: "remoteCommand",
+      event: { requestId: "request-system-command", command: "next" },
+    });
+    expect(events).toContainEqual({
+      eventName: "remoteCommand",
+      event: {
+        requestId: "request-system-command",
+        command: "seek",
+        position: 33,
+      },
+    });
+  });
+
   it("tracks native queue controls and skips through queued songs", async () => {
     const events: unknown[] = [];
     service.onEvent((event) => events.push(event));

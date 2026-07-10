@@ -736,6 +736,14 @@ export class NativeAudioService implements AonsokuAudioApi {
           message: event.message,
         });
         break;
+      case "systemMediaCommand":
+        this.emitRemoteCommand(
+          event.command,
+          typeof event.position === "number"
+            ? { position: event.position }
+            : {},
+        );
+        break;
     }
   }
 
