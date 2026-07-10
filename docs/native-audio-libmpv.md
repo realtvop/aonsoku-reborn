@@ -232,6 +232,13 @@ It excludes source directories and `node_modules` from app packaging. The
 Node-API addon is not rebuilt by Forge; build it with `pnpm native-audio:build`
 and copy it with `pnpm native-audio:prepare`.
 
+In Electron development, the loader prefers the freshly built source addon
+over `resources/native-audio`, so an older prepared resource cannot shadow a
+new `pnpm native-audio:build` result. Packaged applications continue to load
+the addon from `resources/native-audio` first. Older prepared addons that do
+not expose the optional system-media-session methods remain playback
+compatible; they simply skip native media-session projection until refreshed.
+
 `build:unpack` runs non-strict `pnpm native-audio:verify-package` before the
 Electron build so development builds still work and print warnings when local
 native-audio binaries are incomplete.

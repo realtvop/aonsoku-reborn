@@ -55,6 +55,20 @@ describe("libmpv native binding loader", () => {
     expect(requireNative).toHaveBeenCalledWith("/custom/aonsoku_libmpv.node");
   });
 
+  it("can prefer the freshly built source addon during development", () => {
+    const candidates = getLibMpvAddonCandidates({
+      cwd: process.cwd(),
+      preferSourceBuild: true,
+      resourcesPath: "/App/Contents/Resources",
+      platform: "darwin",
+      arch: "arm64",
+    });
+
+    expect(candidates[0]).toMatch(
+      /electron\/main\/native\/audio\/libmpv\/build\/Release\/aonsoku_libmpv\.node$/u,
+    );
+  });
+
   it("throws a diagnostic error when the addon cannot be loaded", () => {
     expect(() =>
       loadLibMpvBinding({

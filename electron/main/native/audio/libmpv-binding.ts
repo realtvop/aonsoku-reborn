@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { NativeAudioMetadata } from "@aonsoku/audio-contract";
 import type {
   MpvPlayer,
   MpvPlayerEvent,
@@ -34,7 +35,7 @@ export interface NativeMpvPlayerBinding {
   command(args: readonly string[]): void;
   setProperty(name: string, value: MpvPropertyValue): void;
   observeProperty(name: string, format: MpvPropertyFormat): void;
-  updateSystemMediaSession(
+  updateSystemMediaSession?(
     metadata: NativeAudioMetadata,
     options: {
       state: "playing" | "paused" | "stopped";
@@ -42,7 +43,7 @@ export interface NativeMpvPlayerBinding {
       duration: number;
     },
   ): void;
-  clearSystemMediaSession(): void;
+  clearSystemMediaSession?(): void;
   destroy(): void;
 }
 
@@ -60,6 +61,8 @@ export interface LibMpvBindingLoadOptions {
   cwd?: string;
   platform?: NodeJS.Platform;
   arch?: string;
+  /** Prefer the local source build over a stale development resource copy. */
+  preferSourceBuild?: boolean;
 }
 
 export class LibMpvBindingLoadError extends Error {
@@ -140,12 +143,20 @@ export function createNativeMpvPlayer(
 export function getLibMpvAddonCandidates(
   options: LibMpvBindingLoadOptions = {},
 ): string[] {
-  const candidates = [
+  const explicitCandidates = [
     options.addonPath,
     process.env.AONSOKU_LIBMPV_ADDON_PATH,
+  ];
+  const packagedCandidates = [
     packagedAddonPath(options),
     devResourceAddonPath(options),
-    sourceBuildAddonPath(),
+  ];
+  const sourceCandidates = [sourceBuildAddonPath(options.cwd)];
+  const candidates = [
+    ...explicitCandidates,
+    ...(options.preferSourceBuild || isElectronDevelopment()
+      ? [...sourceCandidates, ...packagedCandidates]
+      : [...packagedCandidates, ...sourceCandidates]),
   ];
 
   return [
@@ -218,11 +229,11 @@ class NativeMpvPlayerAdapter implements MpvPlayer {
       duration: number;
     },
   ): void {
-    this.#native.updateSystemMediaSession(metadata, options);
+    this.#native.updateSystemMediaSession?.(metadata, options);
   }
 
   clearSystemMediaSession(): void {
-    this.#native.clearSystemMediaSession();
+    this.#native.clearSystemMediaSession?.();
   }
 
   onEvent(listener: MpvPlayerEventListener): () => void {
@@ -259,7 +270,20 @@ function devResourceAddonPath(
   return libMpvRuntimeAddonPath(path.join(cwd, "resources"), options);
 }
 
-function sourceBuildAddonPath(): string {
+function sourceBuildAddonPath(cwd = process.cwd()): string {
+  const cwdCandidate = path.join(
+    cwd,
+    "electron",
+    "main",
+    "native",
+    "audio",
+    "libmpv",
+    "build",
+    "Release",
+    LIBMPV_ADDON_FILENAME,
+  );
+  if (existsSync(cwdCandidate)) return cwdCandidate;
+
   return path.join(
     path.dirname(fileURLToPath(import.meta.url)),
     "libmpv",
@@ -271,6 +295,12 @@ function sourceBuildAddonPath(): string {
 
 function isPresent(value: string | undefined): value is string {
   return typeof value === "string" && value.length > 0;
+}
+
+function isElectronDevelopment(): boolean {
+  return Boolean(
+    (process as NodeJS.Process & { defaultApp?: boolean }).defaultApp,
+  );
 }
 
 function validateRuntimeManifest(
