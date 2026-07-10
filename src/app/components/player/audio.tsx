@@ -40,7 +40,7 @@ import {
   useReplayGainActions,
   useReplayGainState,
 } from "@/store/player.store";
-import { getPlaybackCapabilities } from "@/utils/capabilities";
+import { getPlaybackCapabilities, getRuntime } from "@/utils/capabilities";
 import { logger } from "@/utils/logger";
 import { calculateReplayGain, ReplayGainParams } from "@/utils/replayGain";
 import { manageMediaSession } from "@/utils/setMediaSession";
@@ -307,9 +307,14 @@ export function AudioPlayer({
     if (!audio) return;
 
     if (shouldUseNativeAudio) {
-      getPlaybackBackend(audio)?.setVolume(audioVolume);
+      const entry = getPlaybackBackendEntry(audio);
+      const isElectronNative =
+        getRuntime() === "electron" && entry?.kind === "native";
+      const vol = isElectronNative ? volume / 100 : audioVolume;
+
+      entry?.backend.setVolume(vol);
       previousGainRef.current = Number.NaN;
-      logger.info("Native audio volume set:", audioVolume);
+      logger.info("Native audio volume set:", vol);
       return;
     }
 
@@ -322,10 +327,12 @@ export function AudioPlayer({
     audioRef,
     audioVolume,
     getPlaybackBackend,
+    getPlaybackBackendEntry,
     gainValue,
     replayGain,
     setupGain,
     shouldUseNativeAudio,
+    volume,
   ]);
 
   const safePlay = useCallback(

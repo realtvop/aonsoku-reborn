@@ -149,7 +149,6 @@ function DevicePanelContent({
     }
   };
 
-
   useEffect(() => {
     if (!isMobile || activeSnapPoint !== 1) {
       setHasOverflow(false);
@@ -293,7 +292,6 @@ function DevicePanelContent({
     </div>
   );
 
-
   return (
     <div
       className={cn(
@@ -387,9 +385,7 @@ function DevicePanelContent({
               {unconfiguredContent}
             </div>
           ) : (
-            <ScrollArea className="h-full">
-              {unconfiguredContent}
-            </ScrollArea>
+            <ScrollArea className="h-full">{unconfiguredContent}</ScrollArea>
           )
         ) : isMobile ? (
           <div
