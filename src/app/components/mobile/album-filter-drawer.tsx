@@ -8,6 +8,7 @@ import {
   DrawerTitle,
 } from "@/app/components/ui/drawer";
 import { AlbumListType } from "@/types/responses/album";
+import { setPreferenceValue } from "@/store/native-storage";
 import {
   AlbumsFilters,
   AlbumsSearchParams,
@@ -51,7 +52,7 @@ export function MobileAlbumFilterDrawer({
   );
 
   function handleChangeFilter(filter: AlbumListType) {
-    localStorage.setItem(PersistedAlbumListKeys.MainFilter, filter);
+    setPreferenceValue(PersistedAlbumListKeys.MainFilter, filter);
 
     setSearchParams(
       (state) => {
@@ -72,7 +73,7 @@ export function MobileAlbumFilterDrawer({
   }
 
   function handleChangeYearFilter(value: string) {
-    localStorage.setItem(PersistedAlbumListKeys.YearFilter, value);
+    setPreferenceValue(PersistedAlbumListKeys.YearFilter, value);
 
     setSearchParams(
       (state) => {

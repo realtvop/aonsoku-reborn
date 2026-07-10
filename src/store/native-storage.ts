@@ -32,6 +32,38 @@ export function getNativePrefsPlugin(): AonsokuNativePreferencesPlugin | null {
   return pluginRef;
 }
 
+export function getPreferenceValue(key: string): string | null {
+  if (!isNativePreferencesAvailable()) {
+    return localStorage.getItem(key);
+  }
+
+  return nativePrefsCache?.[key] ?? null;
+}
+
+export function setPreferenceValue(key: string, value: string): void {
+  if (!isNativePreferencesAvailable()) {
+    localStorage.setItem(key, value);
+    return;
+  }
+
+  if (nativePrefsCache) {
+    nativePrefsCache[key] = value;
+  }
+  debouncedNativeWrite(key, value);
+}
+
+export function removePreferenceValue(key: string): void {
+  if (!isNativePreferencesAvailable()) {
+    localStorage.removeItem(key);
+    return;
+  }
+
+  if (nativePrefsCache) {
+    delete nativePrefsCache[key];
+  }
+  pluginRef?.deletePreference({ key });
+}
+
 const writeTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const WRITE_DEBOUNCE_MS = 300;
 
