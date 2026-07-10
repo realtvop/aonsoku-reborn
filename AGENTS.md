@@ -130,6 +130,10 @@ Electron follows the same renderer/native ownership boundary as Capacitor:
   generic Subsonic requests.
 - `electron/main/native/data/` owns metadata sync, persistent library queries,
   lyrics metadata, and cover/avatar downloads.
+- `electron/main/native/preferences/` owns Electron desktop preference
+  persistence exposed through `AonsokuNativePreferences`; renderer-side
+  Zustand/UI preference stores should use `src/store/native-storage.ts` instead
+  of adding new Electron renderer `localStorage` persistence.
 - `electron/main/native/coordination/` owns coordination HTTP, token/config
   persistence, and the realtime WebSocket.
 - `electron/main/native/media-protocol.ts` resolves renderer-facing
