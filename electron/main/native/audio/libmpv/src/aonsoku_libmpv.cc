@@ -230,6 +230,42 @@ void QueueEvent(PlayerState* state, std::unique_ptr<QueuedEvent> event) {
   }
 }
 
+const char* SystemMediaCommandName(SystemMediaCommand command) {
+  switch (command) {
+    case SystemMediaCommand::kPlay:
+      return "play";
+    case SystemMediaCommand::kPause:
+      return "pause";
+    case SystemMediaCommand::kTogglePlayPause:
+      return "togglePlayPause";
+    case SystemMediaCommand::kNext:
+      return "next";
+    case SystemMediaCommand::kPrevious:
+      return "previous";
+    case SystemMediaCommand::kSeek:
+      return "seek";
+  }
+
+  return "unknown";
+}
+
+void SystemMediaCommandDispatcher(void* context,
+                                  SystemMediaCommand command,
+                                  double position) {
+  auto* state = static_cast<PlayerState*>(context);
+  if (state == nullptr) return;
+
+  auto queued = std::make_unique<QueuedEvent>();
+  queued->type = "system-media-command";
+  queued->name = SystemMediaCommandName(command);
+  if (command == SystemMediaCommand::kSeek) {
+    queued->value_type = EventValueType::kNumber;
+    queued->number_value = position;
+  }
+
+  QueueEvent(state, std::move(queued));
+}
+
 std::string EndFileReason(mpv_end_file_reason reason) {
   switch (reason) {
     case MPV_END_FILE_REASON_EOF:
@@ -382,6 +418,7 @@ void FinalizePlayer(napi_env env, void* data, void* /*hint*/) {
     state->tsfn = nullptr;
   }
 
+  ClearSystemMediaCommandHandler(state);
   ClearSystemMediaSession();
 
   delete state;
@@ -497,6 +534,8 @@ napi_value Initialize(napi_env env, napi_callback_info info) {
     state->handle = handle;
     state->running.store(true);
   }
+
+  SetSystemMediaCommandHandler(&SystemMediaCommandDispatcher, state);
 
   state->event_thread = std::thread(EventLoop, state);
 
@@ -745,6 +784,7 @@ napi_value Destroy(napi_env env, napi_callback_info info) {
     state->tsfn = nullptr;
   }
 
+  ClearSystemMediaCommandHandler(state);
   ClearSystemMediaSession();
 
   return Undefined(env);

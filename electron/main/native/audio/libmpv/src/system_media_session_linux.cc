@@ -29,6 +29,27 @@ struct MprisState {
 
 MprisState g_state;
 
+// Command reception (MPRIS method call routing) is not yet wired on Linux;
+// the D-Bus registration is display-only for now. The handler is stored so the
+// addon API stays uniform across platforms.
+SystemMediaCommandHandler g_command_handler = nullptr;
+void* g_command_context = nullptr;
+
+void SetSystemMediaCommandHandler(SystemMediaCommandHandler handler,
+                                  void* context) {
+  std::lock_guard<std::mutex> lock(g_state.mutex);
+  g_command_handler = handler;
+  g_command_context = context;
+}
+
+void ClearSystemMediaCommandHandler(void* context) {
+  std::lock_guard<std::mutex> lock(g_state.mutex);
+  if (g_command_context == context) {
+    g_command_handler = nullptr;
+    g_command_context = nullptr;
+  }
+}
+
 const char* PlaybackStatus(SystemMediaSessionPlaybackState state) {
   switch (state) {
     case SystemMediaSessionPlaybackState::kPlaying:
