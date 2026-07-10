@@ -305,7 +305,9 @@ Key files:
   authenticated Subsonic HTTP URLs before metadata reaches the engine. The
   service also re-syncs the system media session's elapsed time after a seek
   so the Now Playing scrubber stays accurate between play/pause updates.
-  Windows artwork is not yet set. Linux builds require
+  Windows sets the SMTC `Thumbnail` from the resolved HTTP `artworkUrl` via
+  `RandomAccessStreamReference::CreateFromUri`, letting the OS fetch the
+  image. Linux builds require
   the system `dbus-1` development package in addition to libmpv headers.
 - `src/player/queue-controller/` — queue management
   (`web-controller` / `native-controller`). Runtimes with native playback

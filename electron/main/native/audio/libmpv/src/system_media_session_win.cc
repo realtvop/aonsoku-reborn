@@ -5,6 +5,7 @@
 
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Media.h>
+#include <winrt/Windows.Storage.Streams.h>
 
 namespace {
 
@@ -135,6 +136,17 @@ void UpdateSystemMediaSession(const SystemMediaSessionMetadata& metadata,
   music.Title(to_hstring(metadata.title));
   music.Artist(to_hstring(metadata.artist));
   music.AlbumTitle(to_hstring(metadata.album));
+  if (!metadata.artwork_url.empty()) {
+    try {
+      auto uri = Uri(to_hstring(metadata.artwork_url));
+      updater.Thumbnail(
+          Windows::Storage::Streams::RandomAccessStreamReference::CreateFromUri(uri));
+    } catch (const hresult_error&) {
+      // Malformed artwork URL or unavailable stream reference; leave no thumbnail.
+    }
+  } else {
+    updater.Thumbnail(nullptr);
+  }
   updater.Update();
 
   SystemMediaTransportControlsTimelineProperties timeline;
