@@ -94,16 +94,18 @@ network when an offline function is available.
 
 Metadata/library sync is runtime-specific:
 
-- **Web/Electron**: `src/service/cache/sync-worker-adapter.ts` creates
+- **Web**: `src/service/cache/sync-worker-adapter.ts` creates
   `src/service/cache/sync.worker.ts` and communicates with it via Comlink.
   The worker owns its own Dexie instance, receives auth via
   `initAuth`/`updateAuth`, and bridges sync state/query invalidation back to
   the main thread.
 - **Worker fallback**: if Web Workers are unavailable, sync falls back to
   `src/service/cache/metadata-sync.ts` on the main thread.
-- **Capacitor iOS/Android**: sync uses `src/native/data/native-sync-adapter.ts`
-  and the native `AonsokuNativeData` plugin. Native platforms do not fall back
-  to the browser Worker/IndexedDB sync path.
+- **Electron, Capacitor iOS/Android**: sync uses
+  `src/native/data/native-sync-adapter.ts` and the runtime's
+  `AonsokuNativeData` implementation. Electron implements the bridge in
+  `electron/main/native/data/`; mobile uses the Capacitor plugin. Native
+  runtimes do not fall back to the browser Worker/IndexedDB sync path.
 
 ### Data Flow
 
@@ -120,6 +122,20 @@ For native runtimes, album/song search and list queries may read through
 library data behavior, check the online service path, IDB/offline path, and
 native data facade.
 
+Electron follows the same renderer/native ownership boundary as Capacitor:
+
+- Renderer code calls the shared native bridge, data, audio, and coordination
+  facades. It must not open Subsonic/coordination HTTP or WebSocket connections.
+- `electron/main/native/bridge/` owns credentials, login, server probing, and
+  generic Subsonic requests.
+- `electron/main/native/data/` owns metadata sync, persistent library queries,
+  lyrics metadata, and cover/avatar downloads.
+- `electron/main/native/coordination/` owns coordination HTTP, token/config
+  persistence, and the realtime WebSocket.
+- `electron/main/native/media-protocol.ts` resolves renderer-facing
+  `aonsoku-media://` cover/avatar/stream identifiers and injects credentials in
+  the main process. Renderer code must not construct authenticated server URLs.
+
 ### Cross-Device Coordination
 
 Aonsoku includes a Rust coordination service in `coordination-server/` for
@@ -127,10 +143,9 @@ device registration, presence, playback snapshots, remote control, history
 sync, and handoff. The client-side orchestration lives in `src/coordination/`
 with React state in `src/coordination/store.ts`.
 
-- Web/Electron use the TypeScript WebSocket client
-  (`src/coordination/wsClient.ts`).
-- iOS/Android use `src/native/coordination/facade.ts` and the native
-  coordination plugin.
+- Web uses the TypeScript WebSocket client (`src/coordination/wsClient.ts`).
+- Electron, iOS, and Android use `src/native/coordination/facade.ts` and their
+  runtime-native coordination implementations.
 - The root app mounts `CoordinationObserver`, and player/fullscreen/lyrics
   surfaces can project remote playback through
   `src/app/components/remote-control/`.

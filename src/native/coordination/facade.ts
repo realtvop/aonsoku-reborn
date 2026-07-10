@@ -2,9 +2,9 @@
 //
 // Wraps the `@aonsoku/capacitor-native/coordination` plugin so the
 // `CoordinationManager` can talk to the native WebSocket layer on iOS/Android
-// with the same surface area as the TypeScript `CoordinationWsClient`. On
-// web/Electron the plugin is unavailable and the manager falls back to the TS
-// client. Mirrors the facade pattern in `src/native/audio/facade.ts` and
+// with the same surface area as the TypeScript `CoordinationWsClient`. Web
+// falls back to the TS client; Electron supplies a preload-backed native
+// implementation. Mirrors the facade pattern in `src/native/audio/facade.ts` and
 // `src/native/bridge/facade.ts`.
 
 import {
@@ -48,8 +48,16 @@ const NATIVE_COORDINATION_PLATFORMS = ["ios", "android"];
 
 /// Returns whether the native coordination plugin is available. Mirrors
 /// `getNativeAudioPluginAvailability()` — true only when running on a native
-/// Capacitor platform (iOS/Android) **and** the plugin is actually registered.
+/// Capacitor platform with a registered plugin, or Electron with its preload
+/// bridge exposed.
 export function getNativeCoordinationAvailability(): NativeCoordinationAvailability {
+  if (
+    typeof window !== "undefined" &&
+    window.aonsokuNativeCoordination !== undefined
+  ) {
+    return { available: true, plugin: window.aonsokuNativeCoordination };
+  }
+
   if (
     !Capacitor.isNativePlatform() ||
     !NATIVE_COORDINATION_PLATFORMS.includes(Capacitor.getPlatform())

@@ -108,12 +108,25 @@ function snapshot(sessionId: string): PlaybackSnapshot {
 
 describe("native coordination facade availability", () => {
   beforeEach(() => {
+    vi.unstubAllGlobals();
     mockIsNativePlatform.mockReset();
     mockGetPlatform.mockReset();
     mockIsPluginAvailable.mockReset();
     mockIsNativePlatform.mockReturnValue(false);
     mockGetPlatform.mockReturnValue("web");
     mockIsPluginAvailable.mockReturnValue(false);
+  });
+
+  it("uses the Electron coordination bridge exposed by preload", () => {
+    const desktopPlugin = { connect: vi.fn() };
+    vi.stubGlobal("window", {
+      aonsokuNativeCoordination: desktopPlugin,
+    });
+
+    expect(getNativeCoordinationAvailability()).toEqual({
+      available: true,
+      plugin: desktopPlugin,
+    });
   });
 
   it("reports web as unavailable", () => {

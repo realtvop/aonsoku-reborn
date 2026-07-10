@@ -2,6 +2,7 @@ import { electronAPI } from "@electron-toolkit/preload";
 import { contextBridge, ipcRenderer } from "electron";
 import { aonsokuNativeAudioBridge } from "./native-audio";
 import { aonsokuNativeBridge } from "./native-bridge";
+import { aonsokuNativeCoordination } from "./native-coordination";
 import { aonsokuNativeData } from "./native-data";
 import { IAonsokuAPI, IpcChannels, PlayerStateListenerActions } from "./types";
 
@@ -90,6 +91,10 @@ if (process.contextIsolated) {
     );
     contextBridge.exposeInMainWorld("aonsokuNativeBridge", aonsokuNativeBridge);
     contextBridge.exposeInMainWorld("aonsokuNativeData", aonsokuNativeData);
+    contextBridge.exposeInMainWorld(
+      "aonsokuNativeCoordination",
+      aonsokuNativeCoordination,
+    );
   } catch (error) {
     console.error(error);
   }
@@ -104,4 +109,6 @@ if (process.contextIsolated) {
   window.aonsokuNativeBridge = aonsokuNativeBridge;
   // @ts-expect-error (define in dts)
   window.aonsokuNativeData = aonsokuNativeData;
+  // @ts-expect-error (define in dts)
+  window.aonsokuNativeCoordination = aonsokuNativeCoordination;
 }
