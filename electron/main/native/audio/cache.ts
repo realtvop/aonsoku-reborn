@@ -160,18 +160,16 @@ export class DesktopAudioFileStore {
     if (!(await pathExists(directory))) return 0;
 
     const entries = await fs.readdir(directory);
-    let deletedAudioFileCount = 0;
+    let deletedEntryCount = 0;
 
     await Promise.all(
       entries.map(async (entry) => {
-        if (!entry.endsWith(".json")) {
-          deletedAudioFileCount++;
-        }
         await fs.rm(path.join(directory, entry), { force: true });
+        deletedEntryCount++;
       }),
     );
 
-    return deletedAudioFileCount;
+    return deletedEntryCount;
   }
 
   async #resolveCacheDirectory(options: { create: boolean }): Promise<string> {

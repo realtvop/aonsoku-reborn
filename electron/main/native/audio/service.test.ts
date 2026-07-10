@@ -485,7 +485,7 @@ describe("NativeAudioService", () => {
     });
 
     await expect(service.clearAudioFiles()).resolves.toEqual({
-      deletedCount: 2,
+      deletedCount: 4,
     });
     await expect(fs.readdir(audioCacheDirectory)).resolves.toEqual([]);
   });
