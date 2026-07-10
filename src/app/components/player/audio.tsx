@@ -40,7 +40,7 @@ import {
   useReplayGainActions,
   useReplayGainState,
 } from "@/store/player.store";
-import { getPlaybackCapabilities, getRuntime } from "@/utils/capabilities";
+import { getPlaybackCapabilities } from "@/utils/capabilities";
 import { logger } from "@/utils/logger";
 import { calculateReplayGain, ReplayGainParams } from "@/utils/replayGain";
 import { manageMediaSession } from "@/utils/setMediaSession";
@@ -755,10 +755,7 @@ export function AudioPlayer({
             return;
           }
 
-          if (
-            backendRef.current?.kind === "native" &&
-            getRuntime() !== "electron"
-          ) {
+          if (backendRef.current?.kind === "native") {
             logger.info(
               "[PlayEffect:SKIP] reason=nativeBackend | native player handles its own playback",
             );
@@ -770,10 +767,7 @@ export function AudioPlayer({
         } else {
           sessionRef.current.consumeSyncPlayHandled();
 
-          if (
-            backendRef.current?.kind === "native" &&
-            getRuntime() !== "electron"
-          ) {
+          if (backendRef.current?.kind === "native") {
             logger.info(
               "[PlayEffect:SKIP] reason=nativeBackend | native player handles its own playback",
             );
