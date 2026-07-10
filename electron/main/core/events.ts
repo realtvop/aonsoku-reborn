@@ -12,6 +12,7 @@ import {
   desktopNativeBridgeService,
   setupDesktopNativeBridgeIpc,
 } from "../native/bridge/ipc";
+import { setupDesktopNativeDataIpc } from "../native/data/ipc";
 import { tray, updateTray } from "../tray";
 import { colorsState } from "./colors";
 import {
@@ -112,6 +113,7 @@ export function setupIpcEvents(window: BrowserWindow | null) {
         .toString(),
   });
   setupDesktopNativeBridgeIpc();
+  setupDesktopNativeDataIpc(window);
   setupDesktopPlaybackControlChrome(() => {
     setTaskbarButtons();
     updateTray();

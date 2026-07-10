@@ -1,7 +1,7 @@
+import type { PluginListenerHandle } from "@capacitor/core";
 import { expose, type Remote, transfer, wrap } from "comlink";
 import { getSongStreamUrl } from "@/api/httpClient";
 import { getNativeAudioPluginAvailability } from "@/native/audio/facade";
-import type { PluginListenerHandle } from "@capacitor/core";
 import { AudioCacheQueue } from "@/service/cache/audio-cache-queue";
 import { audioKey } from "@/service/cache/cache-keys";
 import { cacheStorage } from "@/service/cache/cache-storage";
@@ -18,7 +18,10 @@ import type { CachedItemMeta, CacheTask } from "@/types/cache";
 import type { AuthType } from "@/types/serverConfig";
 import { getRuntime } from "@/utils/capabilities";
 import type { AudioDownloadService } from "./contracts";
-import { storeNativeAudioFileIfAvailable } from "./native-cache-adapter";
+import {
+  isNativeCacheAdapterAvailable,
+  storeNativeAudioFileIfAvailable,
+} from "./native-cache-adapter";
 
 /* ── Types ─────────────────────────────────────────────────────── */
 
@@ -181,10 +184,7 @@ class MainThreadAudioCacheEngine implements AudioCacheDownloader {
   }
 
   private async executeDownload(task: CacheTask): Promise<void> {
-    if (
-      getRuntime() === "capacitor-ios" ||
-      getRuntime() === "capacitor-android"
-    ) {
+    if (isNativeCacheAdapterAvailable()) {
       return this.executeNativeDownload(task);
     }
 

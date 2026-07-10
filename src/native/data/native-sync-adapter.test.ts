@@ -31,7 +31,7 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock("@aonsoku/capacitor-native/data", () => ({
+vi.mock("@/native/data/facade", () => ({
   AonsokuNativeData: {
     initialize: mocks.mockInitialize,
     syncAll: mocks.mockSyncAll,

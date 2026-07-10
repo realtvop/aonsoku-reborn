@@ -1,5 +1,6 @@
 import { protocol } from "electron";
 import { desktopNativeBridgeService } from "./bridge/ipc";
+import { getDesktopNativeDataService } from "./data/ipc";
 
 export const DESKTOP_MEDIA_SCHEME = "aonsoku-media";
 
@@ -22,6 +23,16 @@ export function setupDesktopMediaProtocol(): void {
     const incoming = new URL(request.url);
     const operation = incoming.hostname || incoming.pathname.replace(/^\//, "");
     const query = Object.fromEntries(incoming.searchParams.entries());
+    if (operation === "cached") {
+      const cached = await getDesktopNativeDataService()?.readCover(
+        query.id ?? "",
+      );
+      return cached
+        ? new Response(cached.data, {
+            headers: { "Content-Type": cached.contentType },
+          })
+        : new Response("Cached media not found", { status: 404 });
+    }
     const path =
       operation === "getCoverArt"
         ? "/getCoverArt.view"
