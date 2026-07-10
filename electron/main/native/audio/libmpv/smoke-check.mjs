@@ -53,6 +53,22 @@ try {
   player.observeProperty("time-pos", "number");
   player.command(["loadfile", wavPath, "replace"]);
   await waitForEvent(events, (event) => event.type === "file-loaded");
+  if (typeof player.updateSystemMediaSession === "function") {
+    const metadata = {
+      title: "Aonsoku native audio smoke test",
+      artworkUrl: "aonsoku-smoke://artwork",
+    };
+    player.updateSystemMediaSession(metadata, {
+      state: "playing",
+      position: 0,
+      duration: 2,
+    });
+    player.updateSystemMediaSession(metadata, {
+      state: "playing",
+      position: 0.05,
+      duration: 2,
+    });
+  }
   player.setProperty("pause", true);
   await waitForEvent(
     events,
@@ -64,6 +80,7 @@ try {
   player.setProperty("pause", false);
   player.command(["seek", "0.05", "absolute", "exact"]);
   player.command(["stop"]);
+  player.clearSystemMediaSession?.();
   player.destroy();
   await rm(wavPath, { force: true });
 
@@ -76,7 +93,15 @@ try {
         runtimeInfo: binding.runtimeInfo?.() ?? null,
         observedEvents: events.length,
         loadedFixture: true,
-        exercised: ["load", "pause", "resume", "seek", "stop", "destroy"],
+        exercised: [
+          "load",
+          "system-media-session",
+          "pause",
+          "resume",
+          "seek",
+          "stop",
+          "destroy",
+        ],
       },
       null,
       2,
