@@ -272,7 +272,14 @@ Key files:
   Media Session for desktop native-audio registration; the renderer disables
   `navigator.mediaSession` via `shouldUseNativePlaybackBackend()`
   (`src/utils/setMediaSession.ts`) whenever the native backend owns the system
-  media session, so the addon/plugin is the single source of truth. On macOS the
+  media session, so the addon/plugin is the single source of truth. On macOS
+  `electron/main/index.ts` also appends `disable-features=HardwareMediaKeyHandling`
+  before `app.whenReady()`: Chromium's `HardwareMediaKeyHandling` feature (on by
+  default for audio-playing Electron apps) otherwise claims the macOS Now Playing
+  slot and routes Control Center / media-key commands to its own
+  `RemoteCommandCenterDelegate`, starving the addon's `MPRemoteCommandCenter`
+  handlers (play/pause, scrubber, and media keys stop firing). With it disabled
+  the addon is the sole media session owner. On macOS the
   addon also registers `MPRemoteCommandCenter` handlers (required for Control
   Center / Now Playing visibility and media-key routing) and forwards system
   media commands back to JS as `system-media-command` events; these flow
