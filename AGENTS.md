@@ -276,10 +276,14 @@ Key files:
   addon also registers `MPRemoteCommandCenter` handlers (required for Control
   Center / Now Playing visibility and media-key routing) and forwards system
   media commands back to JS as `system-media-command` events; these flow
-  through `LibMpvAudioEngine` → `NativeAudioService.emitRemoteCommand` as
-  `remoteCommand` events, reusing the same IPC path the renderer handles for
-  native remote commands (and remote-control projection when a remote device is
-  active). Windows/Linux currently register for display only; system command
+  through `LibMpvAudioEngine` to `NativeAudioService.#handleSystemMediaCommand`,
+  which applies seek/play/pause/toggle/next/previous directly to local playback
+  (matching the desktop taskbar chrome's `handleRemoteCommand` path) so the
+  system scrubber and media keys take effect without a main-process -> renderer
+  -> main-process round-trip. `like`/`shuffle` still forward to the renderer as
+  `remoteCommand` events (their state is owned there), and remote-control
+  projection routes commands to the controlled device instead of acting
+  locally. Windows/Linux currently register for display only; system command
   reception there is a follow-up. The addon reads `artworkUrl` from
   `NativeAudioMetadata`: on macOS it asynchronously fetches the image and sets
   `MPMediaItemArtwork` (cached per-URL, stale downloads are ignored); on Linux
