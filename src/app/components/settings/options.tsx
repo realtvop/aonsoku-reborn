@@ -1,5 +1,4 @@
 import {
-  CircleUserRound,
   EarthLock,
   FileText,
   Globe,
@@ -29,7 +28,6 @@ export type SettingsOptions =
   | "audio"
   | "content"
   | "storage"
-  | "accounts"
   | "desktop"
   | "cross-device"
   | "privacy";
@@ -39,7 +37,6 @@ interface OptionsData {
   icon: ComponentType;
 }
 
-const accountsOption: OptionsData = { id: "accounts", icon: CircleUserRound };
 const desktopOption: OptionsData = { id: "desktop", icon: LaptopIcon };
 
 const options: OptionsData[] = [
@@ -49,7 +46,7 @@ const options: OptionsData[] = [
   { id: "audio", icon: Headphones },
   { id: "content", icon: FileText },
   { id: "storage", icon: HardDrive },
-  ...(isDesktop() ? [accountsOption, desktopOption] : []),
+  ...(isDesktop() ? [desktopOption] : []),
   { id: "cross-device", icon: Share2 },
   { id: "privacy", icon: EarthLock },
 ];
