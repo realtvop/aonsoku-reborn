@@ -119,6 +119,8 @@ function refreshCacheStats(): void {
 class CacheManager {
   private statsTimer: ReturnType<typeof setTimeout> | null = null;
   private cacheCoverInflight = new Map<string, Promise<void>>();
+  private nativeCoverUrlCache = new Map<string, string>();
+  private nativeCoverUrlInflight = new Map<string, Promise<string | null>>();
 
   isDownloadQueued(songId: string): boolean {
     return (
@@ -258,6 +260,7 @@ class CacheManager {
 
       const result = await adapter.downloadCoverImage(coverArtId, size);
       if (!result) return;
+      this.rememberNativeCoverUrl(coverArtId, convertFileSrc(result.uri));
 
       const meta: CachedItemMeta = {
         id: coverArtId,
@@ -322,48 +325,22 @@ class CacheManager {
     const key = coverKey(coverArtId);
 
     if (isNativeImageCacheAdapterAvailable()) {
-      const adapter = getNativeImageCacheAdapter();
-      const result = await adapter.resolveCoverImage(coverArtId);
-      if (!result) {
-        if (isCoverCached(coverArtId)) {
-          getCacheIndexActions().removeItem(key);
-        }
-        return null;
-      }
-
-      if (!isCoverCached(coverArtId)) {
-        const existingRow = await libraryDb.cacheMeta.get(key);
-        if (existingRow) {
-          getCacheIndexActions().addItem(key, {
-            id: existingRow.id,
-            type: existingRow.type,
-            source: existingRow.source,
-            coverSize: (existingRow as Record<string, unknown>).coverSize as
-              | string
-              | undefined,
-            sizeBytes: existingRow.sizeBytes,
-            cachedAt: existingRow.cachedAt,
-            lastAccessedAt: Date.now(),
-            removedFromServer: existingRow.removedFromServer,
-          });
-        } else {
-          const syntheticMeta = {
-            id: coverArtId,
-            type: "cover" as const,
-            source: "explicit" as const,
-            coverSize: result.coverSize ?? "700",
-            sizeBytes: result.sizeBytes ?? 0,
-            cachedAt: Date.now(),
-            lastAccessedAt: Date.now(),
-          };
-          getCacheIndexActions().addItem(key, syntheticMeta);
-          persistCacheMeta(key, { key, ...syntheticMeta });
-        }
-      } else {
+      const cachedUrl = this.nativeCoverUrlCache.get(coverArtId);
+      if (cachedUrl) {
         getCacheIndexActions().touchItem(key);
+        return cachedUrl;
       }
 
-      return convertFileSrc(result.uri);
+      const inflight = this.nativeCoverUrlInflight.get(coverArtId);
+      if (inflight) return inflight;
+
+      const resolve = this.resolveNativeCachedCoverUrl(coverArtId, key).finally(
+        () => {
+          this.nativeCoverUrlInflight.delete(coverArtId);
+        },
+      );
+      this.nativeCoverUrlInflight.set(coverArtId, resolve);
+      return resolve;
     }
 
     // Fast path: when the index is loaded and the key is absent, skip
@@ -416,6 +393,67 @@ class CacheManager {
     }
 
     return URL.createObjectURL(blob);
+  }
+
+  private async resolveNativeCachedCoverUrl(
+    coverArtId: string,
+    key: string,
+  ): Promise<string | null> {
+    const adapter = getNativeImageCacheAdapter();
+    const result = await adapter.resolveCoverImage(coverArtId);
+    if (!result) {
+      this.nativeCoverUrlCache.delete(coverArtId);
+      if (isCoverCached(coverArtId)) {
+        getCacheIndexActions().removeItem(key);
+      }
+      return null;
+    }
+
+    if (!isCoverCached(coverArtId)) {
+      const existingRow = await libraryDb.cacheMeta.get(key);
+      if (existingRow) {
+        getCacheIndexActions().addItem(key, {
+          id: existingRow.id,
+          type: existingRow.type,
+          source: existingRow.source,
+          coverSize: (existingRow as Record<string, unknown>).coverSize as
+            | string
+            | undefined,
+          sizeBytes: existingRow.sizeBytes,
+          cachedAt: existingRow.cachedAt,
+          lastAccessedAt: Date.now(),
+          removedFromServer: existingRow.removedFromServer,
+        });
+      } else {
+        const syntheticMeta = {
+          id: coverArtId,
+          type: "cover" as const,
+          source: "explicit" as const,
+          coverSize: result.coverSize ?? "700",
+          sizeBytes: result.sizeBytes ?? 0,
+          cachedAt: Date.now(),
+          lastAccessedAt: Date.now(),
+        };
+        getCacheIndexActions().addItem(key, syntheticMeta);
+        persistCacheMeta(key, { key, ...syntheticMeta });
+      }
+    } else {
+      getCacheIndexActions().touchItem(key);
+    }
+
+    return this.rememberNativeCoverUrl(coverArtId, convertFileSrc(result.uri));
+  }
+
+  private rememberNativeCoverUrl(coverArtId: string, url: string): string {
+    this.nativeCoverUrlCache.delete(coverArtId);
+    this.nativeCoverUrlCache.set(coverArtId, url);
+
+    if (this.nativeCoverUrlCache.size > 500) {
+      const oldest = this.nativeCoverUrlCache.keys().next().value;
+      if (oldest) this.nativeCoverUrlCache.delete(oldest);
+    }
+
+    return url;
   }
 
   async cacheAvatar(username: string, size = "150"): Promise<void> {
@@ -793,6 +831,8 @@ class CacheManager {
       if (isCover) {
         const id = key.split(":")[1];
         if (id) {
+          this.nativeCoverUrlCache.delete(id);
+          this.nativeCoverUrlInflight.delete(id);
           const adapter = getNativeImageCacheAdapter();
           await adapter.deleteCoverImage(id);
         }
@@ -840,6 +880,8 @@ class CacheManager {
     if (isNativeImageCacheAdapterAvailable()) {
       const adapter = getNativeImageCacheAdapter();
       await adapter.clearCoverImages();
+      this.nativeCoverUrlCache.clear();
+      this.nativeCoverUrlInflight.clear();
     }
 
     await Promise.all(keysToDelete.map((key) => cacheStorage.delete(key)));
@@ -920,6 +962,8 @@ class CacheManager {
     if (isNativeImageCacheAdapterAvailable()) {
       const adapter = getNativeImageCacheAdapter();
       await adapter.clearCoverImages();
+      this.nativeCoverUrlCache.clear();
+      this.nativeCoverUrlInflight.clear();
     }
 
     await cacheStorage.clear();

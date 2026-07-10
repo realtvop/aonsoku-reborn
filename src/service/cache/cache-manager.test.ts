@@ -28,6 +28,18 @@ const nativeCacheAdapterMock = {
   storeAudioFile: vi.fn(() => Promise.reject(new Error("not available"))),
 };
 
+const nativeImageCacheAdapterMock = {
+  clearCoverImages: vi.fn(() => Promise.resolve()),
+  deleteCoverImage: vi.fn(() => Promise.resolve(true)),
+  downloadAvatar: vi.fn(() => Promise.resolve(null)),
+  downloadCoverImage: vi.fn(() => Promise.resolve(null)),
+  getCoverImageSize: vi.fn(() =>
+    Promise.resolve({ sizeBytes: null, coverSize: null }),
+  ),
+  resolveCoverImage: vi.fn(() => Promise.resolve(null)),
+  storeCoverImage: vi.fn(() => Promise.resolve(null)),
+};
+
 const nativeCacheHelpersMock = {
   clearNativeAudioFilesIfAvailable: vi.fn(() => Promise.resolve()),
   evictNativeAudioFileIfAvailable: vi.fn(() => Promise.resolve(false)),
@@ -43,6 +55,18 @@ vi.mock("./audio-cache-worker-adapter", () => ({
 }));
 
 vi.mock("./native-cache-adapter", () => nativeCacheHelpersMock);
+
+vi.mock("./native-image-cache-adapter", () => ({
+  getNativeImageCacheAdapter: vi.fn(() => nativeImageCacheAdapterMock),
+  isNativeImageCacheAdapterAvailable: vi.fn(() => false),
+}));
+
+vi.mock("@capacitor/core", () => ({
+  Capacitor: {
+    convertFileSrc: vi.fn((uri: string) => `converted:${uri}`),
+    getServerUrl: vi.fn(() => "http://localhost"),
+  },
+}));
 
 vi.mock("./sync-worker-adapter", () => ({
   syncService: {
@@ -109,6 +133,27 @@ describe("cacheManager", () => {
     nativeCacheHelpersMock.evictNativeAudioFileIfAvailable
       .mockReset()
       .mockResolvedValue(false);
+    nativeImageCacheAdapterMock.clearCoverImages.mockReset();
+    nativeImageCacheAdapterMock.clearCoverImages.mockResolvedValue(undefined);
+    nativeImageCacheAdapterMock.deleteCoverImage.mockReset();
+    nativeImageCacheAdapterMock.deleteCoverImage.mockResolvedValue(true);
+    nativeImageCacheAdapterMock.downloadAvatar.mockReset();
+    nativeImageCacheAdapterMock.downloadAvatar.mockResolvedValue(null);
+    nativeImageCacheAdapterMock.downloadCoverImage.mockReset();
+    nativeImageCacheAdapterMock.downloadCoverImage.mockResolvedValue(null);
+    nativeImageCacheAdapterMock.getCoverImageSize.mockReset();
+    nativeImageCacheAdapterMock.getCoverImageSize.mockResolvedValue({
+      sizeBytes: null,
+      coverSize: null,
+    });
+    nativeImageCacheAdapterMock.resolveCoverImage.mockReset();
+    nativeImageCacheAdapterMock.resolveCoverImage.mockResolvedValue(null);
+    nativeImageCacheAdapterMock.storeCoverImage.mockReset();
+    nativeImageCacheAdapterMock.storeCoverImage.mockResolvedValue(null);
+    const nativeImageCacheModule = await import("./native-image-cache-adapter");
+    vi.mocked(
+      nativeImageCacheModule.isNativeImageCacheAdapterAvailable,
+    ).mockReturnValue(false);
     await idbClear(cacheIndexStore);
     await _resetLibraryDbForTests();
     useCacheIndexStore.setState({ items: {}, loaded: true, downloads: {} });
@@ -160,6 +205,98 @@ describe("cacheManager", () => {
     const url = await cacheManager.getCachedCoverUrl("cover-2");
 
     expect(url).toBeTruthy();
+  });
+
+  it("deduplicates concurrent native cached cover resolves", async () => {
+    const nativeImageCacheModule = await import("./native-image-cache-adapter");
+    vi.mocked(
+      nativeImageCacheModule.isNativeImageCacheAdapterAvailable,
+    ).mockReturnValue(true);
+
+    let resolveNative: (
+      value: Awaited<
+        ReturnType<typeof nativeImageCacheAdapterMock.resolveCoverImage>
+      >,
+    ) => void = () => {};
+    nativeImageCacheAdapterMock.resolveCoverImage.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveNative = resolve;
+        }),
+    );
+
+    useCacheIndexStore.setState({
+      items: {
+        "cover:native-cover-1": {
+          id: "native-cover-1",
+          type: "cover",
+          source: "explicit",
+          coverSize: "700",
+          sizeBytes: 123,
+          cachedAt: 1,
+          lastAccessedAt: 1,
+        },
+      },
+      loaded: true,
+    });
+
+    const { cacheManager } = await import("./cache-manager");
+    const first = cacheManager.getCachedCoverUrl("native-cover-1");
+    const second = cacheManager.getCachedCoverUrl("native-cover-1");
+
+    expect(nativeImageCacheAdapterMock.resolveCoverImage).toHaveBeenCalledTimes(
+      1,
+    );
+
+    resolveNative({
+      coverArtId: "native-cover-1",
+      uri: "aonsoku-media://cached?id=native-cover-1",
+      sizeBytes: 123,
+      coverSize: "700",
+    });
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      "converted:aonsoku-media://cached?id=native-cover-1",
+      "converted:aonsoku-media://cached?id=native-cover-1",
+    ]);
+  });
+
+  it("reuses resolved native cached cover URLs without another adapter call", async () => {
+    const nativeImageCacheModule = await import("./native-image-cache-adapter");
+    vi.mocked(
+      nativeImageCacheModule.isNativeImageCacheAdapterAvailable,
+    ).mockReturnValue(true);
+    nativeImageCacheAdapterMock.resolveCoverImage.mockResolvedValue({
+      coverArtId: "native-cover-2",
+      uri: "aonsoku-media://cached?id=native-cover-2",
+      sizeBytes: 456,
+      coverSize: "700",
+    });
+
+    useCacheIndexStore.setState({
+      items: {
+        "cover:native-cover-2": {
+          id: "native-cover-2",
+          type: "cover",
+          source: "explicit",
+          coverSize: "700",
+          sizeBytes: 456,
+          cachedAt: 1,
+          lastAccessedAt: 1,
+        },
+      },
+      loaded: true,
+    });
+
+    const { cacheManager } = await import("./cache-manager");
+    const first = await cacheManager.getCachedCoverUrl("native-cover-2");
+    const second = await cacheManager.getCachedCoverUrl("native-cover-2");
+
+    expect(first).toBe("converted:aonsoku-media://cached?id=native-cover-2");
+    expect(second).toBe(first);
+    expect(nativeImageCacheAdapterMock.resolveCoverImage).toHaveBeenCalledTimes(
+      1,
+    );
   });
 
   it("replaces smaller cover with larger size", async () => {
