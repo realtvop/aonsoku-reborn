@@ -2,6 +2,9 @@
 #import <Foundation/Foundation.h>
 #import <MediaPlayer/MediaPlayer.h>
 
+#include <cstdarg>
+#include <cstdio>
+
 #include "system_media_session.h"
 
 namespace {
@@ -30,7 +33,43 @@ double g_last_position = 0;
 void ApplyNowPlayingInfo();
 void DownloadArtwork(NSString* url_string);
 
+// Diagnostics for system media session command delivery. Written to stderr so
+// they show up in `pnpm electron:dev` / the packaged app terminal and make it
+// possible to see where the macOS -> JS command chain breaks.
+void LogMediaSession(const char* format, ...) {
+  va_list args;
+  va_start(args, format);
+  fprintf(stderr, "[aonsoku-media] ");
+  vfprintf(stderr, format, args);
+  fprintf(stderr, "\n");
+  fflush(stderr);
+  va_end(args);
+}
+
+const char* StateName(SystemMediaSessionPlaybackState state) {
+  switch (state) {
+    case SystemMediaSessionPlaybackState::kPlaying:
+      return "playing";
+    case SystemMediaSessionPlaybackState::kPaused:
+      return "paused";
+    case SystemMediaSessionPlaybackState::kStopped:
+      return "stopped";
+  }
+  return "unknown";
+}
+
 void DispatchCommand(SystemMediaCommand command, double position = 0) {
+  const char* name = "unknown";
+  switch (command) {
+    case SystemMediaCommand::kPlay: name = "play"; break;
+    case SystemMediaCommand::kPause: name = "pause"; break;
+    case SystemMediaCommand::kTogglePlayPause: name = "togglePlayPause"; break;
+    case SystemMediaCommand::kNext: name = "next"; break;
+    case SystemMediaCommand::kPrevious: name = "previous"; break;
+    case SystemMediaCommand::kSeek: name = "seek"; break;
+  }
+  LogMediaSession("command fired: %s position=%.3f handler=%p", name, position,
+                   (void*)g_command_handler);
   if (g_command_handler != nullptr) {
     g_command_handler(g_command_context, command, position);
   }
@@ -44,6 +83,8 @@ void DispatchCommand(SystemMediaCommand command, double position = 0) {
 void EnsureRemoteCommandCenter() {
   if (g_remote_commands_registered) return;
   g_remote_commands_registered = true;
+
+  LogMediaSession("registering MPRemoteCommandCenter handlers");
 
   MPRemoteCommandCenter* center = [MPRemoteCommandCenter sharedCommandCenter];
 
@@ -181,6 +222,12 @@ void UpdateSystemMediaSession(const SystemMediaSessionMetadata& metadata,
                               double position) {
   @autoreleasepool {
     EnsureRemoteCommandCenter();
+
+    LogMediaSession(
+        "update: state=%s position=%.3f duration=%.3f title=\"%s\" artwork=\"%s\"",
+        StateName(state), position, metadata.duration,
+        metadata.title.c_str(),
+        metadata.artwork_url.empty() ? "" : metadata.artwork_url.c_str());
 
     g_last_metadata = metadata;
     g_last_state = state;

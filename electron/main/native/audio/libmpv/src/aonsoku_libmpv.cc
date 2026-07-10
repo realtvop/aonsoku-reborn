@@ -6,6 +6,7 @@
 #include <atomic>
 #include <clocale>
 #include <cstdint>
+#include <cstdio>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -218,7 +219,12 @@ void CallJs(napi_env env, napi_value callback, void* /*context*/, void* data) {
 }
 
 void QueueEvent(PlayerState* state, std::unique_ptr<QueuedEvent> event) {
-  if (state->tsfn == nullptr) return;
+  if (state->tsfn == nullptr) {
+    fprintf(stderr, "[aonsoku-media] queue: tsfn null, dropping %s\n",
+            event->type.c_str());
+    fflush(stderr);
+    return;
+  }
 
   auto* raw_event = event.release();
   napi_status status =
@@ -226,6 +232,9 @@ void QueueEvent(PlayerState* state, std::unique_ptr<QueuedEvent> event) {
                                     napi_tsfn_nonblocking);
 
   if (status != napi_ok) {
+    fprintf(stderr, "[aonsoku-media] queue: threadsafe call failed status=%d\n",
+            static_cast<int>(status));
+    fflush(stderr);
     delete raw_event;
   }
 }
@@ -253,7 +262,11 @@ void SystemMediaCommandDispatcher(void* context,
                                   SystemMediaCommand command,
                                   double position) {
   auto* state = static_cast<PlayerState*>(context);
-  if (state == nullptr) return;
+  if (state == nullptr) {
+    fprintf(stderr, "[aonsoku-media] dispatcher: null state\n");
+    fflush(stderr);
+    return;
+  }
 
   auto queued = std::make_unique<QueuedEvent>();
   queued->type = "system-media-command";
@@ -263,6 +276,10 @@ void SystemMediaCommandDispatcher(void* context,
     queued->number_value = position;
   }
 
+  fprintf(stderr,
+          "[aonsoku-media] dispatcher: name=%s position=%.3f tsfn=%p\n",
+          queued->name.c_str(), position, (void*)state->tsfn);
+  fflush(stderr);
   QueueEvent(state, std::move(queued));
 }
 

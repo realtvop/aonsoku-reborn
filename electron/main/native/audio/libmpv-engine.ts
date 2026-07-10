@@ -393,6 +393,14 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
   ): void {
     if (this.#destroyed) return;
 
+    // Diagnostics: confirm the native addon delivered a system media command
+    // to the JS engine. If this never logs while you operate Control Center,
+    // the break is in the native dispatch (handlers not firing / threadsafe
+    // function). Remove once system media controls are verified working.
+    console.error(
+      `[aonsoku-media] engine received system-media-command: name=${event.name} data=${String(event.data)}`,
+    );
+
     const command = event.name as NativeAudioRemoteCommand;
     if (!isSupportedSystemMediaCommand(command)) return;
 
