@@ -1,10 +1,10 @@
+import { shouldUseNativePlaybackBackend } from "@/player/playback/backend-factory";
 import { getNativeQueueController } from "@/player/queue-controller";
 import { cacheManager } from "@/service/cache";
 import { usePlayerStore } from "@/store/player.store";
 import { LanControlMessageType } from "@/types/lanControl";
 import { ISong } from "@/types/responses/song";
 import { getCoverArtUrlFromSongPreference, resolveCacheKeys } from "./coverArt";
-import { getRuntime } from "./capabilities";
 import { isValidDuration } from "./duration";
 import { logger } from "./logger";
 
@@ -15,11 +15,12 @@ function isMediaSessionSupported(): boolean {
   if (typeof navigator === "undefined") return false;
   if (!("mediaSession" in navigator) || navigator.mediaSession === null)
     return false;
-  // On Android and iOS native, the native MediaSession/MPNowPlayingInfoCenter
-  // handles system-level controls. navigator.mediaSession would conflict with it.
-  const runtime = getRuntime();
-  if (runtime === "capacitor-android" || runtime === "capacitor-ios")
-    return false;
+  // When the native playback backend owns the system media session (Electron
+  // desktop native audio via the libmpv addon, or iOS/Android native), the
+  // renderer's navigator.mediaSession would conflict with it: both Chromium and
+  // the native addon write to the same MPNowPlayingInfoCenter on macOS. The
+  // native addon/plugin is the source of truth for system-level controls there.
+  if (shouldUseNativePlaybackBackend()) return false;
   return true;
 }
 
