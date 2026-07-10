@@ -346,6 +346,70 @@ describe("NativeAudioPlaybackBackend", () => {
     expect(listeners.error).not.toHaveBeenCalled();
   });
 
+  it("accepts desktop-native-queue events after active manual load finishes loading, but rejects them if manual load is pending", async () => {
+    const { plugin, emit } = createPlugin();
+    const backend = new NativeAudioPlaybackBackend(plugin);
+    const listeners = makePlaybackListeners();
+
+    backend.subscribe("progress", listeners.progress);
+
+    // 1. Manually load native-audio-1
+    await backend.load(createUrlPlaybackSource("https://server/song1.mp3"));
+
+    // 2. While manual load is pending, a desktop-native-queue event arrives (should be ignored)
+    emit("progress", {
+      requestId: "desktop-native-queue-1",
+      currentTime: 10,
+      duration: 100,
+    });
+    expect(listeners.progress).not.toHaveBeenCalled();
+
+    // 3. Emit a progress event for native-audio-1 (clears pendingManualRequest)
+    emit("progress", {
+      requestId: "native-audio-1",
+      currentTime: 1,
+      duration: 100,
+    });
+    expect(listeners.progress).toHaveBeenCalledTimes(1);
+    expect(listeners.progress).toHaveBeenLastCalledWith({
+      currentTime: 1,
+      duration: 100,
+      bufferedTime: 1,
+    });
+
+    // 4. Now the song transitions natively, emitting a desktop-native-queue-1 event (should be accepted)
+    emit("progress", {
+      requestId: "desktop-native-queue-1",
+      currentTime: 2,
+      duration: 100,
+    });
+    expect(listeners.progress).toHaveBeenCalledTimes(2);
+    expect(listeners.progress).toHaveBeenLastCalledWith({
+      currentTime: 2,
+      duration: 100,
+      bufferedTime: 2,
+    });
+
+    // 5. Subsequent events for desktop-native-queue-1 are accepted
+    emit("progress", {
+      requestId: "desktop-native-queue-1",
+      currentTime: 3,
+      duration: 100,
+    });
+    expect(listeners.progress).toHaveBeenCalledTimes(3);
+
+    // 6. User manually triggers another load (native-audio-2)
+    await backend.load(createUrlPlaybackSource("https://server/song2.mp3"));
+
+    // 7. A late event from desktop-native-queue-1 arrives (should be ignored since native-audio-2 is pending)
+    emit("progress", {
+      requestId: "desktop-native-queue-1",
+      currentTime: 4,
+      duration: 100,
+    });
+    expect(listeners.progress).toHaveBeenCalledTimes(3); // count remains 3
+  });
+
   it("removes native listeners on dispose without clearing plugin state", async () => {
     const { plugin, emit } = createPlugin();
     const backend = new NativeAudioPlaybackBackend(plugin);
