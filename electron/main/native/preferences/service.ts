@@ -32,10 +32,7 @@ export class DesktopNativePreferencesService
     });
   }
 
-  async setPreference(options: {
-    key: string;
-    value: string;
-  }): Promise<void> {
+  async setPreference(options: { key: string; value: string }): Promise<void> {
     const current = this.store.get("preferences") ?? {};
     this.store.set("preferences", {
       ...current,

@@ -379,10 +379,7 @@ class CacheManager {
 
     if (isNativeImageCacheAdapterAvailable()) {
       const cachedUrl = this.nativeCoverUrlCache.get(coverArtId);
-      if (
-        cachedUrl &&
-        isCoverSizeAtLeast(cachedUrl.coverSize, requestedSize)
-      ) {
+      if (cachedUrl && isCoverSizeAtLeast(cachedUrl.coverSize, requestedSize)) {
         getCacheIndexActions().touchItem(key);
         return cachedUrl.url;
       }
@@ -395,8 +392,8 @@ class CacheManager {
         key,
         requestedSize,
       ).finally(() => {
-          this.nativeCoverUrlInflight.delete(coverArtId);
-        });
+        this.nativeCoverUrlInflight.delete(coverArtId);
+      });
       this.nativeCoverUrlInflight.set(coverArtId, resolve);
       return resolve;
     }

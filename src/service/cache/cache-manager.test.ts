@@ -947,7 +947,8 @@ describe("cacheManager", () => {
       activeFetches--;
       return {
         ok: true,
-        blob: () => Promise.resolve(new Blob(["cover"], { type: "image/jpeg" })),
+        blob: () =>
+          Promise.resolve(new Blob(["cover"], { type: "image/jpeg" })),
       } as Response;
     });
 

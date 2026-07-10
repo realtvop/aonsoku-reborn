@@ -70,9 +70,7 @@ export default function DesktopAlbumsList() {
       setPreferenceValue(PersistedAlbumListKeys.ArtistIdFilter, artistId);
     }
 
-    const persistedYear = getPreferenceValue(
-      PersistedAlbumListKeys.YearFilter,
-    );
+    const persistedYear = getPreferenceValue(PersistedAlbumListKeys.YearFilter);
     const persistedMainFilter = getPreferenceValue(
       PersistedAlbumListKeys.MainFilter,
     );
