@@ -681,6 +681,44 @@ export class NativeAudioService implements AonsokuAudioApi {
     });
   }
 
+  // System media commands arrive from the native playback backend (macOS
+  // Control Center / Now Playing scrubber and media keys, remote command
+  // centers on other platforms). Apply them directly to local playback instead
+  // of round-tripping through the renderer, so a seek from the system scrubber
+  // actually moves playback (the previous main-process -> renderer ->
+  // main-process round-trip left it with no effect). The renderer stays in sync
+  // via the playback/progress events emitted below. When projecting to a
+  // remote device, forward the command there instead of acting locally.
+  async #handleSystemMediaCommand(
+    command: NativeAudioRemoteCommand,
+    position?: number,
+  ): Promise<void> {
+    if (this.#emitRemoteControlCommandForNativeCommand(command, position)) {
+      return;
+    }
+
+    switch (command) {
+      case "seek":
+        if (typeof position === "number" && Number.isFinite(position)) {
+          await this.seek({ position: Math.max(0, position) });
+        }
+        return;
+      case "play":
+      case "pause":
+      case "togglePlayPause":
+      case "next":
+      case "previous":
+        await this.handleRemoteCommand(command);
+        return;
+      case "like":
+      case "shuffle":
+        // Star/shuffle state is owned by the renderer; forward so the UI
+        // remains the source of truth for those toggles.
+        this.emitRemoteCommand(command, {});
+        return;
+    }
+  }
+
   emitRemoteControlCommand(
     command: NativeRemoteControlCommandEvent["command"],
     options: {
@@ -748,11 +786,8 @@ export class NativeAudioService implements AonsokuAudioApi {
         });
         break;
       case "systemMediaCommand":
-        this.emitRemoteCommand(
-          event.command,
-          typeof event.position === "number"
-            ? { position: event.position }
-            : {},
+        this.#handleSystemMediaCommand(event.command, event.position).catch(
+          (error) => this.#emitFailure(error),
         );
         break;
     }
