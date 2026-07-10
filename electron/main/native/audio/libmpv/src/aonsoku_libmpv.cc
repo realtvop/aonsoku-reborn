@@ -700,7 +700,8 @@ napi_value UpdateSystemMediaSession(napi_env env, napi_callback_info info) {
   return Undefined(env);
 }
 
-napi_value ClearSystemMediaSession(napi_env env, napi_callback_info info) {
+napi_value ClearSystemMediaSessionCallback(napi_env env,
+                                           napi_callback_info info) {
   size_t argc = 0;
   napi_value argv[1];
   PlayerState* state = UnwrapPlayer(env, info, argc, argv);
@@ -788,7 +789,8 @@ napi_value CreatePlayer(napi_env env, napi_callback_info /*info*/) {
   DefineMethod(env, object, "setProperty", SetProperty);
   DefineMethod(env, object, "observeProperty", ObserveProperty);
   DefineMethod(env, object, "updateSystemMediaSession", UpdateSystemMediaSession);
-  DefineMethod(env, object, "clearSystemMediaSession", ClearSystemMediaSession);
+  DefineMethod(env, object, "clearSystemMediaSession",
+               ClearSystemMediaSessionCallback);
   DefineMethod(env, object, "destroy", Destroy);
 
   return object;
