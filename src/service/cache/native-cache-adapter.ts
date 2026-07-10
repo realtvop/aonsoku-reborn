@@ -100,7 +100,11 @@ export function getNativeCacheAdapter(): NativeCacheAdapter {
   if (nativeCacheAdapter) return nativeCacheAdapter;
 
   const runtime = getRuntime();
-  if (runtime === "capacitor-ios" || runtime === "capacitor-android") {
+  if (
+    runtime === "capacitor-ios" ||
+    runtime === "capacitor-android" ||
+    runtime === "electron"
+  ) {
     const availability = getNativeAudioPluginAvailability();
     const useNativeCache = availability.available;
     nativeCacheAdapter = useNativeCache
