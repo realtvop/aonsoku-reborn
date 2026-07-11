@@ -23,6 +23,19 @@ const imageProxyLimiter = new AsyncLimiter(6);
 /** Abort image-proxy fetches that stall (display path must not hang forever). */
 const IMAGE_PROXY_TIMEOUT_MS = 15_000;
 
+/** Cached cover is reused only when at least as large as the request. */
+function isCoverSizeAtLeast(
+  cachedSize: string | undefined,
+  requestedSize: string | undefined,
+): boolean {
+  if (!requestedSize) return true;
+  const requested = Number(requestedSize);
+  if (!Number.isFinite(requested) || requested <= 0) return true;
+  const cached = Number(cachedSize);
+  if (!Number.isFinite(cached) || cached <= 0) return true;
+  return cached >= requested;
+}
+
 export function registerDesktopMediaScheme(): void {
   protocol.registerSchemesAsPrivileged([
     {
@@ -63,12 +76,18 @@ export function setupDesktopMediaProtocol(): void {
     if (!path)
       return new Response("Unsupported media operation", { status: 404 });
 
-    // Image operations: bounded-concurrency fetch with a stall timeout.
-    // Stream stays unthrottled (long-lived, streaming).
+    // Image operations: prefer disk cache, then bounded-concurrency fetch
+    // with a stall timeout. Stream stays unthrottled (long-lived, streaming).
     if (operation === "getCoverArt" || operation === "getAvatar") {
+      const cacheKey =
+        operation === "getCoverArt"
+          ? (query.id ?? "")
+          : (query.username ?? "");
+      const requestedSize =
+        typeof query.size === "string" ? query.size : undefined;
       try {
         return await imageProxyLimiter.run(() =>
-          proxyImage(operation, query, request),
+          proxyImage(operation, cacheKey, requestedSize, query, request),
         );
       } catch (error) {
         return new Response(
@@ -99,15 +118,35 @@ export function setupDesktopMediaProtocol(): void {
 }
 
 /**
- * Fetch a single `getCoverArt`/`getAvatar` from the server through the
- * dedicated Subsonic dispatcher, with a stall timeout layered on top of
- * `request.signal`.
+ * Serve a single `getCoverArt`/`getAvatar` request.
+ *
+ * 1. Try the disk cache (`readCoverWithMeta`). If present and large enough,
+ *    return it directly — no network, no connection-pool slot consumed.
+ * 2. Otherwise fetch from the server through the dedicated Subsonic
+ *    dispatcher, with a stall timeout layered on top of `request.signal`.
  */
 async function proxyImage(
   operation: "getCoverArt" | "getAvatar",
+  cacheKey: string,
+  requestedSize: string | undefined,
   query: Record<string, string>,
   request: Request,
 ): Promise<Response> {
+  const dataService = getDesktopNativeDataService();
+  if (cacheKey && dataService) {
+    try {
+      const cached = await dataService.readCoverWithMeta(cacheKey);
+      if (cached && isCoverSizeAtLeast(cached.coverSize, requestedSize)) {
+        return new Response(new Uint8Array(cached.data), {
+          status: 200,
+          headers: { "Content-Type": cached.contentType },
+        });
+      }
+    } catch {
+      // Cache read failure — fall through to the network path.
+    }
+  }
+
   const path =
     operation === "getCoverArt" ? "/getCoverArt.view" : "/getAvatar.view";
   const timeoutSignal = AbortSignal.any([

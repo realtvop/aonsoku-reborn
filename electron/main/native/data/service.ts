@@ -592,4 +592,30 @@ export class DesktopNativeDataService {
       return null;
     }
   }
+
+  /**
+   * Read a cached cover/avatar together with its stored `coverSize`.
+   *
+   * Used by the `aonsoku-media://` image proxy to serve a disk-cached image
+   * without re-hitting the server. The caller compares `coverSize` against
+   * the requested size and only reverts to the network when the cached copy
+   * is too small, mirroring `isCoverSizeAtLeast` on the renderer side.
+   */
+  async readCoverWithMeta(coverArtId: string): Promise<{
+    data: Buffer;
+    contentType: string;
+    coverSize: string;
+  } | null> {
+    const meta = this.store.get("coverFiles")[coverArtId];
+    if (!meta) return null;
+    try {
+      return {
+        data: await readFile(join(this.coverDirectory(), meta.fileName)),
+        contentType: meta.contentType,
+        coverSize: meta.coverSize,
+      };
+    } catch {
+      return null;
+    }
+  }
 }
