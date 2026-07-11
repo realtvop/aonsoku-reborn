@@ -25,7 +25,10 @@ runs:
       shell: bash
       run: |
         sudo apt-get update
-        sudo apt-get install -y libmpv-dev libdbus-1-dev pkg-config
+        # libmpv-dev / libdbus-1-dev: libmpv addon build + MPRIS D-Bus.
+        # squashfs-tools: provides `mksquashfs` used by @reforged/maker-appimage
+        # to assemble the AppImage SquashFS payload.
+        sudo apt-get install -y libmpv-dev libdbus-1-dev pkg-config squashfs-tools
 
     - name: Install libmpv development files (macOS)
       if: runner.os == 'macOS'

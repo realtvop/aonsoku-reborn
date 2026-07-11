@@ -161,6 +161,7 @@
     "@electron-forge/publisher-github": "7.11.1",
     "@electron-toolkit/tsconfig": "1.0.1",
     "@electron/fuses": "1.8.0",
+    "@reforged/maker-appimage": "5.2.0",
     "@types/crypto-js": "4.2.2",
     "@types/discord-rpc": "4.0.1",
     "@types/html-to-text": "9.0.4",

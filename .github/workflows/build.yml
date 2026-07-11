@@ -92,6 +92,7 @@ jobs:
           path: |
             dist/make/**/*.deb
             dist/make/**/*.rpm
+            dist/make/**/*.AppImage
             dist/make/**/*.dmg
             dist/make/**/*.zip
           if-no-files-found: warn

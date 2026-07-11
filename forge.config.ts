@@ -3,6 +3,7 @@ import { MakerDeb } from "@electron-forge/maker-deb";
 import { MakerDMG } from "@electron-forge/maker-dmg";
 import { MakerRpm } from "@electron-forge/maker-rpm";
 import { MakerZIP } from "@electron-forge/maker-zip";
+import { MakerAppImage } from "@reforged/maker-appimage";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import type { ForgeConfig } from "@electron-forge/shared-types";
 
@@ -88,11 +89,18 @@ const config: ForgeConfig = {
       format: "ULFO",
       icon: "./build/icon.icns",
     }),
-    // Linux: Output both RPM and DEB installers (final products)
+    // Linux: Output RPM, DEB, and AppImage installers (final products).
+    // All three rely on the host distribution's libmpv at runtime; runtime
+    // .so bundling is intentionally not used on Linux (see
+    // docs/native-audio-libmpv.md).
     new MakerRpm({
       options: {
         homepage: "https://github.com/realtvop/aonsoku-reborn",
         categories: ["AudioVideo", "Audio"],
+        // RPM distros name the libmpv runtime package differently; declare the
+        // Fedora package as the baseline requires. openSUSE ships it as
+        // `libmpv2`. Keep maker metadata and release notes aligned.
+        requires: ["mpv-libs"],
       },
     }),
     new MakerDeb({
@@ -103,6 +111,23 @@ const config: ForgeConfig = {
         depends: ["libmpv2"],
       },
     }),
+    // AppImage (portable Linux bundle). Built via @reforged/maker-appimage,
+    // which reimplements appimagetool in TypeScript and shells out to the
+    // system `mksquashfs` (install `squashfs-tools`). It downloads the
+    // AppImage type2 runtime at make time. Like the RPM/DEB targets it does
+    // NOT bundle libmpv; the host must provide libmpv2 / mpv-libs.
+    new MakerAppImage(
+      {
+        options: {
+          name: "aonsoku",
+          bin: "aonsoku",
+          productName: "Aonsoku",
+          icon: "./build/icon.png",
+          categories: ["AudioVideo", "Audio"],
+        },
+      },
+      ["linux"],
+    ),
   ],
   plugins: [
     new FusesPlugin({

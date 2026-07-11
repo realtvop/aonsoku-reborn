@@ -385,12 +385,18 @@ Intel runner; `macos-13` is retired) and the arm64 build on `macos-latest`.
 stages the runtime DLLs, and generates an MSVC-compatible `mpv.lib` import
 library from `libmpv-2.dll` with `dumpbin`/`lib` (via `ilammy/msvc-dev-cmd`).
 - **Linux**: relies on the distribution `libmpv2` package at runtime
-(`apt install libmpv-dev libdbus-1-dev` for building). Runtime libraries are
-intentionally **not** bundled because the distro libmpv pulls in the graphics
-stack (GL/EGL/Vulkan/X11), so strict `--require-runtime-libs` is not viable.
-Linux CI therefore uses non-strict `pnpm native-audio:verify-package` and the
-`.deb` declares `depends: ["libmpv2"]` in `forge.config.ts` so `apt` installs
-libmpv on the user's machine.
+(`apt install libmpv-dev libdbus-1-dev squashfs-tools` for building; the
+`squashfs-tools` package provides `mksquashfs` used by the AppImage maker).
+Runtime libraries are intentionally **not** bundled because the distro libmpv
+pulls in the graphics stack (GL/EGL/Vulkan/X11), so strict
+`--require-runtime-libs` is not viable. Linux CI therefore uses non-strict
+`pnpm native-audio:verify-package` and the Linux makers declare their distro
+libmpv runtime dependency in `forge.config.ts`: the `.deb` declares
+`depends: ["libmpv2"]` (Debian/Ubuntu) and the `.rpm` declares
+`requires: ["mpv-libs"]` (Fedora baseline; openSUSE ships it as `libmpv2`).
+The AppImage target (`@reforged/maker-appimage`) is built alongside the
+`.deb`/`.rpm` by `electron-forge make --platform linux` and likewise relies on
+the host providing libmpv; it does not bundle a libmpv runtime.
 
 ### Modification Rules
 

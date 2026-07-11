@@ -214,6 +214,14 @@ Linux:
   distro `libmpv` packages. Release builds that rely on distro packages should
   document that dependency in the maker metadata.
 - The addon has `$ORIGIN` rpath for bundled `.so` resolution.
+- Aonsoku's Linux makers all rely on the host distro providing libmpv at
+  runtime: the `.deb` declares `depends: ["libmpv2"]`, the `.rpm` declares
+  `requires: ["mpv-libs"]` (Fedora baseline; openSUSE uses `libmpv2`), and the
+  AppImage (`@reforged/maker-appimage`) does not bundle a libmpv runtime
+  either. The AppImage maker shells out to the system `mksquashfs`, so install
+  `squashfs-tools` (`apt install squashfs-tools`) on the build host; it also
+  downloads the AppImage type2 runtime at make time, so release CI needs
+  outbound network access.
 
 ## Forge Packaging
 

@@ -192,6 +192,7 @@ jobs:
           path: |
             dist/make/**/*.deb
             dist/make/**/*.rpm
+            dist/make/**/*.AppImage
             dist/make/**/*.dmg
             dist/make/**/*.zip
             dist/make/**/*.exe
@@ -315,6 +316,7 @@ jobs:
           files: |
             artifacts/**/*.deb
             artifacts/**/*.rpm
+            artifacts/**/*.AppImage
             artifacts/**/*.dmg
             artifacts/**/*.zip
             artifacts/**/*.exe
