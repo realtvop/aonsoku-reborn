@@ -75,6 +75,22 @@ buffering, ended, errors, metadata title updates, native-file playback,
 Subsonic streams, radio URLs, queue transitions, system-volume parity, and
 download/cache operations all flow through this boundary.
 
+## Cache-First Source Resolution
+
+`NativeAudioService.load()` resolves the playback target through
+`resolveNativeAudioSourceWithCache()` (`electron/main/native/audio/source.ts`),
+mirroring the mobile `NativeSourceResolver`: for `stream` sources that carry a
+`songId`, it first asks `DesktopAudioFileStore.resolveAudioFile(songId)` for a
+locally cached (downloaded/offline) copy. On a cache hit the engine receives a
+`native-file` target pointing at the cached file, so playback reads from disk
+instead of the authenticated network stream. On a miss (no `songId`, no
+resolver, or no cached file) it falls back to the synchronous
+`resolveNativeAudioSource()` path, which produces the authenticated stream URL.
+`radio`, `blob`, and `native-file` sources keep their existing synchronous
+semantics and are unaffected. This keeps the desktop Node.js playback path at
+parity with the mobile plugin's cache-first behavior; it does not change the
+renderer-facing `@aonsoku/audio-contract` surface.
+
 ## Loading Strategy
 
 The loader searches for `aonsoku_libmpv.node` in this order:
