@@ -47,44 +47,53 @@ const addon = args.addon ? path.resolve(args.addon) : null;
 
 if (!existsSync(rootLib)) fail(`Root library not found: ${rootLib}`);
 
-rmSync(staging, { recursive: true, force: true });
-mkdirSync(staging, { recursive: true });
+/**
+ * Top-level entry point. Wrapped in a function and invoked at the bottom of
+ * the module (after the module-level `const BASE_SYSTEM_LIBS` declaration) so
+ * that hoisted function declarations (collectClosure → isBaseSystemLib) don't
+ * reference that `const` before it's initialized — the temporal-dead-zone
+ * error that would otherwise occur if this body ran at module top level.
+ */
+function run() {
+  rmSync(staging, { recursive: true, force: true });
+  mkdirSync(staging, { recursive: true });
 
-console.log(`native-audio: root lib  ${rootLib}`);
-console.log(`native-audio: staging  ${staging}`);
+  console.log(`native-audio: root lib  ${rootLib}`);
+  console.log(`native-audio: staging  ${staging}`);
 
-// 1. Walk the ldd closure, collecting (soname → resolved-path) for every
-//    non-base-system .so. The root lib itself is included.
-const closure = collectClosure(rootLib);
-if (closure.length === 0) fail("No libraries found to bundle.");
+  // 1. Walk the ldd closure, collecting (soname → resolved-path) for every
+  //    non-base-system .so. The root lib itself is included.
+  const closure = collectClosure(rootLib);
+  if (closure.length === 0) fail("No libraries found to bundle.");
 
-// 2. Copy each library into the staging directory using its soname as the
-//    filename, then set $ORIGIN rpath via patchelf.
-const bundled = [];
-for (const { soname, resolved } of closure) {
-  const dest = path.join(staging, soname);
-  copyFileSync(resolved, dest);
-  patchelfRpath(dest);
-  bundled.push(soname);
-  console.log(`native-audio: bundled ${soname}`);
+  // 2. Copy each library into the staging directory using its soname as the
+  //    filename, then set $ORIGIN rpath via patchelf.
+  const bundled = [];
+  for (const { soname, resolved } of closure) {
+    const dest = path.join(staging, soname);
+    copyFileSync(resolved, dest);
+    patchelfRpath(dest);
+    bundled.push(soname);
+    console.log(`native-audio: bundled ${soname}`);
+  }
+
+  // 3. The addon already has $ORIGIN rpath from binding.gyp; no patching needed.
+  if (addon && existsSync(addon)) {
+    console.log(`native-audio: addon ${addon} (rpath already $ORIGIN)`);
+  }
+
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        staging,
+        bundled,
+      },
+      null,
+      2,
+    ),
+  );
 }
-
-// 3. The addon already has $ORIGIN rpath from binding.gyp; no patching needed.
-if (addon && existsSync(addon)) {
-  console.log(`native-audio: addon ${addon} (rpath already $ORIGIN)`);
-}
-
-console.log(
-  JSON.stringify(
-    {
-      ok: true,
-      staging,
-      bundled,
-    },
-    null,
-    2,
-  ),
-);
 
 /**
  * BFS through the ldd dependency tree of `root`, returning an ordered list
@@ -238,3 +247,5 @@ function fail(message) {
   console.error(`native-audio: ${message}`);
   process.exit(1);
 }
+
+run();
