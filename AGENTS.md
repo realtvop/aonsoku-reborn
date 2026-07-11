@@ -157,6 +157,20 @@ Electron follows the same renderer/native ownership boundary as Capacitor:
 - `electron/main/native/media-protocol.ts` resolves renderer-facing
   `aonsoku-media://` cover/avatar/stream identifiers and injects credentials in
   the main process. Renderer code must not construct authenticated server URLs.
+  The image proxy (`getCoverArt`/`getAvatar`) is bounded by a main-process
+  `AsyncLimiter` (`electron/main/native/concurrency.ts`, concurrency 6), serves
+  disk-cached covers first via `DesktopNativeDataService.readCoverWithMeta`
+  (skipping the network when the cached copy is at least the requested size),
+  and applies a 15s stall timeout (`AbortSignal.any([request.signal,
+  AbortSignal.timeout(15_000)])`). `stream` stays on Node's default global
+  `fetch` (no body timeout, so buffered-playout backpressure never aborts it);
+  it is separated from the image flood because images/metadata no longer use
+  the default agent. Bridge `downloadBinary`/`performRequest` and the
+  `media-protocol` image proxy go through a dedicated undici `Agent`
+  (`electron/main/native/bridge/http-agent.ts`, 16 connections per origin,
+  `headersTimeout`/`bodyTimeout` set) via `subsonicFetch`, so image and
+  metadata traffic shares one raised connection ceiling instead of saturating
+  Node's default low-limit global pool and starving IPC handlers.
 
 ### Cross-Device Coordination
 
