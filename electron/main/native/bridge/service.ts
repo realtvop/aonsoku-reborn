@@ -11,6 +11,7 @@ import type {
   StoredCredentials,
 } from "@aonsoku/capacitor-native/bridge";
 import { AonsokuStore } from "../../core/store";
+import { subsonicFetch } from "./http-agent";
 
 const APP_NAME = "Aonsoku";
 const DEFAULT_VERSION = "1.16.0";
@@ -182,7 +183,9 @@ export class DesktopNativeBridgeService {
     const url = this.buildUrl(credentials, { path, query });
     let response: Response;
     try {
-      response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+      response = await subsonicFetch(url, {
+        signal: AbortSignal.timeout(30_000),
+      });
     } catch (error) {
       throw new Error(
         `network_unreachable: ${error instanceof Error ? error.message : error}`,
@@ -209,7 +212,7 @@ export class DesktopNativeBridgeService {
     const url = this.buildUrl(credentials, options);
     let response: Response;
     try {
-      response = await fetch(url, {
+      response = await subsonicFetch(url, {
         method: options.method ?? "GET",
         body: options.body,
         signal: AbortSignal.timeout(30_000),
