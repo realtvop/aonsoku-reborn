@@ -133,6 +133,7 @@ export class NativeAudioService implements AonsokuAudioApi {
   #currentTime = 0;
   #duration = 0;
   #playerVolume = 1;
+  #isBuffering = false;
   #currentSource: NativeAudioQueueItem | null = null;
   #remotePlaybackState: NativeRemotePlaybackStateOptions | null = null;
 
@@ -547,6 +548,22 @@ export class NativeAudioService implements AonsokuAudioApi {
     return Promise.resolve({ volume: this.#playerVolume });
   }
 
+  /**
+   * Debug-only accessor for the native player debug window. Returns the live
+   * libmpv diagnostics and the current buffering flag so the debug snapshot
+   * can show engine availability and buffer status without exposing private
+   * engine internals through the audio contract.
+   */
+  getDebugExtras(): {
+    isBuffering: boolean;
+    diagnostics: DesktopAudioEngineDiagnostics | undefined;
+  } {
+    return {
+      isBuffering: this.#isBuffering,
+      diagnostics: this.#engine.getDiagnostics?.(),
+    };
+  }
+
   setVolumeHUDEnabled(options: { enabled: boolean }): Promise<void> {
     return this.#systemAudio.setVolumeHUDEnabled(options.enabled);
   }
@@ -768,6 +785,7 @@ export class NativeAudioService implements AonsokuAudioApi {
         });
         break;
       case "bufferingChanged":
+        this.#isBuffering = event.isBuffering;
         this.#emit("bufferingChanged", {
           requestId: this.#requestId,
           isBuffering: event.isBuffering,
