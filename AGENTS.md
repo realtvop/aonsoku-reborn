@@ -77,7 +77,12 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
 
 - **Web**: Vite (`vite.config.ts`) builds `src/` as a standard SPA.
 - **Electron**: `electron.vite.config.ts` builds `electron/main`,
-  `electron/preload`, and the renderer, which reuses `src/`.
+  `electron/preload`, and the renderer, which reuses `src/`. A second,
+  Electron-only renderer entry `electron/renderer/native-debug/index.html`
+  builds the native player debug window (see Multi-Stack Native Playback); it
+  is not part of the shared `src/` SPA, so web/Capacitor builds never bundle
+  it. `tailwind.config.js` scans `electron/renderer/**` for its utility
+  classes, and `tsconfig.electron-renderer.json` type-checks it.
 - **Capacitor iOS/Android**: `capacitor.config.ts` points native hosts at
   `dist`. The custom native plugin lives in
   `capacitor-plugins/capacitor-native` and is included through pnpm workspace
@@ -474,3 +479,27 @@ feature-consistent**:
    when unavailable, never silently ignore.
 6. Remote-control or handoff changes -> verify local playback, remote playback
    projection, and native coordination paths.
+
+### Native Player Debug Window (Electron desktop)
+
+A developer/debug window mirroring the mobile `DebugViewController` /
+`DebugActivity` (Playback / Info / Logs tabs, 2s auto-refresh). Entry point is
+macOS-only, under the View application menu ("Native Player Debug…"); other
+platforms have no menu entry yet. The window is a standalone `BrowserWindow`
+that loads the dedicated Electron-only renderer entry
+`electron/renderer/native-debug/index.html` (not part of the shared `src/` SPA).
+
+- Main-process debug surface lives in `electron/main/native/debug/`:
+  `NativeDebugLogger` (ring buffer, mirroring mobile `NativeLogger`),
+  `debug-provider` (aggregates `NativeFullState` + libmpv diagnostics +
+  credentials + process info + logs into one snapshot), and IPC handlers
+  (`aonsoku-native-debug:snapshot|control|clear-logs`). The window itself is
+  managed in `native-debug-window.ts`; `NativeAudioService.getDebugExtras()`
+  exposes engine diagnostics + the live buffering flag.
+- Preload bridge `electron/preload/native-debug.ts` exposes
+  `window.aonsokuNativeDebug`; `window.api.openNativeDebug()` opens the window.
+- The main native audio stack (`DesktopNativeAudioService`,
+  `DesktopQueueEngine`, `LibMpvAudioEngine`) is instrumented with
+  `nativeLogger` calls (sources `audio-service` / `queue-engine` /
+  `libmpv-engine`) so the Logs tab shows real activity. Avoid logging
+  progress events (too noisy).
