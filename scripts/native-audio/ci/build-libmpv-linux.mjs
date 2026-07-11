@@ -22,7 +22,8 @@
  *
  * Build dependencies (must be pre-installed via apt or equivalent):
  *   build-essential git meson ninja-build pkg-config
- *   libavcodec-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev
+ *   libavcodec-dev libavformat-dev libavutil-dev libavfilter-dev
+ *   libswresample-dev libswscale-dev
  *   libass-dev libpulse-dev libasound2-dev
  *
  * Usage:

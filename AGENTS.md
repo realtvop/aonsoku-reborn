@@ -398,9 +398,9 @@ library from `libmpv-2.dll` with `dumpbin`/`lib` (via `ilammy/msvc-dev-cmd`).
   directory using soname filenames, and applies `patchelf --set-rpath
   '$ORIGIN'` so the bundled libs resolve each other without touching system
   paths. Build deps: `build-essential git meson ninja-build pkg-config
-  patchelf libavcodec-dev libavformat-dev libavutil-dev libswresample-dev
-  libswscale-dev libass-dev libpulse-dev libasound2-dev libdbus-1-dev
-  squashfs-tools`. All three Linux makers (`.deb`, `.rpm`, AppImage) bundle
+  patchelf libavcodec-dev libavformat-dev libavutil-dev libavfilter-dev
+  libswresample-dev libswscale-dev libass-dev libpulse-dev libasound2-dev
+  libdbus-1-dev squashfs-tools`. All three Linux makers (`.deb`, `.rpm`, AppImage) bundle
   the audio-only libmpv runtime closure and declare **no** libmpv-related
   package dependency (`depends: []` / `requires: []` in `forge.config.ts`).
   Linux CI uses strict `--require-runtime-libs` verification, same as macOS

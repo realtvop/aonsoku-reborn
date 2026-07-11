@@ -132,8 +132,9 @@ Install the build dependencies, then build and collect the runtime closure:
 ```bash
 sudo apt install -y build-essential git meson ninja-build pkg-config patchelf \
   libavcodec-dev libavformat-dev libavutil-dev \
-  libswresample-dev libswscale-dev \
-  libass-dev libpulse-dev libasound2-dev
+  libavfilter-dev libswresample-dev libswscale-dev \
+  libass-dev libpulse-dev libasound2-dev \
+  libdbus-1-dev squashfs-tools
 
 node scripts/native-audio/ci/build-libmpv-linux.mjs --staging ./.native-audio-build
 export AONSOKU_LIBMPV_INCLUDE_DIR="$(pwd)/.native-audio-build/install/include"
