@@ -56,6 +56,7 @@ pnpm native-audio:smoke   # Load libmpv and play a generated WAV fixture
 pnpm native-audio:smoke:packaged # Smoke test resources/native-audio layout
 pnpm native-audio:verify-package # Check Forge/resource/native-audio packaging
 pnpm native-audio:verify-package:strict # Fail if native runtime files are missing
+pnpm native-audio:check-glibc-baseline   # Verify Linux glibc baseline consistency across forge config, docs, and CI
 
 # CI helpers used by .github/actions/setup-native-audio
 node scripts/native-audio/ci/fetch-libmpv-windows.mjs --arch x64|arm64
@@ -416,7 +417,10 @@ library from `libmpv-2.dll` with `dumpbin`/`lib` (via `ilammy/msvc-dev-cmd`).
   libswresample-dev libswscale-dev libass-dev libpulse-dev libasound2-dev
   libdbus-1-dev squashfs-tools`. All three Linux makers (`.deb`, `.rpm`, AppImage) bundle
   the audio-only libmpv runtime closure and declare **no** libmpv-related
-  package dependency (`depends: []` / `requires: []` in `forge.config.ts`).
+  package dependency. They do declare a **glibc baseline dependency**
+  (`depends: ["libc6 (>= 2.35)"]` / `requires: ["glibc >= 2.35"]` in
+  `forge.config.ts`) because CI builds on Ubuntu 22.04 (glibc 2.35). The
+  resulting packages require glibc >= 2.35 at runtime.
   Linux CI uses strict `--require-runtime-libs` verification, same as macOS
   and Windows. The AppImage target (`@reforged/maker-appimage`) is built
   alongside the `.deb`/`.rpm` by `electron-forge make --platform linux` and

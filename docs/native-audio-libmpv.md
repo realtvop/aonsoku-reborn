@@ -235,24 +235,32 @@ Linux:
   `libmpv2` package is intentionally not used because it transitively depends
   on the graphics stack (GL/EGL/Vulkan/X11/DRM/libplacebo), which is
   impractical to bundle.
-- The audio-only `libmpv.so` and its non-base-system `.so` dependencies
+- CI builds the Linux native-audio artifacts on **Ubuntu 22.04** (glibc
+  2.35). The bundled `libmpv.so`, its non-base-system `.so` dependencies
   (FFmpeg, libass, freetype, fontconfig, PulseAudio client, D-Bus,
-  libstdc++, etc.) are collected by
-  `scripts/native-audio/ci/collect-runtime-linux.mjs` into a flat staging
-  directory. `patchelf --set-rpath '$ORIGIN'` is applied to each bundled
-  `.so` so they resolve each other without touching system paths.
+  libstdc++, etc.), and the Node-API addon are all compiled against that
+  baseline. As a result, the `.deb`, `.rpm`, and AppImage packages require
+  **glibc >= 2.35** at runtime (e.g. Ubuntu 22.04+, Debian 12+, Fedora 36+)
+  and will not work on older distributions such as Ubuntu 20.04 or
+  Debian 11.
+- The audio-only `libmpv.so` and its non-base-system `.so` dependencies are
+  collected by `scripts/native-audio/ci/collect-runtime-linux.mjs` into a flat
+  staging directory. `patchelf --set-rpath '$ORIGIN'` is applied to each
+  bundled `.so` so they resolve each other without touching system paths.
 - The addon has `$ORIGIN` rpath (from `binding.gyp`), so it finds the bundled
   `libmpv.so` placed next to it in `resources/native-audio/linux-<arch>/`.
 - Only truly universal base-system libraries (libc, libm, the dynamic loader,
   etc.) are excluded from the bundle. Everything else is bundled so the
-  package works on any glibc-compatible Linux of the same arch without
-  requiring the user to install extra runtime packages.
+  package works on glibc >= 2.35 Linux distributions of the same arch
+  without requiring the user to install extra runtime packages.
 - All three Linux makers (`.deb`, `.rpm`, AppImage) bundle the audio-only
   libmpv runtime and declare **no** libmpv-related package dependency.
-  The AppImage maker shells out to the system `mksquashfs`, so install
-  `squashfs-tools` (`apt install squashfs-tools`) on the build host; it also
-  downloads the AppImage type2 runtime at make time, so release CI needs
-  outbound network access.
+  `.deb` declares `libc6 (>= 2.35)` and `.rpm` declares
+  `glibc >= 2.35` to reflect the build baseline. The AppImage maker shells
+  out to the system `mksquashfs`, so install `squashfs-tools`
+  (`apt install squashfs-tools`) on the build host; it also downloads the
+  AppImage type2 runtime at make time, so release CI needs outbound network
+  access.
 
 ## Forge Packaging
 

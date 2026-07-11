@@ -122,10 +122,12 @@ jobs:
             libmpv_platform: "linux"
             target: "linux"
             arch: "x64"
+            # Linux native-audio artifacts require glibc >= 2.35.
           - platform: "ubuntu-22.04-arm"
             libmpv_platform: "linux"
             target: "linux"
             arch: "arm64"
+            # Linux native-audio artifacts require glibc >= 2.35.
           - platform: "windows-latest"
             libmpv_platform: "win32"
             target: "win"
@@ -175,7 +177,8 @@ jobs:
         run: |
           if [ "${{ matrix.target }}" = "linux" ]; then
             # Linux bundles an audio-only libmpv with its .so runtime closure;
-            # strict verification ensures the bundled runtime is complete.
+            # strict verification ensures the bundled runtime is complete. The
+            # artifacts are built on Ubuntu 22.04 and require glibc >= 2.35.
             # See docs/native-audio-libmpv.md.
             pnpm native-audio:verify-package --require-native-audio --platform linux --arch ${{ matrix.arch }}
             pnpm electron:build
@@ -298,6 +301,14 @@ jobs:
             **Branch:** `development`
             **Version:** `${{ needs.check-changes.outputs.nightly_version }}`
             **Commit:** `${{ needs.check-changes.outputs.short_sha }}`
+
+            ---
+
+            ### Linux desktop packages
+
+            Linux artifacts are built on `ubuntu-22.04` and require **glibc >= 2.35**
+            (e.g. Ubuntu 22.04+, Debian 12+, Fedora 36+). They will not run on older
+            distributions.
 
             ---
 

@@ -32,6 +32,10 @@ runs:
         # base-system libs — small enough to bundle for portable .deb/.rpm/
         # AppImage packages. See docs/native-audio-libmpv.md.
         #
+        # Linux artifacts are built on the runner's distro (Ubuntu 22.04 in
+        # release/nightly CI, glibc 2.35). Bundled binaries may reference that
+        # glibc baseline, so .deb/.rpm declare libc6/glibc >= 2.35.
+        #
         # FFmpeg/libass dev headers: needed to compile libmpv.
         # patchelf: rewrites .so rpath to $ORIGIN for runtime bundling.
         # squashfs-tools: provides mksquashfs for @reforged/maker-appimage.
@@ -42,6 +46,15 @@ runs:
           libavfilter-dev libswresample-dev libswscale-dev \
           libass-dev libpulse-dev libasound2-dev \
           libdbus-1-dev squashfs-tools
+
+    - name: Record Linux build environment glibc baseline
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        GLIBC_VERSION=$(ldd --version | head -n1 | grep -oE '[0-9]+\.[0-9]+' | head -n1)
+        echo "AONSOKU_LINUX_GLIBC_VERSION=$GLIBC_VERSION" >> "$GITHUB_ENV"
+        echo "Aonsoku Linux native-audio build environment glibc: $GLIBC_VERSION"
+        echo "Packaged artifacts require glibc >= 2.35 (Ubuntu 22.04+ baseline)."
 
     - name: Install libmpv development files (macOS)
       if: runner.os == 'macOS'

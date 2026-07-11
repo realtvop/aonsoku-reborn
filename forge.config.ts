@@ -99,18 +99,22 @@ const config: ForgeConfig = {
         homepage: "https://github.com/realtvop/aonsoku-reborn",
         categories: ["AudioVideo", "Audio"],
         // RPM distros name packages differently, but since libmpv is now
-        // bundled, no libmpv runtime package dependency is declared. Keep
-        // maker metadata and release notes aligned.
-        requires: [],
+        // bundled, no libmpv runtime package dependency is declared.
+        // CI builds Linux native audio on Ubuntu 22.04 (glibc 2.35), so
+        // the package requires glibc >= 2.35 at runtime.
+        // See docs/native-audio-libmpv.md.
+        requires: ["glibc >= 2.35"],
       },
     }),
     new MakerDeb({
       options: {
         homepage: "https://github.com/realtvop/aonsoku-reborn",
         // libmpv is bundled (audio-only build from source + .so runtime
-        // closure), so no libmpv2 apt dependency is declared.
+        // closure), so no libmpv2 apt dependency is declared. The package
+        // is built on Ubuntu 22.04 (glibc 2.35) and still requires
+        // libc6 >= 2.35 at runtime.
         // See docs/native-audio-libmpv.md.
-        depends: [],
+        depends: ["libc6 (>= 2.35)"],
       },
     }),
     // AppImage (portable Linux bundle). Built via @reforged/maker-appimage,

@@ -11,7 +11,9 @@
  * a libmpv.so whose only dynamic dependencies are FFmpeg, libass, audio output
  * client libraries, and base-system libs (libc/libm/ld-linux). The resulting
  * .so closure is small enough to bundle, which makes the .deb/.rpm/AppImage
- * self-contained without dragging in a graphics stack.
+ * self-contained without dragging in a graphics stack. The glibc baseline of
+ * the bundled binaries follows the build environment (Ubuntu 22.04 / glibc
+ * 2.35 in CI).
  *
  * The built library and headers are installed to a staging prefix. After this
  * script runs, set:

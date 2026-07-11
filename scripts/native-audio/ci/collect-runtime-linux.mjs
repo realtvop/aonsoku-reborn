@@ -17,8 +17,10 @@
  * Only truly universal base-system libraries are excluded (libc, libm, the
  * dynamic loader, etc.). Everything else — FFmpeg, libass, freetype,
  * fontconfig, PulseAudio client, D-Bus, libstdc++, libgcc_s — is bundled so
- * the package works on any glibc-compatible Linux of the same arch without
- * requiring the user to install development/runtime packages.
+ * the package works on glibc >= 2.35 Linux distributions of the same arch
+ * without requiring the user to install development/runtime packages. The
+ * actual glibc baseline is determined by the build environment (Ubuntu 22.04
+ * / glibc 2.35 in CI).
  *
  * Requires `patchelf` on PATH (`apt install patchelf`).
  *
