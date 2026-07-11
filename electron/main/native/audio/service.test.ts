@@ -863,6 +863,196 @@ describe("NativeAudioService", () => {
     }
   });
 
+  it("does not fetch or emit streamCacheCompleted when the loaded stream is already cached", async () => {
+    const songId = "song-already-cached";
+    const cachedBytes = Buffer.from("already cached audio");
+    await service.storeAudioFile({
+      songId,
+      dataBase64: cachedBytes.toString("base64"),
+      contentType: "audio/mpeg",
+    });
+    const fetchMock = mockAudioFetch({
+      body: Buffer.from("should not be downloaded"),
+      contentType: "audio/mpeg",
+    });
+
+    const backgroundService = new NativeAudioService({
+      engine,
+      audioCacheDirectory,
+    });
+    const events: unknown[] = [];
+    backgroundService.onEvent((event) => events.push(event));
+
+    try {
+      await backgroundService.load({
+        source: {
+          kind: "stream",
+          url: `https://server/rest/stream?id=${songId}`,
+          songId,
+        },
+      });
+      // Give the skipIfCached background cache path time to run.
+      await delay(50);
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(events).not.toContainEqual(
+        expect.objectContaining({ eventName: "streamCacheCompleted" }),
+      );
+      await expect(
+        backgroundService.resolveAudioFile({ songId }),
+      ).resolves.toEqual({
+        file: expect.objectContaining({
+          songId,
+          contentType: "audio/mpeg",
+          sizeBytes: cachedBytes.byteLength,
+        }),
+      });
+    } finally {
+      backgroundService.destroy();
+    }
+  });
+
+  it("does not start a second fetch when the same songId is downloaded twice", async () => {
+    const songId = "song-duplicate-download";
+    const fetchMock = mockSlowAudioFetch({
+      body: Buffer.from("slow downloaded audio bytes"),
+      contentType: "audio/mpeg",
+      chunkDelayMs: 50,
+    });
+
+    await service.load({
+      source: {
+        kind: "stream",
+        url: `https://server/rest/stream?id=${songId}`,
+        songId,
+      },
+    });
+
+    const completedPromise = waitForServiceEvent(
+      service,
+      "downloadCompleted",
+      (event) => event.songId === songId,
+    );
+
+    await Promise.all([
+      service.downloadAudioFile({ songId }),
+      service.downloadAudioFile({ songId }),
+    ]);
+
+    await completedPromise;
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancelAll cancels multiple active downloads without leaving cache files", async () => {
+    const songIds = [
+      "song-cancelall-1",
+      "song-cancelall-2",
+      "song-cancelall-3",
+    ];
+    mockSlowAudioFetch({
+      body: Buffer.from("slow downloaded audio bytes"),
+      contentType: "audio/mpeg",
+      chunkDelayMs: 100,
+    });
+
+    const resolverService = new NativeAudioService({
+      engine,
+      audioCacheDirectory,
+      downloadUrlResolver: ({ songId }) =>
+        `https://server/rest/stream?id=${songId}`,
+    });
+    const events: unknown[] = [];
+    resolverService.onEvent((event) => events.push(event));
+
+    try {
+      const before = await listAonsokuTempDirs();
+      const progressPromises = songIds.map((songId) =>
+        waitForServiceEvent(
+          resolverService,
+          "downloadProgress",
+          (event) => event.songId === songId,
+        ),
+      );
+
+      await Promise.all(
+        songIds.map((songId) => resolverService.downloadAudioFile({ songId })),
+      );
+      await Promise.all(progressPromises);
+
+      await resolverService.cancelDownload();
+      await delay(200);
+
+      expect(events).not.toContainEqual(
+        expect.objectContaining({ eventName: "downloadCompleted" }),
+      );
+      expect(events).not.toContainEqual(
+        expect.objectContaining({ eventName: "downloadFailed" }),
+      );
+      for (const songId of songIds) {
+        await expect(
+          resolverService.resolveAudioFile({ songId }),
+        ).resolves.toEqual({ file: null });
+      }
+      const after = await listAonsokuTempDirs();
+      expect(after.filter((dir) => !before.includes(dir))).toEqual([]);
+    } finally {
+      resolverService.destroy();
+    }
+  });
+
+  it("cleans up the temp directory when a download fails mid-stream", async () => {
+    const songId = "song-midstream-fail";
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new Uint8Array(Buffer.from("partial bytes")));
+            controller.error(new Error("stream broke mid-download"));
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "audio/mpeg",
+            "content-length": "100",
+          },
+        },
+      ),
+    );
+
+    const before = await listAonsokuTempDirs();
+
+    await service.load({
+      source: {
+        kind: "stream",
+        url: `https://server/rest/stream?id=${songId}`,
+        songId,
+      },
+    });
+
+    const failedPromise = waitForServiceEvent(
+      service,
+      "downloadFailed",
+      (event) => event.songId === songId,
+    );
+
+    await service.downloadAudioFile({ songId });
+
+    await expect(failedPromise).resolves.toEqual({
+      songId,
+      error: "stream broke mid-download",
+    });
+    await delay(20);
+
+    const after = await listAonsokuTempDirs();
+    expect(after.filter((dir) => !before.includes(dir))).toEqual([]);
+    await expect(service.resolveAudioFile({ songId })).resolves.toEqual({
+      file: null,
+    });
+    fetchMock.mockRestore();
+  });
+
   it("forwards base engine events with the active request id", async () => {
     const events: unknown[] = [];
     service.onEvent((event) => events.push(event));
@@ -1909,6 +2099,14 @@ function waitForServiceEvent<TEvent extends keyof NativeAudioEvents>(
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function listAonsokuTempDirs(): Promise<string[]> {
+  return fs
+    .readdir(tmpdir())
+    .then((entries) =>
+      entries.filter((entry) => entry.startsWith("aonsoku-audio-download-")),
+    );
 }
 
 function queueSong(id: string) {
