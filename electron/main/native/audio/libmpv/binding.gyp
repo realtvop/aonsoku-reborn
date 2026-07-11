@@ -51,7 +51,17 @@
             "sources": ["src/system_media_session_linux.cc"],
             "cflags": ["<!@(pkg-config --cflags dbus-1)"],
             "libraries": ["<!@(pkg-config --libs dbus-1)"],
-            "ldflags": ["-Wl,-rpath,$$ORIGIN"]
+            # `$$ORIGIN` survives gyp's `$$` -> `$` makefile expansion, and the
+            # single quotes stop the shell from expanding `$ORIGIN` to empty
+            # before g++ receives it. Without the quotes the addon is linked
+            # with an empty rpath and cannot find libmpv.so next to it at
+            # runtime (the dynamic loader then reports
+            # `libmpv.so.2: cannot open shared object file`). `-z origin` marks
+            # that $ORIGIN is used so the loader expands it.
+            "ldflags": [
+              "-Wl,-z,origin",
+              "-Wl,-rpath,'$$ORIGIN'"
+            ]
           }
         ],
         [
