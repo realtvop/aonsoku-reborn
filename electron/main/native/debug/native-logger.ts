@@ -9,16 +9,9 @@
  * mobile implementation.
  */
 
-export type NativeDebugLogLevel = "debug" | "info" | "warn" | "error";
+import type { NativeDebugLogEntry, NativeDebugLogLevel } from "./types";
 
-export interface NativeDebugLogEntry {
-  /** Unix epoch milliseconds. */
-  timestamp: number;
-  level: NativeDebugLogLevel;
-  message: string;
-  /** Empty string means "no source". */
-  source: string;
-}
+export type { NativeDebugLogLevel };
 
 const MAX_ENTRIES_PER_SOURCE = 200;
 

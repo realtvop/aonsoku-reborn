@@ -40,10 +40,12 @@ export interface NativeDebugSnapshot {
 
 export type NativeDebugControl = "playPause" | "next" | "previous";
 
+export type NativeDebugLogLevel = "debug" | "info" | "warn" | "error";
+
 export interface NativeDebugLogEntry {
   /** Unix epoch milliseconds. */
   timestamp: number;
-  level: "debug" | "info" | "warn" | "error";
+  level: NativeDebugLogLevel;
   message: string;
   source: string;
 }

@@ -43,8 +43,9 @@ export function createNativeDebugWindow(): BrowserWindow | null {
   });
 
   if (is.dev && process.env.ELECTRON_RENDERER_URL) {
+    const base = process.env.ELECTRON_RENDERER_URL.replace(/\/+$/, "");
     nativeDebugWindow.loadURL(
-      `${process.env.ELECTRON_RENDERER_URL}/electron/renderer/native-debug/index.html`,
+      `${base}/electron/renderer/native-debug/index.html`,
     );
   } else {
     nativeDebugWindow.loadFile(
