@@ -5,6 +5,7 @@ import type {
   NativeQueueSourceId,
   NativeSetContextQueueOptions,
 } from "@aonsoku/audio-contract";
+import { nativeLogger } from "../debug/native-logger";
 
 export type DesktopQueueAdvanceReason =
   NativeAudioEvents["queueStateChanged"]["reason"];
@@ -122,6 +123,10 @@ export class DesktopQueueEngine {
   }
 
   async setContextQueue(options: NativeSetContextQueueOptions): Promise<void> {
+    nativeLogger.info(
+      `setContextQueue songs=${options.songs.length} index=${options.currentIndex}`,
+      "queue-engine",
+    );
     this.contextSongs = copySongs(options.songs);
     this.originalContextSongs = [];
     this.currentIndex = normalizeSongIndex(
@@ -197,6 +202,10 @@ export class DesktopQueueEngine {
   }
 
   addToUserQueue(songs: NativeQueueSong[], position: "next" | "last"): void {
+    nativeLogger.info(
+      `addToUserQueue songs=${songs.length} position=${position}`,
+      "queue-engine",
+    );
     const updatedQueue = copySongs(this.userQueue);
 
     if (position === "next") {
@@ -295,6 +304,7 @@ export class DesktopQueueEngine {
   }
 
   setShuffleActive(active: boolean): void {
+    nativeLogger.debug(`shuffle ${active ? "on" : "off"}`, "queue-engine");
     if (active) {
       this.#applyShuffle();
     } else {
@@ -308,6 +318,7 @@ export class DesktopQueueEngine {
   }
 
   setLoopState(state: NativeFullState["loopState"]): void {
+    nativeLogger.debug(`repeat ${state}`, "queue-engine");
     this.loopState = state;
   }
 

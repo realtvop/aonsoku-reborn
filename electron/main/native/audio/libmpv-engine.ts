@@ -3,6 +3,7 @@ import type {
   NativeAudioMetadata,
   NativeAudioRemoteCommand,
 } from "@aonsoku/audio-contract";
+import { nativeLogger } from "../debug/native-logger";
 import type {
   MpvPlayer,
   MpvPlayerEvent,
@@ -73,6 +74,10 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
   }
 
   async load(options: DesktopAudioEngineLoadOptions): Promise<void> {
+    nativeLogger.debug(
+      `loadfile target=${options.source.target.slice(0, 80)}`,
+      "libmpv-engine",
+    );
     const player = await this.#ensureStarted();
     this.#ignoreNextStopEnd = this.#hasLoadedSource;
     this.#hasLoadedSource = false;
@@ -185,8 +190,19 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
   }
 
   async checkAvailability(): Promise<DesktopAudioEngineDiagnostics> {
-    await verifyLibMpvPlayer(this.#playerFactory);
-
+    try {
+      await verifyLibMpvPlayer(this.#playerFactory);
+    } catch (error) {
+      nativeLogger.warn(
+        `libmpv availability check failed: ${error instanceof Error ? error.message : String(error)}`,
+        "libmpv-engine",
+      );
+      throw error;
+    }
+    nativeLogger.info(
+      `libmpv available platformKey=${process.platform}-${process.arch}`,
+      "libmpv-engine",
+    );
     return (
       this.#diagnostics ?? {
         backend: "libmpv",
@@ -270,6 +286,10 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
         this.#handlePropertyChange(event);
         break;
       case "error":
+        nativeLogger.error(
+          `mpv error: ${event.code ?? ""} ${event.message}`,
+          "libmpv-engine",
+        );
         this.#emitError(event.code ?? "mpv-error", event.message);
         break;
       case "system-media-command":

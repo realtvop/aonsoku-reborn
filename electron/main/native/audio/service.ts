@@ -37,6 +37,7 @@ import type {
   NativeSystemVolumeResult,
   NativeUpdateContextQueueOptions,
 } from "@aonsoku/audio-contract";
+import { nativeLogger } from "../debug/native-logger";
 import { DesktopAudioFileStore } from "./cache";
 import {
   type DesktopAudioDownloadCompletionEventName,
@@ -163,6 +164,10 @@ export class NativeAudioService implements AonsokuAudioApi {
       queueEngineLoadSong: (_engine, song, autoplay, startTime) =>
         this.#loadQueueSong(song, { autoplay, startTime }),
       queueEngineDidAdvanceTo: (engine, index, songId, reason) => {
+        nativeLogger.info(
+          `advanced to index=${index} songId=${songId} reason=${reason}`,
+          "audio-service",
+        );
         this.#persistPlaybackState();
         this.#emit("queueStateChanged", {
           requestId: this.#requestId,
@@ -197,6 +202,10 @@ export class NativeAudioService implements AonsokuAudioApi {
     };
     this.#duration = options.metadata?.duration ?? 0;
     this.#currentTime = options.startTime ?? 0;
+    nativeLogger.debug(
+      `load source=${options.source.kind} autoplay=${options.autoplay ?? false}`,
+      "audio-service",
+    );
 
     try {
       await this.#engine.load({
@@ -217,6 +226,7 @@ export class NativeAudioService implements AonsokuAudioApi {
   }
 
   async play(): Promise<void> {
+    nativeLogger.debug("play", "audio-service");
     try {
       await this.#engine.play();
       this.#scrobbleBuffer.resumeTracking();
@@ -227,6 +237,7 @@ export class NativeAudioService implements AonsokuAudioApi {
   }
 
   async pause(): Promise<void> {
+    nativeLogger.debug("pause", "audio-service");
     try {
       await this.#engine.pause();
       this.#scrobbleBuffer.pauseTracking();
@@ -237,6 +248,7 @@ export class NativeAudioService implements AonsokuAudioApi {
   }
 
   async stop(): Promise<void> {
+    nativeLogger.debug("stop", "audio-service");
     try {
       await this.#engine.stop();
       this.#stopScrobbleTracking();
@@ -247,6 +259,7 @@ export class NativeAudioService implements AonsokuAudioApi {
   }
 
   async seek(options: NativeAudioSeekOptions): Promise<void> {
+    nativeLogger.debug(`seek ${options.position}s`, "audio-service");
     try {
       await this.#engine.seek(Math.max(0, options.position));
     } catch (error) {
@@ -289,13 +302,13 @@ export class NativeAudioService implements AonsokuAudioApi {
 
   async skipToNext(): Promise<void> {
     if (!this.#hasNativeQueue()) return;
-
+    nativeLogger.debug("skipToNext", "audio-service");
     await this.#queueEngine.skipToNext();
   }
 
   async skipToPrevious(): Promise<void> {
     if (!this.#hasNativeQueue()) return;
-
+    nativeLogger.debug("skipToPrevious", "audio-service");
     await this.#queueEngine.skipToPrevious(this.#currentTime);
   }
 
@@ -334,6 +347,7 @@ export class NativeAudioService implements AonsokuAudioApi {
   }
 
   async clear(): Promise<void> {
+    nativeLogger.debug("clear", "audio-service");
     try {
       await this.#engine.clear();
       this.#stopScrobbleTracking();
@@ -389,6 +403,10 @@ export class NativeAudioService implements AonsokuAudioApi {
   }
 
   async setContextQueue(options: NativeSetContextQueueOptions): Promise<void> {
+    nativeLogger.info(
+      `setContextQueue songs=${options.songs.length} index=${options.currentIndex}`,
+      "audio-service",
+    );
     this.#rememberQueueSongs(options.songs);
     if (options.repeatMode) {
       this.#queueEngine.setLoopState(options.repeatMode);
@@ -786,17 +804,29 @@ export class NativeAudioService implements AonsokuAudioApi {
         break;
       case "bufferingChanged":
         this.#isBuffering = event.isBuffering;
+        nativeLogger.debug(
+          `buffering ${event.isBuffering ? "started" : "ended"}`,
+          "audio-service",
+        );
         this.#emit("bufferingChanged", {
           requestId: this.#requestId,
           isBuffering: event.isBuffering,
         });
         break;
       case "ended":
+        nativeLogger.info(
+          `ended reason=${event.reason ?? "unknown"}`,
+          "audio-service",
+        );
         this.#handlePlaybackEnded(event).catch((error) => {
           this.#emitFailure(error);
         });
         break;
       case "error":
+        nativeLogger.error(
+          `engine error: ${event.code ?? ""} ${event.message}`,
+          "audio-service",
+        );
         this.#emit("error", {
           requestId: this.#requestId,
           code: event.code,
@@ -813,6 +843,10 @@ export class NativeAudioService implements AonsokuAudioApi {
 
   #emitFailure(error: unknown): void {
     this.#playbackState = "failed";
+    nativeLogger.error(
+      `playback failed: ${error instanceof Error ? error.message : String(error)}`,
+      "audio-service",
+    );
     this.#emit("playbackStateChanged", {
       requestId: this.#requestId,
       state: "failed",
