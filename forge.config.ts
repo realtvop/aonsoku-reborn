@@ -90,32 +90,35 @@ const config: ForgeConfig = {
       icon: "./build/icon.icns",
     }),
     // Linux: Output RPM, DEB, and AppImage installers (final products).
-    // All three rely on the host distribution's libmpv at runtime; runtime
-    // .so bundling is intentionally not used on Linux (see
-    // docs/native-audio-libmpv.md).
+    // All three bundle an audio-only libmpv (built from source with all
+    // video/GPU/display features disabled) and its .so runtime closure, so
+    // they do not depend on the host distribution's libmpv2 package.
+    // See docs/native-audio-libmpv.md.
     new MakerRpm({
       options: {
         homepage: "https://github.com/realtvop/aonsoku-reborn",
         categories: ["AudioVideo", "Audio"],
-        // RPM distros name the libmpv runtime package differently; declare the
-        // Fedora package as the baseline requires. openSUSE ships it as
-        // `libmpv2`. Keep maker metadata and release notes aligned.
-        requires: ["mpv-libs"],
+        // RPM distros name packages differently, but since libmpv is now
+        // bundled, no libmpv runtime package dependency is declared. Keep
+        // maker metadata and release notes aligned.
+        requires: [],
       },
     }),
     new MakerDeb({
       options: {
         homepage: "https://github.com/realtvop/aonsoku-reborn",
-        // Linux packages rely on the distribution's libmpv2 package at runtime
-        // (see docs/native-audio-libmpv.md). Declare it so apt installs it.
-        depends: ["libmpv2"],
+        // libmpv is bundled (audio-only build from source + .so runtime
+        // closure), so no libmpv2 apt dependency is declared.
+        // See docs/native-audio-libmpv.md.
+        depends: [],
       },
     }),
     // AppImage (portable Linux bundle). Built via @reforged/maker-appimage,
     // which reimplements appimagetool in TypeScript and shells out to the
     // system `mksquashfs` (install `squashfs-tools`). It downloads the
-    // AppImage type2 runtime at make time. Like the RPM/DEB targets it does
-    // NOT bundle libmpv; the host must provide libmpv2 / mpv-libs.
+    // AppImage type2 runtime at make time. Like the RPM/DEB targets it
+    // bundles an audio-only libmpv with its .so runtime closure, making it
+    // self-contained without a host libmpv2 dependency.
     new MakerAppImage(
       {
         options: {

@@ -119,13 +119,33 @@ pnpm native-audio:build
 pnpm native-audio:smoke
 ```
 
-Linux package names vary by distribution. Debian/Ubuntu usually provide
-headers and runtime libraries through:
+Linux builds use an **audio-only libmpv built from source** instead of the
+distribution `libmpv-dev` package. The distro package pulls in the entire
+graphics stack (GL/EGL/Vulkan/X11/DRM/libplacebo), making runtime bundling
+impractical. The audio-only build disables all video output, GPU, display,
+and hardware-acceleration features, producing a `libmpv.so` whose only dynamic
+dependencies are FFmpeg, libass, audio output client libraries, and
+base-system libs.
+
+Install the build dependencies, then build and collect the runtime closure:
 
 ```bash
-sudo apt install libmpv-dev
+sudo apt install -y build-essential git meson ninja-build pkg-config patchelf \
+  libavcodec-dev libavformat-dev libavutil-dev \
+  libswresample-dev libswscale-dev \
+  libass-dev libpulse-dev libasound2-dev
+
+node scripts/native-audio/ci/build-libmpv-linux.mjs --staging ./.native-audio-build
+export AONSOKU_LIBMPV_INCLUDE_DIR="$(pwd)/.native-audio-build/install/include"
+export AONSOKU_LIBMPV_LIB_DIR="$(pwd)/.native-audio-build/install/lib"
+export AONSOKU_LIBMPV_LIBRARY="-lmpv"
 pnpm native-audio:build
-pnpm native-audio:smoke
+
+LIBMPV=$(ls .native-audio-build/install/lib/libmpv.so.* | grep -E 'libmpv\.so\.[0-9]+$' | head -1)
+node scripts/native-audio/ci/collect-runtime-linux.mjs \
+  --root "$LIBMPV" --staging ./.native-audio-staging
+pnpm native-audio:prepare -- --runtime-dir ./.native-audio-staging --require-runtime-libs
+pnpm native-audio:smoke:packaged
 ```
 
 Windows builds need `mpv.lib`, libmpv headers, and matching runtime DLLs:
@@ -208,17 +228,27 @@ Windows:
 
 Linux:
 
-- Build on a compatible distro baseline for the intended DEB/RPM/AppImage
-  target.
-- Bundle compatible `.so` files next to the addon or intentionally rely on
-  distro `libmpv` packages. Release builds that rely on distro packages should
-  document that dependency in the maker metadata.
-- The addon has `$ORIGIN` rpath for bundled `.so` resolution.
-- Aonsoku's Linux makers all rely on the host distro providing libmpv at
-  runtime: the `.deb` declares `depends: ["libmpv2"]`, the `.rpm` declares
-  `requires: ["mpv-libs"]` (Fedora baseline; openSUSE uses `libmpv2`), and the
-  AppImage (`@reforged/maker-appimage`) does not bundle a libmpv runtime
-  either. The AppImage maker shells out to the system `mksquashfs`, so install
+- Aonsoku builds an **audio-only libmpv from source** (via
+  `scripts/native-audio/ci/build-libmpv-linux.mjs`) with all video output,
+  GPU, display, and hwaccel features disabled. The distro `libmpv-dev` /
+  `libmpv2` package is intentionally not used because it transitively depends
+  on the graphics stack (GL/EGL/Vulkan/X11/DRM/libplacebo), which is
+  impractical to bundle.
+- The audio-only `libmpv.so` and its non-base-system `.so` dependencies
+  (FFmpeg, libass, freetype, fontconfig, PulseAudio client, D-Bus,
+  libstdc++, etc.) are collected by
+  `scripts/native-audio/ci/collect-runtime-linux.mjs` into a flat staging
+  directory. `patchelf --set-rpath '$ORIGIN'` is applied to each bundled
+  `.so` so they resolve each other without touching system paths.
+- The addon has `$ORIGIN` rpath (from `binding.gyp`), so it finds the bundled
+  `libmpv.so` placed next to it in `resources/native-audio/linux-<arch>/`.
+- Only truly universal base-system libraries (libc, libm, the dynamic loader,
+  etc.) are excluded from the bundle. Everything else is bundled so the
+  package works on any glibc-compatible Linux of the same arch without
+  requiring the user to install extra runtime packages.
+- All three Linux makers (`.deb`, `.rpm`, AppImage) bundle the audio-only
+  libmpv runtime and declare **no** libmpv-related package dependency.
+  The AppImage maker shells out to the system `mksquashfs`, so install
   `squashfs-tools` (`apt install squashfs-tools`) on the build host; it also
   downloads the AppImage type2 runtime at make time, so release CI needs
   outbound network access.
@@ -325,8 +355,8 @@ prepared native-audio resource directory and strict verification enabled.
 - The prepare script copies explicit files or whole runtime directories; it
   does not crawl dependency graphs with `otool`, `ldd`, or Windows SDK tools.
   Release jobs must assemble a complete runtime directory before calling it.
+  (On Linux, `collect-runtime-linux.mjs` handles the `ldd` closure walk and
+  `patchelf` rpath rewriting; on macOS, `collect-runtime-darwin.mjs` handles
+  the `otool` closure walk and `install_name_tool` rewriting.)
 - macOS dylib install-name rewriting and code signing/notarization are release
   pipeline responsibilities.
-- Linux distribution targets may choose between bundled `.so` files and
-  distro package dependencies; keep maker metadata and release notes aligned
-  with that choice.

@@ -384,19 +384,30 @@ Intel runner; `macos-13` is retired) and the arm64 build on `macos-latest`.
 `mpv-dev-<arch>` and `mpv-<arch>` archives from `shinchiro/mpv-winbuild-cmake`,
 stages the runtime DLLs, and generates an MSVC-compatible `mpv.lib` import
 library from `libmpv-2.dll` with `dumpbin`/`lib` (via `ilammy/msvc-dev-cmd`).
-- **Linux**: relies on the distribution `libmpv2` package at runtime
-(`apt install libmpv-dev libdbus-1-dev squashfs-tools` for building; the
-`squashfs-tools` package provides `mksquashfs` used by the AppImage maker).
-Runtime libraries are intentionally **not** bundled because the distro libmpv
-pulls in the graphics stack (GL/EGL/Vulkan/X11), so strict
-`--require-runtime-libs` is not viable. Linux CI therefore uses non-strict
-`pnpm native-audio:verify-package` and the Linux makers declare their distro
-libmpv runtime dependency in `forge.config.ts`: the `.deb` declares
-`depends: ["libmpv2"]` (Debian/Ubuntu) and the `.rpm` declares
-`requires: ["mpv-libs"]` (Fedora baseline; openSUSE ships it as `libmpv2`).
-The AppImage target (`@reforged/maker-appimage`) is built alongside the
-`.deb`/`.rpm` by `electron-forge make --platform linux` and likewise relies on
-the host providing libmpv; it does not bundle a libmpv runtime.
+- **Linux**: builds an **audio-only libmpv from source** via
+  `scripts/native-audio/ci/build-libmpv-linux.mjs` (meson + ninja, pinned mpv
+  release) with all video output, GPU, display, and hardware-acceleration
+  features disabled (`-Dgl/vulkan/egl/wayland/x11/drm/vaapi/vdpau/libplacebo
+  =disabled` etc.). The distro `libmpv-dev` / `libmpv2` package is
+  intentionally not used because it transitively depends on the graphics
+  stack (GL/EGL/Vulkan/X11/DRM/libplacebo), making runtime bundling
+  impractical. The audio-only `libmpv.so` only depends on FFmpeg, libass,
+  audio output client libs (ALSA + PulseAudio), and base-system libs.
+  `scripts/native-audio/ci/collect-runtime-linux.mjs` walks the `ldd`
+  dependency closure, copies every non-base-system `.so` into a flat staging
+  directory using soname filenames, and applies `patchelf --set-rpath
+  '$ORIGIN'` so the bundled libs resolve each other without touching system
+  paths. Build deps: `build-essential git meson ninja-build pkg-config
+  patchelf libavcodec-dev libavformat-dev libavutil-dev libswresample-dev
+  libswscale-dev libass-dev libpulse-dev libasound2-dev libdbus-1-dev
+  squashfs-tools`. All three Linux makers (`.deb`, `.rpm`, AppImage) bundle
+  the audio-only libmpv runtime closure and declare **no** libmpv-related
+  package dependency (`depends: []` / `requires: []` in `forge.config.ts`).
+  Linux CI uses strict `--require-runtime-libs` verification, same as macOS
+  and Windows. The AppImage target (`@reforged/maker-appimage`) is built
+  alongside the `.deb`/`.rpm` by `electron-forge make --platform linux` and
+  is now self-contained; it shells out to the system `mksquashfs`
+  (`squashfs-tools`) and downloads the AppImage type2 runtime at make time.
 
 ### Modification Rules
 
