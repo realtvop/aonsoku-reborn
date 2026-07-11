@@ -37,9 +37,21 @@
           {
             "sources": ["src/system_media_session_win.cc"],
             "libraries": ["windowsapp.lib"],
-            "defines": ["WINVER=0x0A00", "_WIN32_WINNT=0x0A00"],
+            "defines": [
+              "WINVER=0x0A00",
+              "_WIN32_WINNT=0x0A00",
+              # C++/WinRT's <winrt/base.h> pulls in <experimental/coroutine>,
+              # which MSVC 14.51 (VS 2026) turns into a hard STL1011 error.
+              # Silence it until the SDK ships C++20 <coroutine> support in
+              # the cppwinrt headers.
+              "_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS"
+            ],
             "msvs_settings": {
               "VCCLCompilerTool": {
+                # C++/WinRT throws/catches winrt::hresult_error, so C++
+                # exception unwinding must be enabled (node-gyp's default
+                # Windows flags omit /EHsc, producing C4530 and broken catch).
+                "ExceptionHandling": "1",
                 "AdditionalOptions": ["/std:c++17"]
               }
             }
