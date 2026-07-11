@@ -113,7 +113,7 @@ export function getCoverArtUrl(
   id?: string,
   type: CoverArt = "album",
   size = "300",
-): string {
+): string | undefined {
   return _buildCoverArtUrl(ensureAuth(), id, type, size);
 }
 

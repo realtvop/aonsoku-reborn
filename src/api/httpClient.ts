@@ -131,11 +131,10 @@ export function getCoverArtUrl(
   id?: string,
   type: CoverArt = "album",
   size = "300",
-): string {
+): string | undefined {
   if (getRuntime() === "capacitor-ios" || getRuntime() === "electron") {
     if (!id) {
-      type = type === "artist" ? "artist" : "album";
-      return `/default_${type}_art.png`;
+      return undefined;
     }
     return `aonsoku-media://getCoverArt?id=${id}&size=${size}`;
   }

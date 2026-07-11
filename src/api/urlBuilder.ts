@@ -56,10 +56,9 @@ export function buildCoverArtUrl(
   id?: string,
   type: CoverArt = "album",
   size = "300",
-): string {
+): string | undefined {
   if (!id) {
-    type = type === "artist" ? "artist" : "album";
-    return `/default_${type}_art.png`;
+    return undefined;
   }
   return buildUrl("getCoverArt", config, { id, size });
 }

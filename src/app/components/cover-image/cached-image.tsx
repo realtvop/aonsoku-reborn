@@ -10,8 +10,8 @@ import { cacheManager } from "@/service/cache";
 import { useIsOfflineMode } from "@/store/cache.store";
 import { useIsCoverCached } from "@/store/cache-index.store";
 import { CoverArt } from "@/types/coverArtType";
+import { DefaultCoverArt } from "./default-cover-art";
 import {
-  getDefaultArtUrl,
   resolveCacheKeys,
   useCoverArtUrlFromSongPreference,
 } from "@/utils/coverArt";
@@ -140,7 +140,7 @@ export function useCachedCoverUrl(
   albumId: string | undefined,
   fallbackUrl: string,
   cacheArtSize = "700",
-): string {
+): string | undefined {
   const { cachedUrl, isOffline } = useCoverArtCacheLookup({
     coverArtId,
     coverArtType,
@@ -149,7 +149,7 @@ export function useCachedCoverUrl(
   });
 
   if (cachedUrl) return cachedUrl;
-  if (isOffline) return getDefaultArtUrl(coverArtType);
+  if (isOffline) return undefined;
   return fallbackUrl;
 }
 
@@ -195,7 +195,7 @@ export function CachedImage({
   const [failedNetworkSrc, setFailedNetworkSrc] = useState<string | null>(null);
   const [cachedSrcFailed, setCachedSrcFailed] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
-  const [prevSrc, setPrevSrc] = useState<string | null>(null);
+  const [prevSrc, setPrevSrc] = useState<string | undefined>(undefined);
 
   const cacheKeys = useMemo(
     () => resolveCacheKeys(coverArtId, coverArtType, albumId),
@@ -208,8 +208,6 @@ export function CachedImage({
     setFailedNetworkSrc(null);
     setCachedSrcFailed(false);
   }, [primaryCacheKey]);
-
-  const defaultArtUrl = getDefaultArtUrl(coverArtType);
 
   const showCachedImage = cachedSrc && !cachedSrcFailed;
 
@@ -229,9 +227,12 @@ export function CachedImage({
   }
 
   let resolvedSrc = showCachedImage ? cachedSrc : (directSrc ?? generatedSrc);
-
-  if ((isOffline && !showCachedImage) || resolvedSrc === failedNetworkSrc) {
-    resolvedSrc = defaultArtUrl;
+  const showDefaultFallback =
+    !resolvedSrc ||
+    (isOffline && !showCachedImage) ||
+    resolvedSrc === failedNetworkSrc;
+  if (showDefaultFallback) {
+    resolvedSrc = undefined;
   }
 
   // Reset loaded status synchronously during render on source change to prevent layout/placeholder flashes
@@ -250,15 +251,34 @@ export function CachedImage({
     if (currentSrc) {
       if (currentSrc === cachedSrc) {
         setCachedSrcFailed(true);
-      } else if (
-        currentSrc !== defaultArtUrl &&
-        currentSrc !== failedNetworkSrc
-      ) {
+      } else if (currentSrc !== failedNetworkSrc) {
         setFailedNetworkSrc(currentSrc);
       }
     }
     onError?.(e as never);
   };
+
+  if (showDefaultFallback) {
+    return (
+      // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+      <div
+        className={
+          (props as Record<string, unknown>).wrapperClassName as
+            | string
+            | undefined
+        }
+        style={props.style}
+        onClick={props.onClick}
+      >
+        <DefaultCoverArt
+          coverArtType={coverArtType}
+          className={`${props.className ?? ""} transition-opacity duration-300`}
+          width={props.width}
+          height={props.height}
+        />
+      </div>
+    );
+  }
 
   if (showCachedImage) {
     return (

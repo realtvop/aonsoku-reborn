@@ -334,7 +334,7 @@ class CacheManager {
     if (existing && existingSize >= requestedSize) return;
 
     const url = getCoverArtUrl(coverArtId, "album", size);
-    if (url.startsWith("/default_")) return;
+    if (!url) return;
 
     const blob = await this.coverDownloadLimiter.run(async () => {
       const response = await fetch(url);

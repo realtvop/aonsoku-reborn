@@ -96,19 +96,19 @@ describe("buildCoverArtUrl", () => {
     expect(url).toContain("size=300");
   });
 
-  it("returns default album art when no id", () => {
+  it("returns undefined when no id", () => {
     const url = buildCoverArtUrl(tokenConfig, undefined, "album");
-    expect(url).toBe("/default_album_art.png");
+    expect(url).toBeUndefined();
   });
 
-  it("returns default artist art for artist type with no id", () => {
+  it("returns undefined for artist type with no id", () => {
     const url = buildCoverArtUrl(tokenConfig, undefined, "artist");
-    expect(url).toBe("/default_artist_art.png");
+    expect(url).toBeUndefined();
   });
 
-  it("defaults type to album", () => {
+  it("defaults type to album and returns undefined when no id", () => {
     const url = buildCoverArtUrl(tokenConfig, undefined);
-    expect(url).toBe("/default_album_art.png");
+    expect(url).toBeUndefined();
   });
 
   it("defaults size to 300", () => {
