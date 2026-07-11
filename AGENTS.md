@@ -407,6 +407,16 @@ Intel runner; `macos-13` is retired) and the arm64 build on `macos-latest`.
 `mpv-dev-<arch>` and `mpv-<arch>` archives from `shinchiro/mpv-winbuild-cmake`,
 stages the runtime DLLs, and generates an MSVC-compatible `mpv.lib` import
 library from `libmpv-2.dll` with `dumpbin`/`lib` (via `ilammy/msvc-dev-cmd`).
+The `electron/node-gyp` fork is archived (2025-10-11) and pinned via a git
+tarball, so it never gained Visual Studio 2026 (version 18) support; current
+GitHub Actions Windows runners (`windows-latest`, `windows-11-arm`) resolve to
+the `win25-vs2026` image. `build-addon.mjs` therefore invokes the idempotent
+`scripts/native-audio/ci/patch-node-gyp-vs2026.mjs` on Windows before spawning
+node-gyp, backporting the VS 2026 / `v145` toolset detection from upstream
+nodejs/node-gyp 69e5fd2 into the installed `@electron/node-gyp`
+`find-visualstudio.js` in place. The Linux addon's `$ORIGIN` rpath is
+single-quoted in `binding.gyp` (`-Wl,-rpath,'$$ORIGIN'`) so the shell does not
+expand it to empty before the linker records it.
 - **Linux**: builds an **audio-only libmpv from source** via
   `scripts/native-audio/ci/build-libmpv-linux.mjs` (meson + ninja, mpv source
   pinned to a release commit SHA in `RELEASE_MPV_VERSIONS` and verified with
