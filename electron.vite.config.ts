@@ -50,6 +50,10 @@ export default defineConfig(() => {
         rollupOptions: {
           input: {
             index: resolve(__dirname, "index.html"),
+            "native-debug": resolve(
+              __dirname,
+              "electron/renderer/native-debug/index.html",
+            ),
           },
           output: {
             manualChunks: createManualChunks,

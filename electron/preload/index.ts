@@ -4,6 +4,7 @@ import { aonsokuNativeAudioBridge } from "./native-audio";
 import { aonsokuNativeBridge } from "./native-bridge";
 import { aonsokuNativeCoordination } from "./native-coordination";
 import { aonsokuNativeData } from "./native-data";
+import { aonsokuNativeDebug } from "./native-debug";
 import { aonsokuNativePreferences } from "./native-preferences";
 import { IAonsokuAPI, IpcChannels, PlayerStateListenerActions } from "./types";
 
@@ -101,6 +102,7 @@ if (process.contextIsolated) {
       "aonsokuNativeCoordination",
       aonsokuNativeCoordination,
     );
+    contextBridge.exposeInMainWorld("aonsokuNativeDebug", aonsokuNativeDebug);
   } catch (error) {
     console.error(error);
   }
@@ -119,4 +121,6 @@ if (process.contextIsolated) {
   window.aonsokuNativePreferences = aonsokuNativePreferences;
   // @ts-expect-error (define in dts)
   window.aonsokuNativeCoordination = aonsokuNativeCoordination;
+  // @ts-expect-error (define in dts)
+  window.aonsokuNativeDebug = aonsokuNativeDebug;
 }
