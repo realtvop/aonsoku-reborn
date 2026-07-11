@@ -33,27 +33,27 @@ void DispatchCommand(SystemMediaCommand command, double position) {
   if (handler != nullptr) handler(context, command, position);
 }
 
-SystemMediaCommand ButtonToCommand(MediaTransportControlsButton button) {
+SystemMediaCommand ButtonToCommand(SystemMediaTransportControlsButton button) {
   switch (button) {
-    case MediaTransportControlsButton::Play:
+    case SystemMediaTransportControlsButton::Play:
       return SystemMediaCommand::kPlay;
-    case MediaTransportControlsButton::Pause:
+    case SystemMediaTransportControlsButton::Pause:
       return SystemMediaCommand::kPause;
-    case MediaTransportControlsButton::Next:
+    case SystemMediaTransportControlsButton::Next:
       return SystemMediaCommand::kNext;
-    case MediaTransportControlsButton::Previous:
+    case SystemMediaTransportControlsButton::Previous:
       return SystemMediaCommand::kPrevious;
     default:
       return SystemMediaCommand::kTogglePlayPause;
   }
 }
 
-bool IsHandledButton(MediaTransportControlsButton button) {
+bool IsHandledButton(SystemMediaTransportControlsButton button) {
   switch (button) {
-    case MediaTransportControlsButton::Play:
-    case MediaTransportControlsButton::Pause:
-    case MediaTransportControlsButton::Next:
-    case MediaTransportControlsButton::Previous:
+    case SystemMediaTransportControlsButton::Play:
+    case SystemMediaTransportControlsButton::Pause:
+    case SystemMediaTransportControlsButton::Next:
+    case SystemMediaTransportControlsButton::Previous:
       return true;
     default:
       return false;
@@ -98,8 +98,8 @@ bool EnsureControls() {
   if (g_controls != nullptr && !g_button_registered) {
     g_button_token = g_controls.ButtonPressed(
         [](SystemMediaTransportControls /*sender*/,
-           MediaTransportControlsButtonPressedEventArgs args) {
-          MediaTransportControlsButton button = args.Button();
+           SystemMediaTransportControlsButtonPressedEventArgs args) {
+          SystemMediaTransportControlsButton button = args.Button();
           if (!IsHandledButton(button)) return;
           DispatchCommand(ButtonToCommand(button), 0);
         });
