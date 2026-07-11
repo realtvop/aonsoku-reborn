@@ -43,6 +43,25 @@ if (!libraryDirectory || !hasLibMpvLibrary(libraryDirectory)) {
   );
 }
 
+// On Windows, backport Visual Studio 2026 (version 18) detection to the
+// archived `@electron/node-gyp` fork so node-gyp can find the VS installed on
+// current GitHub Actions Windows runners (`win25-vs2026`). No-op elsewhere
+// and idempotent.
+if (process.platform === "win32") {
+  const patchScript = path.resolve(
+    repoRoot,
+    "scripts/native-audio/ci/patch-node-gyp-vs2026.mjs",
+  );
+  if (existsSync(patchScript)) {
+    const patchResult = spawnSync(process.execPath, [patchScript], {
+      stdio: "inherit",
+    });
+    if (patchResult.status !== 0) {
+      fail("Failed to backport VS 2026 detection to @electron/node-gyp.");
+    }
+  }
+}
+
 const result = spawnSync(process.execPath, [nodeGyp, "configure", "build"], {
   cwd: addonDirectory,
   env: {
