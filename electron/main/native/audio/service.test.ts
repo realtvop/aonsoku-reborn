@@ -286,7 +286,9 @@ describe("NativeAudioService", () => {
     // The cached stream copy must not be used when an explicit native-file
     // uri is provided.
     expect(engine.load).not.toHaveBeenCalledWith(
-      expect.objectContaining({ source: { kind: "native-file", target: cachedPath } }),
+      expect.objectContaining({
+        source: { kind: "native-file", target: cachedPath },
+      }),
     );
   });
 
@@ -1232,6 +1234,186 @@ describe("NativeAudioService", () => {
         reason: "next",
         isInUserQueue: false,
       },
+    });
+  });
+
+  it("loads a queued song from the audio cache when cachedFileUri is absent", async () => {
+    const songId = "song/queue-cache";
+    const cacheId = audioCacheId(songId);
+    const data = Buffer.from("queued cached audio");
+    await service.storeAudioFile({
+      songId,
+      dataBase64: data.toString("base64"),
+      contentType: "audio/mpeg",
+    });
+    const expectedAudioPath = path.join(audioCacheDirectory, `${cacheId}.mp3`);
+
+    await service.setContextQueue({
+      songs: [
+        {
+          id: songId,
+          title: "Queued Cached",
+          artist: "Artist",
+          album: "Album",
+          duration: 80,
+          streamUrl: `https://server/rest/stream?id=${songId}`,
+        },
+      ],
+      currentIndex: 0,
+      autoplay: true,
+    });
+
+    expect(engine.load).toHaveBeenLastCalledWith({
+      source: {
+        kind: "native-file",
+        target: expectedAudioPath,
+      },
+      metadata: {
+        title: "Queued Cached",
+        artist: "Artist",
+        album: "Album",
+        duration: 80,
+        artworkUrl: undefined,
+      },
+      autoplay: true,
+      startTime: undefined,
+    });
+  });
+
+  it("falls back to the stream URL for a queued song missing from the cache", async () => {
+    await service.setContextQueue({
+      songs: [
+        {
+          id: "song-queue-miss",
+          title: "Queued Miss",
+          artist: "Artist",
+          album: "Album",
+          duration: 70,
+          streamUrl: "https://server/rest/stream?id=song-queue-miss",
+        },
+      ],
+      currentIndex: 0,
+      autoplay: false,
+    });
+
+    expect(engine.load).toHaveBeenLastCalledWith({
+      source: {
+        kind: "stream",
+        target: "https://server/rest/stream?id=song-queue-miss",
+      },
+      metadata: {
+        title: "Queued Miss",
+        artist: "Artist",
+        album: "Album",
+        duration: 70,
+        artworkUrl: undefined,
+      },
+      autoplay: false,
+      startTime: undefined,
+    });
+  });
+
+  it("prefers an explicit cachedFileUri on a queued song over the audio cache", async () => {
+    const songId = "song/queue-explicit";
+    const cacheId = audioCacheId(songId);
+    await service.storeAudioFile({
+      songId,
+      dataBase64: Buffer.from("cache copy that should be ignored").toString(
+        "base64",
+      ),
+      contentType: "audio/mpeg",
+    });
+    const cachedPath = path.join(audioCacheDirectory, `${cacheId}.mp3`);
+    const explicitUri = pathToFileURL("/tmp/explicit-queue.mp3").toString();
+
+    await service.setContextQueue({
+      songs: [
+        {
+          id: songId,
+          title: "Queued Explicit",
+          artist: "Artist",
+          album: "Album",
+          duration: 60,
+          streamUrl: `https://server/rest/stream?id=${songId}`,
+          cachedFileUri: explicitUri,
+        },
+      ],
+      currentIndex: 0,
+      autoplay: true,
+    });
+
+    expect(engine.load).toHaveBeenLastCalledWith({
+      source: {
+        kind: "native-file",
+        target: "/tmp/explicit-queue.mp3",
+      },
+      metadata: {
+        title: "Queued Explicit",
+        artist: "Artist",
+        album: "Album",
+        duration: 60,
+        artworkUrl: undefined,
+      },
+      autoplay: true,
+      startTime: undefined,
+    });
+    expect(engine.load).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: { kind: "native-file", target: cachedPath },
+      }),
+    );
+  });
+
+  it("resolves a cached queued song through playAtIndex", async () => {
+    const songId = "song/queue-playat";
+    const cacheId = audioCacheId(songId);
+    await service.storeAudioFile({
+      songId,
+      dataBase64: Buffer.from("playAtIndex cached audio").toString("base64"),
+      contentType: "audio/mpeg",
+    });
+    const expectedAudioPath = path.join(audioCacheDirectory, `${cacheId}.mp3`);
+
+    await service.setContextQueue({
+      songs: [
+        {
+          id: "song/queue-other",
+          title: "Other",
+          artist: "Artist",
+          album: "Album",
+          duration: 50,
+          streamUrl: "https://server/rest/stream?id=song/queue-other",
+        },
+        {
+          id: songId,
+          title: "PlayAtIndex Cached",
+          artist: "Artist",
+          album: "Album",
+          duration: 90,
+          streamUrl: `https://server/rest/stream?id=${songId}`,
+        },
+      ],
+      currentIndex: 0,
+      autoplay: false,
+    });
+    engine.load.mockClear();
+
+    await service.playAtIndex({ index: 1, startTime: 7 });
+
+    expect(engine.load).toHaveBeenLastCalledWith({
+      source: {
+        kind: "native-file",
+        target: expectedAudioPath,
+      },
+      metadata: {
+        title: "PlayAtIndex Cached",
+        artist: "Artist",
+        album: "Album",
+        duration: 90,
+        artworkUrl: undefined,
+      },
+      autoplay: true,
+      startTime: 7,
     });
   });
 

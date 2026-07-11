@@ -81,6 +81,27 @@ describe("DesktopQueueEngine", () => {
     expect(engine.getFullState(fullStateOptions()).loopState).toBe("all");
   });
 
+  it("forwards queued songs with cachedFileUri to the load delegate unchanged", async () => {
+    const cached = { ...song("1"), cachedFileUri: "file:///tmp/cached.mp3" };
+
+    await engine.setContextQueue({
+      songs: [cached, song("2")],
+      currentIndex: 0,
+      autoplay: true,
+    });
+
+    expect(delegate.queueEngineLoadSong).toHaveBeenCalledWith(
+      engine,
+      expect.objectContaining({
+        id: "1",
+        cachedFileUri: "file:///tmp/cached.mp3",
+        streamUrl: "https://server/rest/stream?id=1",
+      }),
+      true,
+      undefined,
+    );
+  });
+
   it("updates context queue contents or advances when the current song changes", async () => {
     await engine.setContextQueue({
       songs: [song("1"), song("2")],
