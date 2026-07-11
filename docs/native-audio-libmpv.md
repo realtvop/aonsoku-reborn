@@ -136,6 +136,12 @@ sudo apt install -y build-essential git meson ninja-build pkg-config patchelf \
   libass-dev libpulse-dev libasound2-dev \
   libdbus-1-dev squashfs-tools
 
+# The default --mpv-version is a pinned release: the script verifies the
+# cloned mpv HEAD commit against the pinned SHA in RELEASE_MPV_VERSIONS and
+# fails on drift. For a pinned non-release build add
+#   --mpv-version <ver> --expected-commit <40-hex-sha>
+# For a local, non-reproducible build that skips commit verification add
+#   --mpv-version <ref> --allow-unpinned
 node scripts/native-audio/ci/build-libmpv-linux.mjs --staging ./.native-audio-build
 export AONSOKU_LIBMPV_INCLUDE_DIR="$(pwd)/.native-audio-build/install/include"
 export AONSOKU_LIBMPV_LIB_DIR="$(pwd)/.native-audio-build/install/lib"
@@ -235,6 +241,12 @@ Linux:
   `libmpv2` package is intentionally not used because it transitively depends
   on the graphics stack (GL/EGL/Vulkan/X11/DRM/libplacebo), which is
   impractical to bundle.
+- The mpv source acquisition is **pinned by commit**: the default
+  `--mpv-version` maps to a pinned SHA in `RELEASE_MPV_VERSIONS`, and the
+  script runs `git rev-parse HEAD` after clone/fetch to fail on drift. To
+  build another revision, pass `--mpv-version <ref> --expected-commit <sha>`
+  (pinned non-release) or `--mpv-version <ref> --allow-unpinned` (skip
+  commit verification).
 - CI builds the Linux native-audio artifacts on **Ubuntu 22.04** (glibc
   2.35). The bundled `libmpv.so`, its non-base-system `.so` dependencies
   (FFmpeg, libass, freetype, fontconfig, PulseAudio client, D-Bus,

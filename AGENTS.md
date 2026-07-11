@@ -408,9 +408,10 @@ Intel runner; `macos-13` is retired) and the arm64 build on `macos-latest`.
 stages the runtime DLLs, and generates an MSVC-compatible `mpv.lib` import
 library from `libmpv-2.dll` with `dumpbin`/`lib` (via `ilammy/msvc-dev-cmd`).
 - **Linux**: builds an **audio-only libmpv from source** via
-  `scripts/native-audio/ci/build-libmpv-linux.mjs` (meson + ninja, pinned mpv
-  release) with all video output, GPU, display, and hardware-acceleration
-  features disabled (`-Dgl/vulkan/egl/wayland/x11/drm/vaapi/vdpau/libplacebo
+  `scripts/native-audio/ci/build-libmpv-linux.mjs` (meson + ninja, mpv source
+  pinned to a release commit SHA in `RELEASE_MPV_VERSIONS` and verified with
+  `git rev-parse HEAD` after clone/fetch) with all video output, GPU, display,
+  and hardware-acceleration features disabled (`-Dgl/vulkan/egl/wayland/x11/drm/vaapi/vdpau/libplacebo
   =disabled` etc.). The distro `libmpv-dev` / `libmpv2` package is
   intentionally not used because it transitively depends on the graphics
   stack (GL/EGL/Vulkan/X11/DRM/libplacebo), making runtime bundling

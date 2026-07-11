@@ -77,6 +77,11 @@ runs:
       if: runner.os == 'Linux'
       shell: bash
       run: |
+        # The default --mpv-version is a pinned release: the script verifies
+        # the cloned mpv HEAD commit against RELEASE_MPV_VERSIONS after clone
+        # and fails on drift. Use --mpv-version <ver> --expected-commit <sha>
+        # for a pinned non-release build, or add --allow-unpinned for a local
+        # non-reproducible build that skips commit verification.
         node scripts/native-audio/ci/build-libmpv-linux.mjs \
           --staging ./.native-audio-build
         {
