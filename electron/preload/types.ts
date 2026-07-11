@@ -25,6 +25,8 @@ export enum IpcChannels {
   SetAlwaysOnTop = "set-always-on-top",
   IsAlwaysOnTop = "is-always-on-top",
   FocusMainWindow = "focus-main-window",
+  // Native Player Debug (desktop only)
+  OpenNativeDebug = "open-native-debug",
 }
 
 export type OverlayColors = {
@@ -77,6 +79,8 @@ export interface IAonsokuAPI {
   removeMiniPlayerStatusListener: () => void;
   setAlwaysOnTop: (isAlwaysOnTop: boolean) => void;
   isAlwaysOnTop: () => Promise<boolean>;
+  // Native Player Debug (desktop only)
+  openNativeDebug: () => void;
   // App Update
   update: {
     checkForUpdates: () => Promise<void>;

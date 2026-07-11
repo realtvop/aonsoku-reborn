@@ -71,7 +71,8 @@ const api: IAonsokuAPI = {
   setAlwaysOnTop: (isAlwaysOnTop) =>
     ipcRenderer.send(IpcChannels.SetAlwaysOnTop, isAlwaysOnTop),
   isAlwaysOnTop: () => ipcRenderer.invoke(IpcChannels.IsAlwaysOnTop),
-
+  // Native Player Debug (desktop only)
+  openNativeDebug: () => ipcRenderer.send(IpcChannels.OpenNativeDebug),
   // App Update
   update: {
     checkForUpdates: () => ipcRenderer.invoke("app:check-for-updates"),

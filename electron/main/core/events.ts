@@ -15,6 +15,7 @@ import {
 import { setupDesktopNativeCoordinationIpc } from "../native/coordination/ipc";
 import { setupDesktopNativeDataIpc } from "../native/data/ipc";
 import { setupDesktopNativeDebugIpc } from "../native/debug/ipc";
+import { setupNativeDebugWindowIpc } from "../native/debug/native-debug-window";
 import { setupDesktopNativePreferencesIpc } from "../native/preferences/ipc";
 import { tray, updateTray } from "../tray";
 import { colorsState } from "./colors";
@@ -94,6 +95,7 @@ export function setupIpcEvents(window: BrowserWindow | null) {
   ipcMain.removeAllListeners();
 
   setupMiniPlayerIpc();
+  setupNativeDebugWindowIpc();
   const resolveDesktopMediaUrl = (url: string): string => {
     if (!url.startsWith("aonsoku-media://")) return url;
     const parsed = new URL(url);

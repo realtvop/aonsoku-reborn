@@ -5,6 +5,7 @@ import { updateElectronApp } from "update-electron-app";
 import { createAppMenu } from "./core/menu";
 import { destroyMiniPlayerWindow } from "./mini-player";
 import { destroyDesktopNativeAudioService } from "./native/audio/ipc";
+import { destroyNativeDebugWindow } from "./native/debug/native-debug-window";
 import {
   registerDesktopMediaScheme,
   setupDesktopMediaProtocol,
@@ -93,6 +94,7 @@ if (!instanceLock) {
     isQuitting = true;
 
     destroyMiniPlayerWindow();
+    destroyNativeDebugWindow();
     const nativeAudioDestroyed = destroyDesktopNativeAudioService();
     if (nativeAudioDestroyed) {
       nativeAudioDestroyed.catch((error) => {
