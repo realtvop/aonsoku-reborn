@@ -110,22 +110,28 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: "macos-latest"
+          - platform: "macos-15-intel"
+            libmpv_platform: "darwin"
             target: "mac"
             arch: "x64"
           - platform: "macos-latest"
+            libmpv_platform: "darwin"
             target: "mac"
             arch: "arm64"
           - platform: "ubuntu-22.04"
+            libmpv_platform: "linux"
             target: "linux"
             arch: "x64"
           - platform: "ubuntu-22.04-arm"
+            libmpv_platform: "linux"
             target: "linux"
             arch: "arm64"
           - platform: "windows-latest"
+            libmpv_platform: "win32"
             target: "win"
             arch: "x64"
           - platform: "windows-11-arm"
+            libmpv_platform: "win32"
             target: "win"
             arch: "arm64"
     runs-on: ${{ matrix.platform }}
@@ -155,10 +161,29 @@ jobs:
       - name: Inject nightly version
         run: node -e "const p=require('./package.json'); p.version='${{ needs.check-changes.outputs.nightly_version }}'; require('fs').writeFileSync('package.json', JSON.stringify(p, null, 2))"
 
+      - name: Setup native audio (libmpv addon + runtime)
+        uses: ./.github/actions/setup-native-audio
+        with:
+          platform: ${{ matrix.libmpv_platform }}
+          arch: ${{ matrix.arch }}
+          target: ${{ matrix.target }}
+
       - name: Build Electron app
+        shell: bash
         env:
           ARCH: ${{ matrix.arch }}
-        run: pnpm run build:${{ matrix.target }}
+        run: |
+          if [ "${{ matrix.target }}" = "linux" ]; then
+            # Linux relies on the distro libmpv2 package; use non-strict
+            # verification (strict runtime bundling is not viable because the
+            # distro libmpv pulls in the graphics stack). See
+            # docs/native-audio-libmpv.md.
+            pnpm native-audio:verify-package --platform linux --arch ${{ matrix.arch }}
+            pnpm electron:build
+            pnpm exec electron-forge make --platform linux --arch ${{ matrix.arch }}
+          else
+            pnpm run build:${{ matrix.target }}
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

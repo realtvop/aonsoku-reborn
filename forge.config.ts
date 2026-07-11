@@ -98,6 +98,9 @@ const config: ForgeConfig = {
     new MakerDeb({
       options: {
         homepage: "https://github.com/realtvop/aonsoku-reborn",
+        // Linux packages rely on the distribution's libmpv2 package at runtime
+        // (see docs/native-audio-libmpv.md). Declare it so apt installs it.
+        depends: ["libmpv2"],
       },
     }),
   ],

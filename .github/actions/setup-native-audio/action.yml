@@ -1,0 +1,116 @@
+name: "Setup native audio (libmpv)"
+description: >
+  Install libmpv development files for the current runner, build the
+  Aonsoku libmpv Node-API addon, stage the runtime libraries into
+  resources/native-audio/<platform>-<arch>/, and run the packaged smoke
+  check. Must run after `pnpm install` and before
+  `pnpm run build:<target>` / `pnpm run publish`.
+
+inputs:
+  platform:
+    description: "libmpv platform key (darwin, win32, linux)"
+    required: true
+  arch:
+    description: "Target architecture (x64, arm64)"
+    required: true
+  target:
+    description: "Build target alias used by package scripts (mac, win, linux)"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install libmpv development files (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libmpv-dev libdbus-1-dev pkg-config
+
+    - name: Install libmpv development files (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: brew install mpv
+
+    - name: Set up MSVC dev environment (Windows)
+      if: runner.os == 'Windows'
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: ${{ inputs.arch }}
+
+    - name: Fetch libmpv development files (Windows)
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        node scripts/native-audio/ci/fetch-libmpv-windows.mjs --arch ${{ inputs.arch }}
+
+    - name: Resolve libmpv directories (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        MULTIARCH=$(dpkg-architecture -qDEB_HOST_MULTIARCH)
+        {
+          echo "AONSOKU_LIBMPV_INCLUDE_DIR=/usr/include"
+          echo "AONSOKU_LIBMPV_LIB_DIR=/usr/lib/${MULTIARCH}"
+          echo "AONSOKU_LIBMPV_LIBRARY=-lmpv"
+        } >> "$GITHUB_ENV"
+
+    - name: Resolve libmpv directories (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        BREW_PREFIX=$(brew --prefix)
+        {
+          echo "AONSOKU_LIBMPV_INCLUDE_DIR=${BREW_PREFIX}/include"
+          echo "AONSOKU_LIBMPV_LIB_DIR=${BREW_PREFIX}/lib"
+          echo "AONSOKU_LIBMPV_LIBRARY=-lmpv"
+        } >> "$GITHUB_ENV"
+
+    - name: Build libmpv Node-API addon
+      shell: bash
+      run: pnpm native-audio:build
+
+    - name: Stage macOS runtime libraries
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        BREW_PREFIX=$(brew --prefix)
+        ROOT=$(ls "${BREW_PREFIX}/lib/"libmpv.*.dylib 2>/dev/null | grep -E 'libmpv\.[0-9]+\.dylib$' | head -n 1)
+        if [ -z "$ROOT" ]; then ROOT="${BREW_PREFIX}/lib/libmpv.2.dylib"; fi
+        node scripts/native-audio/ci/collect-runtime-darwin.mjs \
+          --root "$ROOT" \
+          --staging ./.native-audio-staging \
+          --addon electron/main/native/audio/libmpv/build/Release/aonsoku_libmpv.node
+        pnpm native-audio:prepare -- \
+          --runtime-dir ./.native-audio-staging \
+          --require-runtime-libs \
+          --platform ${{ inputs.platform }} \
+          --arch ${{ inputs.arch }} \
+          --clean
+
+    - name: Stage Windows runtime libraries
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        pnpm native-audio:prepare -- \
+          --runtime-dir "$AONSOKU_LIBMPV_RUNTIME_DIR" \
+          --require-runtime-libs \
+          --platform ${{ inputs.platform }} \
+          --arch ${{ inputs.arch }} \
+          --clean
+
+    - name: Stage Linux addon resources
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        # Linux relies on the distribution's libmpv2 package at runtime; no
+        # runtime libraries are bundled. The .deb declares the libmpv2
+        # dependency in forge.config.ts. See docs/native-audio-libmpv.md.
+        pnpm native-audio:prepare -- \
+          --platform ${{ inputs.platform }} \
+          --arch ${{ inputs.arch }} \
+          --clean
+
+    - name: Smoke check packaged layout
+      shell: bash
+      run: pnpm native-audio:smoke:packaged

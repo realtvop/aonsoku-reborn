@@ -56,6 +56,10 @@ pnpm native-audio:smoke   # Load libmpv and play a generated WAV fixture
 pnpm native-audio:smoke:packaged # Smoke test resources/native-audio layout
 pnpm native-audio:verify-package # Check Forge/resource/native-audio packaging
 pnpm native-audio:verify-package:strict # Fail if native runtime files are missing
+
+# CI helpers used by .github/actions/setup-native-audio
+node scripts/native-audio/ci/fetch-libmpv-windows.mjs --arch x64|arm64
+node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --staging <dir> --addon <addon.node>
 ```
 
 ## Architecture
@@ -360,6 +364,33 @@ Key files:
   failure.
 - `src/store/player/playback-actions.ts` — runtime-aware action dispatch.
 - `src/utils/capabilities.ts` — runtime detection and capability matrix.
+
+### CI Native Audio Builds
+
+The Electron build/release/nightly GitHub Actions workflows compile the libmpv
+Node-API addon on every target platform/arch through the reusable composite
+action `.github/actions/setup-native-audio`. It installs or fetches libmpv
+development files, runs `pnpm native-audio:build`, stages the runtime
+libraries into `resources/native-audio/<platform>-<arch>/`, and runs
+`pnpm native-audio:smoke:packaged` before the Electron build.
+
+- **macOS**: `brew install mpv`; `scripts/native-audio/ci/collect-runtime-darwin.mjs`
+  walks the `otool -L` closure of `libmpv.2.dylib`, copies the Homebrew dylib
+dependency set into a staging directory, rewrites their install ids and
+cross-references to `@loader_path/<name>`, and patches the addon's libmpv
+reference. The x86_64 build runs on `macos-15-intel` (the last GitHub-hosted
+Intel runner; `macos-13` is retired) and the arm64 build on `macos-latest`.
+- **Windows**: `scripts/native-audio/ci/fetch-libmpv-windows.mjs` downloads the
+`mpv-dev-<arch>` and `mpv-<arch>` archives from `shinchiro/mpv-winbuild-cmake`,
+stages the runtime DLLs, and generates an MSVC-compatible `mpv.lib` import
+library from `libmpv-2.dll` with `dumpbin`/`lib` (via `ilammy/msvc-dev-cmd`).
+- **Linux**: relies on the distribution `libmpv2` package at runtime
+(`apt install libmpv-dev libdbus-1-dev` for building). Runtime libraries are
+intentionally **not** bundled because the distro libmpv pulls in the graphics
+stack (GL/EGL/Vulkan/X11), so strict `--require-runtime-libs` is not viable.
+Linux CI therefore uses non-strict `pnpm native-audio:verify-package` and the
+`.deb` declares `depends: ["libmpv2"]` in `forge.config.ts` so `apt` installs
+libmpv on the user's machine.
 
 ### Modification Rules
 
