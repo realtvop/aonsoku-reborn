@@ -52,7 +52,7 @@ import {
 import { DesktopScrobbleBuffer } from "./scrobble-buffer";
 import {
   DesktopNativeAudioUnsupportedSourceError,
-  resolveNativeAudioSource,
+  resolveNativeAudioSourceWithCache,
 } from "./source";
 import {
   createDesktopSystemAudioAdapter,
@@ -209,10 +209,10 @@ export class NativeAudioService implements AonsokuAudioApi {
 
     try {
       await this.#engine.load({
-        source: resolveNativeAudioSource(
-          options.source,
-          this.#streamUrlResolver,
-        ),
+        source: await resolveNativeAudioSourceWithCache(options.source, {
+          streamUrlResolver: this.#streamUrlResolver,
+          audioFileResolver: this.#audioFiles,
+        }),
         metadata: this.#normalizeMetadata(options.metadata),
         autoplay: options.autoplay,
         startTime: options.startTime,

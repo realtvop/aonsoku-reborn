@@ -180,6 +180,116 @@ describe("NativeAudioService", () => {
     }
   });
 
+  it("loads cached stream sources as native-file targets from the audio cache", async () => {
+    const songId = "song/cache-stream";
+    const cacheId = audioCacheId(songId);
+    const data = Buffer.from("cached stream audio");
+
+    const stored = await service.storeAudioFile({
+      songId,
+      dataBase64: data.toString("base64"),
+      contentType: "audio/mpeg",
+    });
+    const expectedAudioPath = path.join(audioCacheDirectory, `${cacheId}.mp3`);
+    expect(fileURLToPath(stored.uri)).toBe(expectedAudioPath);
+
+    await service.load({
+      requestId: "request-cached-stream",
+      source: {
+        kind: "stream",
+        url: "https://server/rest/stream?id=song-cache-stream",
+        songId,
+      },
+      metadata: { title: "Cached Stream", duration: 99 },
+      autoplay: true,
+      startTime: 5,
+    });
+
+    expect(engine.load).toHaveBeenLastCalledWith({
+      source: {
+        kind: "native-file",
+        target: expectedAudioPath,
+      },
+      metadata: { title: "Cached Stream", duration: 99 },
+      autoplay: true,
+      startTime: 5,
+    });
+  });
+
+  it("falls back to the stream URL when the cached audio file is missing", async () => {
+    await service.load({
+      requestId: "request-uncached-stream",
+      source: {
+        kind: "stream",
+        url: "https://server/rest/stream?id=song-missing-cache",
+        songId: "song-missing-cache",
+      },
+    });
+
+    expect(engine.load).toHaveBeenLastCalledWith({
+      source: {
+        kind: "stream",
+        target: "https://server/rest/stream?id=song-missing-cache",
+      },
+      metadata: undefined,
+      autoplay: undefined,
+      startTime: undefined,
+    });
+  });
+
+  it("loads stream sources without a songId through the stream URL", async () => {
+    await service.load({
+      source: {
+        kind: "stream",
+        url: "https://server/rest/stream?id=song-no-id",
+      },
+    });
+
+    expect(engine.load).toHaveBeenLastCalledWith({
+      source: {
+        kind: "stream",
+        target: "https://server/rest/stream?id=song-no-id",
+      },
+      metadata: undefined,
+      autoplay: undefined,
+      startTime: undefined,
+    });
+  });
+
+  it("preserves native-file source semantics regardless of cache state", async () => {
+    const songId = "song/native-file-cache";
+    const cacheId = audioCacheId(songId);
+    await service.storeAudioFile({
+      songId,
+      dataBase64: Buffer.from("unused cache").toString("base64"),
+      contentType: "audio/mpeg",
+    });
+    const cachedPath = path.join(audioCacheDirectory, `${cacheId}.mp3`);
+
+    await service.load({
+      source: {
+        kind: "native-file",
+        uri: pathToFileURL("/tmp/explicit-native.mp3").toString(),
+        songId,
+      },
+    });
+
+    expect(engine.load).toHaveBeenLastCalledWith({
+      source: {
+        kind: "native-file",
+        target: "/tmp/explicit-native.mp3",
+      },
+      metadata: undefined,
+      autoplay: undefined,
+      startTime: undefined,
+    });
+    // The cached stream copy must not be used when an explicit native-file
+    // uri is provided.
+    expect(engine.load).not.toHaveBeenCalledWith(
+      expect.objectContaining({ source: { kind: "native-file", target: cachedPath } }),
+    );
+  });
+
   it("loads stream, radio, and native-file sources through the engine", async () => {
     await service.load({
       requestId: "request-stream",
