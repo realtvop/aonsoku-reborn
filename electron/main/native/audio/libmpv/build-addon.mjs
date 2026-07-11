@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -57,8 +57,39 @@ const result = spawnSync(process.execPath, [nodeGyp, "configure", "build"], {
 process.exit(result.status ?? 1);
 
 function findNodeGyp(root) {
-  const directBinary = path.join(root, "node_modules", ".bin", "node-gyp");
-  if (existsSync(directBinary)) return directBinary;
+  // Resolve the real node-gyp JS entry point instead of the `node_modules/.bin`
+  // shim. On Unix `.bin/node-gyp` is a symlink to `../node-gyp/bin/node-gyp.js`
+  // so `node <shim>` happens to work, but on Windows pnpm writes a shell-shim
+  // file (no extension) that must be executed by a shell, not parsed by node —
+  // `node <shim>` fails with `SyntaxError: missing ) after argument list` on
+  // the shim's `basedir=$(dirname ...)`. Always locate the actual `.js` file.
+  const binShim = path.join(root, "node_modules", ".bin", "node-gyp");
+  if (existsSync(binShim)) {
+    try {
+      if (lstatSync(binShim).isSymbolicLink()) {
+        return realpathSync(binShim);
+      }
+    } catch {
+      // Not a symlink (e.g. Windows shell shim) — fall through to the
+      // direct package lookups below.
+    }
+  }
+
+  // Direct hoisted package paths (pnpm hoists @electron/node-gyp here).
+  const directCandidates = [
+    path.join(
+      root,
+      "node_modules",
+      "@electron",
+      "node-gyp",
+      "bin",
+      "node-gyp.js",
+    ),
+    path.join(root, "node_modules", "node-gyp", "bin", "node-gyp.js"),
+  ];
+  for (const candidate of directCandidates) {
+    if (existsSync(candidate)) return candidate;
+  }
 
   const pnpmDirectory = path.join(root, "node_modules", ".pnpm");
   if (!existsSync(pnpmDirectory)) return null;
