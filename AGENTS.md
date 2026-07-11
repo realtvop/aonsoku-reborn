@@ -56,6 +56,14 @@ pnpm native-audio:smoke   # Load libmpv and play a generated WAV fixture
 pnpm native-audio:smoke:packaged # Smoke test resources/native-audio layout
 pnpm native-audio:verify-package # Check Forge/resource/native-audio packaging
 pnpm native-audio:verify-package:strict # Fail if native runtime files are missing
+pnpm native-audio:verify-package:linux # Strict verify + ldd/readelf runtime linkage check (Linux host)
+# Linux local/release paths also run the packaged smoke check:
+# build:linux / make / publish run run-packaged-smoke.mjs --only linux,
+# which is a no-op on macOS/Windows. On a Linux host targeting Linux,
+# verify-libmpv-package.mjs additionally runs ldd/readelf deep checks
+# (no `not found` deps, $ORIGIN rpath on every bundled .so, addon's
+# libmpv resolves from the $ORIGIN bundle).
+node scripts/native-audio/linux-runtime-linkage.mjs --platform linux # Standalone Linux runtime linkage check
 pnpm native-audio:check-glibc-baseline   # Verify Linux glibc baseline consistency across forge config, docs, and CI
 
 # CI helpers used by .github/actions/setup-native-audio
@@ -422,7 +430,18 @@ library from `libmpv-2.dll` with `dumpbin`/`lib` (via `ilammy/msvc-dev-cmd`).
   `forge.config.ts`) because CI builds on Ubuntu 22.04 (glibc 2.35). The
   resulting packages require glibc >= 2.35 at runtime.
   Linux CI uses strict `--require-runtime-libs` verification, same as macOS
-  and Windows. The AppImage target (`@reforged/maker-appimage`) is built
+  and Windows. The `build:linux`, `make`, and `publish` npm scripts also run
+  `scripts/native-audio/run-packaged-smoke.mjs --only linux`, so Linux
+  local/release paths cover `native-audio:smoke:packaged` (it is a no-op on
+  macOS/Windows). On a Linux host targeting Linux,
+  `verify-libmpv-package.mjs` additionally invokes
+  `scripts/native-audio/linux-runtime-linkage.mjs`, which runs `ldd` and
+  `readelf -d` on the addon and every bundled `.so`: no dependency may be
+  `not found`, every bundled `.so` must carry a `$ORIGIN` rpath/RUNPATH, and
+  the addon's `libmpv.so` must resolve to a path inside the bundle directory
+  (proving the `$ORIGIN` bundle is self-contained rather than binding to a
+  system libmpv). macOS/Windows and cross-builds skip the deep check. The
+  AppImage target (`@reforged/maker-appimage`) is built
   alongside the `.deb`/`.rpm` by `electron-forge make --platform linux` and
   is now self-contained; it shells out to the system `mksquashfs`
   (`squashfs-tools`) and downloads the AppImage type2 runtime at make time.

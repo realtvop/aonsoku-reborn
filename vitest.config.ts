@@ -19,6 +19,6 @@ export default defineConfig({
     environment: "node",
     setupFiles: ["./vitest.setup.ts"],
     globals: false,
-    include: ["src/**/*.test.{ts,tsx}", "electron/**/*.test.ts"],
+    include: ["src/**/*.test.{ts,tsx}", "electron/**/*.test.ts", "scripts/**/*.test.mjs"],
   },
 });

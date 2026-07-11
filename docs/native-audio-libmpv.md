@@ -299,7 +299,11 @@ pnpm native-audio:verify-package:strict
 
 Strict verification fails if the target `resources/native-audio/<platform>-<arch>`
 directory, addon, manifest, or runtime libraries are missing. This prevents
-release packages from depending only on global libmpv.
+release packages from depending only on global libmpv. On a Linux host, strict
+verification also runs the `ldd`/`readelf` deep linkage check, and `make`,
+`publish`, and `build:linux` additionally run the packaged smoke check via
+`scripts/native-audio/run-packaged-smoke.mjs --only linux` (a no-op on
+macOS/Windows).
 
 ## Startup Diagnostics
 
@@ -335,6 +339,8 @@ pnpm native-audio:prepare
 pnpm native-audio:smoke:packaged
 pnpm native-audio:verify-package
 pnpm native-audio:verify-package:strict
+pnpm native-audio:verify-package:linux
+node scripts/native-audio/linux-runtime-linkage.mjs --platform linux
 pnpm run build:unpack
 pnpm exec vitest run \
   electron/main/native/audio/engine-factory.test.ts \
@@ -344,7 +350,8 @@ pnpm exec vitest run \
   electron/main/native/audio/ipc.test.ts \
   electron/main/native/audio/ipc-binding.test.ts \
   electron/preload/native-audio.test.ts \
-  src/native/audio/contract-drift.test.ts
+  src/native/audio/contract-drift.test.ts \
+  scripts/native-audio/linux-runtime-linkage.test.mjs
 ```
 
 Cache/native-file regression checks:
@@ -367,5 +374,10 @@ prepared native-audio resource directory and strict verification enabled.
   (On Linux, `collect-runtime-linux.mjs` handles the `ldd` closure walk and
   `patchelf` rpath rewriting; on macOS, `collect-runtime-darwin.mjs` handles
   the `otool` closure walk and `install_name_tool` rewriting.)
+  On a Linux host, `verify-libmpv-package.mjs` additionally runs `ldd`/`readelf`
+  deep linkage checks on the staged bundle (no `not found` deps, `$ORIGIN`
+  rpath on every bundled `.so`, addon's libmpv resolves from the `$ORIGIN`
+  bundle). `build:linux`/`make`/`publish` also run the packaged smoke check
+  via `run-packaged-smoke.mjs --only linux` (no-op on macOS/Windows).
 - macOS dylib install-name rewriting and code signing/notarization are release
   pipeline responsibilities.

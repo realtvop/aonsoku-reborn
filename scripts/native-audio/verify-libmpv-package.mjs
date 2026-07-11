@@ -2,6 +2,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { verifyLinuxRuntimeLinkage } from "./linux-runtime-linkage.mjs";
 
 const ADDON_FILENAME = "aonsoku_libmpv.node";
 const MANIFEST_FILENAME = "manifest.json";
@@ -175,6 +176,24 @@ function checkNativeAudioResources() {
     } else {
       warnings.push(message);
     }
+  }
+
+  // On a Linux host targeting Linux, additionally validate the bundled .so
+  // closure at the dynamic-linker level (ldd/readelf): no `not found` deps,
+  // every bundled .so carries $ORIGIN rpath, and the addon's libmpv resolves
+  // from the $ORIGIN bundle. macOS/Windows and cross-builds skip this.
+  const linkage = verifyLinuxRuntimeLinkage({
+    nativeAudioDirectory,
+    manifest,
+    addonFilename: manifest.addon ?? ADDON_FILENAME,
+    hostPlatform: process.platform,
+    targetPlatform: platform,
+  });
+  for (const error of linkage.errors) {
+    errors.push(error);
+  }
+  for (const warning of linkage.warnings) {
+    warnings.push(warning);
   }
 }
 
