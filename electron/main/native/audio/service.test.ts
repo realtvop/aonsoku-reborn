@@ -19,6 +19,7 @@ import type {
   DesktopAudioEngineEvent,
   DesktopAudioEngineEventListener,
   DesktopAudioEngineLoadOptions,
+  NativeAudioServiceEvent,
 } from "./types";
 
 class FakeAudioEngine implements DesktopAudioEngine {
@@ -230,6 +231,40 @@ describe("NativeAudioService", () => {
         },
       }),
     );
+  });
+
+  it("treats preload as a serialized no-op", async () => {
+    const events: NativeAudioServiceEvent[] = [];
+    let releasePlay = () => {};
+    engine.play.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releasePlay = resolve;
+        }),
+    );
+    service.onEvent((event) => events.push(event));
+
+    const playPromise = service.play();
+    await vi.waitFor(() => expect(engine.play).toHaveBeenCalledTimes(1));
+    let preloadResolved = false;
+    const preloadPromise = service
+      .preload({
+        source: {
+          kind: "stream",
+          url: "https://server/rest/stream?id=preload",
+          songId: "preload",
+        },
+      })
+      .then(() => {
+        preloadResolved = true;
+      });
+
+    await Promise.resolve();
+    expect(preloadResolved).toBe(false);
+    releasePlay();
+    await Promise.all([playPromise, preloadPromise]);
+    expect(engine.load).not.toHaveBeenCalled();
+    expect(events).toEqual([]);
   });
 
   it("drops artwork when the artworkUrlResolver throws", async () => {

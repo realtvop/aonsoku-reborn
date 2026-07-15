@@ -74,13 +74,6 @@ import type {
   NativeAudioServiceEventListener,
 } from "./types";
 
-export class DesktopNativeAudioNotImplementedError extends Error {
-  constructor(method: keyof AonsokuAudioApi) {
-    super(`Desktop native audio bridge method ${method} is not implemented.`);
-    this.name = "DesktopNativeAudioNotImplementedError";
-  }
-}
-
 export interface NativeAudioServiceOptions {
   engine?: DesktopAudioEngine;
   audioFileStore?: DesktopAudioFileStore;
@@ -431,7 +424,7 @@ export class NativeAudioService implements AonsokuAudioApi {
   }
 
   preload(_options: { source: NativeAudioSource }): Promise<void> {
-    return this.notImplemented("preload");
+    return this.#enqueuePlaybackCommand(() => {});
   }
 
   clear(): Promise<void> {
@@ -1373,10 +1366,6 @@ export class NativeAudioService implements AonsokuAudioApi {
       await this.#playbackStatePersistence.flush();
       throw error;
     }
-  }
-
-  private notImplemented<T>(method: keyof AonsokuAudioApi): Promise<T> {
-    return Promise.reject(new DesktopNativeAudioNotImplementedError(method));
   }
 
   async #loadQueueSong(
