@@ -10,11 +10,11 @@ import { cacheManager } from "@/service/cache";
 import { useIsOfflineMode } from "@/store/cache.store";
 import { useIsCoverCached } from "@/store/cache-index.store";
 import { CoverArt } from "@/types/coverArtType";
-import { DefaultCoverArt } from "./default-cover-art";
 import {
   resolveCacheKeys,
   useCoverArtUrlFromSongPreference,
 } from "@/utils/coverArt";
+import { DefaultCoverArt } from "./default-cover-art";
 
 type LazyLoadImageProps = ComponentPropsWithoutRef<typeof LazyLoadImage>;
 
@@ -161,6 +161,7 @@ interface CachedImageProps extends Omit<LazyLoadImageProps, "src"> {
   albumId?: string;
   src?: string;
   autoCache?: boolean;
+  onFallback?: () => void;
 }
 
 export function CachedImage({
@@ -171,6 +172,7 @@ export function CachedImage({
   albumId,
   src: directSrc,
   autoCache = true,
+  onFallback,
   onError,
   onLoad,
   ...props
@@ -211,29 +213,21 @@ export function CachedImage({
 
   const showCachedImage = cachedSrc && !cachedSrcFailed;
 
-  // Render a grey background skeleton during lookup if coverArtId is provided
-  if (isLoading && coverArtId) {
-    return (
-      <div
-        className={`${props.className ?? ""} bg-skeleton`}
-        style={{
-          width: props.width,
-          height: props.height,
-          ...props.style,
-        }}
-        data-testid="cached-image-skeleton"
-      />
-    );
-  }
-
   let resolvedSrc = showCachedImage ? cachedSrc : (directSrc ?? generatedSrc);
   const showDefaultFallback =
-    !resolvedSrc ||
-    (isOffline && !showCachedImage) ||
-    resolvedSrc === failedNetworkSrc;
+    !isLoading &&
+    (!resolvedSrc ||
+      (isOffline && !showCachedImage) ||
+      resolvedSrc === failedNetworkSrc);
   if (showDefaultFallback) {
     resolvedSrc = undefined;
   }
+
+  useEffect(() => {
+    if (showDefaultFallback) {
+      onFallback?.();
+    }
+  }, [onFallback, showDefaultFallback]);
 
   // Reset loaded status synchronously during render on source change to prevent layout/placeholder flashes
   if (resolvedSrc !== prevSrc) {
@@ -257,6 +251,21 @@ export function CachedImage({
     }
     onError?.(e as never);
   };
+
+  // Render a grey background skeleton during lookup if coverArtId is provided
+  if (isLoading && coverArtId) {
+    return (
+      <div
+        className={`${props.className ?? ""} bg-skeleton`}
+        style={{
+          width: props.width,
+          height: props.height,
+          ...props.style,
+        }}
+        data-testid="cached-image-skeleton"
+      />
+    );
+  }
 
   if (showDefaultFallback) {
     return (

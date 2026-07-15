@@ -180,7 +180,10 @@ export default function ImageHeader({
     <div className="flex flex-col relative w-full" key={`header-${coverArtId}`}>
       <div className="relative w-full h-auto md:h-[calc(3rem+200px)] 2xl:h-[calc(3rem+250px)]">
         {!loaded && (
-          <div className="absolute inset-0 z-20">
+          <div
+            className="absolute inset-0 z-20"
+            data-testid="image-header-fallback"
+          >
             <AlbumHeaderFallback
               showArtistAboveCover={showArtistAboveCover}
               showMobileSubtitle={showMobileSubtitle}
@@ -238,6 +241,7 @@ export default function ImageHeader({
                   height="100%"
                   onLoad={handleLoadImage}
                   onError={handleError}
+                  onFallback={() => setLoaded(true)}
                   onClick={() => setOpen(true)}
                 />
               )}
