@@ -55,6 +55,10 @@ import {
 } from "./queue-engine";
 import { DesktopScrobbleBuffer } from "./scrobble-buffer";
 import {
+  type DesktopScrobbleRequest,
+  DesktopScrobbleSubmitter,
+} from "./scrobble-submitter";
+import {
   DesktopNativeAudioUnsupportedSourceError,
   resolveNativeAudioSourceWithCache,
 } from "./source";
@@ -87,6 +91,8 @@ export interface NativeAudioServiceOptions {
   cacheLoadedStreams?: boolean;
   systemAudioAdapter?: DesktopSystemAudioAdapter;
   playbackStateStore?: DesktopPlaybackStateStorage;
+  scrobbleBuffer?: DesktopScrobbleBuffer;
+  scrobbleRequest?: DesktopScrobbleRequest;
   deferPlaybackRestore?: boolean;
 }
 
@@ -128,7 +134,8 @@ export class NativeAudioService implements AonsokuAudioApi {
   > | null = null;
   readonly #streamUrlsBySongId = new Map<string, string>();
   readonly #queueEngine = new DesktopQueueEngine();
-  readonly #scrobbleBuffer = new DesktopScrobbleBuffer();
+  readonly #scrobbleBuffer: DesktopScrobbleBuffer;
+  readonly #scrobbleSubmitter: DesktopScrobbleSubmitter;
   readonly #playbackStateStore: DesktopPlaybackStateStorage;
   readonly #playbackStatePersistence: DesktopPlaybackStatePersistence;
   #requestId: string | undefined;
@@ -148,6 +155,7 @@ export class NativeAudioService implements AonsokuAudioApi {
   #playbackGeneration = 0;
   #failedPlaybackGeneration: number | null = null;
   #destroyPromise: Promise<void> | null = null;
+  #scrobbleNowPlayingSent = false;
 
   constructor(options: NativeAudioServiceOptions = {}) {
     this.#engine = options.engine ?? createDesktopAudioEngine();
@@ -164,6 +172,12 @@ export class NativeAudioService implements AonsokuAudioApi {
       options.systemAudioAdapter ?? createDesktopSystemAudioAdapter();
     this.#playbackStateStore =
       options.playbackStateStore ?? new DesktopPlaybackStateStore();
+    this.#scrobbleBuffer =
+      options.scrobbleBuffer ?? new DesktopScrobbleBuffer();
+    this.#scrobbleSubmitter = new DesktopScrobbleSubmitter({
+      buffer: this.#scrobbleBuffer,
+      request: options.scrobbleRequest,
+    });
     this.#playbackStatePersistence = new DesktopPlaybackStatePersistence(
       this.#playbackStateStore,
       () => this.#playbackStateSnapshot(),
@@ -211,6 +225,7 @@ export class NativeAudioService implements AonsokuAudioApi {
     this.#readyPromise ??= this.#enqueuePlaybackCommand(() =>
       this.#restorePlaybackState(),
     ).catch((error) => this.#emitFailure(error));
+    this.#readyPromise.then(() => this.#scrobbleSubmitter.submitPending());
     return this.#readyPromise;
   }
 
@@ -265,6 +280,7 @@ export class NativeAudioService implements AonsokuAudioApi {
     try {
       await this.#engine.play();
       this.#scrobbleBuffer.resumeTracking();
+      this.#sendScrobbleNowPlayingIfNeeded();
     } catch (error) {
       this.#emitFailure(error);
       throw error;
@@ -743,6 +759,7 @@ export class NativeAudioService implements AonsokuAudioApi {
 
   destroy(): Promise<void> {
     if (this.#destroyPromise) return this.#destroyPromise;
+    this.#stopScrobbleTracking();
     this.#unsubscribeFromEngine();
     this.#listeners.clear();
     this.#downloadManager.cancelAll();
@@ -904,6 +921,7 @@ export class NativeAudioService implements AonsokuAudioApi {
       case "progress":
         this.#currentTime = event.currentTime;
         this.#duration = event.duration;
+        this.#scrobbleBuffer.updateCurrentDuration(event.duration);
         this.#playbackStatePersistence.updateProgress(event.currentTime);
         this.#emit("progress", {
           requestId: this.#requestId,
@@ -914,6 +932,7 @@ export class NativeAudioService implements AonsokuAudioApi {
         break;
       case "durationChanged":
         this.#duration = event.duration;
+        this.#scrobbleBuffer.updateCurrentDuration(event.duration);
         this.#emit("durationChanged", {
           requestId: this.#requestId,
           duration: event.duration,
@@ -1184,18 +1203,35 @@ export class NativeAudioService implements AonsokuAudioApi {
     const songId = getScrobbleSongId(options.source);
     if (!songId) return;
 
+    const isPlaying =
+      Boolean(options.autoplay) || this.#playbackState === "playing";
     this.#scrobbleBuffer.startTracking(
       songId,
-      Boolean(options.autoplay) || this.#playbackState === "playing",
+      options.metadata?.duration ?? this.#duration,
+      isPlaying,
     );
+    this.#scrobbleNowPlayingSent = false;
+    if (isPlaying) this.#sendScrobbleNowPlayingIfNeeded();
   }
 
   #startScrobbleTrackingForSong(song: NativeQueueSong): void {
-    this.#scrobbleBuffer.startTracking(song.id, true);
+    this.#scrobbleBuffer.startTracking(song.id, song.duration, true);
+    this.#scrobbleNowPlayingSent = false;
+    this.#sendScrobbleNowPlayingIfNeeded();
   }
 
   #stopScrobbleTracking(): void {
     this.#scrobbleBuffer.stopTracking();
+    this.#scrobbleNowPlayingSent = false;
+    this.#scrobbleSubmitter.submitPending();
+  }
+
+  #sendScrobbleNowPlayingIfNeeded(): void {
+    const songId = this.#scrobbleBuffer.currentSongId;
+    if (!songId || this.#scrobbleNowPlayingSent) return;
+    this.#scrobbleNowPlayingSent = true;
+    this.#scrobbleSubmitter.sendNowPlaying(songId);
+    this.#scrobbleSubmitter.submitPending();
   }
 
   #syncScrobbleTrackingWithPlaybackState(
@@ -1203,6 +1239,7 @@ export class NativeAudioService implements AonsokuAudioApi {
   ): void {
     if (state === "playing") {
       this.#scrobbleBuffer.resumeTracking();
+      this.#sendScrobbleNowPlayingIfNeeded();
       return;
     }
 

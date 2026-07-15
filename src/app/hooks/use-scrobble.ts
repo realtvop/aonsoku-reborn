@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { shouldUseNativePlaybackBackend } from "@/player/playback/backend-factory";
 import { subsonic } from "@/service/subsonic";
 import {
   useIsRemoteControlActive,
@@ -8,19 +9,13 @@ import {
   usePlayerMediaType,
   usePlayerStore,
 } from "@/store/player.store";
-import { getRuntime } from "@/utils/capabilities";
 
 const SCROBBLE_THRESHOLD_PERCENT = 50;
 const SCROBBLE_THRESHOLD_SECONDS = 60 * 4;
 
-const NATIVE_NATIVE_SYNC_RUNTIMES = new Set([
-  "capacitor-ios",
-  "capacitor-android",
-]);
-
 export function useScrobble() {
   const currentSong = usePlayerCurrentSong();
-  const isNative = NATIVE_NATIVE_SYNC_RUNTIMES.has(getRuntime());
+  const isNative = !shouldRendererSubmitScrobbles();
   const progress = usePlayerStore((state) =>
     isNative ? 0 : state.playerProgress.progress,
   );
@@ -77,4 +72,8 @@ export function useScrobble() {
     isRemoteControlActive,
     isNative,
   ]);
+}
+
+export function shouldRendererSubmitScrobbles(): boolean {
+  return !shouldUseNativePlaybackBackend();
 }

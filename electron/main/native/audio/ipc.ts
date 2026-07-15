@@ -32,11 +32,16 @@ let streamUrlResolver = (url: string): string => url;
 let downloadUrlResolver: DesktopAudioDownloadUrlResolver = () => null;
 let artworkUrlResolver = (artworkUrl: string | undefined): string | undefined =>
   artworkUrl;
+let scrobbleRequest = (_options: {
+  path: string;
+  query: Record<string, string | number>;
+}): Promise<unknown> => Promise.reject(new Error("missing_credentials"));
 
 export const desktopNativeAudioService = new NativeAudioService({
   streamUrlResolver: (url) => streamUrlResolver(url),
   downloadUrlResolver: (options) => downloadUrlResolver(options),
   artworkUrlResolver: (artworkUrl) => artworkUrlResolver(artworkUrl),
+  scrobbleRequest: (options) => scrobbleRequest(options),
   deferPlaybackRestore: true,
 });
 let unsubscribeFromNativeAudioEvents: (() => void) | null = null;
@@ -52,6 +57,7 @@ export function setupDesktopNativeAudioIpc(
     streamUrlResolver: (url: string) => string;
     downloadUrlResolver: DesktopAudioDownloadUrlResolver;
     artworkUrlResolver?: (artworkUrl: string | undefined) => string | undefined;
+    scrobbleRequest?: typeof scrobbleRequest;
   },
 ): void {
   if (networking) {
@@ -59,6 +65,9 @@ export function setupDesktopNativeAudioIpc(
     downloadUrlResolver = networking.downloadUrlResolver;
     if (networking.artworkUrlResolver) {
       artworkUrlResolver = networking.artworkUrlResolver;
+    }
+    if (networking.scrobbleRequest) {
+      scrobbleRequest = networking.scrobbleRequest;
     }
   }
   desktopNativeAudioReady = desktopNativeAudioService.ready();

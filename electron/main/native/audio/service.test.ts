@@ -10,6 +10,7 @@ import type {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { audioCacheDirectoryFromUserDataPath, audioCacheId } from "./cache";
 import type { DesktopPlaybackStateStore } from "./playback-state-store";
+import { DesktopScrobbleBuffer } from "./scrobble-buffer";
 import { NativeAudioService } from "./service";
 import type { DesktopSystemAudioAdapter } from "./system-adapter";
 import type {
@@ -2292,6 +2293,133 @@ describe("NativeAudioService", () => {
       await expect(service.getScrobbleBuffer()).resolves.toEqual({
         entries: [],
       });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("owns now-playing and thresholded scrobble submission without blocking playback", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    service.destroy();
+    const request = vi.fn().mockResolvedValue({});
+    const scrobbleBuffer = new DesktopScrobbleBuffer({
+      storageDirectory: null,
+      now: () => Date.now(),
+    });
+    service = new NativeAudioService({
+      engine,
+      audioCacheDirectory,
+      cacheLoadedStreams: false,
+      scrobbleBuffer,
+      scrobbleRequest: request,
+    });
+
+    try {
+      await service.load({
+        source: {
+          kind: "stream",
+          url: "https://server/rest/stream?id=song-1",
+          songId: "song-1",
+        },
+        metadata: { title: "Song 1", duration: 100 },
+        autoplay: true,
+      });
+      await vi.waitFor(() => {
+        expect(request).toHaveBeenCalledWith({
+          path: "/scrobble.view",
+          query: {
+            id: "song-1",
+            submission: "false",
+            time: 1_000,
+          },
+        });
+      });
+
+      vi.advanceTimersByTime(40_000);
+      await service.pause();
+      vi.advanceTimersByTime(20_000);
+      await service.play();
+      vi.advanceTimersByTime(10_000);
+      await service.load({
+        source: {
+          kind: "stream",
+          url: "https://server/rest/stream?id=song-2",
+          songId: "song-2",
+        },
+        metadata: { title: "Song 2", duration: 100 },
+        autoplay: true,
+      });
+
+      await vi.waitFor(() => {
+        expect(request).toHaveBeenCalledWith({
+          path: "/scrobble.view",
+          query: {
+            id: "song-1",
+            submission: "true",
+            time: 1_000,
+          },
+        });
+      });
+      expect(scrobbleBuffer.getEntries()).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not scrobble remote playback projection", async () => {
+    service.destroy();
+    const request = vi.fn().mockResolvedValue({});
+    service = new NativeAudioService({
+      engine,
+      audioCacheDirectory,
+      cacheLoadedStreams: false,
+      scrobbleBuffer: new DesktopScrobbleBuffer({ storageDirectory: null }),
+      scrobbleRequest: request,
+    });
+
+    await service.updateRemotePlaybackState({
+      targetDeviceId: "remote-device",
+      metadata: { title: "Remote Song", duration: 120 },
+      position: 60,
+      duration: 120,
+      isPlaying: true,
+    });
+
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("keeps playback commands independent from scrobble network failure", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    service.destroy();
+    const scrobbleBuffer = new DesktopScrobbleBuffer({
+      storageDirectory: null,
+      now: () => Date.now(),
+    });
+    service = new NativeAudioService({
+      engine,
+      audioCacheDirectory,
+      cacheLoadedStreams: false,
+      scrobbleBuffer,
+      scrobbleRequest: vi.fn().mockRejectedValue(new Error("offline")),
+    });
+
+    try {
+      await expect(
+        service.load({
+          source: {
+            kind: "stream",
+            url: "https://server/rest/stream?id=song-1",
+            songId: "song-1",
+          },
+          metadata: { title: "Song 1", duration: 10 },
+          autoplay: true,
+        }),
+      ).resolves.toBeUndefined();
+      vi.advanceTimersByTime(5_000);
+      await expect(service.stop()).resolves.toBeUndefined();
+      expect(scrobbleBuffer.getEntries()).toHaveLength(1);
     } finally {
       vi.useRealTimers();
     }

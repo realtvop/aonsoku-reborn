@@ -155,6 +155,7 @@ export function setupIpcEvents(window: BrowserWindow | null) {
         })
         .toString(),
     artworkUrlResolver: resolveDesktopArtworkUrl,
+    scrobbleRequest: (options) => desktopNativeBridgeService.request(options),
   });
   setupDesktopNativeBridgeIpc();
   setupDesktopNativeDataIpc(window);

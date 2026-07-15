@@ -354,6 +354,17 @@ Key files:
   distinguished at the service boundary. A failed queue load restores the
   command's pre-mutation queue and source snapshot before later commands run,
   while read-only and download/cache APIs remain outside the playback FIFO.
+  Desktop native playback also owns Subsonic now-playing and scrobble
+  submission in the main process. The playback FIFO only settles playing
+  segments into the persistent `DesktopScrobbleBuffer`;
+  `DesktopScrobbleSubmitter` uses the existing native bridge
+  credential/request path asynchronously, applies the mobile threshold
+  (`min(duration * 50%, 240s)`), and retries pending entries in order on ready
+  or later playback opportunities. Each play has a stable entry id so a
+  successful retry removes exactly that play even when the same song appears
+  more than once. The renderer `useScrobble` hook remains active only for Web
+  Audio, including Electron fallback, as gated by
+  `shouldUseNativePlaybackBackend()`.
   Special desktop volume behavior: the
   Electron bridge keeps the mobile `setSystemVolume` method name for contract
   parity, but it controls only the embedded player/libmpv volume and must not
