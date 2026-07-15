@@ -37,8 +37,10 @@ export const desktopNativeAudioService = new NativeAudioService({
   streamUrlResolver: (url) => streamUrlResolver(url),
   downloadUrlResolver: (options) => downloadUrlResolver(options),
   artworkUrlResolver: (artworkUrl) => artworkUrlResolver(artworkUrl),
+  deferPlaybackRestore: true,
 });
 let unsubscribeFromNativeAudioEvents: (() => void) | null = null;
+let desktopNativeAudioReady = Promise.resolve();
 
 type DesktopNativeAudioServiceMethod = (
   ...args: Parameters<AonsokuAudioApi[keyof AonsokuAudioApi]>
@@ -59,6 +61,7 @@ export function setupDesktopNativeAudioIpc(
       artworkUrlResolver = networking.artworkUrlResolver;
     }
   }
+  desktopNativeAudioReady = desktopNativeAudioService.ready();
   ipcMain.removeHandler(DESKTOP_NATIVE_AUDIO_INVOKE_CHANNEL);
   unsubscribeFromNativeAudioEvents?.();
   unsubscribeFromNativeAudioEvents = desktopNativeAudioService.onEvent(
@@ -76,6 +79,7 @@ export function setupDesktopNativeAudioIpc(
   ipcMain.handle(
     DESKTOP_NATIVE_AUDIO_INVOKE_CHANNEL,
     async (_, payload: DesktopNativeAudioInvokePayload) => {
+      await desktopNativeAudioReady;
       const method = desktopNativeAudioService[payload.method];
       if (typeof method !== "function") {
         throw new Error(

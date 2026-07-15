@@ -83,6 +83,7 @@ export interface NativeAudioServiceOptions {
   cacheLoadedStreams?: boolean;
   systemAudioAdapter?: DesktopSystemAudioAdapter;
   playbackStateStore?: DesktopPlaybackStateStore;
+  deferPlaybackRestore?: boolean;
 }
 
 export type DesktopAudioDownloadUrlResolver = (
@@ -137,6 +138,7 @@ export class NativeAudioService implements AonsokuAudioApi {
   #isBuffering = false;
   #currentSource: NativeAudioQueueItem | null = null;
   #remotePlaybackState: NativeRemotePlaybackStateOptions | null = null;
+  #readyPromise: Promise<void> | null = null;
 
   constructor(options: NativeAudioServiceOptions = {}) {
     this.#engine = options.engine ?? createDesktopAudioEngine();
@@ -188,8 +190,15 @@ export class NativeAudioService implements AonsokuAudioApi {
     this.#unsubscribeFromEngine = this.#engine.onEvent((event) =>
       this.#handleEngineEvent(event),
     );
-    this.#restorePlaybackState().catch((error) => this.#emitFailure(error));
+    if (!options.deferPlaybackRestore) this.ready();
     this.#scheduleStartupAvailabilityCheck();
+  }
+
+  ready(): Promise<void> {
+    this.#readyPromise ??= this.#restorePlaybackState().catch((error) =>
+      this.#emitFailure(error),
+    );
+    return this.#readyPromise;
   }
 
   async load(options: NativeAudioLoadOptions): Promise<void> {

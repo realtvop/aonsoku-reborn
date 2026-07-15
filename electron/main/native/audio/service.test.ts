@@ -5,9 +5,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import type {
   NativeAudioEvents,
   NativeAudioMetadata,
+  NativeFullState,
 } from "@aonsoku/audio-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { audioCacheDirectoryFromUserDataPath, audioCacheId } from "./cache";
+import type { DesktopPlaybackStateStore } from "./playback-state-store";
 import { NativeAudioService } from "./service";
 import type { DesktopSystemAudioAdapter } from "./system-adapter";
 import type {
@@ -67,6 +69,82 @@ describe("NativeAudioService", () => {
     service.destroy();
     vi.restoreAllMocks();
     await fs.rm(audioCacheDirectory, { force: true, recursive: true });
+  });
+
+  it("waits until ready to restore uncached aonsoku-media queue sources", async () => {
+    service.destroy();
+    const restoredSong = {
+      ...queueSong("restored"),
+      coverArtId: "cover-restored",
+      streamUrl: "aonsoku-media://stream?id=restored",
+    };
+    const restoredState: NativeFullState = {
+      contextQueue: {
+        songs: [restoredSong],
+        currentIndex: 0,
+        sourceId: null,
+        sourceName: null,
+      },
+      userQueue: [],
+      originalContextSongs: [],
+      originalUserSongs: [],
+      shuffleHistory: [],
+      shuffleStartHistory: [],
+      playedUserQueueHistory: [],
+      isInUserQueue: false,
+      isShuffleActive: false,
+      loopState: "off",
+      isPlaying: false,
+      currentTime: 42,
+      duration: 100,
+      currentSongId: restoredSong.id,
+      isRestored: true,
+    };
+    const playbackStateStore = {
+      load: vi.fn(() => restoredState),
+      save: vi.fn(),
+      clear: vi.fn(),
+    } as unknown as DesktopPlaybackStateStore;
+    let streamUrlResolver = (url: string) => url;
+    let artworkUrlResolver = (url: string | undefined) => url;
+
+    service = new NativeAudioService({
+      engine,
+      audioCacheDirectory,
+      cacheLoadedStreams: false,
+      playbackStateStore,
+      deferPlaybackRestore: true,
+      streamUrlResolver: (url) => streamUrlResolver(url),
+      artworkUrlResolver: (url) => artworkUrlResolver(url),
+    });
+
+    expect(playbackStateStore.load).not.toHaveBeenCalled();
+    expect(engine.load).not.toHaveBeenCalled();
+
+    streamUrlResolver = () =>
+      "https://server/rest/stream.view?id=restored&token=ready";
+    artworkUrlResolver = () =>
+      "https://server/rest/getCoverArt.view?id=cover-restored&token=ready";
+    await Promise.all([service.ready(), service.ready()]);
+
+    expect(playbackStateStore.load).toHaveBeenCalledTimes(1);
+    expect(engine.load).toHaveBeenCalledTimes(1);
+    expect(engine.load).toHaveBeenCalledWith({
+      source: {
+        kind: "stream",
+        target: "https://server/rest/stream.view?id=restored&token=ready",
+      },
+      metadata: {
+        title: restoredSong.title,
+        artist: restoredSong.artist,
+        album: restoredSong.album,
+        duration: restoredSong.duration,
+        artworkUrl:
+          "https://server/rest/getCoverArt.view?id=cover-restored&token=ready",
+      },
+      autoplay: false,
+      startTime: 42,
+    });
   });
 
   it("resolves artwork URLs through the artworkUrlResolver before loading", async () => {

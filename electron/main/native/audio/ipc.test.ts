@@ -3,8 +3,14 @@ import type { NativeAudioServiceEventListener } from "./types";
 
 const mocks = vi.hoisted(() => {
   let serviceListener: NativeAudioServiceEventListener | null = null;
+  let serviceConstructorOptions: {
+    streamUrlResolver: (url: string) => string;
+    downloadUrlResolver: (options: { songId: string }) => unknown;
+    artworkUrlResolver: (artworkUrl: string | undefined) => string | undefined;
+  } | null = null;
   const unsubscribe = vi.fn();
   const service = {
+    ready: vi.fn(async () => {}),
     load: vi.fn(async () => {}),
     play: vi.fn(async () => {}),
     pause: vi.fn(async () => {}),
@@ -44,6 +50,17 @@ const mocks = vi.hoisted(() => {
     setServiceListener: (listener: NativeAudioServiceEventListener | null) => {
       serviceListener = listener;
     },
+    serviceConstructorOptions: () => {
+      if (!serviceConstructorOptions) {
+        throw new Error("NativeAudioService was not constructed");
+      }
+      return serviceConstructorOptions;
+    },
+    setServiceConstructorOptions: (
+      options: typeof serviceConstructorOptions,
+    ) => {
+      serviceConstructorOptions = options;
+    },
   };
 });
 
@@ -54,7 +71,14 @@ vi.mock("electron", () => ({
 
 vi.mock("./service", () => ({
   NativeAudioService: class {
-    constructor() {
+    constructor(options: {
+      streamUrlResolver: (url: string) => string;
+      downloadUrlResolver: (options: { songId: string }) => unknown;
+      artworkUrlResolver: (
+        artworkUrl: string | undefined,
+      ) => string | undefined;
+    }) {
+      mocks.setServiceConstructorOptions(options);
       return mocks.service;
     }
   },
@@ -106,6 +130,7 @@ describe("desktop native audio IPC", () => {
     expect(mocks.ipcMain.removeHandler).toHaveBeenCalledWith(
       DESKTOP_NATIVE_AUDIO_INVOKE_CHANNEL,
     );
+    expect(mocks.service.ready).toHaveBeenCalledTimes(1);
     expect(mocks.service.load).toHaveBeenCalledWith({
       requestId: "request-1",
       source: {
@@ -113,6 +138,37 @@ describe("desktop native audio IPC", () => {
         url: "https://server/rest/stream?id=song-1",
       },
     });
+  });
+
+  it("installs networking resolvers before starting playback restore", () => {
+    const streamUrlResolver = vi.fn(
+      () => "https://server/rest/stream.view?id=song-1",
+    );
+    const downloadUrlResolver = vi.fn(() => null);
+    const artworkUrlResolver = vi.fn(
+      () => "https://server/rest/getCoverArt.view?id=cover-1",
+    );
+    mocks.service.ready.mockImplementationOnce(async () => {
+      const options = mocks.serviceConstructorOptions();
+      expect(
+        options.streamUrlResolver("aonsoku-media://stream?id=song-1"),
+      ).toBe("https://server/rest/stream.view?id=song-1");
+      expect(
+        options.artworkUrlResolver("aonsoku-media://getCoverArt?id=cover-1"),
+      ).toBe("https://server/rest/getCoverArt.view?id=cover-1");
+      expect(options.downloadUrlResolver({ songId: "song-1" })).toBeNull();
+    });
+
+    setupDesktopNativeAudioIpc(windowArg(), {
+      streamUrlResolver,
+      downloadUrlResolver,
+      artworkUrlResolver,
+    });
+
+    expect(mocks.service.ready).toHaveBeenCalledTimes(1);
+    expect(streamUrlResolver).toHaveBeenCalledTimes(1);
+    expect(downloadUrlResolver).toHaveBeenCalledTimes(1);
+    expect(artworkUrlResolver).toHaveBeenCalledTimes(1);
   });
 
   it("rejects unknown invoke methods", async () => {
