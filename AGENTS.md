@@ -119,7 +119,13 @@ empty renderer songlist, takes the cold-start branch, sets
 `src/app/components/player/audio.tsx` skips re-issuing `load()`. The Electron
 main process restores position itself in
 `electron/main/native/audio/service.ts` `#restorePlaybackState()` (persisted via
-`playback-state.json`). The desktop singleton defers that restore until
+`playback-state.json`). Desktop writes are coordinated asynchronously outside
+the playback-command FIFO: full-state changes use a 500ms debounce, progress
+uses a 5s/meaningful-change throttle, and the store serializes atomic temporary
+file replacements so older writes cannot overwrite newer state. Clear cancels
+pending work before removing the file, while queue-transaction rollback and
+service/app shutdown flush the latest snapshot; persistence failures remain
+isolated from playback. The desktop singleton defers restore until
 `setupDesktopNativeAudioIpc()` installs its stream/download/artwork resolvers
 and calls the service's idempotent `ready()` lifecycle, so a restored uncached
 `aonsoku-media://stream` source is translated before libmpv loads it. The

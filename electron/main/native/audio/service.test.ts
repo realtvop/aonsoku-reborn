@@ -1282,6 +1282,7 @@ describe("NativeAudioService", () => {
         message: "decoder failed",
       });
       await failed;
+      await vi.advanceTimersByTimeAsync(500);
 
       expect(service.getDebugExtras().isBuffering).toBe(false);
       expect(service.getControlState().isPlaying).toBe(false);
@@ -1837,6 +1838,7 @@ describe("NativeAudioService", () => {
       contextQueue: { currentIndex: 1 },
       currentSongId: "2",
     });
+    await service.destroy();
     expect(playbackStateStore.save).toHaveBeenLastCalledWith(
       expect.objectContaining({
         contextQueue: expect.objectContaining({ currentIndex: 1 }),

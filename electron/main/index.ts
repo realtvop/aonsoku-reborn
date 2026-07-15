@@ -31,6 +31,8 @@ if (process.platform === "darwin") {
 registerDesktopMediaScheme();
 
 let isQuitting = false;
+let nativeAudioShutdownComplete = false;
+let nativeAudioShutdownStarted = false;
 
 export function getIsQuitting(): boolean {
   return isQuitting;
@@ -90,17 +92,24 @@ if (!instanceLock) {
     app.quit();
   });
 
-  app.on("before-quit", () => {
+  app.on("before-quit", (event) => {
     isQuitting = true;
+
+    if (nativeAudioShutdownComplete) return;
+    event.preventDefault();
+    if (nativeAudioShutdownStarted) return;
+    nativeAudioShutdownStarted = true;
 
     destroyMiniPlayerWindow();
     destroyNativeDebugWindow();
-    const nativeAudioDestroyed = destroyDesktopNativeAudioService();
-    if (nativeAudioDestroyed) {
-      nativeAudioDestroyed.catch((error) => {
+    Promise.resolve(destroyDesktopNativeAudioService())
+      .catch((error) => {
         console.error("Failed to destroy desktop native audio service.", error);
+      })
+      .finally(() => {
+        nativeAudioShutdownComplete = true;
+        app.quit();
       });
-    }
   });
 }
 

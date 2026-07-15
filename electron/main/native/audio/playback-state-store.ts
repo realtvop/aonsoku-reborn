@@ -1,16 +1,18 @@
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  writeFileSync,
-} from "node:fs";
+import { promises as fs, readFileSync } from "node:fs";
 import path from "node:path";
 import type { NativeFullState } from "@aonsoku/audio-contract";
 import { getDefaultDesktopScrobbleStorageDirectory } from "./scrobble-buffer";
 
-export class DesktopPlaybackStateStore {
+export interface DesktopPlaybackStateStorage {
+  load(): NativeFullState | null;
+  save(state: NativeFullState): Promise<void>;
+  clear(): Promise<void>;
+}
+
+export class DesktopPlaybackStateStore implements DesktopPlaybackStateStorage {
   readonly #filePath: string | null;
+  #operationTail: Promise<void> = Promise.resolve();
+  #temporarySequence = 0;
 
   constructor(storageDirectory = getDefaultDesktopScrobbleStorageDirectory()) {
     this.#filePath = storageDirectory
@@ -19,7 +21,7 @@ export class DesktopPlaybackStateStore {
   }
 
   load(): NativeFullState | null {
-    if (!this.#filePath || !existsSync(this.#filePath)) return null;
+    if (!this.#filePath) return null;
     try {
       const value = JSON.parse(readFileSync(this.#filePath, "utf8"));
       return isNativeFullState(value) ? value : null;
@@ -28,25 +30,41 @@ export class DesktopPlaybackStateStore {
     }
   }
 
-  save(state: NativeFullState): void {
-    if (!this.#filePath) return;
+  save(state: NativeFullState): Promise<void> {
+    if (!this.#filePath) return Promise.resolve();
+    let serialized: string;
     try {
-      mkdirSync(path.dirname(this.#filePath), { recursive: true });
-      const temporaryPath = `${this.#filePath}.${process.pid}.tmp`;
-      writeFileSync(temporaryPath, JSON.stringify(state), "utf8");
-      renameSync(temporaryPath, this.#filePath);
+      serialized = JSON.stringify(state);
     } catch {
-      // Persistence is best effort and must never interrupt playback.
+      return Promise.resolve();
     }
+    return this.#enqueue(async () => {
+      const temporaryPath = `${this.#filePath}.${process.pid}.${++this.#temporarySequence}.tmp`;
+      try {
+        await fs.mkdir(path.dirname(this.#filePath as string), {
+          recursive: true,
+        });
+        await fs.writeFile(temporaryPath, serialized, "utf8");
+        await fs.rename(temporaryPath, this.#filePath as string);
+      } finally {
+        await fs.rm(temporaryPath, { force: true }).catch(() => {});
+      }
+    });
   }
 
-  clear(): void {
-    if (!this.#filePath) return;
-    try {
-      writeFileSync(this.#filePath, "", "utf8");
-    } catch {
-      // See save().
-    }
+  clear(): Promise<void> {
+    if (!this.#filePath) return Promise.resolve();
+    return this.#enqueue(() =>
+      fs.rm(this.#filePath as string, { force: true }),
+    );
+  }
+
+  #enqueue(operation: () => Promise<void>): Promise<void> {
+    const result = this.#operationTail.then(operation, operation);
+    this.#operationTail = result.catch(() => {
+      // Persistence is best effort and must never interrupt playback.
+    });
+    return this.#operationTail;
   }
 }
 

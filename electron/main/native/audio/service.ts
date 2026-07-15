@@ -44,7 +44,11 @@ import {
   DesktopAudioDownloadManager,
 } from "./download";
 import { createDesktopAudioEngine } from "./engine-factory";
-import { DesktopPlaybackStateStore } from "./playback-state-store";
+import { DesktopPlaybackStatePersistence } from "./playback-state-persistence";
+import {
+  type DesktopPlaybackStateStorage,
+  DesktopPlaybackStateStore,
+} from "./playback-state-store";
 import {
   type DesktopQueueContentsReason,
   DesktopQueueEngine,
@@ -82,7 +86,7 @@ export interface NativeAudioServiceOptions {
   artworkUrlResolver?: (artworkUrl: string | undefined) => string | undefined;
   cacheLoadedStreams?: boolean;
   systemAudioAdapter?: DesktopSystemAudioAdapter;
-  playbackStateStore?: DesktopPlaybackStateStore;
+  playbackStateStore?: DesktopPlaybackStateStorage;
   deferPlaybackRestore?: boolean;
 }
 
@@ -125,7 +129,8 @@ export class NativeAudioService implements AonsokuAudioApi {
   readonly #streamUrlsBySongId = new Map<string, string>();
   readonly #queueEngine = new DesktopQueueEngine();
   readonly #scrobbleBuffer = new DesktopScrobbleBuffer();
-  readonly #playbackStateStore: DesktopPlaybackStateStore;
+  readonly #playbackStateStore: DesktopPlaybackStateStorage;
+  readonly #playbackStatePersistence: DesktopPlaybackStatePersistence;
   #requestId: string | undefined;
   #queueRequestSequence = 0;
   #sleepTimerMode: NativeSetSleepTimerOptions["mode"] = "duration";
@@ -142,6 +147,7 @@ export class NativeAudioService implements AonsokuAudioApi {
   #playbackCommandTail: Promise<void> = Promise.resolve();
   #playbackGeneration = 0;
   #failedPlaybackGeneration: number | null = null;
+  #destroyPromise: Promise<void> | null = null;
 
   constructor(options: NativeAudioServiceOptions = {}) {
     this.#engine = options.engine ?? createDesktopAudioEngine();
@@ -158,6 +164,10 @@ export class NativeAudioService implements AonsokuAudioApi {
       options.systemAudioAdapter ?? createDesktopSystemAudioAdapter();
     this.#playbackStateStore =
       options.playbackStateStore ?? new DesktopPlaybackStateStore();
+    this.#playbackStatePersistence = new DesktopPlaybackStatePersistence(
+      this.#playbackStateStore,
+      () => this.#playbackStateSnapshot(),
+    );
     this.#downloadManager = new DesktopAudioDownloadManager({
       audioFiles: this.#audioFiles,
       onProgress: (event) => this.#emit("downloadProgress", event),
@@ -239,6 +249,7 @@ export class NativeAudioService implements AonsokuAudioApi {
       });
       this.#startScrobbleTrackingForLoad(options);
       this.#startBackgroundStreamCache(options.source);
+      this.#persistPlaybackState();
     } catch (error) {
       this.#emitFailure(error);
       throw error;
@@ -424,7 +435,7 @@ export class NativeAudioService implements AonsokuAudioApi {
       this.#currentTime = 0;
       this.#duration = 0;
       this.#currentSource = null;
-      this.#playbackStateStore.clear();
+      await this.#playbackStatePersistence.clear();
     } catch (error) {
       this.#emitFailure(error);
       throw error;
@@ -558,6 +569,7 @@ export class NativeAudioService implements AonsokuAudioApi {
     const state = this.#playbackStateStore.load();
     if (!state) return;
 
+    this.#playbackStatePersistence.restored(state);
     this.#queueEngine.restoreState(state);
     this.#currentTime = Math.max(0, state.currentTime);
     this.#duration = Math.max(0, state.duration);
@@ -576,13 +588,15 @@ export class NativeAudioService implements AonsokuAudioApi {
   }
 
   #persistPlaybackState(): void {
-    this.#playbackStateStore.save(
-      this.#queueEngine.getFullState({
-        currentTime: this.#currentTime,
-        duration: this.#duration,
-        isPlaying: this.#playbackState === "playing",
-      }),
-    );
+    this.#playbackStatePersistence.markStateDirty();
+  }
+
+  #playbackStateSnapshot(): NativeFullState {
+    return this.#queueEngine.getFullState({
+      currentTime: this.#currentTime,
+      duration: this.#duration,
+      isPlaying: this.#playbackState === "playing",
+    });
   }
 
   resolveSongs(options: { ids: string[] }): Promise<NativeResolveSongsResult> {
@@ -727,17 +741,21 @@ export class NativeAudioService implements AonsokuAudioApi {
     };
   }
 
-  destroy(): Promise<void> | void {
+  destroy(): Promise<void> {
+    if (this.#destroyPromise) return this.#destroyPromise;
     this.#unsubscribeFromEngine();
     this.#listeners.clear();
     this.#downloadManager.cancelAll();
     this.#cancelSleepTimerInternal();
-    const engineDestroyed = this.#engine.destroy?.();
-    const systemDestroyed = this.#systemAudio.destroy?.();
-
-    if (engineDestroyed || systemDestroyed) {
-      return Promise.all([engineDestroyed, systemDestroyed]).then(() => {});
-    }
+    this.#destroyPromise = this.#playbackStatePersistence
+      .flush()
+      .then(() =>
+        Promise.all([
+          this.#engine.destroy?.(),
+          this.#systemAudio.destroy?.(),
+        ]).then(() => {}),
+      );
+    return this.#destroyPromise;
   }
 
   getControlState(): NativeAudioControlState {
@@ -886,7 +904,7 @@ export class NativeAudioService implements AonsokuAudioApi {
       case "progress":
         this.#currentTime = event.currentTime;
         this.#duration = event.duration;
-        this.#persistPlaybackState();
+        this.#playbackStatePersistence.updateProgress(event.currentTime);
         this.#emit("progress", {
           requestId: this.#requestId,
           currentTime: event.currentTime,
@@ -1315,7 +1333,7 @@ export class NativeAudioService implements AonsokuAudioApi {
       this.#currentSource = currentSource;
       this.#currentTime = currentTime;
       this.#duration = duration;
-      this.#persistPlaybackState();
+      await this.#playbackStatePersistence.flush();
       throw error;
     }
   }
