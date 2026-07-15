@@ -1176,7 +1176,7 @@ describe("NativeAudioService", () => {
       message: "mpv playback error",
     });
 
-    await vi.waitFor(() => expect(events).toHaveLength(6));
+    await vi.waitFor(() => expect(events).toHaveLength(7));
 
     expect(events).toEqual([
       {
@@ -1210,6 +1210,20 @@ describe("NativeAudioService", () => {
         },
       },
       {
+        eventName: "ended",
+        event: {
+          requestId: "request-1",
+          reason: "finished",
+        },
+      },
+      {
+        eventName: "playbackStateChanged",
+        event: {
+          requestId: "request-1",
+          state: "failed",
+        },
+      },
+      {
         eventName: "error",
         event: {
           requestId: "request-1",
@@ -1217,14 +1231,210 @@ describe("NativeAudioService", () => {
           message: "mpv playback error",
         },
       },
-      {
-        eventName: "ended",
-        event: {
-          requestId: "request-1",
-          reason: "finished",
-        },
-      },
     ]);
+  });
+
+  it("settles playing engine errors once and recovers on successful playback", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    service.destroy();
+    const playbackStateStore = {
+      load: vi.fn(() => null),
+      save: vi.fn(),
+      clear: vi.fn(),
+    } as unknown as DesktopPlaybackStateStore;
+    service = new NativeAudioService({
+      engine,
+      audioCacheDirectory,
+      cacheLoadedStreams: false,
+      playbackStateStore,
+    });
+    const events: unknown[] = [];
+    service.onEvent((event) => events.push(event));
+
+    try {
+      await service.load({
+        requestId: "request-failing-playback",
+        source: {
+          kind: "stream",
+          url: "https://server/rest/stream?id=failing-playback",
+          songId: "failing-playback",
+        },
+        autoplay: true,
+      });
+      engine.emit({ type: "playbackStateChanged", state: "playing" });
+      engine.emit({ type: "bufferingChanged", isBuffering: true });
+      vi.advanceTimersByTime(1_000);
+
+      const failed = waitForServiceEvent(
+        service,
+        "playbackStateChanged",
+        (event) => event.state === "failed",
+      );
+      engine.emit({
+        type: "error",
+        code: "mpv-playback-error",
+        message: "decoder failed",
+      });
+      engine.emit({
+        type: "error",
+        code: "mpv-playback-error",
+        message: "decoder failed",
+      });
+      await failed;
+
+      expect(service.getDebugExtras().isBuffering).toBe(false);
+      expect(service.getControlState().isPlaying).toBe(false);
+      expect(playbackStateStore.save).toHaveBeenLastCalledWith(
+        expect.objectContaining({ isPlaying: false }),
+      );
+      expect(
+        events.filter(
+          (event) =>
+            (event as { eventName?: string }).eventName ===
+              "playbackStateChanged" &&
+            (event as { event?: { state?: string } }).event?.state === "failed",
+        ),
+      ).toHaveLength(1);
+      expect(
+        events.filter(
+          (event) => (event as { eventName?: string }).eventName === "error",
+        ),
+      ).toHaveLength(1);
+      expect(events).toContainEqual({
+        eventName: "bufferingChanged",
+        event: {
+          requestId: "request-failing-playback",
+          isBuffering: false,
+        },
+      });
+
+      vi.advanceTimersByTime(1_000);
+      engine.play.mockImplementationOnce(async () => {
+        engine.emit({ type: "playbackStateChanged", state: "playing" });
+      });
+      await service.play();
+      expect(service.getControlState().isPlaying).toBe(true);
+      vi.advanceTimersByTime(500);
+
+      await service.load({
+        requestId: "request-recovery-load",
+        source: {
+          kind: "stream",
+          url: "https://server/rest/stream?id=recovery-load",
+          songId: "recovery-load",
+        },
+      });
+      await expect(service.getScrobbleBuffer()).resolves.toEqual({
+        entries: [
+          {
+            songId: "failing-playback",
+            playedDurationMs: 1_500,
+            timestamp: 1_000,
+          },
+        ],
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("settles loading errors without duplicating a rejected load failure", async () => {
+    const events: unknown[] = [];
+    service.onEvent((event) => events.push(event));
+    engine.loadImplementation = async () => {
+      engine.emit({ type: "playbackStateChanged", state: "loading" });
+      engine.emit({ type: "bufferingChanged", isBuffering: true });
+      engine.emit({
+        type: "error",
+        code: "mpv-playback-error",
+        message: "demuxer failed",
+      });
+      throw Object.assign(new Error("demuxer failed"), {
+        code: "mpv-playback-error",
+      });
+    };
+
+    await expect(
+      service.load({
+        requestId: "request-failing-load",
+        source: {
+          kind: "stream",
+          url: "https://server/rest/stream?id=failing-load",
+        },
+      }),
+    ).rejects.toThrow("demuxer failed");
+    await delay(0);
+
+    expect(service.getDebugExtras().isBuffering).toBe(false);
+    expect(
+      events.filter(
+        (event) =>
+          (event as { eventName?: string }).eventName ===
+            "playbackStateChanged" &&
+          (event as { event?: { state?: string } }).event?.state === "failed",
+      ),
+    ).toHaveLength(1);
+    expect(
+      events.filter(
+        (event) => (event as { eventName?: string }).eventName === "error",
+      ),
+    ).toHaveLength(1);
+
+    engine.loadImplementation = async () => {
+      engine.emit({ type: "playbackStateChanged", state: "paused" });
+    };
+    await service.load({
+      requestId: "request-recovered-load",
+      source: {
+        kind: "stream",
+        url: "https://server/rest/stream?id=recovered-load",
+      },
+    });
+    engine.play.mockImplementationOnce(async () => {
+      engine.emit({ type: "playbackStateChanged", state: "playing" });
+    });
+    await service.play();
+    expect(service.getControlState().isPlaying).toBe(true);
+  });
+
+  it("ignores an old engine error queued behind a newer load", async () => {
+    await service.load({
+      requestId: "request-old",
+      source: {
+        kind: "stream",
+        url: "https://server/rest/stream?id=old",
+      },
+    });
+    const pendingPlay = deferred<void>();
+    engine.play.mockImplementationOnce(() => pendingPlay.promise);
+    const play = service.play();
+    const nextLoad = service.load({
+      requestId: "request-new",
+      source: {
+        kind: "stream",
+        url: "https://server/rest/stream?id=new",
+      },
+    });
+    const events: unknown[] = [];
+    service.onEvent((event) => events.push(event));
+
+    engine.emit({
+      type: "error",
+      code: "mpv-playback-error",
+      message: "late old-source error",
+    });
+    pendingPlay.resolve();
+    await Promise.all([play, nextLoad]);
+    await delay(0);
+
+    expect(
+      events.filter(
+        (event) =>
+          (event as { eventName?: string }).eventName === "error" ||
+          (event as { event?: { state?: string } }).event?.state === "failed",
+      ),
+    ).toEqual([]);
   });
 
   it("dispatches the supported playback controls to the engine", async () => {

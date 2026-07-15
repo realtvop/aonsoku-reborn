@@ -290,6 +290,7 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
           `mpv error: ${event.code ?? ""} ${event.message}`,
           "libmpv-engine",
         );
+        this.#settleFatalPlaybackError();
         this.#emitError(event.code ?? "mpv-error", event.message);
         break;
       case "system-media-command":
@@ -320,6 +321,7 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
     }
 
     if (event.reason === "error") {
+      this.#isPaused = true;
       this.#emitError(
         "mpv-playback-error",
         event.error ?? "mpv playback error",
@@ -434,6 +436,13 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
       code,
       message,
     });
+  }
+
+  #settleFatalPlaybackError(): void {
+    this.#hasLoadedSource = false;
+    this.#isPaused = true;
+    this.#clearSystemMediaSession();
+    this.#emit({ type: "bufferingChanged", isBuffering: false });
   }
 
   #emit(event: DesktopAudioEngineEvent): void {

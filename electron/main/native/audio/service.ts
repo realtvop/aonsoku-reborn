@@ -140,6 +140,8 @@ export class NativeAudioService implements AonsokuAudioApi {
   #remotePlaybackState: NativeRemotePlaybackStateOptions | null = null;
   #readyPromise: Promise<void> | null = null;
   #playbackCommandTail: Promise<void> = Promise.resolve();
+  #playbackGeneration = 0;
+  #failedPlaybackGeneration: number | null = null;
 
   constructor(options: NativeAudioServiceOptions = {}) {
     this.#engine = options.engine ?? createDesktopAudioEngine();
@@ -209,6 +211,8 @@ export class NativeAudioService implements AonsokuAudioApi {
   }
 
   async #load(options: NativeAudioLoadOptions): Promise<void> {
+    this.#playbackGeneration += 1;
+    this.#failedPlaybackGeneration = null;
     this.#rememberDownloadableSource(options.source);
     this.#stopScrobbleTracking();
     this.#requestId = options.requestId;
@@ -872,6 +876,7 @@ export class NativeAudioService implements AonsokuAudioApi {
     switch (event.type) {
       case "playbackStateChanged":
         this.#playbackState = event.state;
+        if (event.state !== "failed") this.#failedPlaybackGeneration = null;
         this.#syncScrobbleTrackingWithPlaybackState(event.state);
         this.#emit("playbackStateChanged", {
           requestId: this.#requestId,
@@ -921,11 +926,17 @@ export class NativeAudioService implements AonsokuAudioApi {
           `engine error: ${event.code ?? ""} ${event.message}`,
           "audio-service",
         );
-        this.#emit("error", {
-          requestId: this.#requestId,
-          code: event.code,
-          message: event.message,
-        });
+        {
+          const generation = this.#playbackGeneration;
+          const requestId = this.#requestId;
+          this.#enqueuePlaybackCommand(() =>
+            this.#settlePlaybackFailure(
+              { code: event.code, message: event.message },
+              generation,
+              requestId,
+            ),
+          ).catch((error) => this.#emitFailure(error));
+        }
         break;
       case "systemMediaCommand":
         this.#enqueuePlaybackCommand(() =>
@@ -936,18 +947,48 @@ export class NativeAudioService implements AonsokuAudioApi {
   }
 
   #emitFailure(error: unknown): void {
-    this.#playbackState = "failed";
-    nativeLogger.error(
-      `playback failed: ${error instanceof Error ? error.message : String(error)}`,
-      "audio-service",
+    this.#settlePlaybackFailure(
+      toNativeAudioErrorEvent(error),
+      this.#playbackGeneration,
+      this.#requestId,
     );
+  }
+
+  #settlePlaybackFailure(
+    event: Omit<NativeAudioEvents["error"], "requestId">,
+    generation: number,
+    requestId: string | undefined,
+  ): void {
+    // Engine events do not currently carry libmpv playlist-entry/load ids. A
+    // generation captured when the event reaches the service still prevents a
+    // queued old error from failing a newer load, but cannot identify an old
+    // source error that first arrives after the newer load has already begun.
+    if (
+      generation !== this.#playbackGeneration ||
+      this.#failedPlaybackGeneration === generation
+    ) {
+      return;
+    }
+
+    this.#failedPlaybackGeneration = generation;
+    this.#playbackState = "failed";
+    if (this.#isBuffering) {
+      this.#isBuffering = false;
+      this.#emit("bufferingChanged", {
+        requestId,
+        isBuffering: false,
+      });
+    }
+    this.#scrobbleBuffer.pauseTracking();
+    this.#persistPlaybackState();
+    nativeLogger.error(`playback failed: ${event.message}`, "audio-service");
     this.#emit("playbackStateChanged", {
-      requestId: this.#requestId,
+      requestId,
       state: "failed",
     });
     this.#emit("error", {
-      requestId: this.#requestId,
-      ...toNativeAudioErrorEvent(error),
+      requestId,
+      ...event,
     });
   }
 

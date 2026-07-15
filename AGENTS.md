@@ -340,9 +340,15 @@ Key files:
   playback and queue mutations through one FIFO shared by renderer IPC,
   system-media commands, playback-ended advancement, sleep timers, and state
   restore; queue-driven nested loads use private non-enqueuing helpers to avoid
-  deadlocks. A failed queue load restores the command's pre-mutation queue and
-  source snapshot before later commands run, while read-only and download/cache
-  APIs remain outside the playback FIFO. Special desktop volume behavior: the
+  deadlocks. Asynchronous engine failures join the same FIFO, settle buffering,
+  playback, scrobble, persistence, and renderer state once per service load
+  generation, and stale queued failures are ignored after a newer load begins.
+  The engine event contract does not expose libmpv playlist-entry ids, so an
+  old-source error first delivered after a new load has already begun cannot be
+  distinguished at the service boundary. A failed queue load restores the
+  command's pre-mutation queue and source snapshot before later commands run,
+  while read-only and download/cache APIs remain outside the playback FIFO.
+  Special desktop volume behavior: the
   Electron bridge keeps the mobile `setSystemVolume` method name for contract
   parity, but it controls only the embedded player/libmpv volume and must not
   change the user's OS output volume. See `docs/native-audio-libmpv.md` for

@@ -333,6 +333,37 @@ describe("LibMpvAudioEngine", () => {
       code: "mpv-playback-error",
       message: "demuxer failed",
     });
+    expect(player.clearSystemMediaSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears buffering and the system session on asynchronous player errors", async () => {
+    const { engine, events, player } = createHarness();
+
+    await engine.load({
+      source: {
+        kind: "stream",
+        target: "https://server/rest/stream?id=song-1",
+      },
+      autoplay: true,
+    });
+    player.emit({ type: "file-loaded" });
+    events.length = 0;
+
+    player.emit({
+      type: "error",
+      code: "mpv-decoder-error",
+      message: "decoder failed",
+    });
+
+    expect(events).toEqual([
+      { type: "bufferingChanged", isBuffering: false },
+      {
+        type: "error",
+        code: "mpv-decoder-error",
+        message: "decoder failed",
+      },
+    ]);
+    expect(player.clearSystemMediaSession).toHaveBeenCalledTimes(1);
   });
 
   it("cleans up players when initialization or observers fail", async () => {
