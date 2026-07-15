@@ -1,6 +1,6 @@
 import randomCSSHexColor from "@chriscodesthings/random-css-hex-color";
 import clsx from "clsx";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, type SyntheticEvent, useState } from "react";
 import { getCoverArtUrl } from "@/api/httpClient";
 import {
   CachedImage,
@@ -132,13 +132,9 @@ export default function ImageHeader({
   );
   const lightboxSrc = !customIcon ? cachedLightboxUrl : "";
 
-  function getImage() {
-    return document.getElementById("cover-art-image") as HTMLImageElement;
-  }
-
-  async function handleLoadImage() {
-    const img = getImage();
-    if (!img) return;
+  async function handleLoadImage(event: SyntheticEvent<HTMLImageElement>) {
+    const img = event.currentTarget;
+    setLoaded(true);
 
     let color = randomCSSHexColor(true);
 
@@ -150,16 +146,14 @@ export default function ImageHeader({
       );
     }
 
+    if (!img.isConnected) return;
+
     setBgColor(color);
     onColorExtracted?.(color);
-    setLoaded(true);
   }
 
-  function handleError() {
-    const img = getImage();
-    if (!img) return;
-
-    img.crossOrigin = null;
+  function handleError(event: SyntheticEvent<HTMLImageElement>) {
+    event.currentTarget.crossOrigin = null;
 
     setLoaded(true);
   }
@@ -231,7 +225,6 @@ export default function ImageHeader({
                   key={coverArtId}
                   effect="opacity"
                   crossOrigin="anonymous"
-                  id="cover-art-image"
                   coverArtId={coverArtId}
                   coverArtType={coverArtType}
                   coverArtSize={coverArtSize}
