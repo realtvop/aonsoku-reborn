@@ -139,6 +139,7 @@ export class NativeAudioService implements AonsokuAudioApi {
   #currentSource: NativeAudioQueueItem | null = null;
   #remotePlaybackState: NativeRemotePlaybackStateOptions | null = null;
   #readyPromise: Promise<void> | null = null;
+  #playbackCommandTail: Promise<void> = Promise.resolve();
 
   constructor(options: NativeAudioServiceOptions = {}) {
     this.#engine = options.engine ?? createDesktopAudioEngine();
@@ -195,13 +196,19 @@ export class NativeAudioService implements AonsokuAudioApi {
   }
 
   ready(): Promise<void> {
-    this.#readyPromise ??= this.#restorePlaybackState().catch((error) =>
-      this.#emitFailure(error),
-    );
+    this.#readyPromise ??= this.#enqueuePlaybackCommand(() =>
+      this.#restorePlaybackState(),
+    ).catch((error) => this.#emitFailure(error));
     return this.#readyPromise;
   }
 
-  async load(options: NativeAudioLoadOptions): Promise<void> {
+  load(options: NativeAudioLoadOptions): Promise<void> {
+    return this.#enqueuePlaybackCommand(() =>
+      this.#runQueueTransaction(() => this.#load(options)),
+    );
+  }
+
+  async #load(options: NativeAudioLoadOptions): Promise<void> {
     this.#rememberDownloadableSource(options.source);
     this.#stopScrobbleTracking();
     this.#requestId = options.requestId;
@@ -234,7 +241,11 @@ export class NativeAudioService implements AonsokuAudioApi {
     }
   }
 
-  async play(): Promise<void> {
+  play(): Promise<void> {
+    return this.#enqueuePlaybackCommand(() => this.#play());
+  }
+
+  async #play(): Promise<void> {
     nativeLogger.debug("play", "audio-service");
     try {
       await this.#engine.play();
@@ -245,7 +256,11 @@ export class NativeAudioService implements AonsokuAudioApi {
     }
   }
 
-  async pause(): Promise<void> {
+  pause(): Promise<void> {
+    return this.#enqueuePlaybackCommand(() => this.#pause());
+  }
+
+  async #pause(): Promise<void> {
     nativeLogger.debug("pause", "audio-service");
     try {
       await this.#engine.pause();
@@ -256,7 +271,11 @@ export class NativeAudioService implements AonsokuAudioApi {
     }
   }
 
-  async stop(): Promise<void> {
+  stop(): Promise<void> {
+    return this.#enqueuePlaybackCommand(() => this.#stop());
+  }
+
+  async #stop(): Promise<void> {
     nativeLogger.debug("stop", "audio-service");
     try {
       await this.#engine.stop();
@@ -267,7 +286,11 @@ export class NativeAudioService implements AonsokuAudioApi {
     }
   }
 
-  async seek(options: NativeAudioSeekOptions): Promise<void> {
+  seek(options: NativeAudioSeekOptions): Promise<void> {
+    return this.#enqueuePlaybackCommand(() => this.#seek(options));
+  }
+
+  async #seek(options: NativeAudioSeekOptions): Promise<void> {
     nativeLogger.debug(`seek ${options.position}s`, "audio-service");
     try {
       await this.#engine.seek(Math.max(0, options.position));
@@ -278,24 +301,33 @@ export class NativeAudioService implements AonsokuAudioApi {
   }
 
   setRepeatMode(options: NativeAudioRepeatModeOptions): Promise<void> {
-    this.#queueEngine.setLoopState(options.mode);
-    this.#persistPlaybackState();
-    return Promise.resolve();
+    return this.#enqueuePlaybackCommand(() => {
+      this.#queueEngine.setLoopState(options.mode);
+      this.#persistPlaybackState();
+    });
   }
 
   setShuffle(options: NativeAudioShuffleOptions): Promise<void> {
-    this.#queueEngine.setShuffleActive(options.enabled);
-    this.#persistPlaybackState();
-    return Promise.resolve();
+    return this.#enqueuePlaybackCommand(() => {
+      this.#queueEngine.setShuffleActive(options.enabled);
+      this.#persistPlaybackState();
+    });
   }
 
   markAsShuffled(options: NativeMarkAsShuffledOptions): Promise<void> {
-    this.#queueEngine.markAsShuffled(options.originalSongs);
-    this.#persistPlaybackState();
-    return Promise.resolve();
+    return this.#enqueuePlaybackCommand(() => {
+      this.#queueEngine.markAsShuffled(options.originalSongs);
+      this.#persistPlaybackState();
+    });
   }
 
-  async setQueue(options: NativeAudioQueueOptions): Promise<void> {
+  setQueue(options: NativeAudioQueueOptions): Promise<void> {
+    return this.#enqueuePlaybackCommand(() =>
+      this.#runQueueTransaction(() => this.#setQueue(options)),
+    );
+  }
+
+  async #setQueue(options: NativeAudioQueueOptions): Promise<void> {
     for (const item of options.items) {
       this.#rememberDownloadableSource(item.source);
     }
@@ -309,19 +341,35 @@ export class NativeAudioService implements AonsokuAudioApi {
     this.#emitQueueContentsChanged("queue-edit");
   }
 
-  async skipToNext(): Promise<void> {
+  skipToNext(): Promise<void> {
+    return this.#enqueuePlaybackCommand(() =>
+      this.#runQueueTransaction(() => this.#skipToNext()),
+    );
+  }
+
+  async #skipToNext(): Promise<void> {
     if (!this.#hasNativeQueue()) return;
     nativeLogger.debug("skipToNext", "audio-service");
     await this.#queueEngine.skipToNext();
   }
 
-  async skipToPrevious(): Promise<void> {
+  skipToPrevious(): Promise<void> {
+    return this.#enqueuePlaybackCommand(() =>
+      this.#runQueueTransaction(() => this.#skipToPrevious()),
+    );
+  }
+
+  async #skipToPrevious(): Promise<void> {
     if (!this.#hasNativeQueue()) return;
     nativeLogger.debug("skipToPrevious", "audio-service");
     await this.#queueEngine.skipToPrevious(this.#currentTime);
   }
 
-  async updateMetadata(metadata: NativeAudioMetadata): Promise<void> {
+  updateMetadata(metadata: NativeAudioMetadata): Promise<void> {
+    return this.#enqueuePlaybackCommand(() => this.#updateMetadata(metadata));
+  }
+
+  async #updateMetadata(metadata: NativeAudioMetadata): Promise<void> {
     try {
       await this.#engine.updateMetadata(this.#normalizeMetadata(metadata));
     } catch (error) {
@@ -355,7 +403,11 @@ export class NativeAudioService implements AonsokuAudioApi {
     return this.notImplemented("preload");
   }
 
-  async clear(): Promise<void> {
+  clear(): Promise<void> {
+    return this.#enqueuePlaybackCommand(() => this.#clear());
+  }
+
+  async #clear(): Promise<void> {
     nativeLogger.debug("clear", "audio-service");
     try {
       await this.#engine.clear();
@@ -411,7 +463,13 @@ export class NativeAudioService implements AonsokuAudioApi {
       .then((deletedCount) => ({ deletedCount }));
   }
 
-  async setContextQueue(options: NativeSetContextQueueOptions): Promise<void> {
+  setContextQueue(options: NativeSetContextQueueOptions): Promise<void> {
+    return this.#enqueuePlaybackCommand(() =>
+      this.#runQueueTransaction(() => this.#setContextQueue(options)),
+    );
+  }
+
+  async #setContextQueue(options: NativeSetContextQueueOptions): Promise<void> {
     nativeLogger.info(
       `setContextQueue songs=${options.songs.length} index=${options.currentIndex}`,
       "audio-service",
@@ -425,7 +483,13 @@ export class NativeAudioService implements AonsokuAudioApi {
     this.#emitQueueContentsChanged("queue-edit");
   }
 
-  async updateContextQueue(
+  updateContextQueue(options: NativeUpdateContextQueueOptions): Promise<void> {
+    return this.#enqueuePlaybackCommand(() =>
+      this.#runQueueTransaction(() => this.#updateContextQueue(options)),
+    );
+  }
+
+  async #updateContextQueue(
     options: NativeUpdateContextQueueOptions,
   ): Promise<void> {
     this.#rememberQueueSongs(options.songs);
@@ -438,34 +502,42 @@ export class NativeAudioService implements AonsokuAudioApi {
   reorderContextQueue(
     options: NativeReorderContextQueueOptions,
   ): Promise<void> {
-    this.#queueEngine.reorderContextQueue(options.fromIndex, options.toIndex);
-    this.#persistPlaybackState();
-    return Promise.resolve();
+    return this.#enqueuePlaybackCommand(() => {
+      this.#queueEngine.reorderContextQueue(options.fromIndex, options.toIndex);
+      this.#persistPlaybackState();
+    });
   }
 
   addToUserQueue(options: NativeAddToUserQueueOptions): Promise<void> {
-    this.#rememberQueueSongs(options.songs);
-    this.#queueEngine.addToUserQueue(options.songs, options.position);
-    this.#persistPlaybackState();
-    return Promise.resolve();
+    return this.#enqueuePlaybackCommand(() => {
+      this.#rememberQueueSongs(options.songs);
+      this.#queueEngine.addToUserQueue(options.songs, options.position);
+      this.#persistPlaybackState();
+    });
   }
 
   removeFromUserQueue(
     options: NativeRemoveFromUserQueueOptions,
   ): Promise<void> {
-    this.#queueEngine.removeFromUserQueue(options.indices);
-    this.#persistPlaybackState();
-    return Promise.resolve();
+    return this.#enqueuePlaybackCommand(() => {
+      this.#queueEngine.removeFromUserQueue(options.indices);
+      this.#persistPlaybackState();
+    });
   }
 
   clearUserQueue(): Promise<void> {
-    this.#queueEngine.clearUserQueue();
-    this.#persistPlaybackState();
-    return Promise.resolve();
+    return this.#enqueuePlaybackCommand(() => {
+      this.#queueEngine.clearUserQueue();
+      this.#persistPlaybackState();
+    });
   }
 
-  async playAtIndex(options: NativePlayAtIndexOptions): Promise<void> {
-    await this.#queueEngine.playAtIndex(options.index, options.startTime);
+  playAtIndex(options: NativePlayAtIndexOptions): Promise<void> {
+    return this.#enqueuePlaybackCommand(() =>
+      this.#runQueueTransaction(() =>
+        this.#queueEngine.playAtIndex(options.index, options.startTime),
+      ),
+    );
   }
 
   getFullState(): Promise<NativeFullState> {
@@ -558,7 +630,13 @@ export class NativeAudioService implements AonsokuAudioApi {
     return Promise.resolve();
   }
 
-  async setSystemVolume(
+  setSystemVolume(
+    options: NativeSetSystemVolumeOptions,
+  ): Promise<NativeSystemVolumeResult> {
+    return this.#enqueuePlaybackCommand(() => this.#setSystemVolume(options));
+  }
+
+  async #setSystemVolume(
     options: NativeSetSystemVolumeOptions,
   ): Promise<NativeSystemVolumeResult> {
     // Desktop keeps the mobile plugin method name for contract parity, but the
@@ -600,30 +678,31 @@ export class NativeAudioService implements AonsokuAudioApi {
   }
 
   setSleepTimer(options: NativeSetSleepTimerOptions): Promise<void> {
+    return this.#enqueuePlaybackCommand(() => this.#setSleepTimer(options));
+  }
+
+  #setSleepTimer(options: NativeSetSleepTimerOptions): void {
     this.#cancelSleepTimerInternal();
 
     if (options.mode === "endOfTrack") {
       this.#sleepTimerMode = "endOfTrack";
-      return Promise.resolve();
+      return;
     }
 
     const seconds = Math.max(0, options.seconds);
-    if (seconds <= 0) return Promise.resolve();
+    if (seconds <= 0) return;
 
     this.#sleepTimerMode = "duration";
     this.#sleepTimerDeadlineMs = Date.now() + seconds * 1_000;
     this.#sleepTimerHandle = setTimeout(() => {
-      this.#fireSleepTimer("duration").catch((error) => {
-        this.#emitFailure(error);
-      });
+      this.#enqueuePlaybackCommand(() =>
+        this.#fireSleepTimer("duration"),
+      ).catch((error) => this.#emitFailure(error));
     }, seconds * 1_000);
-
-    return Promise.resolve();
   }
 
   cancelSleepTimer(): Promise<void> {
-    this.#cancelSleepTimerInternal();
-    return Promise.resolve();
+    return this.#enqueuePlaybackCommand(() => this.#cancelSleepTimerInternal());
   }
 
   getSleepTimerRemaining(): Promise<NativeSleepTimerRemainingResult> {
@@ -669,7 +748,13 @@ export class NativeAudioService implements AonsokuAudioApi {
     };
   }
 
-  async handleRemoteCommand(
+  handleRemoteCommand(command: NativeAudioRemoteCommand): Promise<boolean> {
+    return this.#enqueuePlaybackCommand(() =>
+      this.#handleRemoteCommand(command),
+    );
+  }
+
+  async #handleRemoteCommand(
     command: NativeAudioRemoteCommand,
   ): Promise<boolean> {
     if (this.#emitRemoteControlCommandForNativeCommand(command)) {
@@ -679,27 +764,27 @@ export class NativeAudioService implements AonsokuAudioApi {
     switch (command) {
       case "play":
         if (!this.#currentSource) return false;
-        await this.play();
+        await this.#play();
         return true;
       case "pause":
         if (!this.#currentSource) return false;
-        await this.pause();
+        await this.#pause();
         return true;
       case "togglePlayPause":
         if (!this.#currentSource) return false;
         if (this.#playbackState === "playing") {
-          await this.pause();
+          await this.#pause();
         } else {
-          await this.play();
+          await this.#play();
         }
         return true;
       case "next":
         if (!this.getControlState().hasNext) return false;
-        await this.skipToNext();
+        await this.#runQueueTransaction(() => this.#skipToNext());
         return true;
       case "previous":
         if (!this.getControlState().hasPrevious) return false;
-        await this.skipToPrevious();
+        await this.#runQueueTransaction(() => this.#skipToPrevious());
         return true;
       default:
         return false;
@@ -744,7 +829,7 @@ export class NativeAudioService implements AonsokuAudioApi {
     switch (command) {
       case "seek":
         if (typeof position === "number" && Number.isFinite(position)) {
-          await this.seek({ position: Math.max(0, position) });
+          await this.#seek({ position: Math.max(0, position) });
         }
         return;
       case "play":
@@ -752,7 +837,7 @@ export class NativeAudioService implements AonsokuAudioApi {
       case "togglePlayPause":
       case "next":
       case "previous":
-        await this.handleRemoteCommand(command);
+        await this.#handleRemoteCommand(command);
         return;
       case "like":
       case "shuffle":
@@ -827,9 +912,9 @@ export class NativeAudioService implements AonsokuAudioApi {
           `ended reason=${event.reason ?? "unknown"}`,
           "audio-service",
         );
-        this.#handlePlaybackEnded(event).catch((error) => {
-          this.#emitFailure(error);
-        });
+        this.#enqueuePlaybackCommand(() =>
+          this.#runQueueTransaction(() => this.#handlePlaybackEnded(event)),
+        ).catch((error) => this.#emitFailure(error));
         break;
       case "error":
         nativeLogger.error(
@@ -843,9 +928,9 @@ export class NativeAudioService implements AonsokuAudioApi {
         });
         break;
       case "systemMediaCommand":
-        this.#handleSystemMediaCommand(event.command, event.position).catch(
-          (error) => this.#emitFailure(error),
-        );
+        this.#enqueuePlaybackCommand(() =>
+          this.#handleSystemMediaCommand(event.command, event.position),
+        ).catch((error) => this.#emitFailure(error));
         break;
     }
   }
@@ -1090,7 +1175,7 @@ export class NativeAudioService implements AonsokuAudioApi {
   async #fireSleepTimer(
     reason: NativeAudioEvents["sleepTimerFired"]["reason"],
   ): Promise<void> {
-    await this.pause();
+    await this.#pause();
     this.#cancelSleepTimerInternal();
     this.#playbackState = "paused";
     this.#emit("playbackStateChanged", {
@@ -1156,6 +1241,44 @@ export class NativeAudioService implements AonsokuAudioApi {
     }
   }
 
+  #enqueuePlaybackCommand<T>(command: () => T | Promise<T>): Promise<T> {
+    const result = this.#playbackCommandTail.then(command, command);
+    this.#playbackCommandTail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  async #runQueueTransaction<T>(command: () => T | Promise<T>): Promise<T> {
+    // DesktopQueueEngine selects/removes queue entries before awaiting the
+    // delegate load. If libmpv rejects that load, keep the previously committed
+    // queue/source as truth and overwrite any progress-triggered speculative
+    // persistence before the FIFO proceeds to the next command.
+    const queueState = this.#queueEngine.getFullState({
+      currentTime: this.#currentTime,
+      duration: this.#duration,
+      isPlaying: this.#playbackState === "playing",
+    });
+    const requestId = this.#requestId;
+    const currentSource = this.#currentSource;
+    const currentTime = this.#currentTime;
+    const duration = this.#duration;
+
+    try {
+      return await command();
+    } catch (error) {
+      this.#queueEngine.restoreState(queueState);
+      this.#queueEngine.isRestored = queueState.isRestored;
+      this.#requestId = requestId;
+      this.#currentSource = currentSource;
+      this.#currentTime = currentTime;
+      this.#duration = duration;
+      this.#persistPlaybackState();
+      throw error;
+    }
+  }
+
   private notImplemented<T>(method: keyof AonsokuAudioApi): Promise<T> {
     return Promise.reject(new DesktopNativeAudioNotImplementedError(method));
   }
@@ -1169,7 +1292,7 @@ export class NativeAudioService implements AonsokuAudioApi {
   ): Promise<void> {
     const item = nativeQueueSongToQueueItem(song);
 
-    await this.load({
+    await this.#load({
       requestId: `desktop-native-queue-${++this.#queueRequestSequence}`,
       source: item.source,
       metadata: item.metadata,
@@ -1181,8 +1304,8 @@ export class NativeAudioService implements AonsokuAudioApi {
   async #seekQueueSongToStart(song: NativeQueueSong): Promise<void> {
     this.#stopScrobbleTracking();
     this.#currentTime = 0;
-    await this.seek({ position: 0 });
-    await this.play();
+    await this.#seek({ position: 0 });
+    await this.#play();
     this.#startScrobbleTrackingForSong(song);
   }
 
@@ -1216,11 +1339,7 @@ export class NativeAudioService implements AonsokuAudioApi {
     }
 
     if (this.#hasNativeQueue()) {
-      try {
-        await this.#queueEngine.handleEnded();
-      } catch (error) {
-        this.#emitFailure(error);
-      }
+      await this.#queueEngine.handleEnded();
       return;
     }
 

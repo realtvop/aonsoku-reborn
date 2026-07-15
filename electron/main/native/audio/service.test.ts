@@ -21,7 +21,12 @@ import type {
 } from "./types";
 
 class FakeAudioEngine implements DesktopAudioEngine {
-  readonly load = vi.fn(async (_options: DesktopAudioEngineLoadOptions) => {});
+  loadImplementation?: (
+    options: DesktopAudioEngineLoadOptions,
+  ) => void | Promise<void>;
+  readonly load = vi.fn(async (options: DesktopAudioEngineLoadOptions) => {
+    await this.loadImplementation?.(options);
+  });
   readonly play = vi.fn(async () => {});
   readonly pause = vi.fn(async () => {});
   readonly stop = vi.fn(async () => {});
@@ -1171,6 +1176,8 @@ describe("NativeAudioService", () => {
       message: "mpv playback error",
     });
 
+    await vi.waitFor(() => expect(events).toHaveLength(6));
+
     expect(events).toEqual([
       {
         eventName: "playbackStateChanged",
@@ -1203,18 +1210,18 @@ describe("NativeAudioService", () => {
         },
       },
       {
-        eventName: "ended",
-        event: {
-          requestId: "request-1",
-          reason: "finished",
-        },
-      },
-      {
         eventName: "error",
         event: {
           requestId: "request-1",
           code: "mpv-playback-error",
           message: "mpv playback error",
+        },
+      },
+      {
+        eventName: "ended",
+        event: {
+          requestId: "request-1",
+          reason: "finished",
         },
       },
     ]);
@@ -1403,6 +1410,8 @@ describe("NativeAudioService", () => {
     engine.emit({ type: "systemMediaCommand", command: "like" });
     engine.emit({ type: "systemMediaCommand", command: "shuffle" });
 
+    await vi.waitFor(() => expect(events).toHaveLength(2));
+
     expect(events).toContainEqual({
       eventName: "remoteCommand",
       event: {
@@ -1503,6 +1512,142 @@ describe("NativeAudioService", () => {
         isInUserQueue: false,
       },
     });
+  });
+
+  it("serializes consecutive next commands before mutating queue state", async () => {
+    await service.setContextQueue({
+      songs: [queueSong("1"), queueSong("2"), queueSong("3")],
+      currentIndex: 0,
+    });
+    const pendingLoads: Deferred<void>[] = [];
+    engine.loadImplementation = () => {
+      const pending = deferred<void>();
+      pendingLoads.push(pending);
+      return pending.promise;
+    };
+    engine.load.mockClear();
+
+    const first = service.skipToNext();
+    const second = service.skipToNext();
+
+    await vi.waitFor(() => expect(pendingLoads).toHaveLength(1));
+    expect(engine.load).toHaveBeenCalledTimes(1);
+    pendingLoads[0]?.resolve();
+    await vi.waitFor(() => expect(pendingLoads).toHaveLength(2));
+    expect(engine.load).toHaveBeenCalledTimes(2);
+    pendingLoads[1]?.resolve();
+    await Promise.all([first, second]);
+
+    expect(
+      engine.load.mock.calls.map(([options]) => options.metadata?.title),
+    ).toEqual(["Title 2", "Title 3"]);
+    await expect(service.getFullState()).resolves.toMatchObject({
+      contextQueue: { currentIndex: 2 },
+      currentSongId: "3",
+    });
+  });
+
+  it("orders system media and renderer queue commands through one FIFO", async () => {
+    await service.setContextQueue({
+      songs: [queueSong("1"), queueSong("2"), queueSong("3")],
+      currentIndex: 0,
+    });
+    const pendingLoads: Deferred<void>[] = [];
+    engine.loadImplementation = () => {
+      const pending = deferred<void>();
+      pendingLoads.push(pending);
+      return pending.promise;
+    };
+    engine.load.mockClear();
+
+    const rendererNext = service.skipToNext();
+    engine.emit({ type: "systemMediaCommand", command: "previous" });
+    const rendererNextAgain = service.skipToNext();
+
+    for (let index = 0; index < 3; index += 1) {
+      await vi.waitFor(() => expect(pendingLoads.length).toBe(index + 1));
+      pendingLoads[index]?.resolve();
+    }
+    await Promise.all([rendererNext, rendererNextAgain]);
+
+    expect(
+      engine.load.mock.calls.map(([options]) => options.metadata?.title),
+    ).toEqual(["Title 2", "Title 1", "Title 2"]);
+    await expect(service.getFullState()).resolves.toMatchObject({
+      contextQueue: { currentIndex: 1 },
+      currentSongId: "2",
+    });
+  });
+
+  it("rolls back a failed queue load and continues later commands", async () => {
+    service.destroy();
+    const playbackStateStore = {
+      load: vi.fn(() => null),
+      save: vi.fn(),
+      clear: vi.fn(),
+    } as unknown as DesktopPlaybackStateStore;
+    service = new NativeAudioService({
+      engine,
+      audioCacheDirectory,
+      cacheLoadedStreams: false,
+      playbackStateStore,
+    });
+    const events: Array<{ eventName: string; event: unknown }> = [];
+    service.onEvent((event) => events.push(event));
+    await service.setContextQueue({
+      songs: [queueSong("1"), queueSong("2"), queueSong("3")],
+      currentIndex: 0,
+    });
+    events.length = 0;
+    const pendingLoads: Deferred<void>[] = [];
+    engine.loadImplementation = () => {
+      const pending = deferred<void>();
+      pendingLoads.push(pending);
+      return pending.promise;
+    };
+
+    const failed = service.skipToNext();
+    const subsequent = service.skipToNext();
+    await vi.waitFor(() => expect(pendingLoads).toHaveLength(1));
+    pendingLoads[0]?.reject(new Error("delayed load failed"));
+    await expect(failed).rejects.toThrow("delayed load failed");
+    expect(playbackStateStore.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        contextQueue: expect.objectContaining({ currentIndex: 0 }),
+        currentSongId: "1",
+      }),
+    );
+
+    await vi.waitFor(() => expect(pendingLoads).toHaveLength(2));
+    expect(engine.load.mock.calls.at(-1)?.[0].metadata?.title).toBe("Title 2");
+    pendingLoads[1]?.resolve();
+    await subsequent;
+
+    await expect(service.getFullState()).resolves.toMatchObject({
+      contextQueue: { currentIndex: 1 },
+      currentSongId: "2",
+    });
+    expect(playbackStateStore.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        contextQueue: expect.objectContaining({ currentIndex: 1 }),
+        currentSongId: "2",
+      }),
+    );
+    expect(
+      events.filter((event) => event.eventName === "queueStateChanged"),
+    ).toEqual([
+      {
+        eventName: "queueStateChanged",
+        event: expect.objectContaining({
+          currentIndex: 1,
+          songId: "2",
+          reason: "next",
+        }),
+      },
+    ]);
+    expect(
+      events.filter((event) => event.eventName === "queueContentsChanged"),
+    ).toEqual([]);
   });
 
   it("loads a queued song from the audio cache when cachedFileUri is absent", async () => {
@@ -1911,7 +2056,9 @@ describe("NativeAudioService", () => {
       });
 
       vi.advanceTimersByTime(750);
+      const endedPromise = waitForServiceEvent(service, "ended");
       engine.emit({ type: "ended", reason: "finished" });
+      await endedPromise;
 
       await expect(service.getScrobbleBuffer()).resolves.toEqual({
         entries: [
@@ -2177,6 +2324,22 @@ function waitForServiceEvent<TEvent extends keyof NativeAudioEvents>(
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve(value: T | PromiseLike<T>): void;
+  reject(reason?: unknown): void;
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: Deferred<T>["resolve"];
+  let reject!: Deferred<T>["reject"];
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
 }
 
 function listAonsokuTempDirs(): Promise<string[]> {

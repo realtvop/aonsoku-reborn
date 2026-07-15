@@ -336,7 +336,13 @@ Key files:
   desktop queue engine aligned with the mobile native plugin contract for
   context/user queues, shuffle/repeat, full-state export, scrobble buffering,
   sleep timers, remote playback projection, and a platform-scoped system
-  adapter for HUD/like integration. Special desktop volume behavior: the
+  adapter for HUD/like integration. `NativeAudioService` serializes all
+  playback and queue mutations through one FIFO shared by renderer IPC,
+  system-media commands, playback-ended advancement, sleep timers, and state
+  restore; queue-driven nested loads use private non-enqueuing helpers to avoid
+  deadlocks. A failed queue load restores the command's pre-mutation queue and
+  source snapshot before later commands run, while read-only and download/cache
+  APIs remain outside the playback FIFO. Special desktop volume behavior: the
   Electron bridge keeps the mobile `setSystemVolume` method name for contract
   parity, but it controls only the embedded player/libmpv volume and must not
   change the user's OS output volume. See `docs/native-audio-libmpv.md` for
