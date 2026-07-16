@@ -91,4 +91,45 @@ describe("queue actions", () => {
       0,
     );
   });
+
+  it("adds play-next songs before the existing user queue", () => {
+    const state = makeState();
+    state.songlist.userQueue.songs = [makeSong("queued")];
+    const actions = createQueueActions({
+      set: (fn) => fn(state as never),
+      get: () => state as never,
+      isRemoteActive: () => false,
+      remoteSend: vi.fn(),
+      clearSonglistState: vi.fn(),
+    });
+
+    actions.setNextOnQueue?.([makeSong("next")]);
+
+    expect(state.songlist.userQueue.songs.map((song) => song.id)).toEqual([
+      "next",
+      "queued",
+    ]);
+  });
+
+  it("keeps the current user-queue song first when adding play-next songs", () => {
+    const state = makeState();
+    state.songlist.isInUserQueue = true;
+    state.songlist.userQueue.songs = [makeSong("current"), makeSong("queued")];
+    const actions = createQueueActions({
+      set: (fn) => fn(state as never),
+      get: () => state as never,
+      isRemoteActive: () => false,
+      remoteSend: vi.fn(),
+      clearSonglistState: vi.fn(),
+    });
+
+    actions.setNextOnQueue?.([makeSong("next-1"), makeSong("next-2")]);
+
+    expect(state.songlist.userQueue.songs.map((song) => song.id)).toEqual([
+      "current",
+      "next-1",
+      "next-2",
+      "queued",
+    ]);
+  });
 });

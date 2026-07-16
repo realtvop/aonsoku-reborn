@@ -481,10 +481,14 @@ export function createQueueActions(shared: SharedDeps) {
       }
 
       set((state) => {
-        state.songlist.userQueue.songs = setNextOnUserQueue(
-          state.songlist.userQueue.songs,
-          list,
-        );
+        if (state.songlist.isInUserQueue) {
+          state.songlist.userQueue.songs.splice(1, 0, ...list);
+        } else {
+          state.songlist.userQueue.songs = setNextOnUserQueue(
+            state.songlist.userQueue.songs,
+            list,
+          );
+        }
       });
     },
 

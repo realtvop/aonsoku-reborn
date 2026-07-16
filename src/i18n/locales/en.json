@@ -98,6 +98,12 @@
       "shuffle": "Play {{name}} in shuffle mode",
       "options": "More options for {{name}}"
     },
+    "playbackConfirmation": {
+      "title": "Choose how to play this playlist",
+      "description": "The current queue is not empty. How should {{name}} be played?",
+      "replace": "Replace current queue",
+      "playNext": "Play after this song"
+    },
     "noSongList": "This playlist does not have any songs!",
     "form": {
       "labels": {
