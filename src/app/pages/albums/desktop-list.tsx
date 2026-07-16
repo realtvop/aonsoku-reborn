@@ -8,6 +8,7 @@ import { GridViewWrapper } from "@/app/components/grid-view-wrapper";
 import { InfiniteScroll } from "@/app/components/infinite-scroll";
 import ListWrapper from "@/app/components/list-wrapper";
 import { ROUTES } from "@/routes/routesList";
+import { getPreferenceValue, setPreferenceValue } from "@/store/native-storage";
 import {
   AlbumsFilters,
   AlbumsSearchParams,
@@ -35,13 +36,13 @@ export default function DesktopAlbumsList() {
     const hasGenreFilter = searchParams.has(AlbumsSearchParams.Genre);
     const hasYearFilter = searchParams.has(AlbumsSearchParams.YearFilter);
 
-    const savedArtistName = localStorage.getItem(
+    const savedArtistName = getPreferenceValue(
       PersistedAlbumListKeys.ArtistNameFilter,
     );
-    const savedArtistId = localStorage.getItem(
+    const savedArtistId = getPreferenceValue(
       PersistedAlbumListKeys.ArtistIdFilter,
     );
-    const savedFilter = localStorage.getItem(PersistedAlbumListKeys.MainFilter);
+    const savedFilter = getPreferenceValue(PersistedAlbumListKeys.MainFilter);
     const isDiscography = savedFilter === AlbumsFilters.ByDiscography;
     const hasPersistedValues = savedArtistName && savedArtistId;
     const hasArtistFilter = hasArtistNameFilter && hasArtistIdFilter;
@@ -61,18 +62,16 @@ export default function DesktopAlbumsList() {
     if (hasArtistFilter) {
       const artistName = searchParams.get(AlbumsSearchParams.ArtistName) || "";
       const artistId = searchParams.get(AlbumsSearchParams.ArtistId) || "";
-      localStorage.setItem(
+      setPreferenceValue(
         PersistedAlbumListKeys.MainFilter,
         AlbumsFilters.ByDiscography,
       );
-      localStorage.setItem(PersistedAlbumListKeys.ArtistNameFilter, artistName);
-      localStorage.setItem(PersistedAlbumListKeys.ArtistIdFilter, artistId);
+      setPreferenceValue(PersistedAlbumListKeys.ArtistNameFilter, artistName);
+      setPreferenceValue(PersistedAlbumListKeys.ArtistIdFilter, artistId);
     }
 
-    const persistedYear = localStorage.getItem(
-      PersistedAlbumListKeys.YearFilter,
-    );
-    const persistedMainFilter = localStorage.getItem(
+    const persistedYear = getPreferenceValue(PersistedAlbumListKeys.YearFilter);
+    const persistedMainFilter = getPreferenceValue(
       PersistedAlbumListKeys.MainFilter,
     );
     const isByYearFilter = persistedMainFilter === AlbumsFilters.ByYear;
@@ -84,10 +83,10 @@ export default function DesktopAlbumsList() {
 
     if (hasYearFilter) {
       const yearFilter = searchParams.get(AlbumsSearchParams.YearFilter) || "";
-      localStorage.setItem(PersistedAlbumListKeys.YearFilter, yearFilter);
+      setPreferenceValue(PersistedAlbumListKeys.YearFilter, yearFilter);
     }
 
-    const savedGenre = localStorage.getItem(PersistedAlbumListKeys.GenreFilter);
+    const savedGenre = getPreferenceValue(PersistedAlbumListKeys.GenreFilter);
     const isByGenreFilter = persistedMainFilter === AlbumsFilters.ByGenre;
 
     if (savedGenre && !hasMainFilter && !hasGenreFilter && isByGenreFilter) {
@@ -97,7 +96,7 @@ export default function DesktopAlbumsList() {
 
     if (hasGenreFilter) {
       const genre = searchParams.get(AlbumsSearchParams.Genre) || "";
-      localStorage.setItem(PersistedAlbumListKeys.GenreFilter, genre);
+      setPreferenceValue(PersistedAlbumListKeys.GenreFilter, genre);
     }
 
     if (savedFilter && !hasMainFilter) {

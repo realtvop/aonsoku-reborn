@@ -62,6 +62,10 @@ export default defineConfig(({ mode }) => {
     },
     resolve: {
       alias: {
+        "@aonsoku/audio-contract": path.resolve(
+          __dirname,
+          "./packages/audio-contract/src",
+        ),
         "@": path.resolve(__dirname, "./src"),
         cy: path.resolve(__dirname, "./cypress"),
       },

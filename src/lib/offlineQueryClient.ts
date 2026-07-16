@@ -3,6 +3,7 @@ import {
   useInfiniteQuery,
   useQuery,
 } from "@tanstack/react-query";
+import { AonsokuNativeData, isNativeDataAvailable } from "@/native/data/facade";
 import { useIsOnline } from "@/store/cache.store";
 import { libraryDb } from "@/store/library-db";
 import type { Albums, SingleAlbum } from "@/types/responses/album";
@@ -24,11 +25,28 @@ import { matchesAllTokens, tokenizeQuery } from "@/utils/search";
  * is responsible for keeping Dexie fresh.
  */
 export const offlineData = {
-  genres: () => libraryDb.genres.toArray(),
-  artists: () => libraryDb.artists.toArray(),
-  albums: () => libraryDb.albums.toArray(),
-  songs: () => libraryDb.songs.toArray(),
-  playlists: () => libraryDb.playlists.toArray(),
+  genres: async () =>
+    isNativeDataAvailable()
+      ? (await AonsokuNativeData.getGenres()).items
+      : libraryDb.genres.toArray(),
+  artists: async () =>
+    isNativeDataAvailable()
+      ? (await AonsokuNativeData.getArtists({ limit: 100_000, offset: 0 }))
+          .items
+      : libraryDb.artists.toArray(),
+  albums: async () =>
+    isNativeDataAvailable()
+      ? (await AonsokuNativeData.getAlbums({ limit: 100_000, offset: 0 })).items
+      : libraryDb.albums.toArray(),
+  songs: async () =>
+    isNativeDataAvailable()
+      ? (await AonsokuNativeData.getSongs({ limit: 100_000, offset: 0 })).items
+      : libraryDb.songs.toArray(),
+  playlists: async () =>
+    isNativeDataAvailable()
+      ? (await AonsokuNativeData.getPlaylists({ limit: 100_000, offset: 0 }))
+          .items
+      : libraryDb.playlists.toArray(),
 } as const;
 
 interface OfflineSearchOptions {

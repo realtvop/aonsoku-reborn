@@ -1,12 +1,14 @@
 import type { Draft } from "immer";
 import { seekPlaybackTarget } from "@/player/playback/backend-registry";
 import { getNativeQueueController } from "@/player/queue-controller";
+import { usePlaybackReplacementStore } from "@/store/playback-replacement.store";
 import { useSleepTimerStore } from "@/store/sleep-timer.store";
 import { LanControlMessageType } from "@/types/lanControl";
 import type {
   IPlayerActions,
   IPlayerContext,
   ISongList,
+  QueueReplacementOptions,
   QueueSourceId,
   QueueTier,
 } from "@/types/playerContext";
@@ -139,6 +141,7 @@ export function createQueueActions(shared: SharedDeps) {
       shuffle = false,
       sourceId?: QueueSourceId | { albumId: string } | { playlistId: string },
       sourceName?: string,
+      options?: QueueReplacementOptions,
     ) => {
       if (!songlist || songlist.length === 0) return;
 
@@ -166,6 +169,21 @@ export function createQueueActions(shared: SharedDeps) {
         );
         set((state) => {
           state.playerState.isPlaying = true;
+        });
+        return;
+      }
+
+      if (
+        get().songlist.contextQueue.songs.length > 0 &&
+        !options?.bypassQueueConfirmation
+      ) {
+        usePlaybackReplacementStore.getState().show({
+          kind: "songList",
+          songs: [...songlist],
+          index,
+          shuffle,
+          sourceId,
+          sourceName,
         });
         return;
       }
@@ -416,8 +434,29 @@ export function createQueueActions(shared: SharedDeps) {
       });
     },
 
-    playSong: (song: ISong, sourceName?: string) => {
+    playSong: (
+      song: ISong,
+      sourceName?: string,
+      options?: QueueReplacementOptions,
+    ) => {
+      const { isPlaying } = get().playerState;
+      const songIsAlreadyPlaying = get().actions.checkActiveSong(song.id);
+      const onlyResumesCurrentSong = songIsAlreadyPlaying && !isPlaying;
+
       if (remoteSend(LanControlMessageType.PLAY_SONG, { songId: song.id })) {
+        return;
+      }
+
+      if (
+        get().songlist.contextQueue.songs.length > 0 &&
+        !onlyResumesCurrentSong &&
+        !options?.bypassQueueConfirmation
+      ) {
+        usePlaybackReplacementStore.getState().show({
+          kind: "song",
+          song,
+          sourceName,
+        });
         return;
       }
 
@@ -427,8 +466,6 @@ export function createQueueActions(shared: SharedDeps) {
         return;
       }
 
-      const { isPlaying } = get().playerState;
-      const songIsAlreadyPlaying = get().actions.checkActiveSong(song.id);
       if (songIsAlreadyPlaying && !isPlaying) {
         set((state) => {
           state.playerState.isPlaying = true;
@@ -481,10 +518,14 @@ export function createQueueActions(shared: SharedDeps) {
       }
 
       set((state) => {
-        state.songlist.userQueue.songs = setNextOnUserQueue(
-          state.songlist.userQueue.songs,
-          list,
-        );
+        if (state.songlist.isInUserQueue) {
+          state.songlist.userQueue.songs.splice(1, 0, ...list);
+        } else {
+          state.songlist.userQueue.songs = setNextOnUserQueue(
+            state.songlist.userQueue.songs,
+            list,
+          );
+        }
       });
     },
 

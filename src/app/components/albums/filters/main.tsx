@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/app/components/ui/dropdown-menu";
 import { AlbumListType } from "@/types/responses/album";
+import { setPreferenceValue } from "@/store/native-storage";
 import {
   AlbumsFilters,
   AlbumsSearchParams,
@@ -35,7 +36,7 @@ export function AlbumsMainFilter() {
   )[0].label;
 
   function handleChangeFilter(filter: AlbumListType) {
-    localStorage.setItem(PersistedAlbumListKeys.MainFilter, filter);
+    setPreferenceValue(PersistedAlbumListKeys.MainFilter, filter);
 
     setSearchParams((state) => {
       const next = new URLSearchParams(state);

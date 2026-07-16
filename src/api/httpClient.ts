@@ -119,7 +119,7 @@ export async function httpClient<T>(
 }
 
 export function getAvatarUrl(username: string, size?: string): string {
-  if (getRuntime() === "capacitor-ios") {
+  if (getRuntime() === "capacitor-ios" || getRuntime() === "electron") {
     const params = new URLSearchParams({ username });
     if (size) params.set("size", size);
     return `aonsoku-media://getAvatar?${params.toString()}`;
@@ -131,11 +131,10 @@ export function getCoverArtUrl(
   id?: string,
   type: CoverArt = "album",
   size = "300",
-): string {
-  if (getRuntime() === "capacitor-ios") {
+): string | undefined {
+  if (getRuntime() === "capacitor-ios" || getRuntime() === "electron") {
     if (!id) {
-      type = type === "artist" ? "artist" : "album";
-      return `/default_${type}_art.png`;
+      return undefined;
     }
     return `aonsoku-media://getCoverArt?id=${id}&size=${size}`;
   }
@@ -148,7 +147,11 @@ export function getSongStreamUrl(
   format?: string,
 ) {
   const runtime = getRuntime();
-  if (runtime === "capacitor-ios" || runtime === "capacitor-android") {
+  if (
+    runtime === "capacitor-ios" ||
+    runtime === "capacitor-android" ||
+    runtime === "electron"
+  ) {
     const params = new URLSearchParams({ id });
     if (maxBitRate) params.set("maxBitRate", maxBitRate);
     if (format) params.set("format", format);

@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@aonsoku/audio-contract':
+        specifier: workspace:*
+        version: link:packages/audio-contract
       '@aonsoku/capacitor-native':
         specifier: workspace:*
         version: link:capacitor-plugins/capacitor-native
@@ -284,6 +287,9 @@ importers:
       tailwindcss-animate:
         specifier: 1.0.7
         version: 1.0.7(tailwindcss@3.4.19)
+      undici:
+        specifier: ^6.27.0
+        version: 6.27.0
       update-electron-app:
         specifier: 3.1.2
         version: 3.1.2
@@ -351,6 +357,9 @@ importers:
       '@electron/fuses':
         specifier: 1.8.0
         version: 1.8.0
+      '@reforged/maker-appimage':
+        specifier: 5.2.0
+        version: 5.2.0
       '@types/crypto-js':
         specifier: 4.2.2
         version: 4.2.2
@@ -432,9 +441,14 @@ importers:
 
   capacitor-plugins/capacitor-native:
     dependencies:
+      '@aonsoku/audio-contract':
+        specifier: workspace:*
+        version: link:../../packages/audio-contract
       '@capacitor/core':
         specifier: '>=8.0.0'
         version: 8.3.4
+
+  packages/audio-contract: {}
 
 packages:
 
@@ -1957,6 +1971,13 @@ packages:
   '@radix-ui/rect@1.1.1':
     resolution: {integrity: sha512-HPwpGIzkl28mWyZqG52jiqDJ12waP11Pa1lGoiyUkIEuMLBP0oeK/C89esbXrxsky5we7dfd8U58nm0SgAWpVw==}
 
+  '@reforged/maker-appimage@5.2.0':
+    resolution: {integrity: sha512-5u7spsDMyMfwqAnTRsSipVgTIy+DW+wlfhceaRghCuTvyY8Sti8/tFhVKj4vb+dYTqPvS7m30Gl0InGv22J8RQ==}
+    engines: {node: '>=19.0.0 || ^18.11.0'}
+
+  '@reforged/maker-types@2.1.0':
+    resolution: {integrity: sha512-gNMAFO6mxqGwuUov0CzXGTHUMfAawlM6v/uYrqVnKeMwmceaLBt3HtfPcuNapDSH4br6D4EZ14WuWbgefmDfOQ==}
+
   '@remix-run/router@1.23.2':
     resolution: {integrity: sha512-Ic6m2U/rMjTkhERIa/0ZtXJP17QUi2CbWE7cqx4J58M8aA3QTfW+2UlQ4psvTX9IO1RfNVhK3pcpdjej7L+t2w==}
     engines: {node: '>=14.0.0'}
@@ -2108,6 +2129,9 @@ packages:
   '@sindresorhus/is@4.6.0':
     resolution: {integrity: sha512-t09vSN3MdfsyCHoFcTRCH/iUtG7OJ0CsjzB8cjAmKc/va/kIgeDI/TxsigdncE/4be734m0cvIYwNaV4i2XqAw==}
     engines: {node: '>=10'}
+
+  '@spacingbat3/lss@1.2.0':
+    resolution: {integrity: sha512-aywhxHNb6l7COooF3m439eT/6QN8E/RSl5IVboSKthMHcp0GlZYMSoS7546rqDLmFRxTD8f1tu/NIS9vtDwYAg==}
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
@@ -6372,6 +6396,10 @@ packages:
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
+  undici@6.27.0:
+    resolution: {integrity: sha512-YmfV3YnEDzXRC5lZ2jWtWWHKGUm1zIt8AhesR1tens+HTNv+YZlN/dp6G727LOvMJ8xjP9Be7Y2Sdr96LDm+pg==}
+    engines: {node: '>=18.17'}
+
   unified@11.0.5:
     resolution: {integrity: sha512-xKvGhPWw3k84Qjh8bI3ZeJjqnyadK+GEFtazSfZv/rKeTkTjOJho6mFqh2SM96iIcZokxiOpg78GazTSg8+KHA==}
 
@@ -8895,6 +8923,18 @@ snapshots:
 
   '@radix-ui/rect@1.1.1': {}
 
+  '@reforged/maker-appimage@5.2.0':
+    dependencies:
+      '@electron-forge/maker-base': 7.11.1
+      '@reforged/maker-types': 2.1.0
+      '@spacingbat3/lss': 1.2.0
+      semver: 7.7.4
+    transitivePeerDependencies:
+      - bluebird
+      - supports-color
+
+  '@reforged/maker-types@2.1.0': {}
+
   '@remix-run/router@1.23.2': {}
 
   '@rolldown/pluginutils@1.0.0-beta.27': {}
@@ -8980,6 +9020,8 @@ snapshots:
       selderee: 0.11.0
 
   '@sindresorhus/is@4.6.0': {}
+
+  '@spacingbat3/lss@1.2.0': {}
 
   '@standard-schema/spec@1.1.0': {}
 
@@ -13851,6 +13893,8 @@ snapshots:
   uint8array-extras@1.5.0: {}
 
   undici-types@6.21.0: {}
+
+  undici@6.27.0: {}
 
   unified@11.0.5:
     dependencies:

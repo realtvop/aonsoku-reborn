@@ -373,6 +373,12 @@
     "clear": "清空队列",
     "close": "关闭队列",
     "open": "打开队列",
+    "replacementConfirmation": {
+      "description": "当前播放队列不为空。",
+      "playNext": "在本曲后播放",
+      "replace": "替换当前播放队列",
+      "title": "选择播放方式"
+    },
     "title": "队列"
   },
   "radios": {
@@ -465,6 +471,10 @@
         "fullscreen": {
           "info": "如果启用，在访问大播放器时，app 将自动进入全屏模式。",
           "label": "开启自动全屏"
+        },
+        "usePointerCursors": {
+          "info": "启用后，悬停在可交互元素上时会显示手型指针；禁用后减少手型指针，更具原生应用质感。",
+          "label": "使用手型指针"
         },
         "group": "通用"
       },

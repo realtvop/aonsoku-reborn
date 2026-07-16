@@ -2,11 +2,11 @@ import { OptionsButtons } from "@/app/components/options/buttons";
 import { DropdownMenuSeparator } from "@/app/components/ui/dropdown-menu";
 import { useOptions } from "@/app/hooks/use-options";
 import { cacheManager } from "@/service/cache";
+import { subsonic } from "@/service/subsonic";
 import {
   useIsPinnedHomeItem,
   usePinnedHomeActions,
 } from "@/store/pinned-home.store";
-import { subsonic } from "@/service/subsonic";
 import { usePlayerStore } from "@/store/player.store";
 import { usePlaylists, useRemovePlaylist } from "@/store/playlists.store";
 import { Playlist, PlaylistWithEntries } from "@/types/responses/playlist";
@@ -32,7 +32,7 @@ export function PlaylistOptions({
   disableDelete = false,
 }: PlaylistOptionsProps) {
   const { setPlaylistDialogState, setData } = usePlaylists();
-  const { play, playNext, playLast } = useOptions();
+  const { playPlaylist, playNext, playLast } = useOptions();
   const { toggle } = usePinnedHomeActions();
   const { setPlaylistId, setConfirmDialogState } = useRemovePlaylist();
   const isUserQueueEmpty = usePlayerStore(
@@ -61,13 +61,7 @@ export function PlaylistOptions({
   }
 
   async function handlePlay() {
-    if ("entry" in playlist) {
-      play(playlist.entry, { playlistId: playlist.id }, playlist.name);
-    } else {
-      await getSongsToQueue((songs, sourceId) =>
-        play(songs, sourceId, playlist.name),
-      );
-    }
+    await playPlaylist(playlist);
   }
 
   async function handlePlayNext() {

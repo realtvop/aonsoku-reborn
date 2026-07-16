@@ -1,6 +1,6 @@
 import randomCSSHexColor from "@chriscodesthings/random-css-hex-color";
 import clsx from "clsx";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, type SyntheticEvent, useState } from "react";
 import { getCoverArtUrl } from "@/api/httpClient";
 import {
   CachedImage,
@@ -132,13 +132,9 @@ export default function ImageHeader({
   );
   const lightboxSrc = !customIcon ? cachedLightboxUrl : "";
 
-  function getImage() {
-    return document.getElementById("cover-art-image") as HTMLImageElement;
-  }
-
-  async function handleLoadImage() {
-    const img = getImage();
-    if (!img) return;
+  async function handleLoadImage(event: SyntheticEvent<HTMLImageElement>) {
+    const img = event.currentTarget;
+    setLoaded(true);
 
     let color = randomCSSHexColor(true);
 
@@ -150,16 +146,14 @@ export default function ImageHeader({
       );
     }
 
+    if (!img.isConnected) return;
+
     setBgColor(color);
     onColorExtracted?.(color);
-    setLoaded(true);
   }
 
-  function handleError() {
-    const img = getImage();
-    if (!img) return;
-
-    img.crossOrigin = null;
+  function handleError(event: SyntheticEvent<HTMLImageElement>) {
+    event.currentTarget.crossOrigin = null;
 
     setLoaded(true);
   }
@@ -180,7 +174,10 @@ export default function ImageHeader({
     <div className="flex flex-col relative w-full" key={`header-${coverArtId}`}>
       <div className="relative w-full h-auto md:h-[calc(3rem+200px)] 2xl:h-[calc(3rem+250px)]">
         {!loaded && (
-          <div className="absolute inset-0 z-20">
+          <div
+            className="absolute inset-0 z-20"
+            data-testid="image-header-fallback"
+          >
             <AlbumHeaderFallback
               showArtistAboveCover={showArtistAboveCover}
               showMobileSubtitle={showMobileSubtitle}
@@ -228,7 +225,6 @@ export default function ImageHeader({
                   key={coverArtId}
                   effect="opacity"
                   crossOrigin="anonymous"
-                  id="cover-art-image"
                   coverArtId={coverArtId}
                   coverArtType={coverArtType}
                   coverArtSize={coverArtSize}
@@ -238,6 +234,7 @@ export default function ImageHeader({
                   height="100%"
                   onLoad={handleLoadImage}
                   onError={handleError}
+                  onFallback={() => setLoaded(true)}
                   onClick={() => setOpen(true)}
                 />
               )}

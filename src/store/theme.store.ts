@@ -8,6 +8,7 @@ import {
   ThemeMode,
 } from "@/types/themeContext";
 import { createNativeStorage } from "@/store/native-storage";
+import { getRuntime } from "@/utils/capabilities";
 
 const VALID_THEMES = new Set<string>(Object.values(Theme));
 const VALID_MODES = new Set<string>(Object.values(ThemeMode));
@@ -18,6 +19,7 @@ interface ThemePersistedState {
   lightTheme: Theme;
   darkTheme: Theme;
   materialYouEnabled: boolean;
+  usePointerCursors: boolean;
 }
 
 export const useThemeStore = createWithEqualityFn<IThemeContext>()(
@@ -30,6 +32,7 @@ export const useThemeStore = createWithEqualityFn<IThemeContext>()(
           lightTheme: Theme.Light,
           darkTheme: Theme.Dark,
           materialYouEnabled: false,
+          usePointerCursors: getRuntime() !== "electron",
           setTheme: (theme: Theme) => {
             set((state) => {
               state.theme = theme;
@@ -55,6 +58,11 @@ export const useThemeStore = createWithEqualityFn<IThemeContext>()(
               state.materialYouEnabled = enabled;
             });
           },
+          setUsePointerCursors: (enabled: boolean) => {
+            set((state) => {
+              state.usePointerCursors = enabled;
+            });
+          },
         })),
 
         {
@@ -63,7 +71,7 @@ export const useThemeStore = createWithEqualityFn<IThemeContext>()(
       ),
       {
         name: "theme_store",
-        version: 2,
+        version: 3,
         storage: createNativeStorage<IThemeContext>("theme_store"),
         merge: (persistedState, currentState) => {
           const merged = {
@@ -90,6 +98,9 @@ export const useThemeStore = createWithEqualityFn<IThemeContext>()(
           }
           if (typeof merged.materialYouEnabled !== "boolean") {
             merged.materialYouEnabled = false;
+          }
+          if (typeof merged.usePointerCursors !== "boolean") {
+            merged.usePointerCursors = getRuntime() !== "electron";
           }
           return merged;
         },

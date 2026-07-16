@@ -3,12 +3,16 @@ import debounce from "lodash/debounce";
 import merge from "lodash/merge";
 import omit from "lodash/omit";
 import { shallow } from "zustand/shallow";
-import type { IPlayerContext, ISongList } from "@/types/playerContext";
-import { isNativePreferencesAvailable } from "@/native/preferences/facade";
+import {
+  AonsokuNativePreferences,
+  isNativePreferencesAvailable,
+} from "@/native/preferences/facade";
+import { shouldUseNativePlaybackBackend } from "@/player/playback/backend-factory";
 import {
   createNativeStorage,
   getNativePrefsPlugin,
 } from "@/store/native-storage";
+import type { IPlayerContext, ISongList } from "@/types/playerContext";
 import { getRuntime } from "@/utils/capabilities";
 import { logger } from "@/utils/logger";
 import { decodeStoredPassword, genEncodedPassword } from "@/utils/salt";
@@ -84,10 +88,16 @@ export function createPlayerPersistOptions(getStore: () => PlayerStoreApi) {
           return;
         }
 
-        if (
-          getRuntime() === "capacitor-ios" ||
-          getRuntime() === "capacitor-android"
-        ) {
+        // When the native playback backend owns playback (Capacitor iOS/Android,
+        // or Electron with the desktop native-audio bridge), the native layer
+        // is the single source of truth for the restored queue and progress.
+        // Rehydrating the renderer-side songlist from IDB here would make the
+        // cold-start restore check in syncFromNative() see a non-empty songlist,
+        // skip setting nativeDrivenTransition, and cause the AudioSrcChange
+        // effect to re-issue load() without a startTime — clobbering the
+        // position the main process already seeked to. So we leave the
+        // renderer songlist empty and let syncFromNative() pull state from native.
+        if (shouldUseNativePlaybackBackend()) {
           songlistHydrated.value = true;
           return;
         }
@@ -108,9 +118,6 @@ async function loadSonglistFromStorage(getStore: () => PlayerStoreApi) {
   let value: ISongList | undefined;
 
   if (isNativePreferencesAvailable()) {
-    const { AonsokuNativePreferences } = await import(
-      "@aonsoku/capacitor-native/preferences"
-    );
     const result = await AonsokuNativePreferences.getQueueState();
     if (result.state) {
       try {

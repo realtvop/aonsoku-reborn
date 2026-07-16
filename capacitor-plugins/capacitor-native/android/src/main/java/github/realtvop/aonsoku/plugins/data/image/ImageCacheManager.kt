@@ -14,7 +14,7 @@ class ImageCacheManager(private val cacheDir: File, private val cacheMetaDao: Ca
 
     suspend fun downloadCoverImage(coverArtId: String, size: String, credentials: ServerCredentials): File {
         val dir = ImageCacheUtils.cacheDirectory(cacheDir, true); val cid = ImageCacheUtils.cacheId(coverArtId)
-        dir.listFiles { f -> f.name.startsWith("$cid.") }?.forEach { it.delete() }
+        ImageCacheUtils.deleteCoverImageFiles(dir, cid)
         val p = SubsonicAuthBuilder.buildQueryParams(credentials.username, credentials.password, credentials.authType, credentials.protocolVersion).toMutableMap().apply { put("id", coverArtId); put("size", size) }
         val url = "${credentials.serverUrl.trimEnd('/')}/rest/getCoverArt?${p.entries.joinToString("&") { (k, v) -> "${java.net.URLEncoder.encode(k, "UTF-8")}=${java.net.URLEncoder.encode(v, "UTF-8")}" }}"
         val resp = client.newCall(Request.Builder().url(url).get().build()).execute()
@@ -29,7 +29,7 @@ class ImageCacheManager(private val cacheDir: File, private val cacheMetaDao: Ca
 
     suspend fun downloadAvatar(username: String, size: String, credentials: ServerCredentials): File {
         val dir = ImageCacheUtils.cacheDirectory(cacheDir, true); val cid = ImageCacheUtils.cacheId(username)
-        dir.listFiles { f -> f.name.startsWith("$cid.") }?.forEach { it.delete() }
+        ImageCacheUtils.deleteCoverImageFiles(dir, cid)
         val p = SubsonicAuthBuilder.buildQueryParams(credentials.username, credentials.password, credentials.authType, credentials.protocolVersion).toMutableMap().apply { put("username", username); put("size", size) }
         val url = "${credentials.serverUrl.trimEnd('/')}/rest/getAvatar?${p.entries.joinToString("&") { (k, v) -> "${java.net.URLEncoder.encode(k, "UTF-8")}=${java.net.URLEncoder.encode(v, "UTF-8")}" }}"
         val resp = client.newCall(Request.Builder().url(url).get().build()).execute()
@@ -44,7 +44,7 @@ class ImageCacheManager(private val cacheDir: File, private val cacheMetaDao: Ca
 
     suspend fun storeCoverImage(coverArtId: String, data: ByteArray, contentType: String, coverSize: String): File {
         val dir = ImageCacheUtils.cacheDirectory(cacheDir, true); val cid = ImageCacheUtils.cacheId(coverArtId); val ext = ImageCacheUtils.fileExtension(contentType)
-        val file = File(dir, "$cid.$ext"); dir.listFiles { f -> f.name.startsWith("$cid.") }?.forEach { it.delete() }; file.writeBytes(data)
+        val file = File(dir, "$cid.$ext"); ImageCacheUtils.deleteCoverImageFiles(dir, cid); file.writeBytes(data)
         val now = System.currentTimeMillis()
         cacheMetaDao.upsert(CacheMetaEntity("cover:$coverArtId", coverArtId, "cover", "explicit", coverSize = coverSize, sizeBytes = data.size.toLong(), cachedAt = now, lastAccessedAt = now))
         return file
@@ -52,7 +52,7 @@ class ImageCacheManager(private val cacheDir: File, private val cacheMetaDao: Ca
 
     suspend fun resolveCoverImage(coverArtId: String): File? {
         val dir = ImageCacheUtils.cacheDirectory(cacheDir, false); if (!dir.exists()) return null
-        val cid = ImageCacheUtils.cacheId(coverArtId); val f = dir.listFiles { f -> f.name.startsWith("$cid.") }?.firstOrNull() ?: return null
+        val cid = ImageCacheUtils.cacheId(coverArtId); val f = ImageCacheUtils.coverImageFile(dir, cid) ?: return null
         if (!f.exists()) return null
         try { cacheMetaDao.getByKey("cover:$coverArtId")?.let { cacheMetaDao.upsert(it.copy(lastAccessedAt = System.currentTimeMillis())) } } catch (_: Exception) {}
         return f
@@ -60,7 +60,7 @@ class ImageCacheManager(private val cacheDir: File, private val cacheMetaDao: Ca
 
     suspend fun deleteCoverImage(coverArtId: String): Boolean {
         val dir = ImageCacheUtils.cacheDirectory(cacheDir, false); if (!dir.exists()) return false; val cid = ImageCacheUtils.cacheId(coverArtId)
-        var d = false; dir.listFiles { f -> f.name.startsWith("$cid.") }?.forEach { it.delete(); d = true }
+        val d = ImageCacheUtils.deleteCoverImageFiles(dir, cid)
         try { cacheMetaDao.delete("cover:$coverArtId") } catch (_: Exception) {}; return d
     }
 
@@ -72,7 +72,7 @@ class ImageCacheManager(private val cacheDir: File, private val cacheMetaDao: Ca
 
     suspend fun getCoverImageSize(coverArtId: String): Pair<Long, String?>? {
         val dir = ImageCacheUtils.cacheDirectory(cacheDir, false); val cid = ImageCacheUtils.cacheId(coverArtId)
-        val f = dir.listFiles { f -> f.name.startsWith("$cid.") }?.firstOrNull() ?: return null; if (!f.exists()) return null
+        val f = ImageCacheUtils.coverImageFile(dir, cid) ?: return null; if (!f.exists()) return null
         val r = try { cacheMetaDao.getByKey("cover:$coverArtId") } catch (_: Exception) { null }
         return Pair(f.length(), r?.coverSize)
     }

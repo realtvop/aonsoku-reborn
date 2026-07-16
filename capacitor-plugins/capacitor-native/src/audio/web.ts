@@ -7,16 +7,17 @@ import type {
   NativeAudioMetadata,
   NativeAudioQueueOptions,
   NativeAudioRepeatModeOptions,
-  NativeRemotePlaybackStateOptions,
   NativeAudioSeekOptions,
   NativeAudioShuffleOptions,
   NativeAudioSource,
   NativeAudioStoreFileOptions,
-  NativeSetSystemVolumeOptions,
+  NativeMarkAsShuffledOptions,
   NativePlayAtIndexOptions,
-  NativeReorderContextQueueOptions,
+  NativeRemotePlaybackStateOptions,
   NativeRemoveFromUserQueueOptions,
+  NativeReorderContextQueueOptions,
   NativeSetContextQueueOptions,
+  NativeSetSystemVolumeOptions,
   NativeUpdateContextQueueOptions,
 } from "./definitions";
 import { NATIVE_AUDIO_PLUGIN_NAME } from "./definitions";
@@ -57,6 +58,10 @@ export class AonsokuNativeAudioWeb
 
   setShuffle(_options: NativeAudioShuffleOptions): Promise<void> {
     return Promise.reject(createNativeAudioUnavailableError("setShuffle"));
+  }
+
+  markAsShuffled(_options: NativeMarkAsShuffledOptions): Promise<void> {
+    return Promise.reject(createNativeAudioUnavailableError("markAsShuffled"));
   }
 
   setQueue(_options: NativeAudioQueueOptions): Promise<void> {
@@ -159,6 +164,10 @@ export class AonsokuNativeAudioWeb
     return Promise.reject(createNativeAudioUnavailableError("playAtIndex"));
   }
 
+  resolveSongs() {
+    return Promise.reject(createNativeAudioUnavailableError("resolveSongs"));
+  }
+
   getFullState() {
     return Promise.reject(createNativeAudioUnavailableError("getFullState"));
   }
@@ -195,5 +204,25 @@ export class AonsokuNativeAudioWeb
 
   setVolumeHUDEnabled(_options: { enabled: boolean }) {
     return Promise.resolve();
+  }
+
+  setLikeActive(_options: { active: boolean }) {
+    return Promise.resolve();
+  }
+
+  setSleepTimer() {
+    return Promise.reject(createNativeAudioUnavailableError("setSleepTimer"));
+  }
+
+  cancelSleepTimer() {
+    return Promise.reject(
+      createNativeAudioUnavailableError("cancelSleepTimer"),
+    );
+  }
+
+  getSleepTimerRemaining() {
+    return Promise.reject(
+      createNativeAudioUnavailableError("getSleepTimerRemaining"),
+    );
   }
 }

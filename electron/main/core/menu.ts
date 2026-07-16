@@ -1,6 +1,7 @@
 import { platform } from "@electron-toolkit/utils";
 import { app, Menu, shell } from "electron";
 import { repository } from "../../../package.json";
+import { openNativeDebugWindow } from "../native/debug/native-debug-window";
 import { aboutDialog } from "./about";
 
 export function createAppMenu() {
@@ -52,6 +53,13 @@ export function createAppMenu() {
         { role: "reload" },
         { role: "forceReload" },
         { role: "toggleDevTools" },
+        { type: "separator" },
+        {
+          label: "Native Player Debug…",
+          click: () => {
+            openNativeDebugWindow();
+          },
+        },
         { type: "separator" },
         { role: "resetZoom" },
         { role: "zoomIn" },

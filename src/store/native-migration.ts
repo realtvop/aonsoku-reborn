@@ -26,6 +26,12 @@ export async function migrateToNativeStorageIfNeeded(
     "lang_store",
     "ui_store",
     "lan_control_store",
+    "albums-list-filter",
+    "albums-list-year",
+    "albums-list-genre",
+    "albums-list-artist-id",
+    "albums-list-artist-name",
+    "i18nextLng",
   ];
 
   const migrationPayload: Record<string, string> = {};
@@ -34,6 +40,15 @@ export async function migrateToNativeStorageIfNeeded(
     const raw = localStorage.getItem(name);
     if (raw) {
       migrationPayload[name] = raw;
+    }
+  }
+
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (!key || !key.startsWith("grid_")) continue;
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      migrationPayload[key] = raw;
     }
   }
 
@@ -60,6 +75,11 @@ export async function migrateToNativeStorageIfNeeded(
 
   for (const name of storeNames) {
     localStorage.removeItem(name);
+  }
+  for (const key of Object.keys(migrationPayload)) {
+    if (key.startsWith("grid_")) {
+      localStorage.removeItem(key);
+    }
   }
 
   localStorage.setItem(MIGRATED_KEY, "1");

@@ -1,11 +1,16 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMatches } from "react-router-dom";
+import { resolvePlaylistSongs } from "@/app/components/playlist/playback";
 import { subsonic } from "@/service/subsonic";
 import { usePlayerActions } from "@/store/player.store";
 import { usePlaylistRemoveSong } from "@/store/playlists.store";
 import { useSongInfo } from "@/store/ui.store";
 import type { QueueSourceId } from "@/types/playerContext";
-import { UpdateParams } from "@/types/responses/playlist";
+import {
+  Playlist,
+  PlaylistWithEntries,
+  UpdateParams,
+} from "@/types/responses/playlist";
 import { ISong } from "@/types/responses/song";
 import { queryKeys } from "@/utils/queryKeys";
 
@@ -42,6 +47,13 @@ export function useOptions() {
     sourceId?: QueueSourceId | { albumId: string } | { playlistId: string },
   ) {
     setLastOnQueue(list, sourceId);
+  }
+
+  async function playPlaylist(playlist: Playlist | PlaylistWithEntries) {
+    const songs = await resolvePlaylistSongs(playlist);
+    if (!songs) return;
+
+    play(songs, { playlistId: playlist.id }, playlist.name);
   }
 
   const updateMutation = useMutation({
@@ -95,6 +107,7 @@ export function useOptions() {
 
   return {
     play,
+    playPlaylist,
     playNext,
     playLast,
     addToPlaylist,

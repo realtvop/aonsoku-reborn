@@ -1,5 +1,5 @@
 import { queryClient } from "@/lib/queryClient";
-import { AonsokuNativeData } from "@aonsoku/capacitor-native/data";
+import { AonsokuNativeData } from "@/native/data/facade";
 import { useCacheStore } from "@/store/cache.store";
 import type { SyncState } from "@/types/cache";
 
@@ -56,9 +56,9 @@ class NativeSyncAdapter {
     this.initialized = true;
   }
 
-  async syncAll(): Promise<void> {
+  async syncAll(options?: Record<string, unknown>): Promise<void> {
     await this.initialize();
-    await AonsokuNativeData.syncAll();
+    await AonsokuNativeData.syncAll(options);
   }
 
   async syncIncremental(): Promise<void> {

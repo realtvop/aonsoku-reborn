@@ -1,0 +1,411 @@
+# Desktop Native Audio libmpv Backend
+
+Aonsoku's Electron native audio path embeds `libmpv` in the Electron main
+process through a small Node-API addon. The renderer and preload bridge still
+only see `@aonsoku/audio-contract`; no libmpv handle, native addon object, raw
+IPC channel, or arbitrary filesystem access is exposed to the renderer.
+
+## Architecture
+
+```text
+renderer
+  -> electron/preload/native-audio.ts
+  -> electron/main/native/audio/ipc.ts
+  -> NativeAudioService
+  -> DesktopAudioEngine
+  -> LibMpvAudioEngine
+  -> MpvPlayer
+  -> aonsoku_libmpv.node
+  -> libmpv
+```
+
+Key files:
+
+- `electron/main/native/audio/service.ts` owns the desktop implementation of
+  `AonsokuAudioApi`, cache/download/native-file integration, queue state,
+  startup diagnostics, app-quit cleanup, and event forwarding.
+- `electron/main/native/audio/engine-factory.ts` creates the default desktop
+  playback backend and records structured libmpv diagnostics.
+- `electron/main/native/audio/libmpv-engine.ts` maps Aonsoku playback actions
+  and contract events onto libmpv commands and observed properties.
+- `electron/main/native/audio/libmpv-binding.ts` loads
+  `aonsoku_libmpv.node`, validates packaged manifests, configures Windows DLL
+  search paths, adapts the binding to `MpvPlayer`, and reports searched paths
+  in load errors.
+- `electron/main/native/audio/libmpv/src/aonsoku_libmpv.cc` is the Node-API
+  addon. It owns libmpv initialization, option setup, command/property calls,
+  the blocking `mpv_wait_event` loop, event translation, and destroy cleanup.
+- `scripts/native-audio/prepare-libmpv-resources.mjs` copies the addon and
+  supplied libmpv runtime files into the Forge resource layout.
+- `scripts/native-audio/verify-libmpv-package.mjs` checks Forge/resource/icon
+  packaging assumptions and validates the native-audio manifest.
+
+The old external mpv process backend has been removed. There is no child
+process, JSON IPC socket/named pipe, or external `mpv` binary fallback in the
+main playback path.
+
+## Contract Behavior
+
+`NativeAudioService` still exposes the shared `@aonsoku/audio-contract`
+surface. These event names are unchanged: `playbackStateChanged`, `progress`,
+`durationChanged`, `bufferingChanged`, `ended`, `error`, cache/download events,
+remote command events, system volume events, queue events, scrobble events, and
+sleep timer events.
+
+`LibMpvAudioEngine` observes these libmpv properties:
+
+- `time-pos` -> `progress`
+- `duration` -> `durationChanged` and `progress`
+- `pause` -> `playbackStateChanged`
+- `paused-for-cache` -> `bufferingChanged`
+- `cache-buffering-state` -> `bufferingChanged`
+
+libmpv file events map to existing contract semantics:
+
+- `start-file` -> loading + buffering
+- `file-loaded` -> playing/paused + progress
+- `playback-restart` -> buffering false
+- `end-file` with `eof` -> ended/finished
+- `end-file` with `error` -> `mpv-playback-error`
+- explicit `stop`/`clear` suppress libmpv's internal stop event when the
+  service already emitted the intended Aonsoku event
+
+`load`, `play`, `pause`, `stop`, `seek`, `clear`, duration/position updates,
+buffering, ended, errors, metadata title updates, native-file playback,
+Subsonic streams, radio URLs, queue transitions, system-volume parity, and
+download/cache operations all flow through this boundary.
+
+## Cache-First Source Resolution
+
+`NativeAudioService.load()` resolves the playback target through
+`resolveNativeAudioSourceWithCache()` (`electron/main/native/audio/source.ts`),
+mirroring the mobile `NativeSourceResolver`: for `stream` sources that carry a
+`songId`, it first asks `DesktopAudioFileStore.resolveAudioFile(songId)` for a
+locally cached (downloaded/offline) copy. On a cache hit the engine receives a
+`native-file` target pointing at the cached file, so playback reads from disk
+instead of the authenticated network stream. On a miss (no `songId`, no
+resolver, or no cached file) it falls back to the synchronous
+`resolveNativeAudioSource()` path, which produces the authenticated stream URL.
+`radio`, `blob`, and `native-file` sources keep their existing synchronous
+semantics and are unaffected. This keeps the desktop Node.js playback path at
+parity with the mobile plugin's cache-first behavior; it does not change the
+renderer-facing `@aonsoku/audio-contract` surface.
+
+## Loading Strategy
+
+The loader searches for `aonsoku_libmpv.node` in this order:
+
+1. `AONSOKU_LIBMPV_ADDON_PATH`
+2. `process.resourcesPath/native-audio/<platform>-<arch>/aonsoku_libmpv.node`
+3. `resources/native-audio/<platform>-<arch>/aonsoku_libmpv.node`
+4. `electron/main/native/audio/libmpv/build/Release/aonsoku_libmpv.node`
+
+Development normally uses the source-build path. Packaged apps use
+`process.resourcesPath`, which Electron Forge fills from `resources/` through
+`extraResource`.
+
+Production packages must not rely on a developer machine's global
+mpv/libmpv installation as the only runtime condition. Put the addon, libmpv
+dynamic library, and required runtime dependencies under:
+
+```text
+resources/native-audio/<platform>-<arch>/
+  aonsoku_libmpv.node
+  manifest.json
+  libmpv dynamic library
+  libmpv runtime dependencies
+```
+
+The runtime manifest lists `requiredFiles`. At startup the loader validates the
+manifest before requiring the addon. On Windows the runtime directory is
+prepended to `PATH` before loading the addon so DLLs next to the addon are
+visible. On macOS the addon is linked with `@loader_path` runpath. On Linux it
+is linked with `$ORIGIN` rpath. These settings allow bundled dynamic libraries
+next to the addon to be resolved by the platform loader.
+
+## Building
+
+Install libmpv development files before building the addon.
+
+macOS with Homebrew:
+
+```bash
+brew install mpv
+pnpm native-audio:build
+pnpm native-audio:smoke
+```
+
+Linux builds use an **audio-only libmpv built from source** instead of the
+distribution `libmpv-dev` package. The distro package pulls in the entire
+graphics stack (GL/EGL/Vulkan/X11/DRM/libplacebo), making runtime bundling
+impractical. The audio-only build disables all video output, GPU, display,
+and hardware-acceleration features, producing a `libmpv.so` whose only dynamic
+dependencies are FFmpeg, libass, audio output client libraries, and
+base-system libs.
+
+Install the build dependencies, then build and collect the runtime closure:
+
+```bash
+sudo apt install -y build-essential git meson ninja-build pkg-config patchelf \
+  libavcodec-dev libavformat-dev libavutil-dev \
+  libavfilter-dev libswresample-dev libswscale-dev \
+  libass-dev libpulse-dev libasound2-dev \
+  libdbus-1-dev squashfs-tools
+
+# The default --mpv-version is a pinned release: the script verifies the
+# cloned mpv HEAD commit against the pinned SHA in RELEASE_MPV_VERSIONS and
+# fails on drift. For a pinned non-release build add
+#   --mpv-version <ver> --expected-commit <40-hex-sha>
+# For a local, non-reproducible build that skips commit verification add
+#   --mpv-version <ref> --allow-unpinned
+node scripts/native-audio/ci/build-libmpv-linux.mjs --staging ./.native-audio-build
+export AONSOKU_LIBMPV_INCLUDE_DIR="$(pwd)/.native-audio-build/install/include"
+export AONSOKU_LIBMPV_LIB_DIR="$(pwd)/.native-audio-build/install/lib"
+export AONSOKU_LIBMPV_LIBRARY="-lmpv"
+pnpm native-audio:build
+
+LIBMPV=$(ls .native-audio-build/install/lib/libmpv.so.* | grep -E 'libmpv\.so\.[0-9]+$' | head -1)
+node scripts/native-audio/ci/collect-runtime-linux.mjs \
+  --root "$LIBMPV" --staging ./.native-audio-staging
+pnpm native-audio:prepare -- --runtime-dir ./.native-audio-staging --require-runtime-libs
+pnpm native-audio:smoke:packaged
+```
+
+Windows builds need `mpv.lib`, libmpv headers, and matching runtime DLLs:
+
+```powershell
+$env:AONSOKU_LIBMPV_INCLUDE_DIR = "C:\mpv\include"
+$env:AONSOKU_LIBMPV_LIB_DIR = "C:\mpv\lib"
+$env:AONSOKU_LIBMPV_LIBRARY = "mpv.lib"
+pnpm native-audio:build
+pnpm native-audio:smoke
+```
+
+Useful environment variables:
+
+- `AONSOKU_LIBMPV_INCLUDE_DIR`: directory containing `mpv/client.h`.
+- `AONSOKU_LIBMPV_LIB_DIR`: directory containing the libmpv dynamic/import
+  library.
+- `AONSOKU_LIBMPV_LIBRARY`: linker library name, defaulting to `-lmpv` on
+  macOS/Linux and `mpv.lib` on Windows.
+- `AONSOKU_LIBMPV_ADDON_PATH`: explicit addon path for runtime loading or
+  smoke checks.
+- `AONSOKU_LIBMPV_PLATFORM` / `AONSOKU_LIBMPV_ARCH` / `ARCH`: resource target
+  selection for prepare/verify scripts.
+
+The smoke check initializes libmpv with `ao=null`, generates a temporary WAV,
+then exercises load, pause, resume, seek, stop, and destroy.
+
+## Resource Preparation
+
+Prepare a current-platform resource bundle:
+
+```bash
+pnpm native-audio:prepare -- --runtime-dir /path/to/libmpv/runtime
+pnpm native-audio:smoke:packaged
+pnpm native-audio:verify-package
+```
+
+`--runtime-dir` copies every platform runtime library in the directory:
+
+- macOS: `*.dylib`
+- Windows: `*.dll`
+- Linux: `*.so`, `*.so.N`, `*.so.N.M`
+
+You can pass exact files instead:
+
+```bash
+pnpm native-audio:prepare -- \
+  --lib /path/to/libmpv.2.dylib \
+  --lib /path/to/libavcodec.dylib
+```
+
+Release jobs should make missing runtime libraries fatal:
+
+```bash
+pnpm native-audio:prepare -- --runtime-dir /runtime --require-runtime-libs
+AONSOKU_REQUIRE_NATIVE_AUDIO_RESOURCES=1 pnpm native-audio:verify-package
+```
+
+`resources/native-audio/*/` is ignored by git so local binary bundles are not
+committed accidentally. The release pipeline is responsible for preparing the
+right bundle for each platform/arch before `make` or `publish`.
+
+## Platform Notes
+
+macOS:
+
+- Build the addon on the target architecture or set `ARCH`.
+- Bundle `libmpv` and every dylib it needs in the native-audio resource
+  directory.
+- The addon has `@loader_path` in its runpath. Release assets should use dylib
+  install names that resolve through the bundled directory. If copied Homebrew
+  dylibs retain absolute `/opt/homebrew` install names, rewrite them during the
+  release asset preparation step before signing/notarization.
+
+Windows:
+
+- Build with headers/import library matching the runtime DLL set.
+- Ship `mpv-*.dll` and dependency DLLs next to `aonsoku_libmpv.node`.
+- The loader prepends that directory to `PATH` before requiring the addon.
+
+Linux:
+
+- Aonsoku builds an **audio-only libmpv from source** (via
+  `scripts/native-audio/ci/build-libmpv-linux.mjs`) with all video output,
+  GPU, display, and hwaccel features disabled. The distro `libmpv-dev` /
+  `libmpv2` package is intentionally not used because it transitively depends
+  on the graphics stack (GL/EGL/Vulkan/X11/DRM/libplacebo), which is
+  impractical to bundle.
+- The mpv source acquisition is **pinned by commit**: the default
+  `--mpv-version` maps to a pinned SHA in `RELEASE_MPV_VERSIONS`, and the
+  script runs `git rev-parse HEAD` after clone/fetch to fail on drift. To
+  build another revision, pass `--mpv-version <ref> --expected-commit <sha>`
+  (pinned non-release) or `--mpv-version <ref> --allow-unpinned` (skip
+  commit verification).
+- CI builds the Linux native-audio artifacts on **Ubuntu 22.04** (glibc
+  2.35). The bundled `libmpv.so`, its non-base-system `.so` dependencies
+  (FFmpeg, libass, freetype, fontconfig, PulseAudio client, D-Bus,
+  libstdc++, etc.), and the Node-API addon are all compiled against that
+  baseline. As a result, the `.deb`, `.rpm`, and AppImage packages require
+  **glibc >= 2.35** at runtime (e.g. Ubuntu 22.04+, Debian 12+, Fedora 36+)
+  and will not work on older distributions such as Ubuntu 20.04 or
+  Debian 11.
+- The audio-only `libmpv.so` and its non-base-system `.so` dependencies are
+  collected by `scripts/native-audio/ci/collect-runtime-linux.mjs` into a flat
+  staging directory. `patchelf --set-rpath '$ORIGIN'` is applied to each
+  bundled `.so` so they resolve each other without touching system paths.
+- The addon has `$ORIGIN` rpath (from `binding.gyp`), so it finds the bundled
+  `libmpv.so` placed next to it in `resources/native-audio/linux-<arch>/`.
+- Only truly universal base-system libraries (libc, libm, the dynamic loader,
+  etc.) are excluded from the bundle. Everything else is bundled so the
+  package works on glibc >= 2.35 Linux distributions of the same arch
+  without requiring the user to install extra runtime packages.
+- All three Linux makers (`.deb`, `.rpm`, AppImage) bundle the audio-only
+  libmpv runtime and declare **no** libmpv-related package dependency.
+  `.deb` declares `libc6 (>= 2.35)` and `.rpm` declares
+  `glibc >= 2.35` to reflect the build baseline. The AppImage maker shells
+  out to the system `mksquashfs`, so install `squashfs-tools`
+  (`apt install squashfs-tools`) on the build host; it also downloads the
+  AppImage type2 runtime at make time, so release CI needs outbound network
+  access.
+
+## Forge Packaging
+
+Forge uses `asar: true` for app code and `extraResource: ["./resources"]` for
+runtime assets. The native addon and libmpv runtime files live outside
+`app.asar` under Electron resources, so they are loadable by Node and the
+platform dynamic loader.
+
+The custom Forge `ignore` keeps these required inputs:
+
+- `package.json`
+- `out/` from `electron-vite`
+- `resources/` including icons, taskbar/tray assets, and native-audio bundles
+
+It excludes source directories and `node_modules` from app packaging. The
+Node-API addon is not rebuilt by Forge; build it with `pnpm native-audio:build`
+and copy it with `pnpm native-audio:prepare`.
+
+In Electron development, the loader prefers the freshly built source addon
+over `resources/native-audio`, so an older prepared resource cannot shadow a
+new `pnpm native-audio:build` result. Packaged applications continue to load
+the addon from `resources/native-audio` first. Older prepared addons that do
+not expose the optional system-media-session methods remain playback
+compatible; they simply skip native media-session projection until refreshed.
+
+`build:unpack` runs non-strict `pnpm native-audio:verify-package` before the
+Electron build so development builds still work and print warnings when local
+native-audio binaries are incomplete.
+
+`make`, `publish`, and platform package scripts run strict verification before
+Electron build/make:
+
+```bash
+pnpm native-audio:verify-package:strict
+```
+
+Strict verification fails if the target `resources/native-audio/<platform>-<arch>`
+directory, addon, manifest, or runtime libraries are missing. This prevents
+release packages from depending only on global libmpv. On a Linux host, strict
+verification also runs the `ldd`/`readelf` deep linkage check, and `make`,
+`publish`, and `build:linux` additionally run the packaged smoke check via
+`scripts/native-audio/run-packaged-smoke.mjs --only linux` (a no-op on
+macOS/Windows).
+
+## Startup Diagnostics
+
+Electron creates `NativeAudioService` during main-process IPC setup. The
+service performs startup availability checks and replays any startup failure to
+renderer listeners through the existing `error` event.
+
+Common codes:
+
+- `libmpv-addon-unavailable`: addon missing, ABI mismatch, or `require()` /
+  dynamic loader failure.
+- `libmpv-runtime-incomplete`: packaged manifest references missing runtime
+  files.
+- `libmpv-unavailable`: player creation failed.
+- `mpv-init-failed`: `mpv_create` or `mpv_initialize` failed.
+- `mpv-observer-failed`: one of the required property observers failed.
+- `mpv-command-failed`: a libmpv command failed.
+- `mpv-property-failed`: a libmpv property update failed.
+- `mpv-playback-error`: libmpv reported playback failure for the current file.
+
+Cache, download, and native-file storage APIs remain usable when the playback
+backend is unavailable. Playback methods reject and emit clear `error` events
+instead of failing silently.
+
+## Verification
+
+Focused checks:
+
+```bash
+pnpm native-audio:build
+pnpm native-audio:smoke
+pnpm native-audio:prepare
+pnpm native-audio:smoke:packaged
+pnpm native-audio:verify-package
+pnpm native-audio:verify-package:strict
+pnpm native-audio:verify-package:linux
+node scripts/native-audio/linux-runtime-linkage.mjs --platform linux
+pnpm run build:unpack
+pnpm exec vitest run \
+  electron/main/native/audio/engine-factory.test.ts \
+  electron/main/native/audio/libmpv-engine.test.ts \
+  electron/main/native/audio/libmpv-binding.test.ts \
+  electron/main/native/audio/service.test.ts \
+  electron/main/native/audio/ipc.test.ts \
+  electron/main/native/audio/ipc-binding.test.ts \
+  electron/preload/native-audio.test.ts \
+  src/native/audio/contract-drift.test.ts \
+  scripts/native-audio/linux-runtime-linkage.test.mjs
+```
+
+Cache/native-file regression checks:
+
+```bash
+pnpm exec vitest run \
+  src/service/cache/native-cache-adapter.test.ts \
+  src/service/cache/audio-source/index.test.ts \
+  src/native/audio/facade.test.ts
+```
+
+Release CI should run the focused checks on every target platform/arch with a
+prepared native-audio resource directory and strict verification enabled.
+
+## Known Limitations
+
+- The prepare script copies explicit files or whole runtime directories; it
+  does not crawl dependency graphs with `otool`, `ldd`, or Windows SDK tools.
+  Release jobs must assemble a complete runtime directory before calling it.
+  (On Linux, `collect-runtime-linux.mjs` handles the `ldd` closure walk and
+  `patchelf` rpath rewriting; on macOS, `collect-runtime-darwin.mjs` handles
+  the `otool` closure walk and `install_name_tool` rewriting.)
+  On a Linux host, `verify-libmpv-package.mjs` additionally runs `ldd`/`readelf`
+  deep linkage checks on the staged bundle (no `not found` deps, `$ORIGIN`
+  rpath on every bundled `.so`, addon's libmpv resolves from the `$ORIGIN`
+  bundle). `build:linux`/`make`/`publish` also run the packaged smoke check
+  via `run-packaged-smoke.mjs --only linux` (no-op on macOS/Windows).
+- macOS dylib install-name rewriting and code signing/notarization are release
+  pipeline responsibilities.

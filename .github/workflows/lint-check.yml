@@ -29,3 +29,6 @@ jobs:
 
       - name: Run lint
         run: pnpm lint
+
+      - name: Run native-audio Linux glibc baseline consistency check
+        run: pnpm native-audio:check-glibc-baseline

@@ -1,5 +1,11 @@
 import { electronAPI } from "@electron-toolkit/preload";
 import { contextBridge, ipcRenderer } from "electron";
+import { aonsokuNativeAudioBridge } from "./native-audio";
+import { aonsokuNativeBridge } from "./native-bridge";
+import { aonsokuNativeCoordination } from "./native-coordination";
+import { aonsokuNativeData } from "./native-data";
+import { aonsokuNativeDebug } from "./native-debug";
+import { aonsokuNativePreferences } from "./native-preferences";
 import { IAonsokuAPI, IpcChannels, PlayerStateListenerActions } from "./types";
 
 // Custom APIs for renderer
@@ -66,7 +72,8 @@ const api: IAonsokuAPI = {
   setAlwaysOnTop: (isAlwaysOnTop) =>
     ipcRenderer.send(IpcChannels.SetAlwaysOnTop, isAlwaysOnTop),
   isAlwaysOnTop: () => ipcRenderer.invoke(IpcChannels.IsAlwaysOnTop),
-
+  // Native Player Debug (desktop only)
+  openNativeDebug: () => ipcRenderer.send(IpcChannels.OpenNativeDebug),
   // App Update
   update: {
     checkForUpdates: () => ipcRenderer.invoke("app:check-for-updates"),
@@ -81,6 +88,21 @@ if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld("electron", electronAPI);
     contextBridge.exposeInMainWorld("api", api);
+    contextBridge.exposeInMainWorld(
+      "aonsokuNativeAudio",
+      aonsokuNativeAudioBridge,
+    );
+    contextBridge.exposeInMainWorld("aonsokuNativeBridge", aonsokuNativeBridge);
+    contextBridge.exposeInMainWorld("aonsokuNativeData", aonsokuNativeData);
+    contextBridge.exposeInMainWorld(
+      "aonsokuNativePreferences",
+      aonsokuNativePreferences,
+    );
+    contextBridge.exposeInMainWorld(
+      "aonsokuNativeCoordination",
+      aonsokuNativeCoordination,
+    );
+    contextBridge.exposeInMainWorld("aonsokuNativeDebug", aonsokuNativeDebug);
   } catch (error) {
     console.error(error);
   }
@@ -89,4 +111,16 @@ if (process.contextIsolated) {
   window.electron = electronAPI;
   // @ts-expect-error (define in dts)
   window.api = api;
+  // @ts-expect-error (define in dts)
+  window.aonsokuNativeAudio = aonsokuNativeAudioBridge;
+  // @ts-expect-error (define in dts)
+  window.aonsokuNativeBridge = aonsokuNativeBridge;
+  // @ts-expect-error (define in dts)
+  window.aonsokuNativeData = aonsokuNativeData;
+  // @ts-expect-error (define in dts)
+  window.aonsokuNativePreferences = aonsokuNativePreferences;
+  // @ts-expect-error (define in dts)
+  window.aonsokuNativeCoordination = aonsokuNativeCoordination;
+  // @ts-expect-error (define in dts)
+  window.aonsokuNativeDebug = aonsokuNativeDebug;
 }

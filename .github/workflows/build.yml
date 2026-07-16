@@ -15,22 +15,30 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: "macos-latest"
+          - platform: "macos-15-intel"
+            libmpv_platform: "darwin"
             target: "mac"
             arch: "x64"
           - platform: "macos-latest"
+            libmpv_platform: "darwin"
             target: "mac"
             arch: "arm64"
           - platform: "ubuntu-22.04"
+            libmpv_platform: "linux"
             target: "linux"
             arch: "x64"
+            # Linux native-audio artifacts require glibc >= 2.35.
           - platform: "ubuntu-22.04-arm"
+            libmpv_platform: "linux"
             target: "linux"
             arch: "arm64"
+            # Linux native-audio artifacts require glibc >= 2.35.
           - platform: "windows-latest"
+            libmpv_platform: "win32"
             target: "win"
             arch: "x64"
           - platform: "windows-11-arm"
+            libmpv_platform: "win32"
             target: "win"
             arch: "arm64"
     runs-on: ${{ matrix.platform }}
@@ -55,10 +63,29 @@ jobs:
           # Skip Cypress binary download on Windows ARM (unsupported platform)
           CYPRESS_INSTALL_BINARY: ${{ matrix.platform == 'windows-11-arm' && '0' || '' }}
 
+      - name: Setup native audio (libmpv addon + runtime)
+        uses: ./.github/actions/setup-native-audio
+        with:
+          platform: ${{ matrix.libmpv_platform }}
+          arch: ${{ matrix.arch }}
+          target: ${{ matrix.target }}
+
       - name: Build Electron app
+        shell: bash
         env:
           ARCH: ${{ matrix.arch }}
-        run: pnpm run build:${{ matrix.target }}
+        run: |
+          if [ "${{ matrix.target }}" = "linux" ]; then
+            # Linux bundles an audio-only libmpv with its .so runtime closure;
+            # strict verification ensures the bundled runtime is complete. The
+            # artifacts are built on Ubuntu 22.04 and require glibc >= 2.35.
+            # See docs/native-audio-libmpv.md.
+            pnpm native-audio:verify-package --require-native-audio --platform linux --arch ${{ matrix.arch }}
+            pnpm electron:build
+            pnpm exec electron-forge make --platform linux --arch ${{ matrix.arch }}
+          else
+            pnpm run build:${{ matrix.target }}
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -67,6 +94,7 @@ jobs:
           path: |
             dist/make/**/*.deb
             dist/make/**/*.rpm
+            dist/make/**/*.AppImage
             dist/make/**/*.dmg
             dist/make/**/*.zip
           if-no-files-found: warn

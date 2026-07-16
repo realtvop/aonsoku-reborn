@@ -1,7 +1,7 @@
+import type { PluginListenerHandle } from "@capacitor/core";
 import { expose, type Remote, transfer, wrap } from "comlink";
 import { getSongStreamUrl } from "@/api/httpClient";
 import { getNativeAudioPluginAvailability } from "@/native/audio/facade";
-import type { PluginListenerHandle } from "@capacitor/core";
 import { AudioCacheQueue } from "@/service/cache/audio-cache-queue";
 import { audioKey } from "@/service/cache/cache-keys";
 import { cacheStorage } from "@/service/cache/cache-storage";
@@ -18,7 +18,10 @@ import type { CachedItemMeta, CacheTask } from "@/types/cache";
 import type { AuthType } from "@/types/serverConfig";
 import { getRuntime } from "@/utils/capabilities";
 import type { AudioDownloadService } from "./contracts";
-import { storeNativeAudioFileIfAvailable } from "./native-cache-adapter";
+import {
+  isNativeCacheAdapterAvailable,
+  storeNativeAudioFileIfAvailable,
+} from "./native-cache-adapter";
 
 /* ── Types ─────────────────────────────────────────────────────── */
 
@@ -181,10 +184,7 @@ class MainThreadAudioCacheEngine implements AudioCacheDownloader {
   }
 
   private async executeDownload(task: CacheTask): Promise<void> {
-    if (
-      getRuntime() === "capacitor-ios" ||
-      getRuntime() === "capacitor-android"
-    ) {
+    if (isNativeCacheAdapterAvailable()) {
       return this.executeNativeDownload(task);
     }
 
@@ -247,71 +247,78 @@ class MainThreadAudioCacheEngine implements AudioCacheDownloader {
     const plugin = availability.plugin;
 
     return new Promise<void>((resolve, reject) => {
-      let progressHandle: PluginListenerHandle | null = null;
-      let completedHandle: PluginListenerHandle | null = null;
-      let failedHandle: PluginListenerHandle | null = null;
+      // addListener resolves its handle asynchronously, but the download may
+      // complete (or fail) before that promise settles. Removing handles via
+      // null-checked synchronous refs would no-op in that race and leak listeners
+      // on every download — which compounds with repeated SSL/download failures
+      // and freezes the app. Track the handle promises and remove them when they
+      // resolve, guarded so cleanup only runs once.
+      const handlePromises: Array<Promise<PluginListenerHandle | null>> = [];
+      let cleanedUp = false;
 
       const cleanup = () => {
-        progressHandle?.remove();
-        completedHandle?.remove();
-        failedHandle?.remove();
+        if (cleanedUp) return;
+        cleanedUp = true;
+        for (const handlePromise of handlePromises) {
+          handlePromise.then((handle) => handle?.remove()).catch(() => {});
+        }
       };
 
-      plugin
-        .addListener("downloadProgress", (event) => {
-          if (event.songId !== songId) return;
-          if (event.total > 0) {
-            const { onProgress } = this.createProgressCallbacks(songId);
-            onProgress(event.loaded, event.total);
-          }
-        })
-        .then((h) => {
-          progressHandle = h;
-        });
+      handlePromises.push(
+        plugin
+          .addListener("downloadProgress", (event) => {
+            if (event.songId !== songId) return;
+            if (event.total > 0) {
+              const { onProgress } = this.createProgressCallbacks(songId);
+              onProgress(event.loaded, event.total);
+            }
+          })
+          .catch(() => null as PluginListenerHandle | null),
+      );
 
-      plugin
-        .addListener("downloadCompleted", (event) => {
-          if (event.songId !== songId) return;
-          cleanup();
+      handlePromises.push(
+        plugin
+          .addListener("downloadCompleted", (event) => {
+            if (event.songId !== songId) return;
+            cleanup();
 
-          const key = audioKey(songId);
-          const meta: CachedItemMeta = {
-            id: songId,
-            type: "audio",
-            source,
-            triggers,
-            sizeBytes: event.sizeBytes,
-            cachedAt: Date.now(),
-            lastAccessedAt: Date.now(),
-          };
+            const key = audioKey(songId);
+            const meta: CachedItemMeta = {
+              id: songId,
+              type: "audio",
+              source,
+              triggers,
+              sizeBytes: event.sizeBytes,
+              cachedAt: Date.now(),
+              lastAccessedAt: Date.now(),
+            };
 
-          getCacheIndexActions().addItem(key, meta);
-          refreshCacheStatsFromIndex();
-          persistCacheMeta(key, { key, ...meta });
-          this.scheduleClearDownloadProgress(songId);
+            getCacheIndexActions().addItem(key, meta);
+            refreshCacheStatsFromIndex();
+            persistCacheMeta(key, { key, ...meta });
+            this.scheduleClearDownloadProgress(songId);
 
-          this.cacheLyrics(songId).catch((err) => {
-            console.warn(
-              `[cacheManager] lyrics prefetch failed for ${songId}:`,
-              err,
-            );
-          });
+            this.cacheLyrics(songId).catch((err) => {
+              console.warn(
+                `[cacheManager] lyrics prefetch failed for ${songId}:`,
+                err,
+              );
+            });
 
-          resolve();
-        })
-        .then((h) => {
-          completedHandle = h;
-        });
+            resolve();
+          })
+          .catch(() => null as PluginListenerHandle | null),
+      );
 
-      plugin
-        .addListener("downloadFailed", (event) => {
-          if (event.songId !== songId) return;
-          cleanup();
-          reject(new Error(event.error));
-        })
-        .then((h) => {
-          failedHandle = h;
-        });
+      handlePromises.push(
+        plugin
+          .addListener("downloadFailed", (event) => {
+            if (event.songId !== songId) return;
+            cleanup();
+            reject(new Error(event.error));
+          })
+          .catch(() => null as PluginListenerHandle | null),
+      );
 
       plugin.downloadAudioFile({ songId }).catch((err) => {
         cleanup();

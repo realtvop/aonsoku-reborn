@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NativeAudioEvents, NativeAudioPlugin } from "@/native/audio";
 import {
   createUrlPlaybackSource,
@@ -8,6 +8,14 @@ import {
   type PlaybackBackendEvent,
   type PlaybackBackendListener,
 } from ".";
+
+const mocks = vi.hoisted(() => ({
+  getRuntime: vi.fn(() => "capacitor-ios"),
+}));
+
+vi.mock("@/utils/capabilities", () => ({
+  getRuntime: mocks.getRuntime,
+}));
 
 type ListenerMap = {
   [TEvent in keyof NativeAudioEvents]?: Array<
@@ -28,6 +36,7 @@ function createPlugin() {
     setQueue: vi.fn(async () => {}),
     skipToNext: vi.fn(async () => {}),
     skipToPrevious: vi.fn(async () => {}),
+    setSystemVolume: vi.fn(async () => ({ volume: 1 })),
     updateMetadata: vi.fn(async () => {}),
     preload: vi.fn(async () => {}),
     clear: vi.fn(async () => {}),
@@ -67,6 +76,10 @@ function createPlugin() {
 }
 
 describe("NativeAudioPlaybackBackend", () => {
+  beforeEach(() => {
+    mocks.getRuntime.mockReturnValue("capacitor-ios");
+  });
+
   it("maps playback sources to native audio sources", () => {
     expect(
       toNativeAudioSource(
@@ -171,6 +184,7 @@ describe("NativeAudioPlaybackBackend", () => {
     expect(plugin.setShuffle).toHaveBeenCalledWith({ enabled: true });
     expect(plugin.skipToNext).toHaveBeenCalledTimes(1);
     expect(plugin.skipToPrevious).toHaveBeenCalledTimes(1);
+    expect(plugin.setSystemVolume).not.toHaveBeenCalled();
     expect(plugin.updateMetadata).toHaveBeenCalledWith({
       title: "Updated Song",
       artist: undefined,
@@ -185,6 +199,22 @@ describe("NativeAudioPlaybackBackend", () => {
         songId: "song-2",
       },
     });
+  });
+
+  it("routes Electron native backend volume to the desktop player bridge", async () => {
+    mocks.getRuntime.mockReturnValue("electron");
+    const { plugin } = createPlugin();
+    const backend = new NativeAudioPlaybackBackend(plugin);
+
+    await backend.setVolume(1.25);
+    await backend.setVolume(-1);
+    await backend.setVolume(Number.NaN);
+
+    expect(plugin.setSystemVolume).toHaveBeenCalledWith({ value: 1 });
+    expect(plugin.setSystemVolume).toHaveBeenCalledWith({ value: 0 });
+    expect(plugin.setSystemVolume).toHaveBeenCalledTimes(3);
+
+    backend.dispose();
   });
 
   it("loads radio streams with their native radio metadata", async () => {
@@ -314,6 +344,70 @@ describe("NativeAudioPlaybackBackend", () => {
     expect(listeners.play).toHaveBeenCalledTimes(1);
     expect(listeners.ended).not.toHaveBeenCalled();
     expect(listeners.error).not.toHaveBeenCalled();
+  });
+
+  it("accepts desktop-native-queue events after active manual load finishes loading, but rejects them if manual load is pending", async () => {
+    const { plugin, emit } = createPlugin();
+    const backend = new NativeAudioPlaybackBackend(plugin);
+    const listeners = makePlaybackListeners();
+
+    backend.subscribe("progress", listeners.progress);
+
+    // 1. Manually load native-audio-1
+    await backend.load(createUrlPlaybackSource("https://server/song1.mp3"));
+
+    // 2. While manual load is pending, a desktop-native-queue event arrives (should be ignored)
+    emit("progress", {
+      requestId: "desktop-native-queue-1",
+      currentTime: 10,
+      duration: 100,
+    });
+    expect(listeners.progress).not.toHaveBeenCalled();
+
+    // 3. Emit a progress event for native-audio-1 (clears pendingManualRequest)
+    emit("progress", {
+      requestId: "native-audio-1",
+      currentTime: 1,
+      duration: 100,
+    });
+    expect(listeners.progress).toHaveBeenCalledTimes(1);
+    expect(listeners.progress).toHaveBeenLastCalledWith({
+      currentTime: 1,
+      duration: 100,
+      bufferedTime: 1,
+    });
+
+    // 4. Now the song transitions natively, emitting a desktop-native-queue-1 event (should be accepted)
+    emit("progress", {
+      requestId: "desktop-native-queue-1",
+      currentTime: 2,
+      duration: 100,
+    });
+    expect(listeners.progress).toHaveBeenCalledTimes(2);
+    expect(listeners.progress).toHaveBeenLastCalledWith({
+      currentTime: 2,
+      duration: 100,
+      bufferedTime: 2,
+    });
+
+    // 5. Subsequent events for desktop-native-queue-1 are accepted
+    emit("progress", {
+      requestId: "desktop-native-queue-1",
+      currentTime: 3,
+      duration: 100,
+    });
+    expect(listeners.progress).toHaveBeenCalledTimes(3);
+
+    // 6. User manually triggers another load (native-audio-2)
+    await backend.load(createUrlPlaybackSource("https://server/song2.mp3"));
+
+    // 7. A late event from desktop-native-queue-1 arrives (should be ignored since native-audio-2 is pending)
+    emit("progress", {
+      requestId: "desktop-native-queue-1",
+      currentTime: 4,
+      duration: 100,
+    });
+    expect(listeners.progress).toHaveBeenCalledTimes(3); // count remains 3
   });
 
   it("removes native listeners on dispose without clearing plugin state", async () => {

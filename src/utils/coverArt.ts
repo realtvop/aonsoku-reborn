@@ -91,9 +91,8 @@ export function useCoverArtUrlFromSongPreference({
   return getCoverArtUrl(id, coverArtType, size);
 }
 
-export function getDefaultArtUrl(coverArtType: CoverArt | undefined): string {
-  const type = coverArtType === "artist" ? "artist" : "album";
-  return `/default_${type}_art.png`;
+export function getDefaultArtUrl(_coverArtType?: CoverArt): undefined {
+  return undefined;
 }
 
 export function resolveCacheKeys(

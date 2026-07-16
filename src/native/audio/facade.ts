@@ -1,6 +1,8 @@
 import { Capacitor, registerPlugin, WebPlugin } from "@capacitor/core";
-import type { PluginListenerHandle } from "@capacitor/core";
 import {
+  type AonsokuAudioBridge,
+  type AonsokuAudioListenerHandle,
+  type AonsokuNativeAudioPlugin,
   NATIVE_AUDIO_PLUGIN_NAME,
   type NativeAddToUserQueueOptions,
   type NativeAudioEventName,
@@ -8,16 +10,17 @@ import {
   type NativeAudioFileOptions,
   type NativeAudioLoadOptions,
   type NativeAudioMetadata,
-  type NativeAudioPlugin,
   type NativeAudioQueueOptions,
   type NativeAudioRepeatModeOptions,
-  type NativeRemotePlaybackStateOptions,
   type NativeAudioSeekOptions,
   type NativeAudioShuffleOptions,
   type NativeAudioSource,
   type NativeAudioStoreFileOptions,
+  type NativeMarkAsShuffledOptions,
   type NativePlayAtIndexOptions,
+  type NativeRemotePlaybackStateOptions,
   type NativeRemoveFromUserQueueOptions,
+  type NativeReorderContextQueueOptions,
   type NativeSetContextQueueOptions,
   type NativeSetSleepTimerOptions,
   type NativeUpdateContextQueueOptions,
@@ -30,7 +33,7 @@ export type NativeAudioUnavailableReason =
 export type NativeAudioPluginAvailability =
   | {
       available: true;
-      plugin: NativeAudioPlugin;
+      plugin: AonsokuAudioBridge;
     }
   | {
       available: false;
@@ -40,11 +43,14 @@ export type NativeAudioPluginAvailability =
 
 export function createNativeAudioUnavailableError(method: string) {
   return new Error(
-    `${NATIVE_AUDIO_PLUGIN_NAME}.${method} is only available on native Capacitor platforms after the native plugin is installed.`,
+    `${NATIVE_AUDIO_PLUGIN_NAME}.${method} is only available on Electron desktop or native Capacitor platforms after the native plugin is installed.`,
   );
 }
 
-class UnavailableNativeAudioWeb extends WebPlugin implements NativeAudioPlugin {
+class UnavailableNativeAudioWeb
+  extends WebPlugin
+  implements AonsokuNativeAudioPlugin
+{
   load(_options: NativeAudioLoadOptions): Promise<void> {
     return Promise.reject(createNativeAudioUnavailableError("load"));
   }
@@ -71,6 +77,10 @@ class UnavailableNativeAudioWeb extends WebPlugin implements NativeAudioPlugin {
 
   setShuffle(_options: NativeAudioShuffleOptions): Promise<void> {
     return Promise.reject(createNativeAudioUnavailableError("setShuffle"));
+  }
+
+  markAsShuffled(_options: NativeMarkAsShuffledOptions): Promise<void> {
+    return Promise.reject(createNativeAudioUnavailableError("markAsShuffled"));
   }
 
   setQueue(_options: NativeAudioQueueOptions): Promise<void> {
@@ -145,6 +155,14 @@ class UnavailableNativeAudioWeb extends WebPlugin implements NativeAudioPlugin {
     );
   }
 
+  reorderContextQueue(
+    _options: NativeReorderContextQueueOptions,
+  ): Promise<void> {
+    return Promise.reject(
+      createNativeAudioUnavailableError("reorderContextQueue"),
+    );
+  }
+
   addToUserQueue(_options: NativeAddToUserQueueOptions): Promise<void> {
     return Promise.reject(createNativeAudioUnavailableError("addToUserQueue"));
   }
@@ -163,6 +181,10 @@ class UnavailableNativeAudioWeb extends WebPlugin implements NativeAudioPlugin {
 
   playAtIndex(_options: NativePlayAtIndexOptions): Promise<void> {
     return Promise.reject(createNativeAudioUnavailableError("playAtIndex"));
+  }
+
+  resolveSongs() {
+    return Promise.reject(createNativeAudioUnavailableError("resolveSongs"));
   }
 
   getFullState() {
@@ -203,6 +225,10 @@ class UnavailableNativeAudioWeb extends WebPlugin implements NativeAudioPlugin {
     return Promise.resolve();
   }
 
+  setLikeActive(): Promise<void> {
+    return Promise.resolve();
+  }
+
   setSleepTimer(_options: NativeSetSleepTimerOptions): Promise<void> {
     return Promise.reject(createNativeAudioUnavailableError("setSleepTimer"));
   }
@@ -220,19 +246,33 @@ class UnavailableNativeAudioWeb extends WebPlugin implements NativeAudioPlugin {
   }
 }
 
-export const AonsokuNativeAudio = registerPlugin<NativeAudioPlugin>(
+export const AonsokuNativeAudio = registerPlugin<AonsokuNativeAudioPlugin>(
   NATIVE_AUDIO_PLUGIN_NAME,
   {
     web: () => new UnavailableNativeAudioWeb(),
   },
 );
 
+function getDesktopNativeAudioBridge(): AonsokuAudioBridge | null {
+  if (typeof window === "undefined") return null;
+
+  return window.aonsokuNativeAudio ?? null;
+}
+
 export function getNativeAudioPluginAvailability(): NativeAudioPluginAvailability {
+  const desktopBridge = getDesktopNativeAudioBridge();
+  if (desktopBridge) {
+    return {
+      available: true,
+      plugin: desktopBridge,
+    };
+  }
+
   if (!Capacitor.isNativePlatform()) {
     return {
       available: false,
       reason: "unsupported-platform",
-      message: `${NATIVE_AUDIO_PLUGIN_NAME} requires a native Capacitor platform.`,
+      message: `${NATIVE_AUDIO_PLUGIN_NAME} requires Electron desktop or a native Capacitor platform.`,
     };
   }
 
@@ -267,7 +307,7 @@ export async function addNativeAudioListener<
 >(
   eventName: TEvent,
   listener: (event: NativeAudioEvents[TEvent]) => void,
-): Promise<PluginListenerHandle> {
+): Promise<AonsokuAudioListenerHandle> {
   const availability = getNativeAudioPluginAvailability();
   if (!availability.available) {
     throw new Error(availability.message);
@@ -281,7 +321,7 @@ export async function tryAddNativeAudioListener<
 >(
   eventName: TEvent,
   listener: (event: NativeAudioEvents[TEvent]) => void,
-): Promise<PluginListenerHandle | null> {
+): Promise<AonsokuAudioListenerHandle | null> {
   const availability = getNativeAudioPluginAvailability();
   if (!availability.available) return null;
 

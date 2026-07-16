@@ -2,8 +2,10 @@ import { is } from "@electron-toolkit/utils";
 import { app, nativeImage, nativeTheme } from "electron";
 import { join } from "path";
 import { mainWindow } from "../window";
-import { sendPlayerEvents } from "./playerEvents";
-import { playerState } from "./playerState";
+import {
+  dispatchDesktopPlaybackAction,
+  getDesktopPlaybackControlState,
+} from "./playerControls";
 
 export const resourcesPath = join(
   is.dev ? app.getAppPath() : process.resourcesPath,
@@ -31,28 +33,29 @@ export function setTaskbarButtons() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   if (!mainWindow.isVisible()) return;
 
-  const { isPlaying, hasPrevious, hasNext, hasSonglist } = playerState.value();
+  const { isPlaying, hasPrevious, hasNext, hasSonglist } =
+    getDesktopPlaybackControlState();
 
   mainWindow.setThumbarButtons([
     {
       icon: getTaskbarIcon("previous"),
       flags: hasPrevious ? undefined : ["disabled"],
       click() {
-        sendPlayerEvents("skipBackwards");
+        dispatchDesktopPlaybackAction("skipBackwards").catch(() => {});
       },
     },
     {
       icon: getTaskbarIcon(isPlaying ? "pause" : "play"),
       flags: hasSonglist ? undefined : ["disabled"],
       click() {
-        sendPlayerEvents("togglePlayPause");
+        dispatchDesktopPlaybackAction("togglePlayPause").catch(() => {});
       },
     },
     {
       icon: getTaskbarIcon("next"),
       flags: hasNext ? undefined : ["disabled"],
       click() {
-        sendPlayerEvents("skipForward");
+        dispatchDesktopPlaybackAction("skipForward").catch(() => {});
       },
     },
   ]);

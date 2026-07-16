@@ -31,11 +31,10 @@ function createScrollAnimation(scrollDistance: number) {
 
   if (linearDistance <= MIN_LINEAR_DISTANCE) {
     return {
-      x: [0, -scrollDistance / 2, -scrollDistance],
+      x: [0, -scrollDistance],
       transition: {
         duration,
-        times: [0, 0.5, 1],
-        ease: ["easeOut", "easeIn"],
+        ease: "easeInOut",
       } as const,
     };
   }
@@ -44,8 +43,8 @@ function createScrollAnimation(scrollDistance: number) {
     x: [0, -edgeDistance, -(scrollDistance - edgeDistance), -scrollDistance],
     transition: {
       duration,
-      times: [edgeDuration / duration, 1 - edgeDuration / duration, 1],
-      ease: ["easeOut", "linear", "easeIn"],
+      times: [0, edgeDuration / duration, 1 - edgeDuration / duration, 1],
+      ease: ["easeIn", "linear", "easeOut"],
     } as const,
   };
 }

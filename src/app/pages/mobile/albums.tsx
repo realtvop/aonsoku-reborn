@@ -12,6 +12,7 @@ import { MobilePageHeader } from "@/app/components/header/mobile-page-header";
 import { Button } from "@/app/components/ui/button";
 import { Skeleton } from "@/app/components/ui/skeleton";
 import { ROUTES } from "@/routes/routesList";
+import { getPreferenceValue } from "@/store/native-storage";
 import {
   AlbumsFilters,
   AlbumsSearchParams,
@@ -69,7 +70,7 @@ export default function MobileAlbumsList() {
     const hasMainFilter = searchParams.has(AlbumsSearchParams.MainFilter);
     if (hasMainFilter) return;
 
-    const savedFilter = localStorage.getItem(PersistedAlbumListKeys.MainFilter);
+    const savedFilter = getPreferenceValue(PersistedAlbumListKeys.MainFilter);
     if (!savedFilter) return;
 
     if (
@@ -80,7 +81,7 @@ export default function MobileAlbumsList() {
     }
 
     if (savedFilter === AlbumsFilters.ByYear) {
-      const savedYear = localStorage.getItem(PersistedAlbumListKeys.YearFilter);
+      const savedYear = getPreferenceValue(PersistedAlbumListKeys.YearFilter);
       if (savedYear) {
         navigate(ROUTES.ALBUMS.YEAR(savedYear), { replace: true });
         return;

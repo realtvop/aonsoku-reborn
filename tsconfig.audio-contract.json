@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.web.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": [
+    "packages/audio-contract/src/**/*.ts",
+    "capacitor-plugins/capacitor-native/src/audio/**/*.ts",
+    "src/native/audio/**/*.ts"
+  ]
+}

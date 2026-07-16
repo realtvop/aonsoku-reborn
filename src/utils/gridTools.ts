@@ -1,3 +1,9 @@
+import {
+  getPreferenceValue,
+  removePreferenceValue,
+  setPreferenceValue,
+} from "@/store/native-storage";
+
 export type GridViewWrapperType = "artists" | "albums";
 
 type SavedGridItem = Record<string, number>;
@@ -24,7 +30,7 @@ export function saveGridClickedItem(params: SaveGridItemParams) {
     value = { [routeKey]: offsetTop };
   }
 
-  localStorage.setItem(itemName, JSON.stringify(value));
+  setPreferenceValue(itemName, JSON.stringify(value));
 }
 
 type GetGridItemParams = {
@@ -35,7 +41,7 @@ export function getGridClickedItem(params: GetGridItemParams) {
   const { name } = params;
   const itemName = `grid_${name}_last_row_index`;
 
-  const saved = localStorage.getItem(itemName);
+  const saved = getPreferenceValue(itemName);
   if (!saved) return null;
 
   const value = JSON.parse(saved) as SavedGridItem;
@@ -47,5 +53,5 @@ export function resetGridClickedItem(params: GetGridItemParams) {
   const { name } = params;
   const itemName = `grid_${name}_last_row_index`;
 
-  localStorage.removeItem(itemName);
+  removePreferenceValue(itemName);
 }

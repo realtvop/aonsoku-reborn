@@ -5,7 +5,7 @@ import "yet-another-react-lightbox/styles.css";
 interface CustomLightBoxProps {
   open: boolean;
   close: (value: boolean) => void;
-  src: string;
+  src?: string;
   alt: string;
 }
 
@@ -45,15 +45,19 @@ export function CustomLightBox({ open, close, src, alt }: CustomLightBoxProps) {
     <Lightbox
       open={open}
       close={() => close(false)}
-      slides={[
-        {
-          src,
-          width: size,
-          height: size,
-          alt,
-          imageFit: "contain",
-        },
-      ]}
+      slides={
+        src
+          ? [
+              {
+                src,
+                width: size,
+                height: size,
+                alt,
+                imageFit: "contain",
+              },
+            ]
+          : []
+      }
       carousel={{
         finite: true,
         preload: 0,

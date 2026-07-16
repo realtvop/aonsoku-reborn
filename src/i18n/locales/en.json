@@ -539,7 +539,13 @@
     "title": "Queue",
     "clear": "Clear queue",
     "close": "Close queue",
-    "open": "Open queue"
+    "open": "Open queue",
+    "replacementConfirmation": {
+      "title": "Choose how to continue",
+      "description": "The current playback queue is not empty.",
+      "replace": "Replace current queue",
+      "playNext": "Play after this song"
+    }
   },
   "shortcuts": {
     "modal": {
@@ -776,6 +782,10 @@
         "albumCoverForSongs": {
           "label": "Always use album covers",
           "info": "When enabled, every song artwork request uses the album cover to reduce loading time."
+        },
+        "usePointerCursors": {
+          "label": "Use pointer cursors",
+          "info": "When enabled, shows pointer cursors for interactive elements; when disabled, reduces pointer cursors to match native app experiences."
         }
       },
       "queue": {

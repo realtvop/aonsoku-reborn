@@ -1,15 +1,22 @@
-import { Capacitor } from "@capacitor/core";
 import {
   AonsokuNativeBridge,
-  NATIVE_BRIDGE_PLUGIN_NAME,
   type AonsokuNativeBridgePlugin,
+  NATIVE_BRIDGE_PLUGIN_NAME,
 } from "@aonsoku/capacitor-native/bridge";
+import { Capacitor } from "@capacitor/core";
 
 export type NativeBridgeAvailability =
   | { available: true; plugin: AonsokuNativeBridgePlugin }
   | { available: false; reason: string };
 
 export function getNativeBridgeAvailability(): NativeBridgeAvailability {
+  if (
+    typeof window !== "undefined" &&
+    window.aonsokuNativeBridge !== undefined
+  ) {
+    return { available: true, plugin: window.aonsokuNativeBridge };
+  }
+
   if (!Capacitor.isNativePlatform()) {
     return {
       available: false,
@@ -39,12 +46,20 @@ export function isNativeBridgeAvailable(): boolean {
   return getNativeBridgeAvailability().available;
 }
 
-export { AonsokuNativeBridge } from "@aonsoku/capacitor-native/bridge";
+export function getNativeBridge(): AonsokuNativeBridgePlugin {
+  const availability = getNativeBridgeAvailability();
+  if (!availability.available) {
+    throw new Error(availability.reason);
+  }
+  return availability.plugin;
+}
+
 export type {
   AonsokuNativeBridgePlugin,
   LoginOptions,
   LoginResult,
-  StoredCredentials,
   MaterialYouColors,
   MaterialYouColorsResult,
+  StoredCredentials,
 } from "@aonsoku/capacitor-native/bridge";
+export { AonsokuNativeBridge } from "@aonsoku/capacitor-native/bridge";

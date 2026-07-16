@@ -1,0 +1,160 @@
+name: "Setup native audio (libmpv)"
+description: >
+  Install libmpv development files for the current runner, build the
+  Aonsoku libmpv Node-API addon, stage the runtime libraries into
+  resources/native-audio/<platform>-<arch>/, and run the packaged smoke
+  check. Must run after `pnpm install` and before
+  `pnpm run build:<target>` / `pnpm run publish`.
+
+inputs:
+  platform:
+    description: "libmpv platform key (darwin, win32, linux)"
+    required: true
+  arch:
+    description: "Target architecture (x64, arm64)"
+    required: true
+  target:
+    description: "Build target alias used by package scripts (mac, win, linux)"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install libmpv build dependencies (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update
+        # Build audio-only libmpv from source instead of using the distro
+        # libmpv-dev package, which pulls in the entire graphics stack
+        # (GL/EGL/Vulkan/X11/DRM/libplacebo). The audio-only build produces a
+        # libmpv.so whose only deps are FFmpeg, libass, audio output libs, and
+        # base-system libs — small enough to bundle for portable .deb/.rpm/
+        # AppImage packages. See docs/native-audio-libmpv.md.
+        #
+        # Linux artifacts are built on the runner's distro (Ubuntu 22.04 in
+        # release/nightly CI, glibc 2.35). Bundled binaries may reference that
+        # glibc baseline, so .deb/.rpm declare libc6/glibc >= 2.35.
+        #
+        # FFmpeg/libass dev headers: needed to compile libmpv.
+        # patchelf: rewrites .so rpath to $ORIGIN for runtime bundling.
+        # squashfs-tools: provides mksquashfs for @reforged/maker-appimage.
+        # libdbus-1-dev: MPRIS D-Bus in the Node-API addon.
+        sudo apt-get install -y \
+          build-essential git meson ninja-build pkg-config patchelf \
+          libavcodec-dev libavformat-dev libavutil-dev \
+          libavfilter-dev libswresample-dev libswscale-dev \
+          libass-dev libpulse-dev libasound2-dev \
+          libdbus-1-dev squashfs-tools
+
+    - name: Record Linux build environment glibc baseline
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        GLIBC_VERSION=$(ldd --version | head -n1 | grep -oE '[0-9]+\.[0-9]+' | head -n1)
+        echo "AONSOKU_LINUX_GLIBC_VERSION=$GLIBC_VERSION" >> "$GITHUB_ENV"
+        echo "Aonsoku Linux native-audio build environment glibc: $GLIBC_VERSION"
+        echo "Packaged artifacts require glibc >= 2.35 (Ubuntu 22.04+ baseline)."
+
+    - name: Install libmpv development files (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: brew install mpv
+
+    - name: Set up MSVC dev environment (Windows)
+      if: runner.os == 'Windows'
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: ${{ inputs.arch }}
+
+    - name: Fetch libmpv development files (Windows)
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        node scripts/native-audio/ci/fetch-libmpv-windows.mjs --arch ${{ inputs.arch }}
+
+    - name: Build audio-only libmpv from source (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        # The default --mpv-version is a pinned release: the script verifies
+        # the cloned mpv HEAD commit against RELEASE_MPV_VERSIONS after clone
+        # and fails on drift. Use --mpv-version <ver> --expected-commit <sha>
+        # for a pinned non-release build, or add --allow-unpinned for a local
+        # non-reproducible build that skips commit verification.
+        node scripts/native-audio/ci/build-libmpv-linux.mjs \
+          --staging ./.native-audio-build
+        {
+          echo "AONSOKU_LIBMPV_INCLUDE_DIR=$(pwd)/.native-audio-build/install/include"
+          echo "AONSOKU_LIBMPV_LIB_DIR=$(pwd)/.native-audio-build/install/lib"
+          echo "AONSOKU_LIBMPV_LIBRARY=-lmpv"
+        } >> "$GITHUB_ENV"
+
+    - name: Resolve libmpv directories (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        BREW_PREFIX=$(brew --prefix)
+        {
+          echo "AONSOKU_LIBMPV_INCLUDE_DIR=${BREW_PREFIX}/include"
+          echo "AONSOKU_LIBMPV_LIB_DIR=${BREW_PREFIX}/lib"
+          echo "AONSOKU_LIBMPV_LIBRARY=-lmpv"
+        } >> "$GITHUB_ENV"
+
+    - name: Build libmpv Node-API addon
+      shell: bash
+      run: pnpm native-audio:build
+
+    - name: Stage macOS runtime libraries
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        BREW_PREFIX=$(brew --prefix)
+        ROOT=$(ls "${BREW_PREFIX}/lib/"libmpv.*.dylib 2>/dev/null | grep -E 'libmpv\.[0-9]+\.dylib$' | head -n 1)
+        if [ -z "$ROOT" ]; then ROOT="${BREW_PREFIX}/lib/libmpv.2.dylib"; fi
+        node scripts/native-audio/ci/collect-runtime-darwin.mjs \
+          --root "$ROOT" \
+          --staging ./.native-audio-staging \
+          --addon electron/main/native/audio/libmpv/build/Release/aonsoku_libmpv.node
+        pnpm native-audio:prepare -- \
+          --runtime-dir ./.native-audio-staging \
+          --require-runtime-libs \
+          --platform ${{ inputs.platform }} \
+          --arch ${{ inputs.arch }} \
+          --clean
+
+    - name: Stage Windows runtime libraries
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        pnpm native-audio:prepare -- \
+          --runtime-dir "$AONSOKU_LIBMPV_RUNTIME_DIR" \
+          --require-runtime-libs \
+          --platform ${{ inputs.platform }} \
+          --arch ${{ inputs.arch }} \
+          --clean
+
+    - name: Stage Linux runtime libraries
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        # Collect the audio-only libmpv .so closure and bundle it alongside
+        # the addon. The addon has $ORIGIN rpath (binding.gyp), and each
+        # bundled .so gets $ORIGIN rpath via patchelf, so the flat directory
+        # is self-contained. See docs/native-audio-libmpv.md.
+        LIBMPV=$(ls .native-audio-build/install/lib/libmpv.so.* 2>/dev/null | grep -E 'libmpv\.so\.[0-9]+$' | head -n 1)
+        if [ -z "$LIBMPV" ]; then LIBMPV=".native-audio-build/install/lib/libmpv.so.2"; fi
+        node scripts/native-audio/ci/collect-runtime-linux.mjs \
+          --root "$LIBMPV" \
+          --staging ./.native-audio-staging \
+          --addon electron/main/native/audio/libmpv/build/Release/aonsoku_libmpv.node
+        pnpm native-audio:prepare -- \
+          --runtime-dir ./.native-audio-staging \
+          --require-runtime-libs \
+          --platform ${{ inputs.platform }} \
+          --arch ${{ inputs.arch }} \
+          --clean
+
+    - name: Smoke check packaged layout
+      shell: bash
+      run: pnpm native-audio:smoke:packaged

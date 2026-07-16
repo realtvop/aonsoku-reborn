@@ -80,9 +80,11 @@ export interface IThemeContext {
   lightTheme: Theme;
   darkTheme: Theme;
   materialYouEnabled: boolean;
+  usePointerCursors: boolean;
   setTheme: (theme: Theme) => void;
   setThemeMode: (mode: ThemeMode) => void;
   setLightTheme: (theme: Theme) => void;
   setDarkTheme: (theme: Theme) => void;
   setMaterialYouEnabled: (enabled: boolean) => void;
+  setUsePointerCursors: (enabled: boolean) => void;
 }

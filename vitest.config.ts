@@ -4,6 +4,10 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   resolve: {
     alias: {
+      "@aonsoku/audio-contract": path.resolve(
+        __dirname,
+        "./packages/audio-contract/src",
+      ),
       "@": path.resolve(__dirname, "./src"),
     },
   },
@@ -15,6 +19,6 @@ export default defineConfig({
     environment: "node",
     setupFiles: ["./vitest.setup.ts"],
     globals: false,
-    include: ["src/**/*.test.{ts,tsx}"],
+    include: ["src/**/*.test.{ts,tsx}", "electron/**/*.test.ts", "scripts/**/*.test.mjs"],
   },
 });

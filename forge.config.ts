@@ -3,6 +3,7 @@ import { MakerDeb } from "@electron-forge/maker-deb";
 import { MakerDMG } from "@electron-forge/maker-dmg";
 import { MakerRpm } from "@electron-forge/maker-rpm";
 import { MakerZIP } from "@electron-forge/maker-zip";
+import { MakerAppImage } from "@reforged/maker-appimage";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import type { ForgeConfig } from "@electron-forge/shared-types";
 
@@ -88,18 +89,52 @@ const config: ForgeConfig = {
       format: "ULFO",
       icon: "./build/icon.icns",
     }),
-    // Linux: Output both RPM and DEB installers (final products)
+    // Linux: Output RPM, DEB, and AppImage installers (final products).
+    // All three bundle an audio-only libmpv (built from source with all
+    // video/GPU/display features disabled) and its .so runtime closure, so
+    // they do not depend on the host distribution's libmpv2 package.
+    // See docs/native-audio-libmpv.md.
     new MakerRpm({
       options: {
         homepage: "https://github.com/realtvop/aonsoku-reborn",
         categories: ["AudioVideo", "Audio"],
+        // RPM distros name packages differently, but since libmpv is now
+        // bundled, no libmpv runtime package dependency is declared.
+        // CI builds Linux native audio on Ubuntu 22.04 (glibc 2.35), so
+        // the package requires glibc >= 2.35 at runtime.
+        // See docs/native-audio-libmpv.md.
+        requires: ["glibc >= 2.35"],
       },
     }),
     new MakerDeb({
       options: {
         homepage: "https://github.com/realtvop/aonsoku-reborn",
+        // libmpv is bundled (audio-only build from source + .so runtime
+        // closure), so no libmpv2 apt dependency is declared. The package
+        // is built on Ubuntu 22.04 (glibc 2.35) and still requires
+        // libc6 >= 2.35 at runtime.
+        // See docs/native-audio-libmpv.md.
+        depends: ["libc6 (>= 2.35)"],
       },
     }),
+    // AppImage (portable Linux bundle). Built via @reforged/maker-appimage,
+    // which reimplements appimagetool in TypeScript and shells out to the
+    // system `mksquashfs` (install `squashfs-tools`). It downloads the
+    // AppImage type2 runtime at make time. Like the RPM/DEB targets it
+    // bundles an audio-only libmpv with its .so runtime closure, making it
+    // self-contained without a host libmpv2 dependency.
+    new MakerAppImage(
+      {
+        options: {
+          name: "aonsoku",
+          bin: "aonsoku",
+          productName: "Aonsoku",
+          icon: "./build/icon.png",
+          categories: ["AudioVideo", "Audio"],
+        },
+      },
+      ["linux"],
+    ),
   ],
   plugins: [
     new FusesPlugin({

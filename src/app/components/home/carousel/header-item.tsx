@@ -26,6 +26,7 @@ export function HeaderItem({ album }: { album: Albums }) {
     album.id,
     coverArtFallback,
   );
+  const backgroundImageStyle = coverArtUrl ? `url(${coverArtUrl})` : undefined;
 
   async function handlePlayAlbum(album: Albums) {
     const response = await subsonic.albums.getOne(album.id);
@@ -49,7 +50,7 @@ export function HeaderItem({ album }: { album: Albums }) {
         data-testid="header-bg"
         className="absolute -inset-10 bg-cover bg-center z-0 bg-skeleton"
         style={{
-          backgroundImage: `url(${coverArtUrl})`,
+          backgroundImage: backgroundImageStyle,
           filter: isFirefox ? "blur(24px)" : undefined,
         }}
       />

@@ -1,5 +1,6 @@
 import { expose, type Remote, transfer, wrap } from "comlink";
 import { queryClient } from "@/lib/queryClient";
+import { isNativeDataAvailable } from "@/native/data/facade";
 import { metadataSyncService } from "@/service/cache/metadata-sync";
 import { useAppStore } from "@/store/app.store";
 import { useCacheStore } from "@/store/cache.store";
@@ -7,7 +8,6 @@ import { getCacheIndexActions } from "@/store/cache-index.store";
 import { usePlayerStore } from "@/store/player.store";
 import type { SyncState } from "@/types/cache";
 import type { AuthType } from "@/types/serverConfig";
-import { getRuntime } from "@/utils/capabilities";
 
 interface WorkerAuthConfig {
   url: string;
@@ -246,9 +246,7 @@ function createSyncService():
   | SyncWorkerAdapter
   | typeof metadataSyncService
   | LazyNativeSyncAdapter {
-  const runtime = getRuntime();
-
-  if (runtime === "capacitor-ios" || runtime === "capacitor-android") {
+  if (isNativeDataAvailable()) {
     return new LazyNativeSyncAdapter();
   }
 

@@ -54,6 +54,10 @@ export type DesktopFullscreenPanelView =
   | null;
 export type QueueTier = "context" | "user";
 
+export interface QueueReplacementOptions {
+  bypassQueueConfirmation?: boolean;
+}
+
 export interface IPlayerState {
   isPlaying: boolean;
   loopState: LoopState;
@@ -211,13 +215,18 @@ export interface IRemoteControlState {
 }
 
 export interface IPlayerActions {
-  playSong: (song: ISong, sourceName?: string) => void;
+  playSong: (
+    song: ISong,
+    sourceName?: string,
+    options?: QueueReplacementOptions,
+  ) => void;
   setSongList: (
     songlist: ISong[],
     index?: number | null,
     shuffle?: boolean,
     sourceId?: QueueSourceId | { albumId: string } | { playlistId: string },
     sourceName?: string,
+    options?: QueueReplacementOptions,
   ) => void;
   playFromQueue: (contextSongs: ISong[], contextIndex: number) => void;
   playFromUserQueue: (userQueueIndex: number) => void;

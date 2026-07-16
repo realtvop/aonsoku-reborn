@@ -1,0 +1,532 @@
+import type { NativeAudioMetadata } from "@aonsoku/audio-contract";
+import { describe, expect, it, vi } from "vitest";
+import { LibMpvAudioEngine, verifyLibMpvPlayer } from "./libmpv-engine";
+import type {
+  MpvPlayer,
+  MpvPlayerEvent,
+  MpvPlayerEventListener,
+  MpvPlayerInitializeOptions,
+  MpvPropertyFormat,
+  MpvPropertyValue,
+} from "./mpv-player";
+import type { DesktopAudioEngineEvent } from "./types";
+
+class FakeMpvPlayer implements MpvPlayer {
+  readonly initialize = vi.fn(
+    async (_options: MpvPlayerInitializeOptions) => {},
+  );
+  readonly command = vi.fn(async (_args: readonly string[]) => {});
+  readonly setProperty = vi.fn(
+    async (_name: string, _value: MpvPropertyValue) => {},
+  );
+  readonly observeProperty = vi.fn(
+    async (_name: string, _format: MpvPropertyFormat) => {},
+  );
+  readonly updateSystemMediaSession = vi.fn(
+    async (
+      _metadata: NativeAudioMetadata,
+      _options: {
+        state: "playing" | "paused" | "stopped";
+        position: number;
+        duration: number;
+      },
+    ) => {},
+  );
+  readonly clearSystemMediaSession = vi.fn(async () => {});
+  readonly destroy = vi.fn(async () => {});
+  readonly listeners = new Set<MpvPlayerEventListener>();
+
+  onEvent(listener: MpvPlayerEventListener): () => void {
+    this.listeners.add(listener);
+
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  emit(event: MpvPlayerEvent): void {
+    for (const listener of this.listeners) {
+      listener(event);
+    }
+  }
+}
+
+function createHarness(): {
+  engine: LibMpvAudioEngine;
+  events: DesktopAudioEngineEvent[];
+  player: FakeMpvPlayer;
+} {
+  const player = new FakeMpvPlayer();
+  const engine = new LibMpvAudioEngine({ playerFactory: () => player });
+  const events: DesktopAudioEngineEvent[] = [];
+  engine.onEvent((event) => events.push(event));
+
+  return { engine, events, player };
+}
+
+describe("LibMpvAudioEngine", () => {
+  it("initializes libmpv, observes properties, and loads streams", async () => {
+    const { engine, events, player } = createHarness();
+
+    await engine.load({
+      source: {
+        kind: "stream",
+        target: "https://server/rest/stream?id=song-1",
+      },
+      metadata: {
+        title: "Track",
+        duration: 123,
+      },
+      autoplay: true,
+      startTime: 12,
+    });
+
+    expect(player.initialize).toHaveBeenCalledWith({
+      options: {
+        "audio-display": "no",
+        "force-window": "no",
+        idle: "yes",
+        terminal: "no",
+        vid: "no",
+      },
+      registerSystemMediaSession: true,
+    });
+    expect(player.observeProperty.mock.calls).toEqual([
+      ["time-pos", "number"],
+      ["duration", "number"],
+      ["pause", "boolean"],
+      ["paused-for-cache", "boolean"],
+      ["cache-buffering-state", "number"],
+    ]);
+    expect(player.setProperty.mock.calls).toEqual([
+      ["pause", false],
+      ["force-media-title", "Track"],
+    ]);
+    expect(player.command.mock.calls).toEqual([
+      [["loadfile", "https://server/rest/stream?id=song-1", "replace"]],
+      [["seek", "12", "absolute", "exact"]],
+    ]);
+    expect(events).toEqual([
+      { type: "playbackStateChanged", state: "loading" },
+      { type: "bufferingChanged", isBuffering: true },
+      {
+        type: "progress",
+        currentTime: 12,
+        duration: 123,
+        bufferedTime: 12,
+      },
+    ]);
+  });
+
+  it("maps libmpv file and property events to contract engine events", async () => {
+    const { engine, events, player } = createHarness();
+
+    await engine.load({
+      source: {
+        kind: "radio",
+        target: "https://radio.example/live",
+      },
+    });
+    player.emit({ type: "file-loaded" });
+    player.emit({ type: "property-change", name: "duration", data: 45 });
+    player.emit({ type: "property-change", name: "time-pos", data: 11 });
+    player.emit({ type: "property-change", name: "pause", data: false });
+    player.emit({
+      type: "property-change",
+      name: "paused-for-cache",
+      data: true,
+    });
+    player.emit({
+      type: "property-change",
+      name: "cache-buffering-state",
+      data: 100,
+    });
+    player.emit({ type: "end-file", reason: "eof" });
+
+    expect(events).toEqual([
+      { type: "playbackStateChanged", state: "loading" },
+      { type: "bufferingChanged", isBuffering: true },
+      { type: "bufferingChanged", isBuffering: false },
+      { type: "playbackStateChanged", state: "paused" },
+      {
+        type: "progress",
+        currentTime: 0,
+        duration: 0,
+        bufferedTime: 0,
+      },
+      { type: "durationChanged", duration: 45 },
+      {
+        type: "progress",
+        currentTime: 0,
+        duration: 45,
+        bufferedTime: 0,
+      },
+      {
+        type: "progress",
+        currentTime: 11,
+        duration: 45,
+        bufferedTime: 11,
+      },
+      { type: "playbackStateChanged", state: "playing" },
+      { type: "bufferingChanged", isBuffering: true },
+      { type: "bufferingChanged", isBuffering: false },
+      { type: "bufferingChanged", isBuffering: false },
+      { type: "playbackStateChanged", state: "ended" },
+      { type: "ended", reason: "finished" },
+    ]);
+  });
+
+  it("registers loaded native playback with the system media session", async () => {
+    const { engine, player } = createHarness();
+
+    await engine.load({
+      source: {
+        kind: "stream",
+        target: "https://server/rest/stream?id=song-1",
+      },
+      metadata: {
+        title: "Track",
+        artist: "Artist",
+        album: "Album",
+        duration: 123,
+        artworkUrl: "https://server/rest/getCoverArt?id=art-1",
+      },
+      autoplay: true,
+      startTime: 12,
+    });
+    player.emit({ type: "file-loaded" });
+
+    expect(player.updateSystemMediaSession).toHaveBeenLastCalledWith(
+      {
+        title: "Track",
+        artist: "Artist",
+        album: "Album",
+        duration: 123,
+        artworkUrl: "https://server/rest/getCoverArt?id=art-1",
+      },
+      {
+        state: "playing",
+        position: 12,
+        duration: 123,
+      },
+    );
+
+    await engine.pause();
+
+    expect(player.updateSystemMediaSession).toHaveBeenLastCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ state: "paused" }),
+    );
+
+    await engine.stop();
+
+    expect(player.clearSystemMediaSession).toHaveBeenCalledOnce();
+  });
+
+  it("syncs the system media session elapsed time after a seek", async () => {
+    const { engine, player } = createHarness();
+
+    await engine.load({
+      source: {
+        kind: "stream",
+        target: "https://server/rest/stream?id=song-1",
+      },
+      metadata: {
+        title: "Track",
+        artist: "Artist",
+        album: "Album",
+        duration: 123,
+        artworkUrl: "https://server/rest/getCoverArt?id=art-1",
+      },
+      autoplay: true,
+      startTime: 0,
+    });
+    player.emit({ type: "file-loaded" });
+
+    await engine.seek(42);
+
+    expect(player.updateSystemMediaSession).toHaveBeenLastCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ state: "playing", position: 42 }),
+    );
+
+    await engine.pause();
+    await engine.seek(7);
+
+    expect(player.updateSystemMediaSession).toHaveBeenLastCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ state: "paused", position: 7 }),
+    );
+  });
+
+  it("suppresses libmpv stop events caused by repeat load and explicit stop", async () => {
+    const { engine, events, player } = createHarness();
+
+    await engine.load({
+      source: {
+        kind: "stream",
+        target: "https://server/rest/stream?id=song-1",
+      },
+      autoplay: true,
+    });
+    player.emit({ type: "file-loaded" });
+    await engine.load({
+      source: {
+        kind: "stream",
+        target: "https://server/rest/stream?id=song-2",
+      },
+      autoplay: true,
+    });
+    player.emit({ type: "end-file", reason: "stop" });
+    await engine.stop();
+    player.emit({ type: "end-file", reason: "stop" });
+
+    expect(player.command.mock.calls).toContainEqual([
+      ["loadfile", "https://server/rest/stream?id=song-2", "replace"],
+    ]);
+    expect(events).toContainEqual({
+      type: "playbackStateChanged",
+      state: "stopped",
+    });
+    expect(events).toContainEqual({ type: "ended", reason: "stopped" });
+    expect(
+      events.filter(
+        (event) => event.type === "ended" && event.reason === "stopped",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("sets player volume through the mpv volume property", async () => {
+    const { engine, player } = createHarness();
+
+    await engine.setVolume(1.25);
+    await engine.setVolume(-1);
+    await engine.setVolume(Number.NaN);
+
+    expect(player.setProperty.mock.calls).toContainEqual(["volume", 100]);
+    expect(player.setProperty.mock.calls).toContainEqual(["volume", 0]);
+    expect(player.setProperty.mock.calls).toContainEqual(["volume", 100]);
+  });
+
+  it("maps libmpv playback errors and command failures", async () => {
+    const { engine, events, player } = createHarness();
+
+    await engine.load({
+      source: {
+        kind: "stream",
+        target: "https://server/rest/stream?id=song-1",
+      },
+    });
+    player.emit({
+      type: "end-file",
+      reason: "error",
+      error: "demuxer failed",
+    });
+
+    player.command.mockRejectedValueOnce(new Error("bad seek"));
+    await expect(engine.seek(5)).rejects.toMatchObject({
+      code: "mpv-command-failed",
+      message: "bad seek",
+    });
+    expect(events).toContainEqual({
+      type: "error",
+      code: "mpv-playback-error",
+      message: "demuxer failed",
+    });
+    expect(player.clearSystemMediaSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears buffering and the system session on asynchronous player errors", async () => {
+    const { engine, events, player } = createHarness();
+
+    await engine.load({
+      source: {
+        kind: "stream",
+        target: "https://server/rest/stream?id=song-1",
+      },
+      autoplay: true,
+    });
+    player.emit({ type: "file-loaded" });
+    events.length = 0;
+
+    player.emit({
+      type: "error",
+      code: "mpv-decoder-error",
+      message: "decoder failed",
+    });
+
+    expect(events).toEqual([
+      { type: "bufferingChanged", isBuffering: false },
+      {
+        type: "error",
+        code: "mpv-decoder-error",
+        message: "decoder failed",
+      },
+    ]);
+    expect(player.clearSystemMediaSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("cleans up players when initialization or observers fail", async () => {
+    const initFailure = new FakeMpvPlayer();
+    initFailure.initialize.mockRejectedValueOnce(new Error("bad init"));
+    const initEngine = new LibMpvAudioEngine({
+      playerFactory: () => initFailure,
+    });
+
+    await expect(
+      initEngine.load({
+        source: {
+          kind: "stream",
+          target: "https://server/rest/stream?id=song-1",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "mpv-init-failed",
+      message: "bad init",
+    });
+    expect(initFailure.destroy).toHaveBeenCalledTimes(1);
+
+    const observerFailure = new FakeMpvPlayer();
+    observerFailure.observeProperty.mockRejectedValueOnce(
+      new Error("bad observe"),
+    );
+    const observerEngine = new LibMpvAudioEngine({
+      playerFactory: () => observerFailure,
+    });
+
+    await expect(
+      observerEngine.load({
+        source: {
+          kind: "stream",
+          target: "https://server/rest/stream?id=song-1",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "mpv-observer-failed",
+      message: "bad observe",
+    });
+    expect(observerFailure.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("normalizes player creation failures", async () => {
+    const engine = new LibMpvAudioEngine({
+      playerFactory: () => {
+        throw new Error("addon missing");
+      },
+    });
+
+    await expect(
+      engine.load({
+        source: {
+          kind: "stream",
+          target: "https://server/rest/stream?id=song-1",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "libmpv-unavailable",
+      message: "addon missing",
+    });
+  });
+
+  it("preflights libmpv initialization without keeping a player alive", async () => {
+    const { engine, player } = createHarness();
+
+    await expect(engine.checkAvailability()).resolves.toEqual({
+      backend: "libmpv",
+      status: "available",
+      platformKey: `${process.platform}-${process.arch}`,
+    });
+    expect(player.initialize).toHaveBeenCalledTimes(1);
+    expect(player.observeProperty).toHaveBeenCalledTimes(5);
+    expect(player.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases the player and ignores late events after destroy", async () => {
+    const { engine, events, player } = createHarness();
+
+    await engine.load({
+      source: {
+        kind: "native-file",
+        target: "/tmp/song.mp3",
+      },
+    });
+    await engine.destroy();
+    player.emit({ type: "file-loaded" });
+
+    expect(player.destroy).toHaveBeenCalledTimes(1);
+    expect(player.listeners.size).toBe(0);
+    expect(events).toEqual([
+      { type: "playbackStateChanged", state: "loading" },
+      { type: "bufferingChanged", isBuffering: true },
+    ]);
+  });
+
+  it("forwards system media commands as engine events", async () => {
+    const { engine, events, player } = createHarness();
+
+    await engine.load({
+      source: {
+        kind: "stream",
+        target: "https://server/rest/stream?id=song-1",
+      },
+      autoplay: true,
+    });
+    events.length = 0;
+
+    player.emit({ type: "system-media-command", name: "play", data: null });
+    player.emit({
+      type: "system-media-command",
+      name: "togglePlayPause",
+      data: null,
+    });
+    player.emit({ type: "system-media-command", name: "seek", data: 42.5 });
+
+    expect(events).toEqual([
+      { type: "systemMediaCommand", command: "play" },
+      { type: "systemMediaCommand", command: "togglePlayPause" },
+      { type: "systemMediaCommand", command: "seek", position: 42.5 },
+    ]);
+  });
+
+  it("ignores unsupported system media command names", async () => {
+    const { engine, events, player } = createHarness();
+
+    await engine.load({
+      source: {
+        kind: "stream",
+        target: "https://server/rest/stream?id=song-1",
+      },
+      autoplay: true,
+    });
+    events.length = 0;
+
+    player.emit({
+      type: "system-media-command",
+      name: "like",
+      data: null,
+    });
+    player.emit({
+      type: "system-media-command",
+      name: "unknown",
+      data: null,
+    });
+
+    expect(events).toEqual([]);
+  });
+});
+
+describe("verifyLibMpvPlayer", () => {
+  it("initializes the throwaway player without claiming the system media command handler", async () => {
+    const player = new FakeMpvPlayer();
+    await verifyLibMpvPlayer(() => player);
+
+    expect(player.initialize).toHaveBeenCalledWith({
+      options: expect.objectContaining({
+        "audio-display": "no",
+        vid: "no",
+      }),
+      registerSystemMediaSession: false,
+    });
+    expect(player.destroy).toHaveBeenCalled();
+  });
+});

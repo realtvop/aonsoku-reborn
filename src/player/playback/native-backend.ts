@@ -7,6 +7,7 @@ import type {
   NativeAudioPlugin,
   NativeAudioSource,
 } from "@/native/audio";
+import { getRuntime } from "@/utils/capabilities";
 import { nativePlaybackErrorKind, playbackErrorCodeFromKind } from "./errors";
 import {
   type PlaybackBackend,
@@ -31,6 +32,7 @@ export class NativeAudioPlaybackBackend implements PlaybackBackend {
     [];
   #loadSequence = 0;
   #activeRequestId: string | null = null;
+  #pendingManualRequest = false;
   #disposed = false;
 
   constructor(plugin: NativeAudioPlugin) {
@@ -108,9 +110,14 @@ export class NativeAudioPlaybackBackend implements PlaybackBackend {
     return this.#plugin.skipToPrevious();
   }
 
-  setVolume(_value: number) {
+  setVolume(value: number) {
     this.#assertActive();
-    return Promise.resolve();
+    if (getRuntime() !== "electron") return Promise.resolve();
+
+    return this.#plugin
+      .setSystemVolume({ value: clampUnitVolume(value) })
+      .then(() => undefined)
+      .catch(() => undefined);
   }
 
   updateMetadata(metadata: PlaybackMetadata) {
@@ -127,6 +134,7 @@ export class NativeAudioPlaybackBackend implements PlaybackBackend {
     if (this.#disposed) return;
     this.#disposed = true;
     this.#activeRequestId = null;
+    this.#pendingManualRequest = false;
 
     for (const handlePromise of this.#nativeListenerHandles) {
       handlePromise.then((handle) => handle?.remove()).catch(() => {});
@@ -229,23 +237,36 @@ export class NativeAudioPlaybackBackend implements PlaybackBackend {
   #nextRequestId() {
     const requestId = `native-audio-${++this.#loadSequence}`;
     this.#activeRequestId = requestId;
+    this.#pendingManualRequest = true;
 
     return requestId;
   }
 
   #isStaleNativeEvent(event: { requestId?: string | null }) {
+    if (event.requestId === undefined || event.requestId === null) {
+      return false;
+    }
+
+    if (this.#activeRequestId === null) {
+      this.#activeRequestId = event.requestId;
+      this.#pendingManualRequest = false;
+      return false;
+    }
+
+    if (event.requestId === this.#activeRequestId) {
+      this.#pendingManualRequest = false;
+      return false;
+    }
+
     if (
-      event.requestId !== undefined &&
-      event.requestId !== null &&
-      this.#activeRequestId === null
+      !this.#pendingManualRequest &&
+      event.requestId.startsWith("desktop-native-queue-")
     ) {
       this.#activeRequestId = event.requestId;
+      return false;
     }
-    return (
-      event.requestId !== undefined &&
-      event.requestId !== null &&
-      event.requestId !== this.#activeRequestId
-    );
+
+    return true;
   }
 }
 
@@ -333,4 +354,9 @@ function isNativeAudioErrorEvent(
     "message" in error &&
     typeof (error as { message?: unknown }).message === "string"
   );
+}
+
+function clampUnitVolume(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.max(0, Math.min(1, value));
 }

@@ -4,7 +4,6 @@ import { immer } from "zustand/middleware/immer";
 import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
 import { createNativeStorage } from "@/store/native-storage";
-import { getRuntime } from "@/utils/capabilities";
 import {
   CacheSettings,
   CacheStatus,
@@ -18,6 +17,7 @@ import {
   SmartRuleSettings,
   SyncState,
 } from "@/types/cache";
+import { getRuntime } from "@/utils/capabilities";
 
 interface CacheActions {
   setMaxCacheSize: (bytes: number) => void;
@@ -54,8 +54,7 @@ const defaultSyncState: SyncState = {
 };
 
 function migrateSettings(persisted: Record<string, unknown>): CacheSettings {
-  const isCapacitorNative =
-    getRuntime() === "capacitor-ios" || getRuntime() === "capacitor-android";
+  const isNativeLibraryRuntime = getRuntime() !== "web";
   // Pre-P2.3 format (had maxCacheSize but not the per-pool quotas).
   const raw = persisted as Partial<CacheSettings> | undefined;
   if (raw && typeof raw === "object") {
@@ -71,7 +70,7 @@ function migrateSettings(persisted: Record<string, unknown>): CacheSettings {
         assetsQuota: raw.assetsQuota ?? DEFAULT_ASSETS_QUOTA,
         lruQuota: raw.lruQuota ?? legacyCap,
         smartRules: { ...DEFAULT_SMART_RULES, ...(raw.smartRules ?? {}) },
-        libraryCaching: isCapacitorNative
+        libraryCaching: isNativeLibraryRuntime
           ? true
           : (raw.libraryCaching ?? false),
       };
@@ -85,13 +84,15 @@ function migrateSettings(persisted: Record<string, unknown>): CacheSettings {
     return {
       ...(final as unknown as CacheSettings),
       smartRules: { ...DEFAULT_SMART_RULES },
-      libraryCaching: isCapacitorNative ? true : final.libraryCaching === true,
+      libraryCaching: isNativeLibraryRuntime
+        ? true
+        : final.libraryCaching === true,
     };
   }
 
   return {
     ...(persisted as unknown as CacheSettings),
-    libraryCaching: isCapacitorNative
+    libraryCaching: isNativeLibraryRuntime
       ? true
       : (persisted as Record<string, unknown>).libraryCaching === true,
   };
@@ -107,9 +108,7 @@ export const useCacheStore = createWithEqualityFn<CacheStoreState>()(
             assetsQuota: DEFAULT_ASSETS_QUOTA,
             lruQuota: DEFAULT_LRU_QUOTA,
             smartRules: { ...DEFAULT_SMART_RULES },
-            libraryCaching:
-              getRuntime() === "capacitor-ios" ||
-              getRuntime() === "capacitor-android",
+            libraryCaching: getRuntime() !== "web",
             syncLibrary: true,
             syncCoverArt: false,
             coverArtConcurrency: COVER_ART_CONCURRENCY_DEFAULT,
@@ -217,10 +216,7 @@ export const useCacheStore = createWithEqualityFn<CacheStoreState>()(
             raw.settings = migrateSettings(settings);
           }
           const merged = merge({}, current, raw);
-          if (
-            getRuntime() === "capacitor-ios" ||
-            getRuntime() === "capacitor-android"
-          ) {
+          if (getRuntime() !== "web") {
             merged.settings.libraryCaching = true;
             merged.settings.syncLibrary = true;
           }

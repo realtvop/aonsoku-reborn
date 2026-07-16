@@ -15,6 +15,7 @@ import {
   useCoverArtSettings,
   useFullscreenPlayerSettings,
 } from "@/store/player.store";
+import { useTheme } from "@/store/theme.store";
 
 export function FullscreenSettings() {
   const { t } = useTranslation();
@@ -22,6 +23,7 @@ export function FullscreenSettings() {
     useFullscreenPlayerSettings();
   const { useAlbumCoverForSongs, setUseAlbumCoverForSongs } =
     useCoverArtSettings();
+  const { usePointerCursors, setUsePointerCursors } = useTheme();
 
   return (
     <Root>
@@ -55,6 +57,19 @@ export function FullscreenSettings() {
             <Switch
               checked={useAlbumCoverForSongs}
               onCheckedChange={setUseAlbumCoverForSongs}
+            />
+          </ContentItemForm>
+        </ContentItem>
+        <ContentItem>
+          <ContentItemTitle
+            info={t("settings.appearance.general.usePointerCursors.info")}
+          >
+            {t("settings.appearance.general.usePointerCursors.label")}
+          </ContentItemTitle>
+          <ContentItemForm>
+            <Switch
+              checked={usePointerCursors}
+              onCheckedChange={setUsePointerCursors}
             />
           </ContentItemForm>
         </ContentItem>

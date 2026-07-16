@@ -1,6 +1,6 @@
 // Coordination manager — the top-level orchestration layer (design §5.2).
-// Owns the HTTP client, the coordination client (TS WebSocket on web/Electron,
-// native plugin on iOS/Android — §5.2 multi-stack consistency), history
+// Owns the HTTP client, the coordination client (TS WebSocket on web,
+// native transport on Electron/iOS/Android — §5.2 multi-stack consistency), history
 // outbox, and token/config store. Provides a single entry point for React
 // components and the player store.
 
@@ -109,8 +109,8 @@ export interface CoordinationManagerCallbacks {
 
 export class CoordinationManager {
   private httpClient: CoordinationHttpClient | null = null;
-  /// Unified coordination client — either `CoordinationWsClient` (web/Electron)
-  /// or `NativeCoordinationClient` (iOS/Android). Design §5.2 multi-stack.
+  /// Unified coordination client — either `CoordinationWsClient` (web)
+  /// or `NativeCoordinationClient` (Electron/iOS/Android).
   private coordClient: CoordinationClient | null = null;
   private outbox = new HistoryOutbox();
   private tokens: StoredDeviceTokens | null = null;
@@ -420,7 +420,7 @@ export class CoordinationManager {
         return;
       }
     }
-    // TS WebSocket path (web/Electron only). Mobile native runtimes must keep
+    // TS WebSocket path (web only). Native runtimes must keep
     // the realtime remote-control transport in the native plugin.
     const tsClient = new CoordinationWsClient(
       () => wsUrl,

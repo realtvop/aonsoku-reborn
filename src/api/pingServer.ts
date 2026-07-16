@@ -1,3 +1,4 @@
+import { getNativeBridgeAvailability } from "@/native/bridge/facade";
 import { AuthType } from "@/types/serverConfig";
 import { appName } from "@/utils/appName";
 import { authQueryParams } from "./auth";
@@ -20,6 +21,19 @@ async function pingServerDetailed(
   authType: AuthType,
   protocolVersion?: string,
 ): Promise<PingServerResult> {
+  const nativeBridge = getNativeBridgeAvailability();
+  if (nativeBridge.available) {
+    const result = await nativeBridge.plugin.ping({
+      url,
+      username: user,
+      password,
+      authType: authType === AuthType.TOKEN ? "token" : "password",
+    });
+    return result.reachable
+      ? { status: "ok", protocolVersion }
+      : { status: result.error ?? "server_error" };
+  }
+
   const query = {
     ...authQueryParams(user, password, authType),
     v: protocolVersion || "1.16.0",

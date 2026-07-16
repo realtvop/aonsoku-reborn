@@ -15,6 +15,9 @@
     "./coordination": "./src/coordination/index.ts"
   },
   "files": ["ios/Sources", "src", "Package.swift"],
+  "dependencies": {
+    "@aonsoku/audio-contract": "workspace:*"
+  },
   "peerDependencies": {
     "@capacitor/core": ">=8.0.0"
   },

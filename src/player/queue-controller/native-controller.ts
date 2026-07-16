@@ -59,6 +59,7 @@ function songToNativeQueueSong(song: ISong): NativeQueueSong {
     duration: song.duration,
     coverArtId: getSongCoverArtId(song),
     streamUrl: getSongStreamUrl(song.id),
+    song: { ...song },
   };
 }
 
@@ -659,9 +660,16 @@ export class NativeQueueController implements QueueController {
 
   setVolume(volume: number): void {
     const runtime = getRuntime();
-    if (runtime !== "capacitor-android") return;
+    if (runtime !== "capacitor-android" && runtime !== "electron") return;
 
     const clamped = Math.max(0, Math.min(100, Math.round(volume)));
+    if (runtime === "electron") {
+      // Desktop bridge maps this compatibility method to player volume, not
+      // OS output volume.
+      usePlayerStore.setState((state) => {
+        state.playerState.volume = clamped;
+      });
+    }
     this.#plugin.setSystemVolume({ value: clamped / 100 }).catch(() => {
       /* ignore */
     });

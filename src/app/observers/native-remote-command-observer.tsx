@@ -1,4 +1,6 @@
 import { useEffect } from "react";
+import { mapNativeRemoteControlCommand } from "@/coordination/native-remote-control-command";
+import { useCoordinationStore } from "@/coordination/store";
 import { getNativeAudioPluginAvailability } from "@/native/audio/facade";
 import {
   handlePlaybackRemoteCommand,
@@ -59,6 +61,76 @@ export function NativeRemoteCommandObserver() {
     togglePlayPause,
     toggleShuffle,
   ]);
+
+  useEffect(() => {
+    const availability = getNativeAudioPluginAvailability();
+    if (!availability.available) return;
+
+    let disposed = false;
+    const handlePromise = availability.plugin
+      .addListener("remoteControlCommand", (event) => {
+        if (disposed || event.handledNatively) return;
+
+        const command = mapNativeRemoteControlCommand(event.command);
+        if (!command) {
+          logger.info(
+            "[NativeRemoteCommandObserver] ignored malformed remoteControlCommand",
+            event.command,
+          );
+          return;
+        }
+
+        const coordinationState = useCoordinationStore.getState();
+        const targetDeviceId =
+          event.targetDeviceId ?? coordinationState.controlledDeviceId;
+        if (!targetDeviceId) {
+          logger.info(
+            "[NativeRemoteCommandObserver] rejected remoteControlCommand without target",
+            command,
+          );
+          return;
+        }
+
+        const snapshotData =
+          coordinationState.deviceSnapshots[targetDeviceId] ?? null;
+        const expectedGeneration =
+          typeof event.expectedGeneration === "number"
+            ? event.expectedGeneration
+            : snapshotData?.generation;
+        if (typeof expectedGeneration !== "number") {
+          logger.info(
+            "[NativeRemoteCommandObserver] rejected remoteControlCommand without generation",
+            command,
+          );
+          return;
+        }
+
+        coordinationState.manager.sendCommand(
+          targetDeviceId,
+          expectedGeneration,
+          command,
+        );
+      })
+      .catch((error) => {
+        logger.info(
+          "[NativeRemoteCommandObserver] remoteControlCommand listener failed",
+          error,
+        );
+        return null;
+      });
+
+    return () => {
+      disposed = true;
+      handlePromise
+        .then((handle) => handle?.remove())
+        .catch((error) => {
+          logger.info(
+            "[NativeRemoteCommandObserver] remoteControlCommand cleanup failed",
+            error,
+          );
+        });
+    };
+  }, []);
 
   return null;
 }

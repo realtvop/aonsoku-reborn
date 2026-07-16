@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
+import { buildPlaybackSnapshotFromNativeFullState } from "@/coordination/native-full-state-snapshot";
 import { projectPlaybackProgress } from "@/coordination/progress";
 import { useCoordinationStore } from "@/coordination/store";
 import type { PlaybackSnapshot, RemoteCommand } from "@/coordination/types";
+import { getNativeAudioPluginAvailability } from "@/native/audio/facade";
 import { isNativeCoordinationAvailable } from "@/native/coordination";
 import { seekPlaybackTarget } from "@/player/playback/backend-registry";
 import { getNativeQueueController } from "@/player/queue-controller";
@@ -230,7 +232,7 @@ function mapRepeatModeToLoopState(mode: string): LoopState {
   }
 }
 
-function buildPlaybackSnapshot(
+function buildStorePlaybackSnapshot(
   sessionId: string,
   song: ISong,
   isPlaying: boolean,
@@ -271,6 +273,44 @@ function buildPlaybackSnapshot(
     nowPlayingSent: false,
     scrobbleSent: false,
   };
+}
+
+async function buildPlaybackSnapshot(
+  sessionId: string,
+  song: ISong,
+  isPlaying: boolean,
+  shuffleEnabled: boolean,
+  loopState: LoopState,
+  volume: number,
+): Promise<PlaybackSnapshot> {
+  if (getPlaybackCapabilities().supportsNativePlayback) {
+    const availability = getNativeAudioPluginAvailability();
+    if (availability.available) {
+      try {
+        const nativeState = await availability.plugin.getFullState();
+        const snapshot = buildPlaybackSnapshotFromNativeFullState(
+          sessionId,
+          nativeState,
+          { volume },
+        );
+        if (snapshot) return snapshot;
+      } catch (err) {
+        logger.warn(
+          "[CoordinationObserver] native full-state snapshot failed",
+          err,
+        );
+      }
+    }
+  }
+
+  return buildStorePlaybackSnapshot(
+    sessionId,
+    song,
+    isPlaying,
+    shuffleEnabled,
+    loopState,
+    volume,
+  );
 }
 
 async function prepareNativeHandoffPlayback(
@@ -317,26 +357,33 @@ export function CoordinationObserver() {
     if (!isConnected || !currentSong) return;
     if (usePlayerStore.getState().remoteControl.active) return;
 
-    const snapshot = buildPlaybackSnapshot(
-      sessionIdRef.current,
+    const sessionId = sessionIdRef.current;
+    const generation = generationRef.current;
+    buildPlaybackSnapshot(
+      sessionId,
       currentSong,
       isPlaying,
       shuffleEnabled,
       loopState,
       volume,
-    );
-    snapshotRevisionRef.current++;
-    setLocalDeviceSnapshot(
-      snapshot,
-      generationRef.current,
-      snapshotRevisionRef.current,
-    );
-    manager.publishSnapshot(
-      sessionIdRef.current,
-      generationRef.current,
-      snapshotRevisionRef.current,
-      snapshot,
-    );
+    )
+      .then((snapshot) => {
+        snapshotRevisionRef.current++;
+        setLocalDeviceSnapshot(
+          snapshot,
+          generation,
+          snapshotRevisionRef.current,
+        );
+        manager.publishSnapshot(
+          sessionId,
+          generation,
+          snapshotRevisionRef.current,
+          snapshot,
+        );
+      })
+      .catch((err) => {
+        logger.error("[CoordinationObserver] publish snapshot failed:", err);
+      });
   }, [
     isConnected,
     currentSong,
@@ -468,7 +515,11 @@ export function CoordinationObserver() {
             subsonic.songs
               .getSong(command.song_id)
               .then((song) => {
-                if (song) playerActions.playSong(song);
+                if (song) {
+                  playerActions.playSong(song, undefined, {
+                    bypassQueueConfirmation: true,
+                  });
+                }
               })
               .catch((err) =>
                 logger.error("[CoordinationObserver] play_song failed:", err),
@@ -489,7 +540,14 @@ export function CoordinationObserver() {
                     0,
                     Math.min(command.index, valid.length - 1),
                   );
-                  playerActions.setSongList(valid, index, false);
+                  playerActions.setSongList(
+                    valid,
+                    index,
+                    false,
+                    undefined,
+                    undefined,
+                    { bypassQueueConfirmation: true },
+                  );
                 }
               })
               .catch((err) =>
@@ -516,6 +574,7 @@ export function CoordinationObserver() {
                     Boolean(command.shuffle),
                     { albumId: command.album_id },
                     album.name,
+                    { bypassQueueConfirmation: true },
                   );
                 }
               })
@@ -540,6 +599,7 @@ export function CoordinationObserver() {
                     Boolean(command.shuffle),
                     { playlistId: command.playlist_id },
                     playlist.name,
+                    { bypassQueueConfirmation: true },
                   );
                 }
               })
@@ -630,15 +690,24 @@ export function CoordinationObserver() {
     ) => {
       playerActions.setPlayingState(false);
       if (currentSong) {
-        const finalSnapshot = buildPlaybackSnapshot(
-          sessionIdRef.current,
+        const sessionId = sessionIdRef.current;
+        buildPlaybackSnapshot(
+          sessionId,
           currentSong,
           false,
           shuffleEnabled,
           loopState,
           volume,
-        );
-        manager.sendRelinquishAck(transactionId, finalSnapshot);
+        )
+          .then((finalSnapshot) => {
+            manager.sendRelinquishAck(transactionId, finalSnapshot);
+          })
+          .catch((err) => {
+            logger.error(
+              "[CoordinationObserver] relinquish snapshot failed:",
+              err,
+            );
+          });
       }
     };
     return () => {

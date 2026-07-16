@@ -28,12 +28,23 @@ const mockIsPluginAvailable = vi.mocked(Capacitor.isPluginAvailable);
 
 describe("native bridge facade", () => {
   beforeEach(() => {
+    vi.unstubAllGlobals();
     mockIsNativePlatform.mockReset();
     mockGetPlatform.mockReset();
     mockIsPluginAvailable.mockReset();
     mockIsNativePlatform.mockReturnValue(false);
     mockGetPlatform.mockReturnValue("web");
     mockIsPluginAvailable.mockReturnValue(false);
+  });
+
+  it("uses the Electron main-process bridge when exposed by preload", () => {
+    const desktopPlugin = { request: vi.fn() };
+    vi.stubGlobal("window", { aonsokuNativeBridge: desktopPlugin });
+
+    expect(getNativeBridgeAvailability()).toEqual({
+      available: true,
+      plugin: desktopPlugin,
+    });
   });
 
   it("reports web as unavailable", () => {

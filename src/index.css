@@ -692,3 +692,25 @@ html {
   width: 100%;
   max-width: clamp(280px, 85vw, 480px);
 }
+
+/* Appearance: Use pointer cursors settings overrides */
+.no-pointer-cursors [class*="cursor-pointer"],
+.no-pointer-cursors button,
+.no-pointer-cursors a,
+.no-pointer-cursors [role="button"],
+.no-pointer-cursors [role="tab"],
+.no-pointer-cursors [role="slider"],
+.no-pointer-cursors [role="checkbox"],
+.no-pointer-cursors [role="menuitem"],
+.no-pointer-cursors input[type="button"],
+.no-pointer-cursors input[type="submit"],
+.no-pointer-cursors input[type="reset"] {
+  cursor: default !important;
+}
+
+.no-pointer-cursors a[target="_blank"],
+.no-pointer-cursors .prose a,
+.no-pointer-cursors .markdown a,
+.no-pointer-cursors a.external-link {
+  cursor: pointer !important;
+}
