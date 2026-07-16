@@ -362,12 +362,6 @@
     },
     "headline": "播放列表",
     "noSongList": "这个播放列表没有任何歌曲！",
-    "playbackConfirmation": {
-      "description": "当前播放队列不为空。要如何播放《{{name}}》？",
-      "playNext": "在本曲后播放",
-      "replace": "替换当前播放队列",
-      "title": "选择播放方式"
-    },
     "refresh": "刷新播放列表",
     "songCount_one": "{{count}} 首歌曲",
     "songCount_other": "{{count}} 首歌曲"
@@ -376,6 +370,12 @@
     "clear": "清空队列",
     "close": "关闭队列",
     "open": "打开队列",
+    "replacementConfirmation": {
+      "description": "当前播放队列不为空。",
+      "playNext": "在本曲后播放",
+      "replace": "替换当前播放队列",
+      "title": "选择播放方式"
+    },
     "title": "队列"
   },
   "radios": {

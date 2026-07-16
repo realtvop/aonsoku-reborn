@@ -50,30 +50,6 @@ export const usePlaylistsStore = createWithEqualityFn<IPlaylistsContext>()(
             });
           },
         },
-        playbackConfirmation: {
-          open: false,
-          playlist: null,
-          request: (playlist) => {
-            set((state) => {
-              state.playbackConfirmation.open = true;
-              state.playbackConfirmation.playlist = playlist;
-            });
-          },
-          reset: () => {
-            set((state) => {
-              state.playbackConfirmation.open = false;
-              state.playbackConfirmation.playlist = null;
-            });
-          },
-          setOpen: (open) => {
-            set((state) => {
-              state.playbackConfirmation.open = open;
-              if (!open) {
-                state.playbackConfirmation.playlist = null;
-              }
-            });
-          },
-        },
       })),
       {
         name: "playlists_store",
@@ -89,6 +65,3 @@ export const usePlaylistRemoveSong = () =>
 
 export const useRemovePlaylist = () =>
   usePlaylistsStore((state) => state.removePlaylist);
-
-export const usePlaylistPlaybackConfirmation = () =>
-  usePlaylistsStore((state) => state.playbackConfirmation);

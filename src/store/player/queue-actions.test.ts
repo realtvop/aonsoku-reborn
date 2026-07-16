@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { usePlaybackReplacementStore } from "@/store/playback-replacement.store";
 import { LoopState } from "@/types/playerContext";
 import { createQueueActions } from "./queue-actions";
 
@@ -69,6 +70,7 @@ function makeState() {
 describe("queue actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    usePlaybackReplacementStore.getState().reset();
   });
 
   it("restarts the current song when previous is used without a real previous song", () => {
@@ -131,5 +133,73 @@ describe("queue actions", () => {
       "next-2",
       "queued",
     ]);
+  });
+
+  it("requests confirmation before replacing a non-empty context queue", () => {
+    const state = makeState();
+    const actions = createQueueActions({
+      set: (fn) => fn(state as never),
+      get: () => state as never,
+      isRemoteActive: () => false,
+      remoteSend: vi.fn(),
+      clearSonglistState: vi.fn(),
+    });
+
+    actions.setSongList?.([makeSong("replacement")], 0, false, {
+      albumId: "album-2",
+    });
+
+    expect(state.songlist.contextQueue.songs[0]?.id).toBe("a");
+    expect(usePlaybackReplacementStore.getState().request).toMatchObject({
+      kind: "songList",
+      songs: [{ id: "replacement" }],
+      sourceId: { albumId: "album-2" },
+    });
+  });
+
+  it("replaces the context queue after confirmation", () => {
+    const state = makeState();
+    const actions = createQueueActions({
+      set: (fn) => fn(state as never),
+      get: () => state as never,
+      isRemoteActive: () => false,
+      remoteSend: vi.fn(),
+      clearSonglistState: vi.fn(),
+    });
+
+    actions.setSongList?.(
+      [makeSong("replacement")],
+      0,
+      false,
+      { albumId: "album-2" },
+      "Album 2",
+      { bypassQueueConfirmation: true },
+    );
+
+    expect(state.songlist.contextQueue.songs[0]?.id).toBe("replacement");
+    expect(state.songlist.contextQueue.sourceId).toEqual({
+      type: "album",
+      id: "album-2",
+    });
+  });
+
+  it("requests confirmation before replacing the queue with one song", () => {
+    const state = makeState();
+    const actions = createQueueActions({
+      set: (fn) => fn(state as never),
+      get: () => state as never,
+      isRemoteActive: () => false,
+      remoteSend: vi.fn(),
+      clearSonglistState: vi.fn(),
+    });
+    Object.assign(state, { actions });
+
+    actions.playSong?.(makeSong("replacement"));
+
+    expect(state.songlist.contextQueue.songs[0]?.id).toBe("a");
+    expect(usePlaybackReplacementStore.getState().request).toMatchObject({
+      kind: "song",
+      song: { id: "replacement" },
+    });
   });
 });

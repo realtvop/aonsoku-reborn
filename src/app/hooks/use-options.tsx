@@ -1,15 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMatches } from "react-router-dom";
-import {
-  resolvePlaylistSongs,
-  shouldConfirmPlaylistPlayback,
-} from "@/app/components/playlist/playback";
+import { resolvePlaylistSongs } from "@/app/components/playlist/playback";
 import { subsonic } from "@/service/subsonic";
-import { usePlayerActions, usePlayerStore } from "@/store/player.store";
-import {
-  usePlaylistRemoveSong,
-  usePlaylistsStore,
-} from "@/store/playlists.store";
+import { usePlayerActions } from "@/store/player.store";
+import { usePlaylistRemoveSong } from "@/store/playlists.store";
 import { useSongInfo } from "@/store/ui.store";
 import type { QueueSourceId } from "@/types/playerContext";
 import {
@@ -56,12 +50,6 @@ export function useOptions() {
   }
 
   async function playPlaylist(playlist: Playlist | PlaylistWithEntries) {
-    const { contextQueue } = usePlayerStore.getState().songlist;
-    if (shouldConfirmPlaylistPlayback(contextQueue, playlist.id)) {
-      usePlaylistsStore.getState().playbackConfirmation.request(playlist);
-      return;
-    }
-
     const songs = await resolvePlaylistSongs(playlist);
     if (!songs) return;
 

@@ -98,12 +98,6 @@
       "shuffle": "Play {{name}} in shuffle mode",
       "options": "More options for {{name}}"
     },
-    "playbackConfirmation": {
-      "title": "Choose how to play this playlist",
-      "description": "The current queue is not empty. How should {{name}} be played?",
-      "replace": "Replace current queue",
-      "playNext": "Play after this song"
-    },
     "noSongList": "This playlist does not have any songs!",
     "form": {
       "labels": {
@@ -541,7 +535,13 @@
     "title": "Queue",
     "clear": "Clear queue",
     "close": "Close queue",
-    "open": "Open queue"
+    "open": "Open queue",
+    "replacementConfirmation": {
+      "title": "Choose how to continue",
+      "description": "The current playback queue is not empty.",
+      "replace": "Replace current queue",
+      "playNext": "Play after this song"
+    }
   },
   "shortcuts": {
     "modal": {

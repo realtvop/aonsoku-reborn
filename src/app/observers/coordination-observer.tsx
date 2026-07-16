@@ -515,7 +515,11 @@ export function CoordinationObserver() {
             subsonic.songs
               .getSong(command.song_id)
               .then((song) => {
-                if (song) playerActions.playSong(song);
+                if (song) {
+                  playerActions.playSong(song, undefined, {
+                    bypassQueueConfirmation: true,
+                  });
+                }
               })
               .catch((err) =>
                 logger.error("[CoordinationObserver] play_song failed:", err),
@@ -536,7 +540,14 @@ export function CoordinationObserver() {
                     0,
                     Math.min(command.index, valid.length - 1),
                   );
-                  playerActions.setSongList(valid, index, false);
+                  playerActions.setSongList(
+                    valid,
+                    index,
+                    false,
+                    undefined,
+                    undefined,
+                    { bypassQueueConfirmation: true },
+                  );
                 }
               })
               .catch((err) =>
@@ -563,6 +574,7 @@ export function CoordinationObserver() {
                     Boolean(command.shuffle),
                     { albumId: command.album_id },
                     album.name,
+                    { bypassQueueConfirmation: true },
                   );
                 }
               })
@@ -587,6 +599,7 @@ export function CoordinationObserver() {
                     Boolean(command.shuffle),
                     { playlistId: command.playlist_id },
                     playlist.name,
+                    { bypassQueueConfirmation: true },
                   );
                 }
               })
