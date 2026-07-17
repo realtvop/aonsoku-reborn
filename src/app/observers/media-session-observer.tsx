@@ -1,9 +1,12 @@
+import type {
+  AonsokuAudioBridge,
+  NativeRemotePlaybackStateOptions,
+} from "@aonsoku/audio-contract";
 import { useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useRemotePlaybackProjection } from "@/app/components/remote-control/use-remote-playback-projection";
 import { useBackgroundPlayback } from "@/app/hooks/use-background-playback";
 import { getNativeAudioPluginAvailability } from "@/native/audio/facade";
-import { isNativeCoordinationAvailable } from "@/native/coordination";
 import { playbackRepeatModeFromLoopState } from "@/player/playback/types";
 import {
   usePlayerCurrentSong,
@@ -25,6 +28,17 @@ import { logger } from "@/utils/logger";
 import { manageMediaSession } from "@/utils/setMediaSession";
 
 const NATIVE_REMOTE_COVER_SIZE = "800";
+
+export async function syncNativeRemotePlaybackProjection(
+  plugin: AonsokuAudioBridge,
+  options: NativeRemotePlaybackStateOptions | null,
+): Promise<void> {
+  if (options) {
+    await plugin.updateRemotePlaybackState(options);
+  } else {
+    await plugin.clearRemotePlaybackState();
+  }
+}
 
 export function MediaSessionObserver() {
   const { t } = useTranslation();
@@ -223,8 +237,6 @@ export function MediaSessionObserver() {
   ]);
 
   useEffect(() => {
-    if (isNativeCoordinationAvailable()) return;
-
     const availability = getNativeAudioPluginAvailability();
     if (!availability.available) return;
 
@@ -232,8 +244,11 @@ export function MediaSessionObserver() {
     if (!isRemoteActive || hasNothingPlaying || !song) {
       if (nativeRemoteProjectionActiveRef.current) {
         nativeRemoteProjectionActiveRef.current = false;
-        plugin.clearRemotePlaybackState().catch((error) => {
-          logger.info("[MediaSessionObserver.nativeRemoteClear] failed", error);
+        syncNativeRemotePlaybackProjection(plugin, null).catch((error) => {
+          logger.error(
+            "[MediaSessionObserver.nativeRemoteClear] failed",
+            error,
+          );
         });
       }
       return;
@@ -259,31 +274,29 @@ export function MediaSessionObserver() {
         : undefined;
 
     nativeRemoteProjectionActiveRef.current = true;
-    plugin
-      .updateRemotePlaybackState({
-        metadata: {
-          title: song.title,
-          artist: song.artist,
-          album: song.album,
-          duration,
-          artworkUrl,
-          coverArtId,
-        },
-        isPlaying: remoteProjection.isPlaying,
-        position,
+    syncNativeRemotePlaybackProjection(plugin, {
+      metadata: {
+        title: song.title,
+        artist: song.artist,
+        album: song.album,
         duration,
-        isShuffleActive: remoteProjection.isShuffleActive,
-        repeatMode: playbackRepeatModeFromLoopState(remoteProjection.loopState),
-        volume:
-          typeof remoteProjection.volume === "number"
-            ? remoteProjection.volume / 100
-            : undefined,
-        targetDeviceId: remoteProjection.targetDeviceId ?? undefined,
-        expectedGeneration: remoteProjection.expectedGeneration ?? undefined,
-      })
-      .catch((error) => {
-        logger.info("[MediaSessionObserver.nativeRemoteUpdate] failed", error);
-      });
+        artworkUrl,
+        coverArtId,
+      },
+      isPlaying: remoteProjection.isPlaying,
+      position,
+      duration,
+      isShuffleActive: remoteProjection.isShuffleActive,
+      repeatMode: playbackRepeatModeFromLoopState(remoteProjection.loopState),
+      volume:
+        typeof remoteProjection.volume === "number"
+          ? remoteProjection.volume / 100
+          : undefined,
+      targetDeviceId: remoteProjection.targetDeviceId ?? undefined,
+      expectedGeneration: remoteProjection.expectedGeneration ?? undefined,
+    }).catch((error) => {
+      logger.error("[MediaSessionObserver.nativeRemoteUpdate] failed", error);
+    });
   }, [
     hasNothingPlaying,
     isRemoteActive,

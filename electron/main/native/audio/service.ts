@@ -415,12 +415,21 @@ export class NativeAudioService implements AonsokuAudioApi {
           ? clampUnitVolume(options.volume)
           : undefined,
     };
-    return Promise.resolve();
+    return this.#enqueuePlaybackCommand(async () => {
+      const projection = this.#remotePlaybackState;
+      if (!projection) return;
+      await this.#engine.updateRemotePlaybackState({
+        ...projection,
+        metadata: this.#normalizeMetadata(projection.metadata) ?? {},
+      });
+    });
   }
 
   clearRemotePlaybackState(): Promise<void> {
     this.#remotePlaybackState = null;
-    return Promise.resolve();
+    return this.#enqueuePlaybackCommand(() =>
+      this.#engine.clearRemotePlaybackState(),
+    );
   }
 
   preload(_options: { source: NativeAudioSource }): Promise<void> {
@@ -696,6 +705,17 @@ export class NativeAudioService implements AonsokuAudioApi {
     };
   }
 
+  getNativePlaybackCapability(): {
+    available: boolean;
+    reason?: string;
+  } {
+    const diagnostics = this.#engine.getDiagnostics?.();
+    if (!diagnostics || diagnostics.status === "available") {
+      return { available: true };
+    }
+    return { available: false, reason: diagnostics.message };
+  }
+
   setVolumeHUDEnabled(options: { enabled: boolean }): Promise<void> {
     return this.#systemAudio.setVolumeHUDEnabled(options.enabled);
   }
@@ -802,6 +822,9 @@ export class NativeAudioService implements AonsokuAudioApi {
         if (!this.#currentSource) return false;
         await this.#pause();
         return true;
+      case "stop":
+        await this.#clear();
+        return true;
       case "togglePlayPause":
         if (!this.#currentSource) return false;
         if (this.#playbackState === "playing") {
@@ -863,6 +886,9 @@ export class NativeAudioService implements AonsokuAudioApi {
         if (typeof position === "number" && Number.isFinite(position)) {
           await this.#seek({ position: Math.max(0, position) });
         }
+        return;
+      case "stop":
+        await this.#clear();
         return;
       case "play":
       case "pause":
@@ -967,6 +993,17 @@ export class NativeAudioService implements AonsokuAudioApi {
             ),
           ).catch((error) => this.#emitFailure(error));
         }
+        break;
+      case "systemMediaSessionError":
+        nativeLogger.error(
+          `system media session error: ${event.code} ${event.message}`,
+          "audio-service",
+        );
+        this.#emit("systemMediaSessionError", {
+          requestId: this.#requestId,
+          code: event.code,
+          message: event.message,
+        });
         break;
       case "systemMediaCommand":
         this.#enqueuePlaybackCommand(() =>
@@ -1310,6 +1347,8 @@ export class NativeAudioService implements AonsokuAudioApi {
         return { type: "play" };
       case "pause":
         return { type: "pause" };
+      case "stop":
+        return { type: "clear_queue" };
       case "togglePlayPause":
         return { type: "toggle_play_pause" };
       case "next":
@@ -1399,6 +1438,7 @@ export class NativeAudioService implements AonsokuAudioApi {
       this.#stopScrobbleTracking();
       await this.#engine.pause();
       await this.#engine.seek(0);
+      await this.#engine.settlePlaybackEnded();
       this.#playbackState = "ended";
       this.#currentTime = 0;
       this.#emit("playbackStateChanged", {
@@ -1430,6 +1470,7 @@ export class NativeAudioService implements AonsokuAudioApi {
 
     this.#playbackState = "ended";
     this.#stopScrobbleTracking();
+    await this.#engine.settlePlaybackEnded();
     this.#emit("ended", {
       requestId: this.#requestId,
       reason: event.reason,

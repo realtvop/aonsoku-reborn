@@ -28,7 +28,8 @@ import {
 
 export type NativeAudioUnavailableReason =
   | "unsupported-platform"
-  | "missing-plugin";
+  | "missing-plugin"
+  | "unhealthy-plugin";
 
 export type NativeAudioPluginAvailability =
   | {
@@ -262,6 +263,16 @@ function getDesktopNativeAudioBridge(): AonsokuAudioBridge | null {
 export function getNativeAudioPluginAvailability(): NativeAudioPluginAvailability {
   const desktopBridge = getDesktopNativeAudioBridge();
   if (desktopBridge) {
+    const capability = window.aonsokuNativeAudioCapability;
+    if (!capability?.available) {
+      return {
+        available: false,
+        reason: "unhealthy-plugin",
+        message:
+          capability?.reason ??
+          "Electron desktop native audio did not complete its capability handshake.",
+      };
+    }
     return {
       available: true,
       plugin: desktopBridge,

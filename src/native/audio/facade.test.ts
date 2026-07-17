@@ -149,6 +149,7 @@ describe("Aonsoku native audio facade", () => {
   it("prefers the Electron desktop bridge when it is exposed", () => {
     vi.stubGlobal("window", {
       aonsokuNativeAudio: mockPlugin,
+      aonsokuNativeAudioCapability: { available: true },
     });
 
     expect(getNativeAudioPluginAvailability()).toEqual({
@@ -157,6 +158,22 @@ describe("Aonsoku native audio facade", () => {
     });
     expect(mockIsNativePlatform).not.toHaveBeenCalled();
     expect(isNativeAudioPluginAvailable()).toBe(true);
+  });
+
+  it("rejects an Electron bridge that did not pass its health handshake", () => {
+    vi.stubGlobal("window", {
+      aonsokuNativeAudio: mockPlugin,
+      aonsokuNativeAudioCapability: {
+        available: false,
+        reason: "native addon unavailable",
+      },
+    });
+
+    expect(getNativeAudioPluginAvailability()).toEqual({
+      available: false,
+      reason: "unhealthy-plugin",
+      message: "native addon unavailable",
+    });
   });
 
   it("reports unsupported platforms as unavailable", () => {
@@ -216,6 +233,7 @@ describe("Aonsoku native audio facade", () => {
     vi.mocked(mockPlugin.addListener).mockResolvedValue(handle);
     vi.stubGlobal("window", {
       aonsokuNativeAudio: mockPlugin,
+      aonsokuNativeAudioCapability: { available: true },
     });
 
     await expect(addNativeAudioListener("progress", listener)).resolves.toBe(

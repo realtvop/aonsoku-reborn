@@ -3,6 +3,7 @@ import type { PlaybackRemoteCommandEvent } from "./types";
 export interface PlaybackRemoteCommandContext {
   isPlaying: () => boolean;
   togglePlayPause: () => void;
+  stop: () => void;
   playNextSong: () => void;
   playPrevSong: () => void;
   seek: (position: number) => void;
@@ -24,6 +25,9 @@ export function handlePlaybackRemoteCommand(
       if (context.isPlaying()) {
         context.togglePlayPause();
       }
+      return;
+    case "stop":
+      context.stop();
       return;
     case "togglePlayPause":
       context.togglePlayPause();

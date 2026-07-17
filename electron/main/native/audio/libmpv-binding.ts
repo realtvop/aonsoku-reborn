@@ -137,7 +137,17 @@ export function loadLibMpvBinding(
 export function createNativeMpvPlayer(
   binding: LibMpvNativeBinding = loadLibMpvBinding(),
 ): MpvPlayer {
-  return new NativeMpvPlayerAdapter(binding.createPlayer());
+  const native = binding.createPlayer();
+  if (
+    typeof native.updateSystemMediaSession !== "function" ||
+    typeof native.clearSystemMediaSession !== "function"
+  ) {
+    native.destroy?.();
+    throw new Error(
+      "The Aonsoku libmpv addon does not expose the required system media session methods.",
+    );
+  }
+  return new NativeMpvPlayerAdapter(native);
 }
 
 export function getLibMpvAddonCandidates(

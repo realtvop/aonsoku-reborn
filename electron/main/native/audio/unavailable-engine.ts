@@ -1,5 +1,8 @@
 import { EventEmitter } from "node:events";
-import type { NativeAudioMetadata } from "@aonsoku/audio-contract";
+import type {
+  NativeAudioMetadata,
+  NativeRemotePlaybackStateOptions,
+} from "@aonsoku/audio-contract";
 import type {
   DesktopAudioEngine,
   DesktopAudioEngineDiagnostics,
@@ -69,6 +72,20 @@ export class UnavailableDesktopAudioEngine implements DesktopAudioEngine {
   }
 
   updateMetadata(_metadata: NativeAudioMetadata): Promise<void> {
+    return Promise.resolve();
+  }
+
+  updateRemotePlaybackState(
+    _options: NativeRemotePlaybackStateOptions,
+  ): Promise<void> {
+    return this.#reject();
+  }
+
+  clearRemotePlaybackState(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  settlePlaybackEnded(): Promise<void> {
     return Promise.resolve();
   }
 

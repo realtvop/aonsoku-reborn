@@ -259,6 +259,37 @@ describe("LibMpvAudioEngine", () => {
     );
   });
 
+  it("reports system media update failures without emitting playback errors", async () => {
+    const { engine, events, player } = createHarness();
+
+    await engine.load({
+      source: { kind: "native-file", target: "/tmp/song.mp3" },
+      metadata: { title: "Track", duration: 100 },
+      autoplay: true,
+    });
+    player.emit({ type: "file-loaded" });
+    events.length = 0;
+    player.updateSystemMediaSession.mockRejectedValueOnce(
+      new Error("Now Playing unavailable"),
+    );
+
+    player.emit({
+      type: "property-change",
+      name: "pause",
+      data: true,
+    });
+    await vi.waitFor(() =>
+      expect(events).toContainEqual({
+        type: "systemMediaSessionError",
+        code: "system-media-session-update-failed",
+        message: "Now Playing unavailable",
+      }),
+    );
+    expect(events).not.toContainEqual(
+      expect.objectContaining({ type: "error" }),
+    );
+  });
+
   it("suppresses libmpv stop events caused by repeat load and explicit stop", async () => {
     const { engine, events, player } = createHarness();
 
@@ -474,6 +505,7 @@ describe("LibMpvAudioEngine", () => {
     events.length = 0;
 
     player.emit({ type: "system-media-command", name: "play", data: null });
+    player.emit({ type: "system-media-command", name: "stop", data: null });
     player.emit({
       type: "system-media-command",
       name: "togglePlayPause",
@@ -483,6 +515,7 @@ describe("LibMpvAudioEngine", () => {
 
     expect(events).toEqual([
       { type: "systemMediaCommand", command: "play" },
+      { type: "systemMediaCommand", command: "stop" },
       { type: "systemMediaCommand", command: "togglePlayPause" },
       { type: "systemMediaCommand", command: "seek", position: 42.5 },
     ]);

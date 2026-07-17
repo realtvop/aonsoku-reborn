@@ -13,6 +13,8 @@ export const DESKTOP_NATIVE_AUDIO_INVOKE_CHANNEL =
   "aonsoku-native-audio:invoke";
 
 export const DESKTOP_NATIVE_AUDIO_EVENT_CHANNEL = "aonsoku-native-audio:event";
+export const DESKTOP_NATIVE_AUDIO_CAPABILITY_CHANNEL =
+  "aonsoku-native-audio:capability";
 
 export type DesktopNativeAudioInvokePayload<
   TMethod extends keyof AonsokuAudioApi = keyof AonsokuAudioApi,
@@ -72,6 +74,10 @@ export function setupDesktopNativeAudioIpc(
   }
   desktopNativeAudioReady = desktopNativeAudioService.ready();
   ipcMain.removeHandler(DESKTOP_NATIVE_AUDIO_INVOKE_CHANNEL);
+  ipcMain.removeAllListeners(DESKTOP_NATIVE_AUDIO_CAPABILITY_CHANNEL);
+  ipcMain.on(DESKTOP_NATIVE_AUDIO_CAPABILITY_CHANNEL, (event) => {
+    event.returnValue = desktopNativeAudioService.getNativePlaybackCapability();
+  });
   unsubscribeFromNativeAudioEvents?.();
   unsubscribeFromNativeAudioEvents = desktopNativeAudioService.onEvent(
     ({ eventName, event }) => {
@@ -106,6 +112,7 @@ export function setupDesktopNativeAudioIpc(
 
 export function destroyDesktopNativeAudioService(): Promise<void> | void {
   ipcMain.removeHandler(DESKTOP_NATIVE_AUDIO_INVOKE_CHANNEL);
+  ipcMain.removeAllListeners(DESKTOP_NATIVE_AUDIO_CAPABILITY_CHANNEL);
   unsubscribeFromNativeAudioEvents?.();
   unsubscribeFromNativeAudioEvents = null;
 

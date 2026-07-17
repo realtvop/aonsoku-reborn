@@ -272,9 +272,16 @@ export interface NativeAudioErrorEvent {
   message: string;
 }
 
+export interface NativeAudioSystemMediaSessionErrorEvent {
+  requestId?: string;
+  code: string;
+  message: string;
+}
+
 export type NativeAudioRemoteCommand =
   | "play"
   | "pause"
+  | "stop"
   | "togglePlayPause"
   | "next"
   | "previous"
@@ -386,6 +393,7 @@ export interface NativeAudioEvents {
   bufferingChanged: NativeAudioBufferingChangedEvent;
   ended: NativeAudioEndedEvent;
   error: NativeAudioErrorEvent;
+  systemMediaSessionError: NativeAudioSystemMediaSessionErrorEvent;
   remoteCommand: NativeAudioRemoteCommandEvent;
   remoteControlCommand: NativeRemoteControlCommandEvent;
   interruptionChanged: NativeAudioInterruptionChangedEvent;

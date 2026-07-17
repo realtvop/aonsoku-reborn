@@ -30,6 +30,17 @@ try {
 }
 
 const player = binding.createPlayer();
+const runtimeInfo = binding.runtimeInfo?.() ?? {};
+if (runtimeInfo.systemMediaSessionApiVersion !== "2") {
+  throw new Error(
+    "native-audio: addon does not provide system media session API version 2",
+  );
+}
+for (const method of ["updateSystemMediaSession", "clearSystemMediaSession"]) {
+  if (typeof player[method] !== "function") {
+    throw new Error(`native-audio: addon is missing required method ${method}`);
+  }
+}
 const events = [];
 player.setEventCallback((event) => {
   events.push(event);
@@ -53,22 +64,38 @@ try {
   player.observeProperty("time-pos", "number");
   player.command(["loadfile", wavPath, "replace"]);
   await waitForEvent(events, (event) => event.type === "file-loaded");
-  if (typeof player.updateSystemMediaSession === "function") {
-    const metadata = {
-      title: "Aonsoku native audio smoke test",
-      artworkUrl: "aonsoku-smoke://artwork",
-    };
-    player.updateSystemMediaSession(metadata, {
-      state: "playing",
-      position: 0,
-      duration: 2,
-    });
-    player.updateSystemMediaSession(metadata, {
-      state: "playing",
-      position: 0.05,
-      duration: 2,
-    });
-  }
+  const metadata = {
+    title: "Aonsoku native audio smoke test",
+  };
+  player.updateSystemMediaSession(metadata, {
+    state: "playing",
+    position: 0,
+    duration: 2,
+  });
+  const availabilityPlayer = binding.createPlayer();
+  availabilityPlayer.setEventCallback(() => {});
+  availabilityPlayer.initialize({
+    options: {
+      ao: "null",
+      "audio-display": "no",
+      "force-window": "no",
+      idle: "yes",
+      terminal: "no",
+      vid: "no",
+    },
+    registerSystemMediaSession: false,
+  });
+  availabilityPlayer.destroy();
+  player.updateSystemMediaSession(metadata, {
+    state: "playing",
+    position: 0.1,
+    duration: 2,
+  });
+  player.updateSystemMediaSession(metadata, {
+    state: "playing",
+    position: 0.05,
+    duration: 2,
+  });
   player.setProperty("pause", true);
   await waitForEvent(
     events,
@@ -80,7 +107,7 @@ try {
   player.setProperty("pause", false);
   player.command(["seek", "0.05", "absolute", "exact"]);
   player.command(["stop"]);
-  player.clearSystemMediaSession?.();
+  player.clearSystemMediaSession();
   player.destroy();
   await rm(wavPath, { force: true });
 
@@ -90,12 +117,13 @@ try {
         ok: true,
         addonPath,
         mode: args.packagedLike ? "packaged-like" : "source-build",
-        runtimeInfo: binding.runtimeInfo?.() ?? null,
+        runtimeInfo,
         observedEvents: events.length,
         loadedFixture: true,
         exercised: [
           "load",
           "system-media-session",
+          "availability-player-isolation",
           "pause",
           "resume",
           "seek",

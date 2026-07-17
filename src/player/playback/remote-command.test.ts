@@ -10,6 +10,7 @@ function createContext(isPlaying: boolean) {
       togglePlayPause: vi.fn(() => {
         state.isPlaying = !state.isPlaying;
       }),
+      stop: vi.fn(),
       playNextSong: vi.fn(),
       playPrevSong: vi.fn(),
       seek: vi.fn(),
@@ -46,6 +47,14 @@ describe("handlePlaybackRemoteCommand", () => {
     expect(context.playNextSong).toHaveBeenCalledTimes(1);
     expect(context.playPrevSong).toHaveBeenCalledTimes(1);
     expect(context.seek).toHaveBeenCalledWith(0);
+  });
+
+  it("maps stop to clearing the player", () => {
+    const { context } = createContext(true);
+
+    handlePlaybackRemoteCommand({ command: "stop" }, context);
+
+    expect(context.stop).toHaveBeenCalledOnce();
   });
 
   it("maps like command to starCurrentSong", () => {

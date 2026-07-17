@@ -3,11 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => {
   const ipcRenderer = {
     invoke: vi.fn(),
+    sendSync: vi.fn(() => ({ available: true })),
     on: vi.fn(),
     removeListener: vi.fn(),
   };
   const ipcMain = {
     removeHandler: vi.fn(),
+    removeAllListeners: vi.fn(),
+    on: vi.fn(),
     handle: vi.fn(),
   };
   const BrowserWindow = {
@@ -31,8 +34,10 @@ import {
   DESKTOP_NATIVE_AUDIO_EVENT_CHANNEL,
   DESKTOP_NATIVE_AUDIO_INVOKE_CHANNEL,
 } from "../main/native/audio/ipc";
-import { aonsokuNativeAudioBridge } from "./native-audio";
-import { __resetNativeAudioDispatcherForTest } from "./native-audio";
+import {
+  __resetNativeAudioDispatcherForTest,
+  aonsokuNativeAudioBridge,
+} from "./native-audio";
 
 function dispatch(payload: { eventName: string; event: unknown }): void {
   const dispatcher = mocks.ipcRenderer.on.mock.calls[0]?.[1] as

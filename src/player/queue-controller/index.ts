@@ -1,3 +1,4 @@
+import { getNativeAudioPluginAvailability } from "@/native/audio";
 import { getPlaybackCapabilities } from "@/utils/capabilities";
 import { logger } from "@/utils/logger";
 import { NativeQueueController } from "./native-controller";
@@ -14,7 +15,10 @@ export function getQueueController(): QueueController {
 }
 
 function createQueueController(): QueueController {
-  if (getPlaybackCapabilities().supportsNativePlayback) {
+  if (
+    getPlaybackCapabilities().supportsNativePlayback &&
+    getNativeAudioPluginAvailability().available
+  ) {
     try {
       return new NativeQueueController();
     } catch (err) {
@@ -37,11 +41,11 @@ export function resetQueueController(): void {
   instance = null;
 }
 
-export type { QueueController } from "./types";
 export type {
-  QueueControllerState,
+  QueueController,
   QueueControllerEvent,
   QueueControllerListener,
+  QueueControllerState,
   QueueStateChangeEvent,
   QueueStateChangeReason,
 } from "./types";

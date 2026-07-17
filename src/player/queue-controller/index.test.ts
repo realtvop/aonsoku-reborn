@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => {
 
   return {
     getPlaybackCapabilities: vi.fn(),
+    getNativeAudioPluginAvailability: vi.fn(),
     logger: {
       error: vi.fn(),
     },
@@ -30,6 +31,10 @@ const mocks = vi.hoisted(() => {
 
 vi.mock("@/utils/capabilities", () => ({
   getPlaybackCapabilities: mocks.getPlaybackCapabilities,
+}));
+
+vi.mock("@/native/audio", () => ({
+  getNativeAudioPluginAvailability: mocks.getNativeAudioPluginAvailability,
 }));
 
 vi.mock("@/utils/logger", () => ({
@@ -56,6 +61,10 @@ describe("queue controller selection", () => {
   beforeEach(() => {
     mocks.getPlaybackCapabilities.mockReturnValue({
       supportsNativePlayback: false,
+    });
+    mocks.getNativeAudioPluginAvailability.mockReturnValue({
+      available: true,
+      plugin: {},
     });
     mocks.MockNativeQueueController.shouldThrow = false;
     vi.clearAllMocks();
@@ -97,5 +106,18 @@ describe("queue controller selection", () => {
       "[QueueController] Native controller unavailable, falling back to web",
       expect.any(Error),
     );
+  });
+
+  it("uses the web controller when the desktop health handshake fails", () => {
+    mocks.getPlaybackCapabilities.mockReturnValue({
+      supportsNativePlayback: true,
+    });
+    mocks.getNativeAudioPluginAvailability.mockReturnValue({
+      available: false,
+      reason: "unhealthy-plugin",
+      message: "addon unavailable",
+    });
+
+    expect(getQueueController()).toBeInstanceOf(WebQueueController);
   });
 });

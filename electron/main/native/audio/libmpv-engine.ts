@@ -67,6 +67,7 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
   #hasLoadedSource = false;
   #ignoreNextStopEnd = false;
   #destroyed = false;
+  #remoteProjectionActive = false;
 
   constructor(options: LibMpvAudioEngineOptions) {
     this.#playerFactory = options.playerFactory;
@@ -159,7 +160,9 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
     this.#duration = 0;
     this.#isPaused = true;
     this.#metadata = {};
-    await this.#player?.clearSystemMediaSession();
+    if (!this.#remoteProjectionActive) {
+      await this.#player?.clearSystemMediaSession();
+    }
     this.#emit({ type: "bufferingChanged", isBuffering: false });
     this.#emit({ type: "playbackStateChanged", state: "idle" });
   }
@@ -175,6 +178,40 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
       metadata.title ?? "",
     );
     await this.#updateSystemMediaSession(this.#isPaused ? "paused" : "playing");
+  }
+
+  async updateRemotePlaybackState(
+    options: import("@aonsoku/audio-contract").NativeRemotePlaybackStateOptions,
+  ): Promise<void> {
+    const player = await this.#ensureStarted();
+    this.#remoteProjectionActive = true;
+    await player.updateSystemMediaSession(options.metadata, {
+      state: options.isPlaying ? "playing" : "paused",
+      position: Math.max(0, options.position),
+      duration: Math.max(0, options.duration),
+    });
+  }
+
+  async clearRemotePlaybackState(): Promise<void> {
+    if (!this.#remoteProjectionActive) return;
+    this.#remoteProjectionActive = false;
+    if (!this.#player) return;
+
+    if (this.#hasLoadedSource) {
+      await this.#updateSystemMediaSession(
+        this.#isPaused ? "paused" : "playing",
+      );
+    } else {
+      await this.#player.clearSystemMediaSession();
+    }
+  }
+
+  async settlePlaybackEnded(): Promise<void> {
+    this.#isPaused = true;
+    this.#currentTime = 0;
+    if (!this.#remoteProjectionActive) {
+      await this.#player?.clearSystemMediaSession();
+    }
   }
 
   onEvent(listener: DesktopAudioEngineEventListener): () => void {
@@ -220,6 +257,9 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
     this.#player = null;
 
     if (player) {
+      if (this.#remoteProjectionActive || this.#hasLoadedSource) {
+        await player.clearSystemMediaSession();
+      }
       await player.destroy();
     }
   }
@@ -297,7 +337,6 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
         this.#handleSystemMediaCommand(event);
         break;
       case "shutdown":
-        this.#clearSystemMediaSession();
         this.#player = null;
         this.#hasLoadedSource = false;
         break;
@@ -311,7 +350,6 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
     }
 
     this.#hasLoadedSource = false;
-    this.#clearSystemMediaSession();
     this.#emit({ type: "bufferingChanged", isBuffering: false });
 
     if (event.reason === "eof") {
@@ -321,6 +359,7 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
     }
 
     if (event.reason === "error") {
+      this.#clearSystemMediaSession();
       this.#isPaused = true;
       this.#emitError(
         "mpv-playback-error",
@@ -329,6 +368,7 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
       return;
     }
 
+    this.#clearSystemMediaSession();
     this.#emit({ type: "playbackStateChanged", state: "stopped" });
     this.#emit({ type: "ended", reason: "stopped" });
   }
@@ -348,6 +388,7 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
         this.#duration = duration;
         this.#emit({ type: "durationChanged", duration });
         this.#emitProgress();
+        this.#syncSystemMediaSession(this.#isPaused ? "paused" : "playing");
         break;
       }
       case "pause":
@@ -452,7 +493,13 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
   async #updateSystemMediaSession(
     state: "playing" | "paused" | "stopped",
   ): Promise<void> {
-    if (!this.#player || !this.#hasLoadedSource) return;
+    if (
+      !this.#player ||
+      !this.#hasLoadedSource ||
+      this.#remoteProjectionActive
+    ) {
+      return;
+    }
 
     await this.#player.updateSystemMediaSession(this.#metadata, {
       state,
@@ -462,11 +509,27 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
   }
 
   #syncSystemMediaSession(state: "playing" | "paused" | "stopped"): void {
-    this.#updateSystemMediaSession(state).catch(() => {});
+    this.#updateSystemMediaSession(state).catch((error) => {
+      this.#emitSystemMediaSessionError(
+        "system-media-session-update-failed",
+        error instanceof Error ? error.message : String(error),
+      );
+    });
   }
 
   #clearSystemMediaSession(): void {
-    Promise.resolve(this.#player?.clearSystemMediaSession()).catch(() => {});
+    if (this.#remoteProjectionActive) return;
+    Promise.resolve(this.#player?.clearSystemMediaSession()).catch((error) => {
+      this.#emitSystemMediaSessionError(
+        "system-media-session-clear-failed",
+        error instanceof Error ? error.message : String(error),
+      );
+    });
+  }
+
+  #emitSystemMediaSessionError(code: string, message: string): void {
+    nativeLogger.error(`${code}: ${message}`, "libmpv-engine");
+    this.#emit({ type: "systemMediaSessionError", code, message });
   }
 }
 
@@ -549,7 +612,15 @@ function clampUnitVolume(value: number): number {
 }
 
 const SUPPORTED_SYSTEM_MEDIA_COMMANDS: ReadonlySet<NativeAudioRemoteCommand> =
-  new Set(["play", "pause", "togglePlayPause", "next", "previous", "seek"]);
+  new Set([
+    "play",
+    "pause",
+    "stop",
+    "togglePlayPause",
+    "next",
+    "previous",
+    "seek",
+  ]);
 
 function isSupportedSystemMediaCommand(
   command: string,

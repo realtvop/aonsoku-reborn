@@ -44,6 +44,25 @@ struct PlayerState {
   std::atomic_bool running{false};
 };
 
+std::mutex g_system_media_session_owner_mutex;
+PlayerState* g_system_media_session_owner = nullptr;
+
+void PublishOwnedSystemMediaSession(
+    PlayerState* state, const SystemMediaSessionMetadata& metadata,
+    SystemMediaSessionPlaybackState playback_state, double position) {
+  std::lock_guard<std::mutex> lock(g_system_media_session_owner_mutex);
+  UpdateSystemMediaSession(metadata, playback_state, position);
+  g_system_media_session_owner = state;
+}
+
+void ClearOwnedSystemMediaSession(PlayerState* state) {
+  std::lock_guard<std::mutex> lock(g_system_media_session_owner_mutex);
+  if (g_system_media_session_owner == state) {
+    ClearSystemMediaSession();
+    g_system_media_session_owner = nullptr;
+  }
+}
+
 std::string Message(const std::string& prefix, int status) {
   return prefix + ": " + mpv_error_string(status);
 }
@@ -258,6 +277,8 @@ const char* SystemMediaCommandName(SystemMediaCommand command) {
       return "play";
     case SystemMediaCommand::kPause:
       return "pause";
+    case SystemMediaCommand::kStop:
+      return "stop";
     case SystemMediaCommand::kTogglePlayPause:
       return "togglePlayPause";
     case SystemMediaCommand::kNext:
@@ -415,6 +436,7 @@ void FinalizePlayer(napi_env env, void* data, void* /*hint*/) {
   auto* state = static_cast<PlayerState*>(data);
   if (state == nullptr) return;
 
+  ClearSystemMediaCommandHandler(state);
   state->running.store(false);
   {
     std::lock_guard<std::mutex> lock(state->mutex);
@@ -440,8 +462,7 @@ void FinalizePlayer(napi_env env, void* data, void* /*hint*/) {
     state->tsfn = nullptr;
   }
 
-  ClearSystemMediaCommandHandler(state);
-  ClearSystemMediaSession();
+  ClearOwnedSystemMediaSession(state);
 
   delete state;
 }
@@ -777,7 +798,7 @@ napi_value UpdateSystemMediaSession(napi_env env, napi_callback_info info) {
     playback_state = SystemMediaSessionPlaybackState::kStopped;
   }
 
-  UpdateSystemMediaSession(metadata, playback_state, position);
+  PublishOwnedSystemMediaSession(state, metadata, playback_state, position);
   return Undefined(env);
 }
 
@@ -788,7 +809,7 @@ napi_value ClearSystemMediaSessionCallback(napi_env env,
   PlayerState* state = UnwrapPlayer(env, info, argc, argv);
   if (state == nullptr) return nullptr;
 
-  ClearSystemMediaSession();
+  ClearOwnedSystemMediaSession(state);
   return Undefined(env);
 }
 
@@ -798,6 +819,7 @@ napi_value Destroy(napi_env env, napi_callback_info info) {
   PlayerState* state = UnwrapPlayer(env, info, argc, argv);
   if (state == nullptr) return nullptr;
 
+  ClearSystemMediaCommandHandler(state);
   state->running.store(false);
 
   {
@@ -826,8 +848,7 @@ napi_value Destroy(napi_env env, napi_callback_info info) {
     state->tsfn = nullptr;
   }
 
-  ClearSystemMediaCommandHandler(state);
-  ClearSystemMediaSession();
+  ClearOwnedSystemMediaSession(state);
 
   return Undefined(env);
 }
@@ -838,6 +859,7 @@ napi_value RuntimeInfo(napi_env env, napi_callback_info /*info*/) {
 
   SetString(env, object, "clientApiVersion",
             std::to_string(MPV_CLIENT_API_VERSION));
+  SetString(env, object, "systemMediaSessionApiVersion", "2");
 
   return object;
 }

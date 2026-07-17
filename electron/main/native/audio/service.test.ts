@@ -36,6 +36,9 @@ class FakeAudioEngine implements DesktopAudioEngine {
   readonly setVolume = vi.fn(async (_value: number) => {});
   readonly clear = vi.fn(async () => {});
   readonly updateMetadata = vi.fn(async (_metadata: NativeAudioMetadata) => {});
+  readonly updateRemotePlaybackState = vi.fn(async () => {});
+  readonly clearRemotePlaybackState = vi.fn(async () => {});
+  readonly settlePlaybackEnded = vi.fn(async () => {});
   readonly listeners = new Set<DesktopAudioEngineEventListener>();
   getDiagnostics?: () => DesktopAudioEngineDiagnostics;
   checkAvailability?: () => Promise<DesktopAudioEngineDiagnostics>;
@@ -1554,7 +1557,16 @@ describe("NativeAudioService", () => {
       expectedGeneration: 7,
     });
 
+    expect(engine.updateRemotePlaybackState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ title: "Remote song" }),
+        position: 12,
+        duration: 180,
+      }),
+    );
+
     await expect(service.handleRemoteCommand("play")).resolves.toBe(true);
+    await expect(service.handleRemoteCommand("stop")).resolves.toBe(true);
     service.emitRemoteCommand("shuffle");
     service.emitRemoteCommand("seek", { position: -4 });
 
@@ -1567,6 +1579,16 @@ describe("NativeAudioService", () => {
         expectedGeneration: 7,
         handledNatively: false,
         command: { type: "play" },
+      },
+    });
+    expect(events).toContainEqual({
+      eventName: "remoteControlCommand",
+      event: {
+        requestId: undefined,
+        targetDeviceId: "device-target",
+        expectedGeneration: 7,
+        handledNatively: false,
+        command: { type: "clear_queue" },
       },
     });
     expect(events).toContainEqual({
@@ -1592,6 +1614,7 @@ describe("NativeAudioService", () => {
 
     events.length = 0;
     await service.clearRemotePlaybackState();
+    expect(engine.clearRemotePlaybackState).toHaveBeenCalledOnce();
     service.emitRemoteCommand("next");
 
     expect(events).toContainEqual({
@@ -1636,6 +1659,64 @@ describe("NativeAudioService", () => {
     expect(events).not.toContainEqual(
       expect.objectContaining({ eventName: "remoteCommand" }),
     );
+  });
+
+  it("clears local playback for a system stop command", async () => {
+    await service.load({
+      source: {
+        kind: "stream",
+        url: "https://server/rest/stream?id=song-1",
+        songId: "song-1",
+      },
+      metadata: { title: "Track", duration: 100 },
+      autoplay: true,
+    });
+
+    engine.emit({ type: "systemMediaCommand", command: "stop" });
+
+    await vi.waitFor(() => expect(engine.clear).toHaveBeenCalledOnce());
+    await expect(service.getFullState()).resolves.toMatchObject({
+      currentSongId: null,
+      isPlaying: false,
+    });
+  });
+
+  it("surfaces system media diagnostics without failing playback", async () => {
+    const events: unknown[] = [];
+    service.onEvent((event) => events.push(event));
+    await service.load({
+      requestId: "request-media-diagnostic",
+      source: {
+        kind: "stream",
+        url: "https://server/rest/stream?id=song-1",
+        songId: "song-1",
+      },
+      metadata: { title: "Track", duration: 100 },
+      autoplay: true,
+    });
+    engine.emit({ type: "playbackStateChanged", state: "playing" });
+    events.length = 0;
+
+    engine.emit({
+      type: "systemMediaSessionError",
+      code: "system-media-session-update-failed",
+      message: "Now Playing unavailable",
+    });
+
+    expect(events).toEqual([
+      {
+        eventName: "systemMediaSessionError",
+        event: {
+          requestId: "request-media-diagnostic",
+          code: "system-media-session-update-failed",
+          message: "Now Playing unavailable",
+        },
+      },
+    ]);
+    await expect(service.getFullState()).resolves.toMatchObject({
+      isPlaying: true,
+    });
+    expect(engine.clear).not.toHaveBeenCalled();
   });
 
   it("forwards like/shuffle system media commands to the renderer", async () => {

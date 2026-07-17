@@ -8,6 +8,17 @@ import { ipcRenderer } from "electron";
 
 const DESKTOP_NATIVE_AUDIO_INVOKE_CHANNEL = "aonsoku-native-audio:invoke";
 const DESKTOP_NATIVE_AUDIO_EVENT_CHANNEL = "aonsoku-native-audio:event";
+const DESKTOP_NATIVE_AUDIO_CAPABILITY_CHANNEL =
+  "aonsoku-native-audio:capability";
+
+export interface DesktopNativeAudioCapability {
+  available: boolean;
+  reason?: string;
+}
+
+export const desktopNativeAudioCapability = ipcRenderer.sendSync(
+  DESKTOP_NATIVE_AUDIO_CAPABILITY_CHANNEL,
+) as DesktopNativeAudioCapability;
 
 type DesktopNativeAudioInvokePayload<
   TMethod extends keyof AonsokuAudioApi = keyof AonsokuAudioApi,

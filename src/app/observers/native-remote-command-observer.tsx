@@ -17,6 +17,7 @@ export function NativeRemoteCommandObserver() {
     setProgress,
     starCurrentSong,
     toggleShuffle,
+    clearPlayerState,
   } = usePlayerActions();
 
   useEffect(() => {
@@ -33,6 +34,7 @@ export function NativeRemoteCommandObserver() {
         handlePlaybackRemoteCommand(command, {
           isPlaying: () => usePlayerStore.getState().playerState.isPlaying,
           togglePlayPause,
+          stop: clearPlayerState,
           playNextSong,
           playPrevSong,
           seek: (position) => setProgress(position, true),
@@ -60,6 +62,7 @@ export function NativeRemoteCommandObserver() {
     starCurrentSong,
     togglePlayPause,
     toggleShuffle,
+    clearPlayerState,
   ]);
 
   useEffect(() => {

@@ -1,6 +1,9 @@
 import { electronAPI } from "@electron-toolkit/preload";
 import { contextBridge, ipcRenderer } from "electron";
-import { aonsokuNativeAudioBridge } from "./native-audio";
+import {
+  aonsokuNativeAudioBridge,
+  desktopNativeAudioCapability,
+} from "./native-audio";
 import { aonsokuNativeBridge } from "./native-bridge";
 import { aonsokuNativeCoordination } from "./native-coordination";
 import { aonsokuNativeData } from "./native-data";
@@ -92,6 +95,10 @@ if (process.contextIsolated) {
       "aonsokuNativeAudio",
       aonsokuNativeAudioBridge,
     );
+    contextBridge.exposeInMainWorld(
+      "aonsokuNativeAudioCapability",
+      desktopNativeAudioCapability,
+    );
     contextBridge.exposeInMainWorld("aonsokuNativeBridge", aonsokuNativeBridge);
     contextBridge.exposeInMainWorld("aonsokuNativeData", aonsokuNativeData);
     contextBridge.exposeInMainWorld(
@@ -113,6 +120,8 @@ if (process.contextIsolated) {
   window.api = api;
   // @ts-expect-error (define in dts)
   window.aonsokuNativeAudio = aonsokuNativeAudioBridge;
+  // @ts-expect-error (define in dts)
+  window.aonsokuNativeAudioCapability = desktopNativeAudioCapability;
   // @ts-expect-error (define in dts)
   window.aonsokuNativeBridge = aonsokuNativeBridge;
   // @ts-expect-error (define in dts)

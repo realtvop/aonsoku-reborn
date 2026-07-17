@@ -4,6 +4,8 @@
 
 #include "system_media_session.h"
 
+#include <mutex>
+
 namespace {
 
 NSString* ToNSString(const std::string& value) {
@@ -13,6 +15,7 @@ NSString* ToNSString(const std::string& value) {
 SystemMediaCommandHandler g_command_handler = nullptr;
 void* g_command_context = nullptr;
 bool g_remote_commands_registered = false;
+std::mutex g_command_handler_mutex;
 
 // Artwork is fetched asynchronously from artwork_url. The downloaded image is
 // cached per-URL so repeated nowPlayingInfo updates (play/pause/seek) do not
@@ -30,10 +33,23 @@ double g_last_position = 0;
 void ApplyNowPlayingInfo();
 void DownloadArtwork(NSString* url_string);
 
-void DispatchCommand(SystemMediaCommand command, double position = 0) {
+bool DispatchCommand(SystemMediaCommand command, double position = 0) {
+  std::lock_guard<std::mutex> lock(g_command_handler_mutex);
   if (g_command_handler != nullptr) {
     g_command_handler(g_command_context, command, position);
+    return true;
   }
+  return false;
+}
+
+void SetRemoteCommandsEnabled(bool enabled) {
+  MPRemoteCommandCenter* center = [MPRemoteCommandCenter sharedCommandCenter];
+  center.playCommand.enabled = enabled;
+  center.pauseCommand.enabled = enabled;
+  center.togglePlayPauseCommand.enabled = enabled;
+  center.nextTrackCommand.enabled = enabled;
+  center.previousTrackCommand.enabled = enabled;
+  center.changePlaybackPositionCommand.enabled = enabled;
 }
 
 // Registers MPRemoteCommandCenter handlers so macOS treats this process as a
@@ -47,53 +63,55 @@ void EnsureRemoteCommandCenter() {
 
   MPRemoteCommandCenter* center = [MPRemoteCommandCenter sharedCommandCenter];
 
-  center.playCommand.enabled = YES;
   [center.playCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(
       MPRemoteCommandEvent* _Nonnull) {
-    DispatchCommand(SystemMediaCommand::kPlay);
-    return MPRemoteCommandHandlerStatusSuccess;
+    return DispatchCommand(SystemMediaCommand::kPlay)
+               ? MPRemoteCommandHandlerStatusSuccess
+               : MPRemoteCommandHandlerStatusCommandFailed;
   }];
 
-  center.pauseCommand.enabled = YES;
   [center.pauseCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(
       MPRemoteCommandEvent* _Nonnull) {
-    DispatchCommand(SystemMediaCommand::kPause);
-    return MPRemoteCommandHandlerStatusSuccess;
+    return DispatchCommand(SystemMediaCommand::kPause)
+               ? MPRemoteCommandHandlerStatusSuccess
+               : MPRemoteCommandHandlerStatusCommandFailed;
   }];
 
-  center.togglePlayPauseCommand.enabled = YES;
   [center.togglePlayPauseCommand
       addTargetWithHandler:^MPRemoteCommandHandlerStatus(
           MPRemoteCommandEvent* _Nonnull) {
-        DispatchCommand(SystemMediaCommand::kTogglePlayPause);
-        return MPRemoteCommandHandlerStatusSuccess;
+        return DispatchCommand(SystemMediaCommand::kTogglePlayPause)
+                   ? MPRemoteCommandHandlerStatusSuccess
+                   : MPRemoteCommandHandlerStatusCommandFailed;
       }];
 
-  center.nextTrackCommand.enabled = YES;
   [center.nextTrackCommand
       addTargetWithHandler:^MPRemoteCommandHandlerStatus(
           MPRemoteCommandEvent* _Nonnull) {
-        DispatchCommand(SystemMediaCommand::kNext);
-        return MPRemoteCommandHandlerStatusSuccess;
+        return DispatchCommand(SystemMediaCommand::kNext)
+                   ? MPRemoteCommandHandlerStatusSuccess
+                   : MPRemoteCommandHandlerStatusCommandFailed;
       }];
 
-  center.previousTrackCommand.enabled = YES;
   [center.previousTrackCommand
       addTargetWithHandler:^MPRemoteCommandHandlerStatus(
           MPRemoteCommandEvent* _Nonnull) {
-        DispatchCommand(SystemMediaCommand::kPrevious);
-        return MPRemoteCommandHandlerStatusSuccess;
+        return DispatchCommand(SystemMediaCommand::kPrevious)
+                   ? MPRemoteCommandHandlerStatusSuccess
+                   : MPRemoteCommandHandlerStatusCommandFailed;
       }];
 
-  center.changePlaybackPositionCommand.enabled = YES;
   [center.changePlaybackPositionCommand
       addTargetWithHandler:^MPRemoteCommandHandlerStatus(
           MPRemoteCommandEvent* _Nonnull event) {
         MPChangePlaybackPositionCommandEvent* position_event =
             (MPChangePlaybackPositionCommandEvent*)event;
-        DispatchCommand(SystemMediaCommand::kSeek, position_event.positionTime);
-        return MPRemoteCommandHandlerStatusSuccess;
+        return DispatchCommand(SystemMediaCommand::kSeek,
+                               position_event.positionTime)
+                   ? MPRemoteCommandHandlerStatusSuccess
+                   : MPRemoteCommandHandlerStatusCommandFailed;
       }];
+  SetRemoteCommandsEnabled(false);
 }
 
 void ApplyNowPlayingInfo() {
@@ -165,11 +183,13 @@ void DownloadArtwork(NSString* url_string) {
 
 void SetSystemMediaCommandHandler(SystemMediaCommandHandler handler,
                                   void* context) {
+  std::lock_guard<std::mutex> lock(g_command_handler_mutex);
   g_command_handler = handler;
   g_command_context = context;
 }
 
 void ClearSystemMediaCommandHandler(void* context) {
+  std::lock_guard<std::mutex> lock(g_command_handler_mutex);
   if (g_command_context == context) {
     g_command_handler = nullptr;
     g_command_context = nullptr;
@@ -181,6 +201,7 @@ void UpdateSystemMediaSession(const SystemMediaSessionMetadata& metadata,
                               double position) {
   @autoreleasepool {
     EnsureRemoteCommandCenter();
+    SetRemoteCommandsEnabled(true);
 
     g_last_metadata = metadata;
     g_last_state = state;
@@ -218,5 +239,6 @@ void ClearSystemMediaSession() {
     MPNowPlayingInfoCenter* center = [MPNowPlayingInfoCenter defaultCenter];
     center.nowPlayingInfo = nil;
     center.playbackState = MPNowPlayingPlaybackStateStopped;
+    SetRemoteCommandsEnabled(false);
   }
 }

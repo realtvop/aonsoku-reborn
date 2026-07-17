@@ -40,8 +40,13 @@ describe("createDesktopAudioEngine", () => {
   it("creates a libmpv engine when the binding loads", () => {
     const binding = {
       createPlayer: vi.fn(),
+      runtimeInfo: vi.fn(() => ({ systemMediaSessionApiVersion: "2" })),
     } satisfies LibMpvNativeBinding;
     mocks.loadLibMpvBinding.mockReturnValue(binding);
+    mocks.createNativeMpvPlayer.mockReturnValue({
+      initialize: vi.fn(),
+      destroy: vi.fn(),
+    });
 
     const engine = createDesktopAudioEngine();
 
@@ -50,6 +55,50 @@ describe("createDesktopAudioEngine", () => {
       backend: "libmpv",
       status: "available",
       platformKey: "darwin-arm64",
+      runtimeInfo: { systemMediaSessionApiVersion: "2" },
+    });
+    expect(mocks.createNativeMpvPlayer).toHaveBeenCalledWith(binding);
+    const probe = mocks.createNativeMpvPlayer.mock.results[0]?.value;
+    expect(probe.initialize).toHaveBeenCalledWith({
+      options: expect.objectContaining({ idle: "yes", vid: "no" }),
+      registerSystemMediaSession: false,
+    });
+    expect(probe.destroy).toHaveBeenCalledOnce();
+  });
+
+  it("falls back when the native initialization probe fails", () => {
+    mocks.loadLibMpvBinding.mockReturnValue({
+      createPlayer: vi.fn(),
+      runtimeInfo: vi.fn(() => ({ systemMediaSessionApiVersion: "2" })),
+    });
+    mocks.createNativeMpvPlayer.mockReturnValue({
+      initialize: vi.fn(() => {
+        throw new Error("mpv runtime init failed");
+      }),
+      destroy: vi.fn(),
+    });
+
+    const engine = createDesktopAudioEngine();
+
+    expect(engine).toBeInstanceOf(UnavailableDesktopAudioEngine);
+    expect(engine.getDiagnostics?.()).toMatchObject({
+      status: "unavailable",
+      message: "mpv runtime init failed",
+    });
+  });
+
+  it("rejects a stale addon without the owned-session API", () => {
+    mocks.loadLibMpvBinding.mockReturnValue({
+      createPlayer: vi.fn(),
+      runtimeInfo: vi.fn(() => ({ clientApiVersion: "2.0" })),
+    });
+
+    const engine = createDesktopAudioEngine();
+
+    expect(engine).toBeInstanceOf(UnavailableDesktopAudioEngine);
+    expect(engine.getDiagnostics?.()).toMatchObject({
+      status: "unavailable",
+      message: expect.stringContaining("API version 2"),
     });
   });
 

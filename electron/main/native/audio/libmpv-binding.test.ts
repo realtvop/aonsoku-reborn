@@ -145,6 +145,8 @@ describe("native mpv player adapter", () => {
       command: vi.fn(),
       setProperty: vi.fn(),
       observeProperty: vi.fn(),
+      updateSystemMediaSession: vi.fn(),
+      clearSystemMediaSession: vi.fn(),
       destroy: vi.fn(),
     };
     const binding = {

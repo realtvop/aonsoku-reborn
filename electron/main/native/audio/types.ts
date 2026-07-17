@@ -3,6 +3,7 @@ import type {
   NativeAudioEvents,
   NativeAudioMetadata,
   NativeAudioRemoteCommand,
+  NativeRemotePlaybackStateOptions,
 } from "@aonsoku/audio-contract";
 
 export type NativeAudioServiceEvent = {
@@ -42,6 +43,11 @@ export type DesktopAudioEngineEvent =
   | {
       type: "error";
       code?: string;
+      message: string;
+    }
+  | {
+      type: "systemMediaSessionError";
+      code: string;
       message: string;
     }
   | {
@@ -91,6 +97,11 @@ export interface DesktopAudioEngine {
   setVolume(value: number): Promise<void>;
   clear(): Promise<void>;
   updateMetadata(metadata: NativeAudioMetadata): Promise<void>;
+  updateRemotePlaybackState(
+    options: NativeRemotePlaybackStateOptions,
+  ): Promise<void>;
+  clearRemotePlaybackState(): Promise<void>;
+  settlePlaybackEnded(): Promise<void>;
   onEvent(listener: DesktopAudioEngineEventListener): () => void;
   getDiagnostics?(): DesktopAudioEngineDiagnostics;
   checkAvailability?(): Promise<DesktopAudioEngineDiagnostics>;

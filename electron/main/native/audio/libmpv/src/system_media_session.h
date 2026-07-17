@@ -19,6 +19,7 @@ enum class SystemMediaSessionPlaybackState {
 enum class SystemMediaCommand {
   kPlay,
   kPause,
+  kStop,
   kTogglePlayPause,
   kNext,
   kPrevious,

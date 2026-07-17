@@ -14,11 +14,37 @@ import { UnavailableDesktopAudioEngine } from "./unavailable-engine";
 export function createDesktopAudioEngine(): DesktopAudioEngine {
   try {
     const binding = loadLibMpvBinding();
+    const runtimeInfo = binding.runtimeInfo?.();
+    if (runtimeInfo?.systemMediaSessionApiVersion !== "2") {
+      throw new Error(
+        "The Aonsoku libmpv addon does not provide system media session API version 2.",
+      );
+    }
+    const capabilityProbe = createNativeMpvPlayer(binding);
+    try {
+      const result = capabilityProbe.initialize({
+        options: {
+          "audio-display": "no",
+          "force-window": "no",
+          idle: "yes",
+          terminal: "no",
+          vid: "no",
+        },
+        registerSystemMediaSession: false,
+      });
+      if (result instanceof Promise) {
+        throw new Error(
+          "The desktop native audio capability probe must initialize synchronously.",
+        );
+      }
+    } finally {
+      capabilityProbe.destroy();
+    }
     const diagnostics = {
       backend: "libmpv",
       status: "available",
       platformKey: libMpvPlatformKey(),
-      runtimeInfo: binding.runtimeInfo?.(),
+      runtimeInfo,
     } satisfies DesktopAudioEngineDiagnostics;
 
     return new LibMpvAudioEngine({
