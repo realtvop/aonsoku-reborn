@@ -98,4 +98,22 @@ describe("DesktopNativeDataService", () => {
       progress: 1,
     });
   });
+
+  it("resolves stored covers to local file URIs", async () => {
+    const service = new DesktopNativeDataService(
+      { request: mocks.request } as never,
+      () => {},
+    );
+    await service.storeCoverImage({
+      coverArtId: "mpris-cover",
+      dataBase64: Buffer.from("cover").toString("base64"),
+      contentType: "image/jpeg",
+      coverSize: "300",
+    });
+
+    const uri = service.resolveCoverFileUri("mpris-cover");
+    expect(uri).toMatch(/^file:\/\//);
+    expect(uri).toContain("/aonsoku-native-data-test/CoverCache/");
+    expect(service.resolveCoverFileUri("missing-cover")).toBeUndefined();
+  });
 });

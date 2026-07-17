@@ -1,3 +1,4 @@
+import { realpathSync, statSync } from "node:fs";
 import {
   mkdir,
   readdir,
@@ -6,7 +7,8 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { join } from "node:path";
+import { join, sep } from "node:path";
+import { pathToFileURL } from "node:url";
 import type {
   AlbumFilter,
   ArtistFilter,
@@ -474,6 +476,21 @@ export class DesktopNativeDataService {
       };
     } catch {
       return { file: null };
+    }
+  }
+
+  resolveCoverFileUri(coverArtId: string): string | undefined {
+    const meta = this.store.get("coverFiles")[coverArtId];
+    if (!meta) return undefined;
+    try {
+      const directory = realpathSync(this.coverDirectory());
+      const path = realpathSync(join(directory, meta.fileName));
+      if (!path.startsWith(`${directory}${sep}`) || !statSync(path).isFile()) {
+        return undefined;
+      }
+      return pathToFileURL(path).toString();
+    } catch {
+      return undefined;
     }
   }
 

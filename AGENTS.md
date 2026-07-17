@@ -336,8 +336,15 @@ Key files:
   source build is preferred over a stale `resources/native-audio` copy;
   packaged apps keep the packaged resource first. Missing native pieces
   produce startup diagnostics and visible `error` events while cache/download
-  APIs remain usable. `make`, `publish`, and platform package scripts run strict native
-  audio verification and fail if addon/runtime files are missing; development
+  APIs remain usable. Before the renderer selects native playback, a
+  synchronous Electron capability handshake confirms that the binding loaded,
+  a throwaway `mpv_initialize` succeeds without registering system commands,
+  and the addon exposes the required system-media update/clear methods; a
+  failed or missing handshake keeps Web Audio, renderer Media Session, and the
+  web queue controller active. This is a binding-capability check, not proof
+  that an OS media surface is currently healthy. `make`, `publish`, and
+  platform package scripts run strict native audio verification and fail if
+  addon/runtime files are missing; development
   `build:unpack` runs the non-strict verifier. The Electron service includes a
   desktop queue engine aligned with the mobile native plugin contract for
   context/user queues, shuffle/repeat, full-state export, scrobble buffering,
@@ -394,24 +401,36 @@ Key files:
   -> main-process round-trip. `like`/`shuffle` still forward to the renderer as
   `remoteCommand` events (their state is owned there), and remote-control
   projection routes commands to the controlled device instead of acting
-  locally. Windows routes SMTC transport buttons (play/pause/next/previous)
-  back to JS the same way, but the classic `SystemMediaTransportControls`
+  locally. Remote projection metadata is also published through the Electron
+  main-process engine even though coordination itself is native-owned. Native
+  player instances own their last global system-session publication: teardown
+  only clears a session still owned by that instance, and command-handler
+  detachment precedes player/TSFN destruction so old or finalized players
+  cannot clear or call into a newer owner. Windows routes SMTC transport
+  buttons (play/pause/next/previous) back to JS the same way, but the classic
+  `SystemMediaTransportControls`
   API has no seek/scrubber command, so Windows position changes are
   display-only; Linux routes MPRIS Player method calls (play/pause/playpause/
   stop/next/previous/seek/setposition) back to JS through the same dispatcher,
-  advertises `CanPlay`/`CanPause`/`CanSeek`/`CanGoNext`/`CanGoPrevious`/
-  `CanControl` as true, emits the `Seeked` signal after position changes, and
-  answers `Get`/`GetAll` for both the Player and Root interfaces with a full
-  introspection XML. MPRIS `Stop` maps to the contract's `pause` command (there
-  is no stop command), and `OpenUri` is unsupported. The addon reads `artworkUrl` from
+  advertises only the capabilities it can prove from the active track and
+  command handler (queue-bound next/previous remain false), exposes a fixed
+  playback rate of 1.0, validates `SetPosition` track ids and bounds, and emits
+  `Seeked` only after the async seek is reflected back into the native media
+  state. It answers `Get`/`GetAll` for both the Player and Root interfaces with
+  a full introspection XML. MPRIS `Stop` dispatches the shared native stop
+  command, which clears local playback; `OpenUri` is unsupported. The addon
+  reads `artworkUrl` from
   `NativeAudioMetadata`: on macOS it asynchronously fetches the image and sets
   `MPMediaItemArtwork` (cached per-URL, stale downloads are ignored); on Linux
-  it exposes `mpris:artUrl`. The platform HTTP clients (NSURLSession, D-Bus
-  MPRIS clients) cannot resolve the renderer's `aonsoku-media://` custom
-  protocol, so `electron/main/core/events.ts` wires an `artworkUrlResolver`
+  it exposes `mpris:artUrl`. Linux accepts only a cached local `file://` URI and
+  omits artwork on a cache miss so authenticated Subsonic URLs and replayable
+  credentials are never published on the session bus. Platform artwork
+  consumers cannot resolve the renderer's `aonsoku-media://` custom protocol,
+  so `electron/main/core/events.ts` wires an `artworkUrlResolver`
   into the desktop audio service that translates `aonsoku-media://getCoverArt`
   URLs (renderer-driven loads) and bare cover-art ids (queue-driven loads) into
-  authenticated Subsonic HTTP URLs before metadata reaches the engine. The
+  a safe local cached file for Linux or authenticated Subsonic HTTP URLs on
+  macOS/Windows before metadata reaches the engine. The
   service also re-syncs the system media session's elapsed time after a seek
   so the Now Playing scrubber stays accurate between play/pause updates.
   Windows sets the SMTC `Thumbnail` from the resolved HTTP `artworkUrl` via

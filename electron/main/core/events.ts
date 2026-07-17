@@ -7,13 +7,17 @@ import {
 } from "../../preload/types";
 import { getIsQuitting } from "../index";
 import { setupMiniPlayerIpc } from "../mini-player";
+import { resolveDesktopSystemArtworkUrl } from "../native/audio/artwork-url";
 import { setupDesktopNativeAudioIpc } from "../native/audio/ipc";
 import {
   desktopNativeBridgeService,
   setupDesktopNativeBridgeIpc,
 } from "../native/bridge/ipc";
 import { setupDesktopNativeCoordinationIpc } from "../native/coordination/ipc";
-import { setupDesktopNativeDataIpc } from "../native/data/ipc";
+import {
+  getDesktopNativeDataService,
+  setupDesktopNativeDataIpc,
+} from "../native/data/ipc";
 import { setupDesktopNativeDebugIpc } from "../native/debug/ipc";
 import { setupNativeDebugWindowIpc } from "../native/debug/native-debug-window";
 import { setupDesktopNativePreferencesIpc } from "../native/preferences/ipc";
@@ -106,44 +110,18 @@ export function setupIpcEvents(window: BrowserWindow | null) {
       .getMediaUrl("/stream.view", Object.fromEntries(parsed.searchParams))
       .toString();
   };
-  // The native system media session (libmpv addon on macOS, MPRIS on Linux)
-  // downloads cover art with platform HTTP clients that cannot resolve the
-  // renderer's `aonsoku-media://` custom protocol. Translate cover-art
-  // references (either `aonsoku-media://getCoverArt?id=...` URLs from renderer
-  // loads or bare cover-art ids from queue-driven loads) into authenticated
-  // Subsonic HTTP URLs the platform clients can fetch.
   const resolveDesktopArtworkUrl = (
     artworkUrl: string | undefined,
-  ): string | undefined => {
-    if (!artworkUrl) return undefined;
-    try {
-      if (artworkUrl.startsWith("aonsoku-media://")) {
-        const parsed = new URL(artworkUrl);
-        const operation = parsed.hostname || parsed.pathname.replace(/^\//, "");
-        if (operation !== "getCoverArt") return undefined;
-        return desktopNativeBridgeService
-          .getMediaUrl(
-            "/getCoverArt.view",
-            Object.fromEntries(parsed.searchParams),
-          )
-          .toString();
-      }
-      // Queue-driven loads store the raw cover-art id without a scheme.
-      if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(artworkUrl)) {
-        return desktopNativeBridgeService
-          .getMediaUrl("/getCoverArt.view", {
-            id: artworkUrl,
-            size: "300",
-          })
-          .toString();
-      }
-      return artworkUrl;
-    } catch {
-      // No credentials / unsupported reference: leave artwork unset rather than
-      // surfacing a broken URL to the platform media session.
-      return undefined;
-    }
-  };
+  ): string | undefined =>
+    resolveDesktopSystemArtworkUrl(artworkUrl, {
+      isLinux: platform.isLinux,
+      resolveCachedFile: (coverArtId) =>
+        getDesktopNativeDataService()?.resolveCoverFileUri(coverArtId),
+      resolveAuthenticatedUrl: (_coverArtId, params) =>
+        desktopNativeBridgeService
+          .getMediaUrl("/getCoverArt.view", params)
+          .toString(),
+    });
   setupDesktopNativeAudioIpc(window, {
     streamUrlResolver: resolveDesktopMediaUrl,
     downloadUrlResolver: ({ songId, maxBitRate, format }) =>
