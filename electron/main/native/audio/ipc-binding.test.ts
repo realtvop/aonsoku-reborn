@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => {
   const ipcMain = {
     removeHandler: vi.fn(),
+    removeAllListeners: vi.fn(),
+    on: vi.fn(),
     handle: vi.fn(),
   };
   const BrowserWindow = {
