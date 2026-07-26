@@ -83,10 +83,12 @@ export const FullscreenSongInfoRow = memo(function FullscreenSongInfoRow({
 
 export const ArtworkWithInfo = memo(function ArtworkWithInfo({
   className,
+  preferCompactLayout = false,
   showTouchDragSurface = false,
   showInfo = true,
 }: {
   className?: string;
+  preferCompactLayout?: boolean;
   showTouchDragSurface?: boolean;
   showInfo?: boolean;
 }) {
@@ -94,11 +96,19 @@ export const ArtworkWithInfo = memo(function ArtworkWithInfo({
     <div
       className={clsx(
         "flex w-full min-h-0 min-w-0 flex-col items-center",
-        showInfo ? "flex-1 justify-between" : "justify-center",
+        preferCompactLayout ? "flex-[0_1_auto]" : "flex-1",
+        showInfo ? "justify-between" : "justify-center",
         className,
       )}
     >
-      <div className="flex w-full min-h-0 flex-col items-center justify-center flex-1">
+      <div
+        className={clsx(
+          "flex w-full min-h-0 flex-col items-center justify-center",
+          preferCompactLayout
+            ? "flex-[0_1_auto] [container-type:inline-size]"
+            : "flex-1",
+        )}
+      >
         <div
           className={clsx(
             "mx-auto w-full min-w-0 shrink-0 justify-self-center pb-2",
@@ -108,7 +118,14 @@ export const ArtworkWithInfo = memo(function ArtworkWithInfo({
           <AlbumName className="pb-1 [&>div]:py-0.5 [&_p]:leading-normal" />
         </div>
 
-        <div className="flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden [container-type:size]">
+        <div
+          className={clsx(
+            "flex min-h-0 w-full items-center justify-center overflow-hidden [container-type:size]",
+            preferCompactLayout
+              ? "flex-[0_1_min(480px,100cqw)]"
+              : "flex-1",
+          )}
+        >
           <div className="aspect-square flex-none w-[min(100cqw,100cqh,clamp(280px,85vw,480px))]">
             <FullscreenSongArtwork
               showTouchDragSurface={showTouchDragSurface}
