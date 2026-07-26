@@ -18,10 +18,10 @@ jobs:
       nightly_version: ${{ steps.check.outputs.nightly_version }}
       short_sha: ${{ steps.check.outputs.short_sha }}
     steps:
-      - name: Checkout development branch
+      - name: Checkout main branch
         uses: actions/checkout@v4
         with:
-          ref: development
+          ref: main
           fetch-depth: 0
 
       - name: Check for recent commits
@@ -62,10 +62,10 @@ jobs:
       attestations: write
       id-token: write
     steps:
-      - name: Checkout development branch
+      - name: Checkout main branch
         uses: actions/checkout@v4
         with:
-          ref: development
+          ref: main
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -138,10 +138,10 @@ jobs:
             arch: "arm64"
     runs-on: ${{ matrix.platform }}
     steps:
-      - name: Checkout development branch
+      - name: Checkout main branch
         uses: actions/checkout@v4
         with:
-          ref: development
+          ref: main
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -206,10 +206,10 @@ jobs:
     if: needs.check-changes.outputs.has_changes == 'true'
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout development branch
+      - name: Checkout main branch
         uses: actions/checkout@v4
         with:
-          ref: development
+          ref: main
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -265,10 +265,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout development branch
+      - name: Checkout main branch
         uses: actions/checkout@v4
         with:
-          ref: development
+          ref: main
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -298,7 +298,7 @@ jobs:
           body: |
             ## Nightly Build
 
-            **Branch:** `development`
+            **Branch:** `main`
             **Version:** `${{ needs.check-changes.outputs.nightly_version }}`
             **Commit:** `${{ needs.check-changes.outputs.short_sha }}`
 
@@ -322,7 +322,7 @@ jobs:
 
             ---
 
-            > This is an automated nightly build from the `development` branch. It may be unstable.
+            > This is an automated nightly build from the `main` branch. It may be unstable.
           files: |
             artifacts/**/*.deb
             artifacts/**/*.rpm
