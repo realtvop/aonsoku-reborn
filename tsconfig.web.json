@@ -37,8 +37,7 @@
     "cypress",
     "electron/main/**/*",
     "electron/preload/**/*",
-    "vite.config.ts",
-    "manual-chunks.ts"
+    "vite.config.ts"
   ],
   "references": [
     {

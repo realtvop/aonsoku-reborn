@@ -29,6 +29,7 @@ pnpm run electron:dev     # Electron desktop dev
 pnpm run build            # Production web build (tsc + vite)
 pnpm run electron:build   # Electron renderer/main/preload build
 pnpm run make             # Create Electron distributable packages
+pnpm exec cap sync        # Copy dist and refresh Android/iOS plugin paths
 
 # Lint & Format (Biome)
 pnpm run lint             # Check only
@@ -263,9 +264,14 @@ Dark mode is class-based.
 
 ### Code Splitting
 
-Manual chunk strategy is defined in root `manual-chunks.ts` and imported by
-both Vite and Electron Vite configs. Update it when adding large dependencies
-or moving substantial lazy-loaded feature areas.
+Web and Electron renderer builds leave route and vendor chunk ownership to
+Rollup so lazy modules stay separate instead of collapsing every page and
+dependency into startup chunks. The HTML boot shell and its inline styles load
+without the application stylesheet; `src/main.tsx` restores native preferences
+before dynamically importing `src/render-app.tsx`, which owns the application
+styles and React tree. When adding large dependencies or moving substantial
+lazy-loaded feature areas, verify that optional route chunks and application
+CSS are not preloaded by `dist/index.html`.
 
 ## Tooling Notes
 

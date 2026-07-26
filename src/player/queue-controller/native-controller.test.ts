@@ -161,7 +161,7 @@ vi.mock("@/native/audio/facade", () => ({
   getNativeAudioPluginAvailability: mocks.getNativeAudioPluginAvailability,
 }));
 
-vi.mock("@/store/player.store", () => ({
+vi.mock("@/store/player/store", () => ({
   usePlayerStore: {
     getState: () => mocks.storeState,
     setState: (

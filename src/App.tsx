@@ -1,9 +1,8 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 
 import { RouterProvider } from "react-router-dom";
 
 import { Linux } from "@/app/components/controls/linux";
-import { SettingsDialog } from "@/app/components/settings/dialog";
 import { useNetworkStatusObserver } from "@/app/hooks/use-network-status";
 
 import { AndroidBackButtonObserver } from "@/app/observers/android-back-button-observer";
@@ -24,9 +23,28 @@ import { ToastContainer } from "@/app/observers/toast-container";
 import { VolumeHUDObserver } from "@/app/observers/volume-hud-observer";
 import { router } from "@/routes/router";
 import { cacheManager } from "@/service/cache";
+import { useAppStore } from "@/store/app.store";
 import { useCacheIndexActions } from "@/store/cache-index.store";
 
 import { isDesktop, isLinux } from "@/utils/desktop";
+
+const SettingsDialog = lazy(() =>
+  import("@/app/components/settings/dialog").then((module) => ({
+    default: module.SettingsDialog,
+  })),
+);
+
+function DeferredSettingsDialog() {
+  const openDialog = useAppStore((state) => state.settings.openDialog);
+
+  if (!openDialog) return null;
+
+  return (
+    <Suspense fallback={null}>
+      <SettingsDialog />
+    </Suspense>
+  );
+}
 
 function App() {
   const { loadFromIDB } = useCacheIndexActions();
@@ -61,7 +79,7 @@ function App() {
       <NetworkMonitorObserver />
       <MetadataSyncObserver />
       <SmartDownloadObserver />
-      <SettingsDialog />
+      <DeferredSettingsDialog />
       <RouterProvider router={router} />
       <ToastContainer />
       {isDesktop() && isLinux && <Linux />}

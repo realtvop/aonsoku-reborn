@@ -2,7 +2,6 @@ import react from "@vitejs/plugin-react";
 import fs from "fs";
 import path from "path";
 import { defineConfig, type Plugin } from "vite";
-import { createManualChunks } from "./manual-chunks";
 
 function swCacheVersionPlugin(buildHash: string): Plugin {
   return {
@@ -75,9 +74,6 @@ export default defineConfig(({ mode }) => {
       minify: "terser",
       rollupOptions: {
         external: ["bufferutil", "utf-8-validate"],
-        output: {
-          manualChunks: createManualChunks,
-        },
       },
     },
   };

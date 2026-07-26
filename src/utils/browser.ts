@@ -1,10 +1,7 @@
 import { engineName, isMacOs } from "react-device-detect";
-import i18n from "@/i18n";
-import { usePlayerStore } from "@/store/player.store";
+import { getRuntime } from "./capabilities";
 import { isDesktop } from "./desktop";
 import { isDev } from "./env";
-
-import { getRuntime } from "./capabilities";
 
 export enum MouseButton {
   Left = 0,
@@ -64,7 +61,7 @@ function preventNewTabAndScroll() {
 }
 
 function preventReload() {
-  document.addEventListener("keydown", (e) => {
+  document.addEventListener("keydown", async (e) => {
     const isF5 = e.key === "F5";
     const isReloadCmd = (e.ctrlKey || e.metaKey) && e.key === "r";
 
@@ -74,6 +71,10 @@ function preventReload() {
 
     if (isDesktop()) return;
 
+    const [{ default: i18n }, { usePlayerStore }] = await Promise.all([
+      import("@/i18n"),
+      import("@/store/player/store"),
+    ]);
     const { isPlaying } = usePlayerStore.getState().playerState;
 
     if (isPlaying) {

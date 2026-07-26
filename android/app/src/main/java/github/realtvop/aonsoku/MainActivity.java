@@ -36,6 +36,17 @@ public class MainActivity extends BridgeActivity implements SensorEventListener 
 
         super.onCreate(savedInstanceState);
 
+        int startupBackground = androidx.core.content.ContextCompat.getColor(
+            this,
+            R.color.startup_background
+        );
+        android.webkit.WebView startupWebView = getBridge().getWebView();
+        startupWebView.setBackgroundColor(startupBackground);
+        View startupParent = (View) startupWebView.getParent();
+        if (startupParent != null) {
+            startupParent.setBackgroundColor(startupBackground);
+        }
+
         getBridge().getWebView().post(() -> {
             android.webkit.WebView webView = getBridge().getWebView();
             if (webView != null) {

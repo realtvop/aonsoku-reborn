@@ -37,10 +37,67 @@
     />
     <meta name="msapplication-TileColor" content="#20b358" />
     <meta name="theme-color" content="#20b358" />
+    <style>
+      html,
+      body,
+      #root {
+        min-height: 100%;
+      }
+
+      html,
+      body {
+        margin: 0;
+        background: #f8fafc;
+      }
+
+      #aonsoku-boot {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: #f8fafc;
+      }
+
+      #aonsoku-boot img {
+        width: 72px;
+        height: 72px;
+        animation: aonsoku-boot-pulse 1.2s ease-in-out infinite;
+      }
+
+      @keyframes aonsoku-boot-pulse {
+        0%,
+        100% {
+          opacity: 0.55;
+          transform: scale(0.96);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+
+      @media (prefers-color-scheme: dark) {
+        html,
+        body,
+        #aonsoku-boot {
+          background: #060e23;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        #aonsoku-boot img {
+          animation: none;
+        }
+      }
+    </style>
   </head>
 
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="aonsoku-boot" role="status" aria-label="Loading Aonsoku">
+        <img src="/icon_transparent.svg" alt="" width="72" height="72" />
+      </div>
+    </div>
     <script src="/env-config.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>

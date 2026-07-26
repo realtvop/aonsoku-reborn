@@ -1,6 +1,6 @@
 import type { Draft } from "immer";
 import { queryClient } from "@/lib/queryClient";
-import { subsonic } from "@/service/subsonic";
+import { star } from "@/service/star";
 import { libraryDb, withStarredAt } from "@/store/library-db";
 import type { IPlayerActions, IPlayerContext } from "@/types/playerContext";
 import { queryKeys } from "@/utils/queryKeys";
@@ -69,7 +69,7 @@ export function createStarActions(shared: SharedDeps) {
       const { id, starred } = currentSong;
       const isSongStarred = typeof starred === "string";
 
-      await subsonic.star.handleStarItem({
+      await star.handleStarItem({
         id,
         starred: isSongStarred,
       });

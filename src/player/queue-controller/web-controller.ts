@@ -1,6 +1,6 @@
-import type { LoopState, QueueSourceId } from "@/types/playerContext";
 import { getCurrentSong } from "@/store/player/queue-utils";
-import { usePlayerStore } from "@/store/player.store";
+import { usePlayerStore } from "@/store/player/store";
+import type { LoopState, QueueSourceId } from "@/types/playerContext";
 import type { Radio } from "@/types/responses/radios";
 import type { ISong } from "@/types/responses/song";
 import type {

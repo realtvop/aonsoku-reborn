@@ -112,6 +112,18 @@ vi.mock("@/store/player.store", () => ({
   },
 }));
 
+vi.mock("@/store/player/store", () => ({
+  usePlayerStore: {
+    getState: () => ({
+      settings: {
+        coverArt: {
+          useAlbumCoverForSongs: false,
+        },
+      },
+    }),
+  },
+}));
+
 describe("cacheManager", () => {
   beforeEach(async () => {
     cacheStorageMock.clear.mockReset();

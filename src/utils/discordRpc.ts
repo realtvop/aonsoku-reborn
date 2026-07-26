@@ -1,5 +1,5 @@
 import { useAppStore } from "@/store/app.store";
-import { usePlayerStore } from "@/store/player.store";
+import { usePlayerStore } from "@/store/player/store";
 import { ISong } from "@/types/responses/song";
 import { hasElectronBridge } from "./desktop";
 
