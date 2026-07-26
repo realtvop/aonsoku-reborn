@@ -30,8 +30,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build web assets
-        run: pnpm run build
+      - name: Build mobile web assets
+        run: pnpm run build:mobile
 
       - name: Sync Capacitor
         run: pnpm exec cap sync ios

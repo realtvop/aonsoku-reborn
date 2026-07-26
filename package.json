@@ -13,6 +13,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:mobile": "tsc && vite build --mode mobile",
     "preview": "vite preview",
     "lint": "biome lint",
     "lint:fix": "biome lint --write",

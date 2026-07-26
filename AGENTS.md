@@ -27,9 +27,10 @@ pnpm run electron:dev     # Electron desktop dev
 
 # Build
 pnpm run build            # Production web build (tsc + vite)
+pnpm run build:mobile     # Capacitor bundle with automatic fine-grained chunks
 pnpm run electron:build   # Electron renderer/main/preload build
 pnpm run make             # Create Electron distributable packages
-pnpm exec cap sync        # Copy dist and refresh Android/iOS plugin paths
+pnpm exec cap sync        # Copy the preceding build into Android/iOS
 
 # Lint & Format (Biome)
 pnpm run lint             # Check only
@@ -264,14 +265,21 @@ Dark mode is class-based.
 
 ### Code Splitting
 
-Web and Electron renderer builds leave route and vendor chunk ownership to
-Rollup so lazy modules stay separate instead of collapsing every page and
-dependency into startup chunks. The HTML boot shell and its inline styles load
-without the application stylesheet; `src/main.tsx` restores native preferences
-before dynamically importing `src/render-app.tsx`, which owns the application
-styles and React tree. When adding large dependencies or moving substantial
-lazy-loaded feature areas, verify that optional route chunks and application
-CSS are not preloaded by `dist/index.html`.
+Normal Web (`pnpm run build`) and Electron renderer builds use
+`manual-chunks.ts` to preserve the established larger `pages`, `core-vendor`,
+and `heavy-vendor` bundles. Capacitor builds use `pnpm run build:mobile`
+(`vite --mode mobile`), which leaves chunk ownership to Rollup so lazy modules
+stay separate instead of collapsing every page and dependency into startup
+chunks. Android/iOS CI and release workflows must use `build:mobile` before
+`cap sync`; do not use the normal Web build for a native package.
+
+The HTML boot shell and its inline styles load without the application
+stylesheet; `src/main.tsx` restores native preferences before dynamically
+importing `src/render-app.tsx`, which owns the application styles and React
+tree. When adding large dependencies or moving substantial lazy-loaded feature
+areas, verify both build modes: the normal Web output should retain the named
+large chunks, while the mobile `dist/index.html` should not preload optional
+route chunks or application CSS.
 
 ## Tooling Notes
 

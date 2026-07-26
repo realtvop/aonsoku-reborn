@@ -1,6 +1,7 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "electron-vite";
 import { resolve } from "path";
+import { createManualChunks } from "./manual-chunks";
 
 export default defineConfig(() => {
   const buildTimestamp = Date.now();
@@ -53,6 +54,9 @@ export default defineConfig(() => {
               __dirname,
               "electron/renderer/native-debug/index.html",
             ),
+          },
+          output: {
+            manualChunks: createManualChunks,
           },
         },
       },

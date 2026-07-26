@@ -2,6 +2,7 @@ import react from "@vitejs/plugin-react";
 import fs from "fs";
 import path from "path";
 import { defineConfig, type Plugin } from "vite";
+import { createManualChunks } from "./manual-chunks";
 
 function swCacheVersionPlugin(buildHash: string): Plugin {
   return {
@@ -48,12 +49,14 @@ function swCacheVersionPlugin(buildHash: string): Plugin {
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  const buildTimestamp = mode === "production" ? Date.now() : 0;
+  const isMobileBuild = mode === "mobile";
+  const isProductionBuild = mode === "production" || isMobileBuild;
+  const buildTimestamp = isProductionBuild ? Date.now() : 0;
   const buildHash = buildTimestamp > 0 ? buildTimestamp.toString(36) : "dev";
   return {
     plugins: [
       react(),
-      ...(mode === "production" ? [swCacheVersionPlugin(buildHash)] : []),
+      ...(isProductionBuild ? [swCacheVersionPlugin(buildHash)] : []),
     ],
     define: {
       __BUILD_HASH__: JSON.stringify(buildHash),
@@ -74,6 +77,13 @@ export default defineConfig(({ mode }) => {
       minify: "terser",
       rollupOptions: {
         external: ["bufferutil", "utf-8-validate"],
+        ...(isMobileBuild
+          ? {}
+          : {
+              output: {
+                manualChunks: createManualChunks,
+              },
+            }),
       },
     },
   };
