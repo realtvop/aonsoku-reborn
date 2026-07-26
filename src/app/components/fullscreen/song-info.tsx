@@ -15,11 +15,7 @@ const TEXT_TRANSITION_DELAYED = {
   delay: 0.05,
 } as const;
 
-export const SongInfo = memo(function SongInfo({
-  compact = false,
-}: {
-  compact?: boolean;
-}) {
+export const SongInfo = memo(function SongInfo() {
   const currentSong = usePlayerStore(
     (state) => state.songlist.currentSong,
     (a, b) => a?.id === b?.id,
@@ -30,12 +26,7 @@ export const SongInfo = memo(function SongInfo({
   if (!displaySong?.id) return null;
 
   return (
-    <div
-      className={clsx(
-        "flex w-full min-w-0 flex-col",
-        compact ? "gap-0.5" : "gap-1",
-      )}
-    >
+    <div className="flex w-full min-w-0 flex-col gap-1">
       <AnimatePresence mode="wait">
         <motion.div
           key={displaySong.id ?? "no-song"}
@@ -46,12 +37,7 @@ export const SongInfo = memo(function SongInfo({
           className="w-full min-w-0 overflow-hidden"
         >
           <ScrollingTitle>
-            <h2
-              className={clsx(
-                "font-bold tracking-tight",
-                compact ? "text-xl md:text-2xl" : "text-2xl md:text-3xl",
-              )}
-            >
+            <h2 className="font-bold tracking-tight text-2xl md:text-3xl">
               {displaySong.title}
             </h2>
           </ScrollingTitle>
@@ -67,12 +53,7 @@ export const SongInfo = memo(function SongInfo({
           className="w-full min-w-0 overflow-hidden"
         >
           <ScrollingTitle>
-            <div
-              className={clsx(
-                compact ? "text-xs" : "text-sm",
-                "text-foreground/70",
-              )}
-            >
+            <div className="text-sm text-foreground/70">
               <ArtistNames song={displaySong} />
             </div>
           </ScrollingTitle>
@@ -84,10 +65,8 @@ export const SongInfo = memo(function SongInfo({
 
 export const AlbumName = memo(function AlbumName({
   className,
-  compact = false,
 }: {
   className?: string;
-  compact?: boolean;
 }) {
   const currentSong = usePlayerStore(
     (state) => state.songlist.currentSong,
@@ -112,14 +91,7 @@ export const AlbumName = memo(function AlbumName({
         )}
       >
         <ScrollingTitle>
-          <p
-            className={clsx(
-              compact ? "text-xs" : "text-sm",
-              "text-foreground/70",
-            )}
-          >
-            {displaySong.album}
-          </p>
+          <p className="text-sm text-foreground/70">{displaySong.album}</p>
         </ScrollingTitle>
       </motion.div>
     </AnimatePresence>

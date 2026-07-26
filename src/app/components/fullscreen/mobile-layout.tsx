@@ -52,22 +52,15 @@ const HEADER_ICON = <ChevronDown className="size-5" />;
 const MobileHeader = memo(function MobileHeader({
   onClose,
   showDragHandle = false,
-  compact = false,
 }: {
   onClose: () => void;
   showDragHandle?: boolean;
-  compact?: boolean;
 }) {
   const { currentSongColor } = useSongColor();
   const contrast = useFullscreenContrast();
 
   return (
-    <div
-      className={cn(
-        "relative flex items-center justify-between px-3 shrink-0 min-h-[32px] z-20",
-        compact ? "pt-0 pb-1" : "pt-0.5 pb-1.5",
-      )}
-    >
+    <div className="relative flex items-center justify-between px-3 pt-0.5 pb-1.5 shrink-0 min-h-[32px] z-20">
       <Button
         variant="ghost"
         size="icon"
@@ -228,7 +221,6 @@ const MobilePlayingView = memo(function MobilePlayingView() {
     <div className="flex flex-col items-center justify-center w-full flex-1 min-h-0">
       {/* Artwork Section: AlbumName + Artwork */}
       <ArtworkWithInfo
-        largeArtwork
         showInfo={false}
         showTouchDragSurface={isTouchPrimary}
         className="w-full flex-1 min-h-0"

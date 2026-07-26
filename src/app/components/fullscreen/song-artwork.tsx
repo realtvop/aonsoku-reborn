@@ -1,4 +1,3 @@
-import { clsx } from "clsx";
 import { AnimatePresence, motion } from "framer-motion";
 import { memo } from "react";
 import { CachedImage } from "@/app/components/cover-image/cached-image";
@@ -6,12 +5,8 @@ import { useRemotePlaybackProjection } from "@/app/components/remote-control/use
 import { usePlayerStore } from "@/store/player.store";
 
 export const FullscreenSongArtwork = memo(function FullscreenSongArtwork({
-  compact = false,
-  large = false,
   showTouchDragSurface = false,
 }: {
-  compact?: boolean;
-  large?: boolean;
   showTouchDragSurface?: boolean;
 }) {
   const { albumId, coverArt, artist, title, id } = usePlayerStore(
@@ -26,16 +21,7 @@ export const FullscreenSongArtwork = memo(function FullscreenSongArtwork({
   const displayId = displaySong?.id ?? id;
 
   return (
-    <div
-      className={clsx(
-        "relative aspect-square h-auto flex-none bg-foreground/5 rounded-md overflow-hidden flex items-center justify-center transition-all duration-300 ease-in-out",
-        compact
-          ? "w-[min(260px,42svh,calc(100vw-2rem),100%)]"
-          : large
-            ? "w-[min(480px,85vw,60svh,100%)]"
-            : "w-[min(clamp(280px,85vw,480px),100%)]",
-      )}
-    >
+    <div className="relative flex size-full items-center justify-center overflow-hidden rounded-md bg-foreground/5">
       {showTouchDragSurface && (
         <div
           className="absolute inset-0 z-10 touch-none"
@@ -59,7 +45,7 @@ export const FullscreenSongArtwork = memo(function FullscreenSongArtwork({
             coverArtSize="700"
             effect="opacity"
             alt={`${displayArtist} - ${displayTitle}`}
-            className="size-full object-cover rounded-md"
+            className="size-full object-contain rounded-md"
             wrapperClassName="size-full block overflow-hidden"
             width="100%"
             height="100%"

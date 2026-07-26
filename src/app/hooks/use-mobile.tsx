@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 
 const MOBILE_BREAKPOINT = 768;
-const SHORT_VIEWPORT_HEIGHT = 700;
-const WIDE_VIEWPORT_WIDTH = 768;
 
 function getIsPortraitViewport() {
   if (typeof window === "undefined") {
@@ -35,14 +33,6 @@ function useMediaQuery(query: string) {
 
 export function useIsMobile() {
   return useMediaQuery(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
-}
-
-export function useIsShortViewport() {
-  return useMediaQuery(`(max-height: ${SHORT_VIEWPORT_HEIGHT}px)`);
-}
-
-export function useIsWideViewport() {
-  return useMediaQuery(`(min-width: ${WIDE_VIEWPORT_WIDTH}px)`);
 }
 
 export function useIsPortraitViewport() {
