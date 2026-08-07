@@ -1,6 +1,6 @@
 import {
-  AonsokuNativeData,
   type AonsokuNativeDataPlugin,
+  AonsokuNativeData as CapacitorNativeData,
   NATIVE_DATA_PLUGIN_NAME,
 } from "@aonsoku/capacitor-native/data";
 import { Capacitor } from "@capacitor/core";
@@ -33,7 +33,7 @@ export function getNativeDataAvailability(): NativeDataAvailability {
     };
   }
 
-  return { available: true, plugin: AonsokuNativeData };
+  return { available: true, plugin: CapacitorNativeData };
 }
 
 export function isNativeDataAvailable(): boolean {
