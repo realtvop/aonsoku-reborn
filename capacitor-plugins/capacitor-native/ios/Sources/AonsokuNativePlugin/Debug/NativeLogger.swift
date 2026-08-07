@@ -21,6 +21,12 @@ final class NativeLogger {
     private init() {}
 
     func log(_ level: Entry.Level, _ message: String, source: String = "") {
+        #if DEBUG
+        if source == "NowPlayingArtwork" || source == "ImageCache" {
+            print("[\(source)][\(level.rawValue)] \(message)")
+        }
+        #endif
+
         queue.async {
             let entry = Entry(timestamp: Date(), level: level, message: message, source: source)
             let key = source.isEmpty ? "_default" : source

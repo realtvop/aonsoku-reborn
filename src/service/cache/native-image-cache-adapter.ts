@@ -1,8 +1,8 @@
-import {
-  getNativeDataAvailability,
-  type AonsokuNativeDataPlugin,
-} from "@/native/data";
 import type { NativeCachedCoverImageFile } from "@aonsoku/capacitor-native/data";
+import {
+  type AonsokuNativeDataPlugin,
+  getNativeDataAvailability,
+} from "@/native/data";
 
 export interface NativeImageCacheAdapter {
   downloadCoverImage(
@@ -143,14 +143,17 @@ export function getNativeImageCacheAdapter(): NativeImageCacheAdapter {
 
   const availability = getNativeDataAvailability();
   if (availability.available) {
-    nativeImageCacheAdapter = new IosNativeImageCacheAdapter(
-      availability.plugin,
-    );
+    if (!(nativeImageCacheAdapter instanceof IosNativeImageCacheAdapter)) {
+      nativeImageCacheAdapter = new IosNativeImageCacheAdapter(
+        availability.plugin,
+      );
+    }
     return nativeImageCacheAdapter;
   }
 
-  nativeImageCacheAdapter = new WebNullNativeImageCacheAdapter();
-  return nativeImageCacheAdapter;
+  // Plugin registration may not be visible during early app startup. Do not
+  // permanently cache the null adapter or later native calls become no-ops.
+  return new WebNullNativeImageCacheAdapter();
 }
 
 export function isNativeImageCacheAdapterAvailable(): boolean {

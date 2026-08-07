@@ -252,6 +252,12 @@ describe("Aonsoku native audio plugin skeleton", () => {
         "ios/Sources/AonsokuNativePlugin/Audio/AonsokuNativeAudioPlugin.swift",
       ),
     );
+    const imageCacheSwift = readText(
+      path.join(
+        pluginRoot,
+        "ios/Sources/AonsokuNativePlugin/Image/ImageCacheManager.swift",
+      ),
+    );
 
     for (const command of [
       "playCommand",
@@ -283,6 +289,12 @@ describe("Aonsoku native audio plugin skeleton", () => {
     expect(swift).toContain("MPNowPlayingInfoPropertyPlaybackRate");
     expect(swift).toContain("MPMediaItemArtwork");
     expect(swift).toContain("URLSession.shared.dataTask");
+    expect(imageCacheSwift).toContain("aonsokuCoverImageCached");
+    expect(imageCacheSwift).toContain(
+      "notifyCoverImageCached(coverArtId: coverArtId)",
+    );
+    expect(swift).toContain("forName: .aonsokuCoverImageCached");
+    expect(swift).toContain("cachedCoverArtId == currentCoverArtId");
   });
 
   it("tracks radio sources and resets native state on clear", () => {
