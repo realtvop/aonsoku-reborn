@@ -1,6 +1,14 @@
 import Foundation
 import GRDB
 
+extension Notification.Name {
+    static let aonsokuCoverImageCached = Notification.Name("AonsokuCoverImageCached")
+}
+
+enum ImageCacheNotification {
+    static let coverArtIdKey = "coverArtId"
+}
+
 final class ImageCacheManager {
     private let db: DatabasePool
     private let session: URLSession
@@ -106,6 +114,7 @@ final class ImageCacheManager {
 
         let repo = CacheMetaRepository(db: db)
         try repo.upsert(record)
+        notifyCoverImageCached(coverArtId: coverArtId)
 
         return finalFileURL
     }
@@ -136,6 +145,7 @@ final class ImageCacheManager {
 
         let repo = CacheMetaRepository(db: db)
         try repo.upsert(record)
+        notifyCoverImageCached(coverArtId: coverArtId)
 
         return fileURL
     }
@@ -170,13 +180,12 @@ final class ImageCacheManager {
     }
 
     func deleteCoverImage(coverArtId: String) throws -> Bool {
-        let directory = try ImageCacheUtils.cacheDirectoryURL(createIfNeeded: false)
-        guard FileManager.default.fileExists(atPath: directory.path) else {
-            return false
+        var deleted = false
+        if let directory = try? ImageCacheUtils.cacheDirectoryURL(createIfNeeded: false),
+           FileManager.default.fileExists(atPath: directory.path) {
+            let cacheId = ImageCacheUtils.cacheId(for: coverArtId)
+            deleted = removeCoverImageFiles(cacheId: cacheId, in: directory)
         }
-
-        let cacheId = ImageCacheUtils.cacheId(for: coverArtId)
-        let deleted = removeCoverImageFiles(cacheId: cacheId, in: directory)
 
         let key = "cover:\(coverArtId)"
         let repo = CacheMetaRepository(db: db)
@@ -186,20 +195,18 @@ final class ImageCacheManager {
     }
 
     func clearCoverImages() throws -> Int {
-        let directory = try ImageCacheUtils.cacheDirectoryURL(createIfNeeded: false)
-        guard FileManager.default.fileExists(atPath: directory.path) else {
-            return 0
-        }
-
-        let urls = try FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: nil
-        )
-
         var deletedCount = 0
-        for url in urls {
-            try FileManager.default.removeItem(at: url)
-            deletedCount += 1
+        if let directory = try? ImageCacheUtils.cacheDirectoryURL(createIfNeeded: false),
+           FileManager.default.fileExists(atPath: directory.path) {
+            let urls = try FileManager.default.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: nil
+            )
+
+            for url in urls {
+                try FileManager.default.removeItem(at: url)
+                deletedCount += 1
+            }
         }
 
         try db.write { db in
@@ -230,6 +237,18 @@ final class ImageCacheManager {
     }
 
     // MARK: - Private Helpers
+
+    private func notifyCoverImageCached(coverArtId: String) {
+        NativeLogger.shared.info(
+            "cover cached; posting notification coverArtId=\(coverArtId)",
+            source: "ImageCache"
+        )
+        NotificationCenter.default.post(
+            name: .aonsokuCoverImageCached,
+            object: nil,
+            userInfo: [ImageCacheNotification.coverArtIdKey: coverArtId]
+        )
+    }
 
     private func buildAvatarURL(credentials: ServerCredentials, username: String, size: String) throws -> URL {
         var params = SubsonicAuthBuilder.buildQueryParams(

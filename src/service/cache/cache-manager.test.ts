@@ -512,6 +512,20 @@ describe("cacheManager", () => {
     expect(useCacheIndexStore.getState().items).toEqual({});
   });
 
+  it("clears native covers when the renderer cache index is empty", async () => {
+    const nativeImageCacheModule = await import("./native-image-cache-adapter");
+    vi.mocked(
+      nativeImageCacheModule.isNativeImageCacheAdapterAvailable,
+    ).mockReturnValue(true);
+
+    const { cacheManager } = await import("./cache-manager");
+    await cacheManager.clearAssets();
+
+    expect(nativeImageCacheAdapterMock.clearCoverImages).toHaveBeenCalledTimes(
+      1,
+    );
+  });
+
   it("evictItem removes the row from libraryDb.cacheMeta", async () => {
     await libraryDb.cacheMeta.put({
       key: "audio:song-1",

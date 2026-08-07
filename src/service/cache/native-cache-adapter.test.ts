@@ -186,11 +186,28 @@ describe("getNativeCacheAdapter", () => {
     expect(await adapter.resolveAudioFile("song-1")).toBeNull();
   });
 
-  it("caches the adapter instance", () => {
+  it("does not cache the null adapter", () => {
     mocks.getRuntime.mockReturnValue("web");
     const a = getNativeCacheAdapter();
     const b = getNativeCacheAdapter();
-    expect(a).toBe(b);
+    expect(a).not.toBe(b);
+  });
+
+  it("upgrades the iOS adapter after the plugin becomes available", () => {
+    const plugin = createNativePlugin();
+    mocks.getRuntime.mockReturnValue("capacitor-ios");
+    mocks.getNativeAudioPluginAvailability.mockReturnValue({
+      available: false,
+      reason: "missing-plugin",
+      message: "missing",
+    });
+    expect(getNativeCacheAdapter()).not.toBeInstanceOf(IosNativeCacheAdapter);
+
+    mocks.getNativeAudioPluginAvailability.mockReturnValue({
+      available: true,
+      plugin,
+    });
+    expect(getNativeCacheAdapter()).toBeInstanceOf(IosNativeCacheAdapter);
   });
 
   it("reset clears the cached adapter", () => {

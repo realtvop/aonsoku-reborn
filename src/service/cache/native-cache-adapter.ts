@@ -106,15 +106,19 @@ export function getNativeCacheAdapter(): NativeCacheAdapter {
     runtime === "electron"
   ) {
     const availability = getNativeAudioPluginAvailability();
-    const useNativeCache = availability.available;
-    nativeCacheAdapter = useNativeCache
-      ? new IosNativeCacheAdapter(availability.plugin)
-      : new WebNullNativeCacheAdapter();
-    return nativeCacheAdapter;
+    if (availability.available) {
+      if (!(nativeCacheAdapter instanceof IosNativeCacheAdapter)) {
+        nativeCacheAdapter = new IosNativeCacheAdapter(availability.plugin);
+      }
+      return nativeCacheAdapter;
+    }
+
+    // Capacitor may report unavailable before plugin registration completes.
+    // A cached null adapter would turn all later native cache calls into no-ops.
+    return new WebNullNativeCacheAdapter();
   }
 
-  nativeCacheAdapter = new WebNullNativeCacheAdapter();
-  return nativeCacheAdapter;
+  return new WebNullNativeCacheAdapter();
 }
 
 export function isNativeCacheAdapterAvailable(): boolean {

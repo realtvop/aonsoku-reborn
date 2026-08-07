@@ -1,11 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getNativeDataAvailability, isNativeDataAvailable } from "./facade";
+import {
+  AonsokuNativeData,
+  getNativeDataAvailability,
+  isNativeDataAvailable,
+} from "./facade";
 
 const mocks = vi.hoisted(() => ({
   isNativePlatform: vi.fn(() => false),
   getPlatform: vi.fn(() => "web"),
   isPluginAvailable: vi.fn(() => false),
-  capacitorPlugin: {},
+  clearCoverImages: vi.fn(async () => ({ deletedCount: 1 })),
+  capacitorPlugin: {
+    clearCoverImages: () => mocks.clearCoverImages(),
+  },
 }));
 
 vi.mock("@capacitor/core", () => ({
@@ -22,7 +29,13 @@ vi.mock("@aonsoku/capacitor-native/data", () => ({
 }));
 
 describe("native data facade", () => {
-  beforeEach(() => vi.unstubAllGlobals());
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+    mocks.isNativePlatform.mockReturnValue(false);
+    mocks.getPlatform.mockReturnValue("web");
+    mocks.isPluginAvailable.mockReturnValue(false);
+    mocks.clearCoverImages.mockClear();
+  });
 
   it("uses the Electron main-process data bridge", () => {
     const plugin = { getSongs: vi.fn() };
@@ -34,5 +47,20 @@ describe("native data facade", () => {
 
   it("keeps web unavailable", () => {
     expect(getNativeDataAvailability()).toMatchObject({ available: false });
+  });
+
+  it("forwards iOS calls to the registered Capacitor plugin", async () => {
+    mocks.isNativePlatform.mockReturnValue(true);
+    mocks.getPlatform.mockReturnValue("ios");
+    mocks.isPluginAvailable.mockReturnValue(true);
+
+    expect(getNativeDataAvailability()).toEqual({
+      available: true,
+      plugin: mocks.capacitorPlugin,
+    });
+    await expect(AonsokuNativeData.clearCoverImages()).resolves.toEqual({
+      deletedCount: 1,
+    });
+    expect(mocks.clearCoverImages).toHaveBeenCalledTimes(1);
   });
 });

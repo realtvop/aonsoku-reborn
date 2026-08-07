@@ -1034,14 +1034,14 @@ class CacheManager {
     // stale cacheMeta rows after we clear them.
     audioCacheService.cancelAll();
     syncService.cancel();
-    await clearNativeAudioFilesIfAvailable();
+    const nativeClears: Promise<void>[] = [clearNativeAudioFilesIfAvailable()];
 
     if (isNativeImageCacheAdapterAvailable()) {
-      const adapter = getNativeImageCacheAdapter();
-      await adapter.clearCoverImages();
-      this.nativeCoverUrlCache.clear();
-      this.nativeCoverUrlInflight.clear();
+      nativeClears.push(getNativeImageCacheAdapter().clearCoverImages());
     }
+    await Promise.all(nativeClears);
+    this.nativeCoverUrlCache.clear();
+    this.nativeCoverUrlInflight.clear();
 
     await cacheStorage.clear();
     getCacheIndexActions().clear();

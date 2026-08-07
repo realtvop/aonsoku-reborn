@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "react-toastify";
 import {
   Content,
   ContentItem,
@@ -23,6 +24,8 @@ import {
 } from "@/app/components/ui/select";
 import { Switch } from "@/app/components/ui/switch";
 import { cacheManager } from "@/service/cache";
+import { isNativeCacheAdapterAvailable } from "@/service/cache/native-cache-adapter";
+import { isNativeImageCacheAdapterAvailable } from "@/service/cache/native-image-cache-adapter";
 import { syncService } from "@/service/cache/sync-worker-adapter";
 import {
   useCacheActions,
@@ -44,9 +47,9 @@ import {
   COVER_ART_CONCURRENCY_MAX,
   COVER_ART_CONCURRENCY_MIN,
 } from "@/types/cache";
+import { getRuntime } from "@/utils/capabilities";
 import dateTime from "@/utils/dateTime";
 import { formatBytes } from "@/utils/formatBytes";
-import { getRuntime } from "@/utils/capabilities";
 import { CacheManagerSection } from "./cache-manager";
 
 function LibraryCachingSection() {
@@ -297,6 +300,7 @@ interface PoolRowProps {
   quota: number | null;
   onQuotaChange?: (bytes: number) => void;
   onClear: () => void;
+  allowEmptyClear?: boolean;
 }
 
 function PoolRow({
@@ -305,6 +309,7 @@ function PoolRow({
   quota,
   onQuotaChange,
   onClear,
+  allowEmptyClear = false,
 }: PoolRowProps) {
   const { t } = useTranslation();
   const sizeLabel = useMemo(() => {
@@ -366,7 +371,7 @@ function PoolRow({
           variant="outline"
           className="h-7 text-xs"
           onClick={onClear}
-          disabled={stats.count === 0}
+          disabled={stats.count === 0 && !allowEmptyClear}
         >
           {t("settings.storage.limits.clearAudio")}
         </Button>
@@ -380,6 +385,8 @@ function CacheLimitsSection() {
   const { assetsQuota, lruQuota } = useCacheSettings();
   const { setAssetsQuota, setLruQuota } = useCacheActions();
   const stats = useCachePoolStats();
+  const hasNativeImageCache = isNativeImageCacheAdapterAvailable();
+  const hasNativeCache = hasNativeImageCache || isNativeCacheAdapterAvailable();
 
   const totalCount =
     stats.explicit.count +
@@ -394,13 +401,25 @@ function CacheLimitsSection() {
     [],
   );
 
-  const handleClearAssets = useCallback(() => {
-    cacheManager.clearAssets();
-  }, []);
+  const handleClearAssets = useCallback(async () => {
+    try {
+      await cacheManager.clearAssets();
+      toast.success(t("settings.storage.limits.clearAudio"));
+    } catch (error) {
+      console.error("Failed to clear cover cache", error);
+      toast.error(error instanceof Error ? error.message : String(error));
+    }
+  }, [t]);
 
-  const handleClearAll = useCallback(() => {
-    cacheManager.clearAllCaches();
-  }, []);
+  const handleClearAll = useCallback(async () => {
+    try {
+      await cacheManager.clearAllCaches();
+      toast.success(t("settings.storage.limits.clearAll"));
+    } catch (error) {
+      console.error("Failed to clear all caches", error);
+      toast.error(error instanceof Error ? error.message : String(error));
+    }
+  }, [t]);
 
   return (
     <Root>
@@ -437,6 +456,7 @@ function CacheLimitsSection() {
           quota={assetsQuota}
           onQuotaChange={setAssetsQuota}
           onClear={handleClearAssets}
+          allowEmptyClear={hasNativeImageCache}
         />
 
         <ContentItem>
@@ -447,7 +467,7 @@ function CacheLimitsSection() {
               variant="destructive"
               className="h-8"
               onClick={handleClearAll}
-              disabled={totalCount === 0}
+              disabled={totalCount === 0 && !hasNativeCache}
             >
               {t("settings.storage.limits.clearAll")}
             </Button>
