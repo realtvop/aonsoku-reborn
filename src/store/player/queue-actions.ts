@@ -175,6 +175,7 @@ export function createQueueActions(shared: SharedDeps) {
 
       if (
         get().songlist.contextQueue.songs.length > 0 &&
+        get().playerState.isPlaying &&
         !options?.bypassQueueConfirmation
       ) {
         usePlaybackReplacementStore.getState().show({
@@ -449,6 +450,7 @@ export function createQueueActions(shared: SharedDeps) {
 
       if (
         get().songlist.contextQueue.songs.length > 0 &&
+        isPlaying &&
         !onlyResumesCurrentSong &&
         !options?.bypassQueueConfirmation
       ) {

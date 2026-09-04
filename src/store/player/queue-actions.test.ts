@@ -137,6 +137,7 @@ describe("queue actions", () => {
 
   it("requests confirmation before replacing a non-empty context queue", () => {
     const state = makeState();
+    state.playerState.isPlaying = true;
     const actions = createQueueActions({
       set: (fn) => fn(state as never),
       get: () => state as never,
@@ -159,6 +160,7 @@ describe("queue actions", () => {
 
   it("replaces the context queue after confirmation", () => {
     const state = makeState();
+    state.playerState.isPlaying = true;
     const actions = createQueueActions({
       set: (fn) => fn(state as never),
       get: () => state as never,
@@ -185,6 +187,7 @@ describe("queue actions", () => {
 
   it("requests confirmation before replacing the queue with one song", () => {
     const state = makeState();
+    state.playerState.isPlaying = true;
     const actions = createQueueActions({
       set: (fn) => fn(state as never),
       get: () => state as never,
@@ -201,5 +204,42 @@ describe("queue actions", () => {
       kind: "song",
       song: { id: "replacement" },
     });
+  });
+
+  it("replaces and starts a new context queue without confirmation when paused", () => {
+    const state = makeState();
+    const actions = createQueueActions({
+      set: (fn) => fn(state as never),
+      get: () => state as never,
+      isRemoteActive: () => false,
+      remoteSend: vi.fn(),
+      clearSonglistState: vi.fn(),
+    });
+
+    actions.setSongList?.([makeSong("replacement")], 0, false, {
+      albumId: "album-2",
+    });
+
+    expect(usePlaybackReplacementStore.getState().request).toBeNull();
+    expect(state.songlist.contextQueue.songs[0]?.id).toBe("replacement");
+    expect(state.playerState.isPlaying).toBe(true);
+  });
+
+  it("replaces and starts a new song without confirmation when paused", () => {
+    const state = makeState();
+    const actions = createQueueActions({
+      set: (fn) => fn(state as never),
+      get: () => state as never,
+      isRemoteActive: () => false,
+      remoteSend: vi.fn(),
+      clearSonglistState: vi.fn(),
+    });
+    Object.assign(state, { actions });
+
+    actions.playSong?.(makeSong("replacement"));
+
+    expect(usePlaybackReplacementStore.getState().request).toBeNull();
+    expect(state.songlist.contextQueue.songs[0]?.id).toBe("replacement");
+    expect(state.playerState.isPlaying).toBe(true);
   });
 });
