@@ -62,7 +62,8 @@ function useCoverArtCacheLookup({
     let objectUrl: string | null = null;
     setIsLoading(true);
 
-    async function loadCache() {
+    async function loadCache(allowAutoCache = autoCache, showLoading = true) {
+      if (showLoading) setIsLoading(true);
       for (const key of cacheKeys) {
         try {
           const url = await cacheManager.getCachedCoverUrl(key, cacheArtSize);
@@ -85,7 +86,7 @@ function useCoverArtCacheLookup({
         setCachedUrl(null);
         setIsLoading(false);
         if (
-          autoCache &&
+          allowAutoCache &&
           !isOffline &&
           primaryCacheKey &&
           pendingAutoCache.current !== primaryCacheKey
@@ -93,7 +94,13 @@ function useCoverArtCacheLookup({
           pendingAutoCache.current = primaryCacheKey;
           cacheManager
             .cacheCover(primaryCacheKey, cacheArtSize)
+            .then(() => {
+              if (!cancelled) {
+                loadCache(false, false).catch(() => {});
+              }
+            })
             .catch((err) => {
+              pendingAutoCache.current = null;
               console.warn(
                 `[useCoverArtCacheLookup] auto-cache failed: ${primaryCacheKey}`,
                 err,
@@ -103,7 +110,7 @@ function useCoverArtCacheLookup({
       }
     }
 
-    loadCache();
+    loadCache().catch(() => {});
 
     return () => {
       cancelled = true;
@@ -164,6 +171,8 @@ interface CachedImageProps extends Omit<LazyLoadImageProps, "src"> {
   onFallback?: () => void;
 }
 
+const COVER_IMAGE_RETRY_DELAYS_MS = [1_000, 4_000, 12_000] as const;
+
 export function CachedImage({
   coverArtId,
   coverArtType = "album",
@@ -198,6 +207,9 @@ export function CachedImage({
   const [cachedSrcFailed, setCachedSrcFailed] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [prevSrc, setPrevSrc] = useState<string | undefined>(undefined);
+  const [retryNonce, setRetryNonce] = useState(0);
+  const [retryAttempt, setRetryAttempt] = useState(0);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cacheKeys = useMemo(
     () => resolveCacheKeys(coverArtId, coverArtType, albumId),
@@ -205,11 +217,30 @@ export function CachedImage({
   );
   const primaryCacheKey = cacheKeys[0];
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional — reset on primaryCacheKey change
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset local failure state when the effective cover or connectivity changes
   useEffect(() => {
     setFailedNetworkSrc(null);
     setCachedSrcFailed(false);
-  }, [primaryCacheKey]);
+    setRetryAttempt(0);
+    setRetryNonce(0);
+    if (retryTimer.current) {
+      clearTimeout(retryTimer.current);
+      retryTimer.current = null;
+    }
+  }, [primaryCacheKey, isOffline]);
+
+  useEffect(() => {
+    if (!cachedSrc) return;
+    setCachedSrcFailed(false);
+    setFailedNetworkSrc(null);
+    setRetryAttempt(0);
+  }, [cachedSrc]);
+
+  useEffect(() => {
+    return () => {
+      if (retryTimer.current) clearTimeout(retryTimer.current);
+    };
+  }, []);
 
   const showCachedImage = cachedSrc && !cachedSrcFailed;
 
@@ -237,6 +268,11 @@ export function CachedImage({
 
   const handleLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     setIsLoaded(true);
+    setRetryAttempt(0);
+    if (retryTimer.current) {
+      clearTimeout(retryTimer.current);
+      retryTimer.current = null;
+    }
     onLoad?.(e as never);
   };
 
@@ -247,6 +283,18 @@ export function CachedImage({
         setCachedSrcFailed(true);
       } else if (currentSrc !== failedNetworkSrc) {
         setFailedNetworkSrc(currentSrc);
+        if (
+          retryAttempt < COVER_IMAGE_RETRY_DELAYS_MS.length &&
+          !retryTimer.current
+        ) {
+          const nextAttempt = retryAttempt + 1;
+          retryTimer.current = setTimeout(() => {
+            retryTimer.current = null;
+            setFailedNetworkSrc(null);
+            setRetryAttempt(nextAttempt);
+            setRetryNonce((nonce) => nonce + 1);
+          }, COVER_IMAGE_RETRY_DELAYS_MS[retryAttempt]);
+        }
       }
     }
     onError?.(e as never);
@@ -312,6 +360,7 @@ export function CachedImage({
           loading={props.loading ?? "lazy"}
           onError={handleError}
           onLoad={handleLoad}
+          key={`${cachedSrc}:${retryNonce}`}
           src={cachedSrc}
           style={{ ...props.style, opacity: isLoaded ? 1 : 0 }}
           title={props.title}
@@ -324,6 +373,7 @@ export function CachedImage({
   return (
     <LazyLoadImage
       {...props}
+      key={`${resolvedSrc}:${retryNonce}`}
       src={resolvedSrc}
       onError={handleError}
       onLoad={handleLoad}

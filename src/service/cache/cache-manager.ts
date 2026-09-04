@@ -23,6 +23,7 @@ function convertFileSrc(uri: string): string {
 
   return `${serverUrl}/_capacitor_file_${filePath}`;
 }
+
 import { asyncPool } from "@/service/cache/concurrency";
 import { subsonic } from "@/service/subsonic";
 import { useCacheStore } from "@/store/cache.store";
@@ -127,6 +128,12 @@ function isCoverSizeAtLeast(
   return cached >= requested;
 }
 
+function normalizeCoverSize(size: string | undefined): number {
+  if (!size) return 0;
+  const value = Number(size);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
 class AsyncLimiter {
   private active = 0;
   private queue: Array<() => void> = [];
@@ -160,12 +167,18 @@ class AsyncLimiter {
 
 class CacheManager {
   private statsTimer: ReturnType<typeof setTimeout> | null = null;
-  private cacheCoverInflight = new Map<string, Promise<void>>();
+  private cacheCoverInflight = new Map<
+    string,
+    { requestedSize: number; promise: Promise<void> }
+  >();
   private nativeCoverUrlCache = new Map<
     string,
     { url: string; coverSize?: string }
   >();
-  private nativeCoverUrlInflight = new Map<string, Promise<string | null>>();
+  private nativeCoverUrlInflight = new Map<
+    string,
+    { requestedSize: number; promise: Promise<string | null> }
+  >();
   private coverDownloadLimiter = new AsyncLimiter(4);
 
   isDownloadQueued(songId: string): boolean {
@@ -282,12 +295,21 @@ class CacheManager {
   async cacheCover(coverArtId: string, size = "700"): Promise<void> {
     const key = coverKey(coverArtId);
     const inflight = this.cacheCoverInflight.get(key);
-    if (inflight) return inflight;
+    const requestedSize = normalizeCoverSize(size);
+    if (inflight) {
+      if (inflight.requestedSize >= requestedSize) return inflight.promise;
+      // A higher-quality request arriving behind a lower-quality request must
+      // run again after the first request has settled. Reusing the low-size
+      // promise would leave the cache permanently under-sized.
+      return inflight.promise.then(() => this.cacheCover(coverArtId, size));
+    }
 
     const p = this.cacheCoverImpl(coverArtId, size).finally(() => {
-      this.cacheCoverInflight.delete(key);
+      if (this.cacheCoverInflight.get(key)?.promise === p) {
+        this.cacheCoverInflight.delete(key);
+      }
     });
-    this.cacheCoverInflight.set(key, p);
+    this.cacheCoverInflight.set(key, { requestedSize, promise: p });
     return p;
   }
 
@@ -385,16 +407,32 @@ class CacheManager {
       }
 
       const inflight = this.nativeCoverUrlInflight.get(coverArtId);
-      if (inflight) return inflight;
+      const requestedSizeNumber = normalizeCoverSize(requestedSize);
+      if (inflight) {
+        if (inflight.requestedSize >= requestedSizeNumber) {
+          return inflight.promise;
+        }
+        // Re-check after a low-size resolve so a concurrent high-size caller
+        // can observe a later cache upgrade instead of inheriting null/low
+        // quality metadata from the first caller.
+        return inflight.promise.then(() =>
+          this.getCachedCoverUrl(coverArtId, requestedSize),
+        );
+      }
 
       const resolve = this.resolveNativeCachedCoverUrl(
         coverArtId,
         key,
         requestedSize,
       ).finally(() => {
-        this.nativeCoverUrlInflight.delete(coverArtId);
+        if (this.nativeCoverUrlInflight.get(coverArtId)?.promise === resolve) {
+          this.nativeCoverUrlInflight.delete(coverArtId);
+        }
       });
-      this.nativeCoverUrlInflight.set(coverArtId, resolve);
+      this.nativeCoverUrlInflight.set(coverArtId, {
+        requestedSize: requestedSizeNumber,
+        promise: resolve,
+      });
       return resolve;
     }
 

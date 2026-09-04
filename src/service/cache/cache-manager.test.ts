@@ -408,6 +408,27 @@ describe("cacheManager", () => {
     vi.restoreAllMocks();
   });
 
+  it("runs a higher-quality cover request after a lower-quality one", async () => {
+    const blob = new Blob(["cover"], { type: "image/jpeg" });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      blob: () => Promise.resolve(blob),
+    } as Response);
+
+    const { cacheManager } = await import("./cache-manager");
+    const low = cacheManager.cacheCover("cover-upgrade", "100");
+    const high = cacheManager.cacheCover("cover-upgrade", "700");
+
+    await Promise.all([low, high]);
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    await vi.waitFor(async () => {
+      expect(
+        (await libraryDb.cacheMeta.get("cover:cover-upgrade"))?.coverSize,
+      ).toBe("700");
+    });
+  });
+
   it("cacheSong sets download progress and delegates to audioCacheService", async () => {
     useCacheIndexStore.setState({
       items: {},
