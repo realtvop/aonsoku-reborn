@@ -136,7 +136,8 @@ export function getCoverArtUrl(
     if (!id) {
       return undefined;
     }
-    return `aonsoku-media://getCoverArt?id=${id}&size=${size}`;
+    const params = new URLSearchParams({ id, size });
+    return `aonsoku-media://getCoverArt?${params.toString()}`;
   }
   return _buildCoverArtUrl(getAuthConfig(), id, type, size);
 }
