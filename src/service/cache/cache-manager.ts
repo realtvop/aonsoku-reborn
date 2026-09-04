@@ -723,10 +723,11 @@ class CacheManager {
     const useAlbumCoverForSongs =
       usePlayerStore.getState().settings.coverArt.useAlbumCoverForSongs;
 
-    const [artists, albums, songs] = await Promise.all([
+    const [artists, albums, songs, playlists] = await Promise.all([
       libraryDb.artists.toArray(),
       libraryDb.albums.toArray(),
       libraryDb.songs.toArray(),
+      libraryDb.playlists.toArray(),
     ]);
 
     // Always cache every distinct coverArt we encounter, regardless of
@@ -737,8 +738,9 @@ class CacheManager {
     const queue = Array.from(
       new Set(
         [
-          ...artists.map((artist) => artist.coverArt),
+          ...artists.flatMap((artist) => [artist.coverArt, artist.id]),
           ...albums.map((album) => album.coverArt),
+          ...playlists.map((playlist) => playlist.coverArt),
           ...(useAlbumCoverForSongs ? [] : songs.map((song) => song.coverArt)),
         ].filter((value): value is string => Boolean(value)),
       ),

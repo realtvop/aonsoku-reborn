@@ -1,6 +1,8 @@
 import { WebPlugin } from "@capacitor/core";
 import type {
+  AlbumFilter,
   AonsokuNativeDataPlugin,
+  ArtistFilter,
   BulkImportData,
   InitializeResult,
   NativeAlbum,
@@ -18,10 +20,8 @@ import type {
   PaginatedQuery,
   PaginatedResult,
   SearchOptions,
-  StoreLyricsOptions,
-  AlbumFilter,
-  ArtistFilter,
   SongFilter,
+  StoreLyricsOptions,
 } from "./definitions";
 
 const UNAVAILABLE =
@@ -40,7 +40,7 @@ export class AonsokuNativeDataWeb
   async syncAll(_options?: NativeSyncOptions): Promise<void> {
     throw new Error(UNAVAILABLE);
   }
-  async syncIncremental(): Promise<void> {
+  async syncIncremental(_options?: NativeSyncOptions): Promise<void> {
     throw new Error(UNAVAILABLE);
   }
   async cancelSync(): Promise<void> {

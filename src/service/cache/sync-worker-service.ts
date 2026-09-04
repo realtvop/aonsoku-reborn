@@ -659,6 +659,9 @@ export class SyncWorkerService {
     const coverArtIds = new Set<string>();
     await this.db.artists.each((a) => {
       if (a.coverArt) coverArtIds.add(a.coverArt);
+      // Album details expose artist IDs while artist grids expose coverArt.
+      // Cache both keys so either UI surface works offline.
+      if (a.id) coverArtIds.add(a.id);
     });
     await this.db.albums.each((a) => {
       if (a.coverArt) coverArtIds.add(a.coverArt);

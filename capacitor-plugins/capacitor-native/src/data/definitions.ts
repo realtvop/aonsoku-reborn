@@ -27,6 +27,7 @@ export interface NativeSyncOptions {
   includeCoverArt?: boolean;
   includeFullSongs?: boolean;
   coverArtConcurrency?: number;
+  useAlbumCoverForSongs?: boolean;
 }
 
 export interface NativeSyncState {
@@ -281,7 +282,7 @@ export interface AonsokuNativeDataPlugin extends Plugin {
   importBulk(options: BulkImportData): Promise<void>;
 
   syncAll(options?: NativeSyncOptions): Promise<void>;
-  syncIncremental(): Promise<void>;
+  syncIncremental(options?: NativeSyncOptions): Promise<void>;
   cancelSync(): Promise<void>;
   getSyncState(): Promise<NativeSyncState>;
 

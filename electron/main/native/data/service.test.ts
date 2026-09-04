@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   stores: new Map<string, Record<string, unknown>>(),
   request: vi.fn(),
+  downloadBinary: vi.fn(),
 }));
 
 vi.mock("electron", () => ({
@@ -36,6 +37,7 @@ describe("DesktopNativeDataService", () => {
   beforeEach(() => {
     mocks.stores.clear();
     mocks.request.mockReset();
+    mocks.downloadBinary.mockReset();
   });
 
   it("syncs the complete library in the main process and serves queries", async () => {
@@ -115,5 +117,51 @@ describe("DesktopNativeDataService", () => {
     expect(uri).toMatch(/^file:\/\//);
     expect(uri).toContain("/aonsoku-native-data-test/CoverCache/");
     expect(service.resolveCoverFileUri("missing-cover")).toBeUndefined();
+  });
+
+  it("downloads covers when native sync receives cover options", async () => {
+    mocks.request.mockImplementation(async ({ path }: { path: string }) => {
+      if (path.includes("getGenres"))
+        return response({ genres: { genre: [] } });
+      if (path.includes("getPlaylists"))
+        return response({ playlists: { playlist: [] } });
+      if (path.includes("getStarred"))
+        return response({ starred2: { song: [] } });
+      if (path.includes("getArtists"))
+        return response({
+          artists: { index: [{ artist: [{ id: "ar1", name: "Artist" }] }] },
+        });
+      if (path.includes("getAlbumList"))
+        return response({ albumList2: { album: [] } });
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    mocks.downloadBinary.mockResolvedValue({
+      data: Buffer.from("cover"),
+      contentType: "image/jpeg",
+    });
+
+    const service = new DesktopNativeDataService(
+      {
+        request: mocks.request,
+        downloadBinary: mocks.downloadBinary,
+        getCredentials: () => ({ serverType: "navidrome" }),
+      } as never,
+      () => {},
+    );
+
+    await service.syncAll({
+      includeCoverArt: true,
+      includeFullSongs: false,
+      coverArtConcurrency: 2,
+    });
+
+    expect(mocks.downloadBinary).toHaveBeenCalledWith("/getCoverArt.view", {
+      id: "ar1",
+      size: "700",
+    });
+    expect(service.getSyncState()).toMatchObject({
+      phase: "done",
+      progress: 1,
+    });
   });
 });

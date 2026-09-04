@@ -173,7 +173,10 @@ Electron follows the same renderer/native ownership boundary as Capacitor:
 - `electron/main/native/bridge/` owns credentials, login, server probing, and
   generic Subsonic requests.
 - `electron/main/native/data/` owns metadata sync, persistent library queries,
-  lyrics metadata, and cover/avatar downloads.
+  lyrics metadata, and cover/avatar downloads. Its `syncAll` and
+  `syncIncremental` paths honor `includeCoverArt`, `coverArtConcurrency`, and
+  `useAlbumCoverForSongs`, downloading the required cover IDs into the main
+  process `CoverCache`.
 - `electron/main/native/preferences/` owns Electron desktop preference
   persistence exposed through `AonsokuNativePreferences`; renderer-side
   Zustand/UI preference stores should use `src/store/native-storage.ts` instead

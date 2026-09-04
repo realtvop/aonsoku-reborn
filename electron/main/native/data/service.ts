@@ -106,12 +106,22 @@ export class DesktopNativeDataService {
     this.cancelled = true;
   }
 
-  async syncAll(options?: { includeFullSongs?: boolean }): Promise<void> {
-    await this.sync(false, options?.includeFullSongs ?? false);
+  async syncAll(options?: {
+    includeCoverArt?: boolean;
+    includeFullSongs?: boolean;
+    coverArtConcurrency?: number;
+    useAlbumCoverForSongs?: boolean;
+  }): Promise<void> {
+    await this.sync(false, options?.includeFullSongs ?? false, options);
   }
 
-  async syncIncremental(): Promise<void> {
-    await this.sync(true, false);
+  async syncIncremental(options?: {
+    includeCoverArt?: boolean;
+    includeFullSongs?: boolean;
+    coverArtConcurrency?: number;
+    useAlbumCoverForSongs?: boolean;
+  }): Promise<void> {
+    await this.sync(true, false, options);
   }
 
   private updateSyncState(state: Partial<NativeSyncState>): void {
@@ -122,6 +132,11 @@ export class DesktopNativeDataService {
   private async sync(
     _incremental: boolean,
     includeFullSongs: boolean,
+    options?: {
+      includeCoverArt?: boolean;
+      coverArtConcurrency?: number;
+      useAlbumCoverForSongs?: boolean;
+    },
   ): Promise<void> {
     if (this.syncState.isSyncing) return;
     this.cancelled = false;
@@ -197,6 +212,17 @@ export class DesktopNativeDataService {
             "songs",
           ],
         });
+        if (options?.includeCoverArt) {
+          await this.syncCoverArt({
+            artists: this.store.get("artists"),
+            albums,
+            playlists,
+            songs: this.store.get("songs"),
+            concurrency: options.coverArtConcurrency,
+            useAlbumCoverForSongs: options.useAlbumCoverForSongs,
+          });
+          if (this.cancelled) return;
+        }
         this.updateSyncState({ phase: "done", progress: 1 });
         return;
       }
@@ -238,6 +264,17 @@ export class DesktopNativeDataService {
           "songs",
         ],
       });
+      if (options?.includeCoverArt) {
+        await this.syncCoverArt({
+          artists: this.store.get("artists"),
+          albums,
+          playlists,
+          songs: mergedSongs,
+          concurrency: options.coverArtConcurrency,
+          useAlbumCoverForSongs: options.useAlbumCoverForSongs,
+        });
+        if (this.cancelled) return;
+      }
       this.updateSyncState({ phase: "done", progress: 1 });
     } catch (error) {
       this.updateSyncState({ phase: "error" });
@@ -245,6 +282,91 @@ export class DesktopNativeDataService {
     } finally {
       this.updateSyncState({ isSyncing: false });
     }
+  }
+
+  private async syncCoverArt({
+    artists,
+    albums,
+    playlists,
+    songs,
+    concurrency = 4,
+    useAlbumCoverForSongs = false,
+  }: {
+    artists: NativeArtist[];
+    albums: NativeAlbum[];
+    playlists: NativePlaylist[];
+    songs: NativeSong[];
+    concurrency?: number;
+    useAlbumCoverForSongs?: boolean;
+  }): Promise<void> {
+    const coverArtIds = new Set<string>();
+    const isLms = this.bridge.getCredentials()?.serverType === "lms";
+
+    for (const artist of artists) {
+      if (artist.coverArt) coverArtIds.add(artist.coverArt);
+      // Album details expose artist.id, while artist grids expose coverArt.
+      // Keep both keys available so either surface can resolve offline.
+      if (!isLms && artist.id) coverArtIds.add(artist.id);
+    }
+    for (const album of albums) {
+      if (album.coverArt) coverArtIds.add(album.coverArt);
+      if (useAlbumCoverForSongs && album.id) coverArtIds.add(album.id);
+    }
+    for (const playlist of playlists) {
+      if (playlist.coverArt) coverArtIds.add(playlist.coverArt);
+    }
+    if (!useAlbumCoverForSongs) {
+      for (const song of songs) {
+        if (song.coverArt) coverArtIds.add(song.coverArt);
+      }
+    }
+
+    const queue = Array.from(coverArtIds);
+    const total = queue.length;
+    this.updateSyncState({
+      phase: "coverArt",
+      progress: total === 0 ? 1 : 0,
+      processedItems: 0,
+      totalItems: total,
+    });
+    if (total === 0) return;
+
+    const parsedConcurrency = Number(concurrency);
+    const workerCount = Math.min(
+      total,
+      Number.isFinite(parsedConcurrency)
+        ? Math.max(1, Math.min(8, Math.trunc(parsedConcurrency)))
+        : 4,
+    );
+    let nextIndex = 0;
+    let processed = 0;
+
+    const worker = async () => {
+      while (!this.cancelled) {
+        const index = nextIndex++;
+        if (index >= total) return;
+        const coverArtId = queue[index];
+        try {
+          const existing = await this.getCoverImageSize({ coverArtId });
+          if (!existing.coverSize || Number(existing.coverSize) < 700) {
+            await this.downloadCoverImage({ coverArtId, size: "700" });
+          }
+        } catch (error) {
+          console.warn(
+            `[desktopNativeData] failed to cache cover ${coverArtId}:`,
+            error,
+          );
+        } finally {
+          processed++;
+          this.updateSyncState({
+            processedItems: processed,
+            progress: processed / total,
+          });
+        }
+      }
+    };
+
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
   }
 
   private mergeStarredSongs(

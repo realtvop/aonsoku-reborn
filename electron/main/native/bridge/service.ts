@@ -192,10 +192,21 @@ export class DesktopNativeBridgeService {
       );
     }
     if (!response.ok) throw new Error(`http_error: HTTP ${response.status}`);
+    const contentType =
+      response.headers.get("content-type") ?? "application/octet-stream";
+    if (
+      (path.endsWith("getCoverArt.view") || path.endsWith("getAvatar.view")) &&
+      !contentType.startsWith("image/") &&
+      contentType !== "application/octet-stream"
+    ) {
+      // Subsonic commonly returns a JSON error with HTTP 200 for media
+      // endpoints. Never persist that error document as a cover file.
+      throw new Error(`server_error: expected image, got ${contentType}`);
+    }
+    const data = Buffer.from(await response.arrayBuffer());
     return {
-      data: Buffer.from(await response.arrayBuffer()),
-      contentType:
-        response.headers.get("content-type") ?? "application/octet-stream",
+      data,
+      contentType,
     };
   }
 
