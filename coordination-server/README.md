@@ -4,6 +4,10 @@ A Rust coordination service for synchronizing Aonsoku playback history,
 device presence, and playback handoff across devices bound to the same
 Navidrome account.
 
+For Cloudflare Workers, use the alternative TypeScript implementation in
+[`../coordination-worker/`](../coordination-worker/README.md). It preserves the
+client protocol; storage and device credentials are separate deployments.
+
 See `docs/spark/2026-06-20-cross-device-coordination-server-design.md` for
 the full design document.
 

@@ -17,6 +17,8 @@
       "!android",
       "!capacitor-plugins/capacitor-native/.build",
       "!dist",
+      "!coordination-worker/dist",
+      "!coordination-worker/.wrangler",
       "!dist-ssr",
       "!out",
       "!coverage",

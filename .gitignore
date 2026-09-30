@@ -42,3 +42,7 @@ coverage/
 .swiftpm/
 electron/main/native/audio/libmpv/build/
 resources/native-audio/*/
+
+# Cloudflare Workers local state and secrets
+**/.wrangler/
+**/.dev.vars

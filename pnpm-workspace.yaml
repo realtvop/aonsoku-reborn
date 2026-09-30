@@ -1,5 +1,6 @@
 packages:
   - "."
+  - "coordination-worker"
   - "packages/*"
   - "capacitor-plugins/*"
 

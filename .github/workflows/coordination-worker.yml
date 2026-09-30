@@ -1,0 +1,44 @@
+name: coordination worker
+
+on:
+  push:
+    paths:
+      - "coordination-worker/**"
+      - "src/coordination/types.ts"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/coordination-worker.yml"
+  pull_request:
+    paths:
+      - "coordination-worker/**"
+      - "src/coordination/types.ts"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/coordination-worker.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Type check
+        run: pnpm --filter @aonsoku/coordination-worker check
+      - name: Worker runtime integration tests
+        run: pnpm --filter @aonsoku/coordination-worker test
+      - name: Deployment bundle verification
+        run: pnpm --filter @aonsoku/coordination-worker build
+        env:
+          WRANGLER_SEND_METRICS: "false"

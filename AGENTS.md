@@ -47,6 +47,13 @@ cd coordination-server && cargo clippy --all-targets -- -D warnings
 cd coordination-server && cargo test
 cd coordination-server && cargo run --bin aonsoku-coordination-server
 
+# Cloudflare coordination server (Node.js >= 22)
+pnpm --filter @aonsoku/coordination-worker dev
+pnpm --filter @aonsoku/coordination-worker check
+pnpm --filter @aonsoku/coordination-worker test
+pnpm --filter @aonsoku/coordination-worker build # Deployment dry-run, no account needed
+pnpm --filter @aonsoku/coordination-worker deploy # Requires configured Cloudflare account/secrets
+
 # Android native plugin
 cd android && ./gradlew :aonsoku-capacitor-native:compileDebugKotlin
 cd android && ./gradlew :aonsoku-capacitor-native:testDebugUnitTest
@@ -205,7 +212,21 @@ Electron follows the same renderer/native ownership boundary as Capacitor:
 
 Aonsoku includes a Rust coordination service in `coordination-server/` for
 device registration, presence, playback snapshots, remote control, history
-sync, and handoff. The client-side orchestration lives in `src/coordination/`
+sync, and handoff. An alternative TypeScript Cloudflare deployment lives in
+`coordination-worker/`
+(workspace `@aonsoku/coordination-worker`). It implements the same `/v1/*` and
+version-1 WebSocket client protocol with one SQLite-backed Durable Object per
+account. WebSocket attachments preserve connection/control state through
+hibernation; SQLite owns history, snapshots, pending ACK routes and handoff
+transactions. Alarms handle deadlines and cleanup. It requires a stable secret
+and an operator-trusted exact HTTPS origin allowlist for Navidrome verification
+(all redirects rejected), rather than Rust's arbitrary-host DNS/IP-pinning
+policy. Rust and Workers have separate databases/credentials; switching URLs
+requires device registration, not automatic data migration. See
+`coordination-worker/README.md` for deployment and local Miniflare integration
+tests; `.github/workflows/coordination-worker.yml` checks this runtime on Node 22.
+
+The client-side orchestration lives in `src/coordination/`
 with React state in `src/coordination/store.ts`.
 
 - Web uses the TypeScript WebSocket client (`src/coordination/wsClient.ts`).
@@ -287,7 +308,8 @@ route chunks or application CSS.
 ## Tooling Notes
 
 - **Package manager**: pnpm only.
-- **Workspace**: root app plus `capacitor-plugins/*`.
+- **Workspace**: root app, `packages/*`, `capacitor-plugins/*`, and
+  `coordination-worker` (Cloudflare service; Node.js >= 22).
 - **Linter/formatter**: Biome 2.0.6 — double quotes, trailing commas,
   80-character line width, no unused vars/imports.
 - **TypeScript**: strict mode, path alias `@/` -> `src/`.
