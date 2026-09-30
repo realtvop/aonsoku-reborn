@@ -36,6 +36,8 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Type check
         run: pnpm --filter @aonsoku/coordination-worker check
+      - name: Deployment wizard tests
+        run: pnpm --filter @aonsoku/coordination-worker test:deploy
       - name: Worker runtime integration tests
         run: pnpm --filter @aonsoku/coordination-worker test
       - name: Deployment bundle verification

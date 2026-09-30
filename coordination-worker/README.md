@@ -86,15 +86,41 @@ ALLOWED_IDENTITY_ORIGINS="https://your-navidrome.example.com"
 Then run `pnpm --filter @aonsoku/coordination-worker dev`. Wrangler persists local
 SQLite state under `.wrangler/`, independently of production.
 
-For deployment:
+For deployment, run from the repository root:
 
-1. Set the desired Worker `name` and actual allowed origins in `wrangler.jsonc`.
-2. Run `pnpm --filter @aonsoku/coordination-worker exec wrangler login`.
-3. Run `pnpm --filter @aonsoku/coordination-worker exec wrangler secret put STABLE_KEY`
-   and enter a durable random secret of at least 32 characters.
-4. Run `pnpm --filter @aonsoku/coordination-worker deploy`.
-5. Check `/healthz` and `/readyz`, then configure the HTTPS Worker/custom-domain
-   URL in Aonsoku. Readiness checks configuration and a Durable Object SQL query.
+```sh
+pnpm coordination:deploy
+```
+
+On the first run, the wizard asks for a Worker name (Enter accepts the default)
+and your trusted Navidrome/Subsonic HTTPS URL(s). A URL with an application base
+path is accepted; its origin becomes the allowlist entry. If needed, it opens
+Cloudflare login in your browser and lets you select an account. It generates a
+random stable key and uploads it together with the Worker using Wrangler's
+[`--secrets-file` support](https://developers.cloudflare.com/workers/configuration/secrets/).
+Durable Objects and SQLite are created by the existing migration. No manual
+resource creation, config editing or secret command is needed.
+
+Run the same command for updates. Deployment choices are saved in gitignored
+`coordination-worker/wrangler.deploy.json`; bindings and migrations always come
+from the current checked-in config. An existing remote `STABLE_KEY` is preserved,
+even when deploying from a new checkout. New keys are backed up to gitignored
+`coordination-worker/.deploy.secrets.json` with owner-only permissions on Unix;
+back up this file securely. A failed first deployment reuses that key on retry.
+Authentication, permission and network failures stop deployment rather than
+being treated as an empty remote secret list. Concurrent wizard runs are not
+supported. To change the name, account or allowed origins, edit the saved config;
+each new deployment uses the selected name/account as its target.
+
+Copy the printed `workers.dev` HTTPS URL into Aonsoku coordination settings.
+Check `/healthz` and `/readyz`; readiness checks configuration and a Durable Object
+SQL query. Custom domains can be configured separately in Cloudflare.
+
+For manual deployments or CI, the original Wrangler command remains available
+as `pnpm --filter @aonsoku/coordination-worker deploy:raw`. It uses
+`wrangler.jsonc`, so configure its name/origins and provision `STABLE_KEY` first,
+or pass `--config wrangler.deploy.json` to reuse the wizard config. The wizard
+also accepts Wrangler's usual `CLOUDFLARE_API_TOKEN` authentication environment.
 
 Keep the stable key backed up: changing it changes account routing and
 invalidates credentials. SQLite DO classes are provisioned by the checked-in

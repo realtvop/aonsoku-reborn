@@ -46,3 +46,5 @@ resources/native-audio/*/
 # Cloudflare Workers local state and secrets
 **/.wrangler/
 **/.dev.vars
+coordination-worker/wrangler.deploy.json
+coordination-worker/.deploy.secrets.json

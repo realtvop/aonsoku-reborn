@@ -52,7 +52,9 @@ pnpm --filter @aonsoku/coordination-worker dev
 pnpm --filter @aonsoku/coordination-worker check
 pnpm --filter @aonsoku/coordination-worker test
 pnpm --filter @aonsoku/coordination-worker build # Deployment dry-run, no account needed
-pnpm --filter @aonsoku/coordination-worker deploy # Requires configured Cloudflare account/secrets
+pnpm coordination:deploy # Guided login/configuration/key creation/deployment; reuses saved choices
+pnpm --filter @aonsoku/coordination-worker test:deploy # Deployment wizard regression tests
+pnpm --filter @aonsoku/coordination-worker deploy:raw # Direct Wrangler deployment for operators/CI
 
 # Android native plugin
 cd android && ./gradlew :aonsoku-capacitor-native:compileDebugKotlin
