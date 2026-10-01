@@ -1,0 +1,38 @@
+name: coordination upstream sync
+
+on:
+  schedule:
+    - cron: "23 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: coordination-upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: >-
+      github.event.repository.fork &&
+      github.repository != 'realtvop/aonsoku-reborn' &&
+      vars.COORDINATION_AUTO_SYNC == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      FORK_BRANCH: ${{ github.event.repository.default_branch }}
+    steps:
+      - name: Verify upstream repository
+        run: |
+          parent=$(gh api "repos/$GITHUB_REPOSITORY" --jq '.parent.full_name')
+          if [ "$parent" != "realtvop/aonsoku-reborn" ]; then
+            echo "::error::This workflow only supports direct forks of realtvop/aonsoku-reborn."
+            exit 1
+          fi
+      - name: Sync upstream without force pushing
+        run: |
+          gh api --method POST "repos/$GITHUB_REPOSITORY/merge-upstream" \
+            -f "branch=$FORK_BRANCH"
+          echo "Upstream synced. Workers Builds deploys changes on the connected production branch." >> "$GITHUB_STEP_SUMMARY"
