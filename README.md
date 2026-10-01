@@ -6,6 +6,12 @@ and version-1 WebSocket messages use the shared client types from
 `../src/coordination/types.ts`. Web, Electron, iOS and Android continue using
 their existing transports; configure the deployed URL in coordination settings.
 
+**Deploy entirely in your browser:** [在线部署与自动更新](ONLINE-DEPLOY.md).
+Fork on GitHub, connect Cloudflare Workers Builds, configure two runtime values
+in the dashboard, and optionally enable daily upstream synchronization. No local
+clone or terminal is required. The checked-in Wrangler config preserves dashboard
+variables with `keep_vars`; set allowed origins before using the service.
+
 ## Runtime and storage
 
 Each account has one SQLite-backed `AccountCoordinator` Durable Object. Its
@@ -118,7 +124,7 @@ SQL query. Custom domains can be configured separately in Cloudflare.
 
 For manual deployments or CI, the original Wrangler command remains available
 as `pnpm --filter @aonsoku/coordination-worker deploy:raw`. It uses
-`wrangler.jsonc`, so configure its name/origins and provision `STABLE_KEY` first,
+`wrangler.jsonc`, so configure the runtime origins and provision `STABLE_KEY` first,
 or pass `--config wrangler.deploy.json` to reuse the wizard config. The wizard
 also accepts Wrangler's usual `CLOUDFLARE_API_TOKEN` authentication environment.
 
