@@ -10,8 +10,9 @@ coordination settings.
 
 **Deploy entirely in your browser:** [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/realtvop/aonsoku-reborn/tree/coordination-worker)
 See [在线部署与自动更新](ONLINE-DEPLOY.md) for the dashboard settings.
-The button points at this isolated directory, so the main application's root
-`.env.example` is not included in the setup form. No local clone or terminal is
+The button points at the generated `coordination-worker` branch, so the main
+application's root `.env.example` is not included in the setup form. No local
+clone or terminal is
 required. The checked-in Wrangler config preserves dashboard variables with
 `keep_vars`; set allowed origins before using the service.
 Only `STABLE_KEY` is a secret; `ALLOWED_IDENTITY_ORIGINS` is a normal text
