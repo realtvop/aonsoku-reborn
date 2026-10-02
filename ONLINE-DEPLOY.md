@@ -28,8 +28,9 @@
    不要使用交互式的 `coordination:deploy`。
    这些环境变量填在 **Build Variables and Secrets** 中。
 
-   仓库中的 `docs/aonsoku.env.example` 是主 Web 应用的 Docker/静态站点模板，
-   不属于 Worker 配置；它不会被一键部署页面读取。
+   仓库根目录的 `.env.example` 是主 Web 应用的 Docker/静态站点模板，
+   不属于 Worker 配置。已有的 Cloudflare 设置页可能仍显示它解析出的旧字段；
+   关闭旧流程并从最新提交重新开始，才能读取根目录 `wrangler.jsonc`。
 4. 首次部署完成后，在该 Worker 的 **Settings → Variables and Secrets**
    中添加以下运行时配置，然后保存并部署：
 
