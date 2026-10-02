@@ -234,11 +234,13 @@ branch, whose root contains only the self-contained Worker. This keeps the main
 app's root `.env.example` out of the button's secret scan. The branch is rebuilt
 by `.github/workflows/coordination-worker-branch.yml` whenever the Worker source
 changes. Full-repository Cloudflare Workers Builds remain available for GitHub
-forks that need the daily upstream-sync workflow; the root `wrangler.jsonc` is
-that path's entry point and mirrors the Worker binding/migration config in
-`coordination-worker/wrangler.jsonc`. Runtime origins/key are set in the
-dashboard and preserved by Wrangler `keep_vars`. `coordination-worker/ONLINE-DEPLOY.md`
-documents both setup paths. The Worker keeps a local copy of the protocol types
+forks that need the daily upstream-sync workflow. Their `build:ci` / `deploy:ci`
+commands use `coordination-worker/wrangler.ci.jsonc`, which declares the
+binding/migration config without runtime vars. Runtime settings/key are set in
+the dashboard and preserved by Wrangler `keep_vars`; ordinary Wrangler configs
+declare defaults that overwrite same-named dashboard vars.
+`coordination-worker/ONLINE-DEPLOY.md` documents both setup paths. The Worker
+keeps a local copy of the protocol types
 in `coordination-worker/src/protocol.ts` so its deployment has no dependency
 outside its source tree.
 `.github/workflows/coordination-upstream-sync.yml` optionally syncs direct forks

@@ -35,17 +35,16 @@
 
    | 字段 | 值 |
    | --- | --- |
-   | Root directory | 仓库根目录 `/`（根目录的 `wrangler.jsonc` 是 fork/Workers Builds 入口） |
-   | Build command | `pnpm --config.node-linker=isolated install --filter @aonsoku/coordination-worker --frozen-lockfile --ignore-scripts && pnpm --filter @aonsoku/coordination-worker check` |
-   | Deploy command | `npx wrangler deploy` |
-   | Build variable `SKIP_DEPENDENCY_INSTALL` | `1` |
+   | Root directory | 仓库根目录 `/` |
+   | Build command | `pnpm --filter @aonsoku/coordination-worker run build:ci` |
+   | Deploy command | `pnpm --filter @aonsoku/coordination-worker run deploy:ci` |
    | Build variable `NODE_VERSION` | `22` |
    | Build variable `PNPM_VERSION` | `10` |
 
-   使用整个仓库是为了让 fork 的上游同步工作流和客户端协议源文件保持可用。根目录
-   `wrangler.jsonc` 会指向 `coordination-worker/src/index.ts`，并声明 Durable Object
-   绑定和 SQLite migration。只安装 Worker
-   依赖（覆盖仓库的 hoisted 链接设置），跳过 Electron/Cypress 等安装脚本。
+   使用整个仓库是为了让 fork 的上游同步工作流保持可用。Cloudflare 自动安装 pnpm
+   workspace 依赖，上面的命令只构建和部署 Worker。两个 CI 命令使用
+   `coordination-worker/wrangler.ci.jsonc`，其中声明 Durable Object 绑定和 SQLite
+   migration，但不声明运行时变量，避免覆盖网页设置。
    不要使用交互式的 `coordination:deploy`。
    这些环境变量填在 **Build Variables and Secrets** 中。
 
@@ -58,8 +57,8 @@
    | 名称 | 类型 | 值 |
    | --- | --- | --- |
    | `ALLOWED_IDENTITY_ORIGINS` | Text | 你信任的 Navidrome/Subsonic HTTPS origin，例如 `https://music.example.com`；多个用逗号分隔 |
-   | `ENABLE_OFFLINE_HANDOFF` | Boolean | 是否允许从离线设备接管播放，默认 `true` |
-   | `MAX_DEVICES` | Number | 每个账号最多注册设备数，范围 1–1000，默认 `100` |
+   | `ENABLE_OFFLINE_HANDOFF` | JSON | 填 `true` 或 `false`，是否允许从离线设备接管播放；省略时默认 `true` |
+   | `MAX_DEVICES` | JSON | 填数字，例如 `100`；每个账号最多注册设备数，范围 1–1000，省略时默认 `100` |
    | `STABLE_KEY` | Secret | 用密码管理器生成并保存的至少 32 字符随机密钥 |
 
    **运行时配置和构建变量是两个不同的页面。** `ALLOWED_IDENTITY_ORIGINS` 是普通
@@ -67,15 +66,17 @@
    名称而隐藏值，这是预期的安全行为。未配置时 `/readyz` 会报错，
    服务不接受注册；补齐后才能使用。地址只填 origin，不包含 Navidrome 的路径。
    `STABLE_KEY` 只设置一次，并保存在密码管理器中；后续更新不要更换。
-   Wrangler 使用 `keep_vars` 保留网页设置的变量，部署不会覆盖已有密钥。
+   `deploy:ci` 使用不含 `vars` 的 CI 配置和 `keep_vars` 保留网页设置，部署不会覆盖
+   已有密钥。不要改用 `deploy` 或根目录的 `npx wrangler deploy`：普通配置中的
+   默认值会覆盖同名网页变量，即使设置了 `keep_vars`。
    Workers 由 Cloudflare 管理监听端口，部署不需要也不能设置 `PORT`；如果模板
    里出现 `PORT`，可以删除，它不会被本 Worker 读取。
 5. 打开部署得到的 HTTPS URL 的 `/readyz`，确认返回成功。
    将该 URL 填入 Aonsoku 的协调服务设置。
 
 SQLite Durable Object 由代码中的 migration 创建，不需要手动创建 D1/KV/R2。
-如果需要自定义 Worker 名称，在 fork 网页编辑 `wrangler.jsonc` 的 `name`，并保持
-Cloudflare 中的名称一致；这会成为 fork 中的自定义修改。
+如果需要自定义 Worker 名称，在 fork 网页编辑 `coordination-worker/wrangler.ci.jsonc`
+的 `name`，并保持 Cloudflare 中的名称一致；这会成为 fork 中的自定义修改。
 
 ## 自动跟随上游
 

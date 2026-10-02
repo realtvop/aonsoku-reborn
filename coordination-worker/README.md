@@ -12,9 +12,10 @@ coordination settings.
 See [在线部署与自动更新](ONLINE-DEPLOY.md) for the dashboard settings.
 The button points at the generated `coordination-worker` branch, so the main
 application's root `.env.example` is not included in the setup form. No local
-clone or terminal is
-required. The checked-in Wrangler config preserves dashboard variables with
-`keep_vars`; set allowed origins before using the service.
+clone or terminal is required. For full-repository Workers Builds, use
+`build:ci` and `deploy:ci`: their `wrangler.ci.jsonc` omits runtime defaults and
+uses `keep_vars` to preserve dashboard settings. Set allowed origins before
+using the service.
 Only `STABLE_KEY` is a secret; `ALLOWED_IDENTITY_ORIGINS` is a normal text
 variable. `ENABLE_OFFLINE_HANDOFF` is a Boolean preset to `true`, and
 `MAX_DEVICES` is a Number; both are Worker-only runtime settings. Workers
@@ -130,9 +131,16 @@ Copy the printed `workers.dev` HTTPS URL into Aonsoku coordination settings.
 Check `/healthz` and `/readyz`; readiness checks configuration and a Durable Object
 SQL query. Custom domains can be configured separately in Cloudflare.
 
-For manual deployments or CI, the original Wrangler command remains available
+For Workers Builds with dashboard-managed configuration, use
+`pnpm --filter @aonsoku/coordination-worker deploy:ci`. This preserves all
+existing runtime variables and secrets, including a `false` offline-handoff
+setting. If omitted, offline handoff defaults to `true` and the device limit
+defaults to `100` in the service.
+
+For manual deployments, the original Wrangler command remains available
 as `pnpm --filter @aonsoku/coordination-worker deploy:raw`. It uses
-`wrangler.jsonc`, so configure the runtime origins and provision `STABLE_KEY` first,
+`wrangler.jsonc`, whose declared variables overwrite dashboard values, so
+configure the runtime origins and provision `STABLE_KEY` first,
 or pass `--config wrangler.deploy.json` to reuse the wizard config. The wizard
 also accepts Wrangler's usual `CLOUDFLARE_API_TOKEN` authentication environment.
 
