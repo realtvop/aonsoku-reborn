@@ -8,6 +8,12 @@ For Cloudflare Workers, use the alternative TypeScript implementation in
 [`../coordination-worker/`](../coordination-worker/README.md). It preserves the
 client protocol; storage and device credentials are separate deployments.
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/realtvop/aonsoku-reborn)
+
+The button deploys the Cloudflare Workers implementation from the repository
+root. For required dashboard variables and automatic upstream updates, see
+[`coordination-worker/ONLINE-DEPLOY.md`](../coordination-worker/ONLINE-DEPLOY.md).
+
 See `docs/spark/2026-06-20-cross-device-coordination-server-design.md` for
 the full design document.
 

@@ -12,6 +12,8 @@ in the dashboard, and optionally enable daily upstream synchronization. No local
 clone or terminal is required. The checked-in Wrangler config preserves dashboard
 variables with `keep_vars`; set allowed origins before using the service.
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/realtvop/aonsoku-reborn)
+
 ## Runtime and storage
 
 Each account has one SQLite-backed `AccountCoordinator` Durable Object. Its
