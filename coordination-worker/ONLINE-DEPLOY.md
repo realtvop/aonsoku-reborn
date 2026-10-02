@@ -11,12 +11,14 @@
 分支包含自己的 Wrangler 配置、依赖清单、协议类型和 `.dev.vars.example`，所以不需要
 本地 Node.js 或终端。Cloudflare 会创建自己的 Git 仓库并在该仓库的生产分支更新时重新部署。
 
-首次表单只需要填写 Worker 运行时配置：
+首次表单只需要填写 Worker 运行时配置；`ENABLE_OFFLINE_HANDOFF` 已在 Wrangler 配置中预设为
+`true`，因此不会作为额外输入项出现。部署后仍可在 Cloudflare 的 Variables and Secrets
+中改成 `false`：
 
 | 名称 | 类型 | 值 |
 | --- | --- | --- |
 | `ALLOWED_IDENTITY_ORIGINS` | Text | 你信任的 Navidrome/Subsonic HTTPS origin，多个用逗号分隔 |
-| `ENABLE_OFFLINE_HANDOFF` | Boolean | 是否允许离线设备接管播放，默认 `true` |
+| `ENABLE_OFFLINE_HANDOFF` | Boolean | 是否允许离线设备接管播放，默认 `true`，首次部署已预设 |
 | `MAX_DEVICES` | Number | 每个账号最多注册设备数，范围 1–1000，默认 `100` |
 | `STABLE_KEY` | Secret | 至少 32 字符的随机密钥 |
 

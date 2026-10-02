@@ -19,7 +19,7 @@
         "description": "Trusted HTTPS Navidrome/Subsonic origins, comma-separated; do not include a port unless the origin actually uses a non-default HTTPS port."
       },
       "ENABLE_OFFLINE_HANDOFF": {
-        "description": "Boolean value (true or false): allow a device to take over playback from an offline device within the eight-hour snapshot window. Leave empty for the default true."
+        "description": "Boolean value (true or false): allow a device to take over playback from an offline device within the eight-hour snapshot window. Defaults to true in wrangler.jsonc; change it after deployment if needed."
       },
       "MAX_DEVICES": {
         "description": "Number from 1 to 1000: maximum registered devices per account. Leave empty for the default 100."
