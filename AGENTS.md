@@ -228,8 +228,10 @@ requires device registration, not automatic data migration. See
 `coordination-worker/README.md` for deployment and local Miniflare integration
 tests; `.github/workflows/coordination-worker.yml` checks this runtime on Node 22.
 Browser-only deployment uses Cloudflare Workers Builds connected to the full
-repository, with runtime origins/key set in the dashboard and preserved by
-Wrangler `keep_vars`. `coordination-worker/ONLINE-DEPLOY.md` documents setup.
+repository. The root `wrangler.jsonc` is the Deploy to Cloudflare entry point and
+mirrors the Worker binding/migration config in `coordination-worker/wrangler.jsonc`;
+runtime origins/key are set in the dashboard and preserved by Wrangler
+`keep_vars`. `coordination-worker/ONLINE-DEPLOY.md` documents setup.
 `.github/workflows/coordination-upstream-sync.yml` optionally syncs direct forks
 daily via GitHub's merge-upstream API when repository variable
 `COORDINATION_AUTO_SYNC=true`; no force push or personal token is used.
