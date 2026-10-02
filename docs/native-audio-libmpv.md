@@ -194,7 +194,10 @@ Useful environment variables:
   selection for prepare/verify scripts.
 
 The smoke check initializes libmpv with `ao=null`, generates a temporary WAV,
-then exercises load, pause, resume, seek, stop, and destroy.
+and keeps it paused during load and system-session/probe setup. It seeks before
+resuming, waits for playback progress, then stops and destroys the player.
+`keep-open=yes` retains the fixture if a slow runner reaches EOF, and failures
+report the operation being exercised.
 
 ## Resource Preparation
 

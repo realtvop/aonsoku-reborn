@@ -46,6 +46,7 @@ player.setEventCallback((event) => {
   events.push(event);
 });
 const wavPath = path.join(tmpdir(), `aonsoku-libmpv-smoke-${process.pid}.wav`);
+let stage = "initialize";
 
 try {
   await writeFile(wavPath, createSilentWav());
@@ -56,19 +57,23 @@ try {
       "audio-display": "no",
       "force-window": "no",
       idle: "yes",
+      "keep-open": "yes",
+      pause: "yes",
       terminal: "no",
       vid: "no",
     },
   });
   player.observeProperty("pause", "boolean");
   player.observeProperty("time-pos", "number");
+  stage = "load";
   player.command(["loadfile", wavPath, "replace"]);
   await waitForEvent(events, (event) => event.type === "file-loaded");
   const metadata = {
     title: "Aonsoku native audio smoke test",
   };
+  stage = "system-media-session";
   player.updateSystemMediaSession(metadata, {
-    state: "playing",
+    state: "paused",
     position: 0,
     duration: 2,
   });
@@ -87,16 +92,17 @@ try {
   });
   availabilityPlayer.destroy();
   player.updateSystemMediaSession(metadata, {
-    state: "playing",
+    state: "paused",
     position: 0.1,
     duration: 2,
   });
   player.updateSystemMediaSession(metadata, {
-    state: "playing",
+    state: "paused",
     position: 0.05,
     duration: 2,
   });
   player.setProperty("pause", true);
+  stage = "pause";
   await waitForEvent(
     events,
     (event) =>
@@ -104,9 +110,23 @@ try {
       event.name === "pause" &&
       event.data === true,
   );
-  player.setProperty("pause", false);
+  // Keep the short fixture paused during system-session/probe work: a slow
+  // runner can otherwise reach EOF before the seek command is exercised.
+  stage = "seek";
   player.command(["seek", "0.05", "absolute", "exact"]);
+  stage = "resume";
+  player.setProperty("pause", false);
+  await waitForEvent(
+    events,
+    (event) =>
+      event.type === "property-change" &&
+      event.name === "time-pos" &&
+      typeof event.data === "number" &&
+      event.data > 0.05,
+  );
+  stage = "stop";
   player.command(["stop"]);
+  stage = "destroy";
   player.clearSystemMediaSession();
   player.destroy();
   await rm(wavPath, { force: true });
@@ -143,7 +163,7 @@ try {
   }
   await rm(wavPath, { force: true });
 
-  console.error("native-audio: libmpv smoke check failed");
+  console.error(`native-audio: libmpv smoke check failed during ${stage}`);
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 }

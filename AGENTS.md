@@ -527,7 +527,14 @@ the `win25-vs2026` image. `build-addon.mjs` therefore invokes the idempotent
 `scripts/native-audio/ci/patch-node-gyp-vs2026.mjs` on Windows before spawning
 node-gyp, backporting the VS 2026 / `v145` toolset detection from upstream
 nodejs/node-gyp 69e5fd2 into the installed `@electron/node-gyp`
-`find-visualstudio.js` in place. The Linux addon's `$ORIGIN` rpath is
+`find-visualstudio.js` in place. Electron build/release/nightly workflows also
+install Windows dependencies with `--ignore-scripts`, apply that patch, then
+run `pnpm rebuild --pending` before native-audio setup; this allows dependency
+install scripts (including sharp on Windows ARM64) to use VS 2026 too.
+The packaged smoke fixture stays paused during system-session/probe setup,
+seeks before resuming, and waits for playback progress before stopping. This
+prevents a slow runner from exhausting the two-second WAV before seeking.
+The Linux addon's `$ORIGIN` rpath is
 single-quoted in `binding.gyp` (`-Wl,-rpath,'$$ORIGIN'`) so the shell does not
 expand it to empty before the linker records it.
 - **Linux**: builds an **audio-only libmpv from source** via
