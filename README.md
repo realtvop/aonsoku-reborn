@@ -16,9 +16,9 @@ clone or terminal is
 required. The checked-in Wrangler config preserves dashboard variables with
 `keep_vars`; set allowed origins before using the service.
 Only `STABLE_KEY` is a secret; `ALLOWED_IDENTITY_ORIGINS` is a normal text
-variable. `ENABLE_OFFLINE_HANDOFF` is a Boolean and `MAX_DEVICES` is a Number;
-both are Worker-only runtime settings. Workers manage their own listener, so
-this service has no `PORT` setting.
+variable. `ENABLE_OFFLINE_HANDOFF` is a Boolean preset to `true`, and
+`MAX_DEVICES` is a Number; both are Worker-only runtime settings. Workers
+manage their own listener, so this service has no `PORT` setting.
 
 ## Runtime and storage
 
