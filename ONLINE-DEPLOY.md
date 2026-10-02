@@ -27,6 +27,9 @@
    依赖（覆盖仓库的 hoisted 链接设置），跳过 Electron/Cypress 等安装脚本。
    不要使用交互式的 `coordination:deploy`。
    这些环境变量填在 **Build Variables and Secrets** 中。
+
+   仓库中的 `docs/aonsoku.env.example` 是主 Web 应用的 Docker/静态站点模板，
+   不属于 Worker 配置；它不会被一键部署页面读取。
 4. 首次部署完成后，在该 Worker 的 **Settings → Variables and Secrets**
    中添加以下运行时配置，然后保存并部署：
 
