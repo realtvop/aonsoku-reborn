@@ -5,6 +5,28 @@ export interface Env {
   STABLE_KEY: string;
   // Exact HTTPS origins controlled/trusted by the operator. No wildcard.
   ALLOWED_IDENTITY_ORIGINS: string;
+  ENABLE_OFFLINE_HANDOFF?: boolean | string;
+  MAX_DEVICES?: number | string;
+}
+
+export function booleanSetting(value: unknown, fallback: boolean): boolean {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "boolean") return value;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return fallback;
+}
+
+export function integerSetting(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= min && parsed <= max
+    ? parsed
+    : fallback;
 }
 
 export class ApiError extends Error {

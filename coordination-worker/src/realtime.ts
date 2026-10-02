@@ -30,6 +30,7 @@ export class Realtime {
   constructor(
     readonly ctx: DurableObjectState,
     readonly store: Store,
+    readonly options: { offlineHandoff: boolean } = { offlineHandoff: true },
   ) {}
   attachment(ws: WebSocket) {
     return ws.deserializeAttachment() as Attachment;
@@ -403,6 +404,8 @@ export class Realtime {
         fail("forbidden", "source is controlling another device");
       const s = this.activeSession(env.sourceDeviceId);
       if (!s) fail("target_offline", "source has no active session");
+      if (s.offlineAt && !this.options.offlineHandoff)
+        fail("forbidden", "offline handoff is disabled");
       if (s.offlineAt && Date.now() - s.offlineAt > OFFLINE_TTL)
         fail("snapshot_expired", "offline snapshot expired");
       if (s.generation !== env.expectedGeneration)
@@ -482,6 +485,8 @@ export class Realtime {
       if (source && this.attachment(source).controlling)
         fail("forbidden", "source is controlling another device");
       if (!source) {
+        if (!this.options.offlineHandoff)
+          fail("forbidden", "offline handoff is disabled");
         if (!s.offlineAt || Date.now() - s.offlineAt > OFFLINE_TTL)
           fail("snapshot_expired", "offline snapshot expired");
         this.commit(txn, s.snapshot);

@@ -9,6 +9,7 @@ import {
   ApiError,
   accountId,
   body,
+  booleanSetting,
   canonicalUser,
   type Env,
   errorResponse,
@@ -16,6 +17,7 @@ import {
   hash,
   identity,
   integer,
+  integerSetting,
   json,
   object,
   sign,
@@ -50,7 +52,9 @@ export class AccountCoordinator extends DurableObject<Env, unknown> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.store = new Store(ctx.storage);
-    this.realtime = new Realtime(ctx, this.store);
+    this.realtime = new Realtime(ctx, this.store, {
+      offlineHandoff: booleanSetting(env.ENABLE_OFFLINE_HANDOFF, true),
+    });
     // After host loss there may be persisted online sessions without live sockets.
     // Hibernation retains sockets; only absent owners become frozen candidates.
     for (const session of this.store.list<Session>("session:")) {
@@ -168,7 +172,10 @@ export class AccountCoordinator extends DurableObject<Env, unknown> {
       const capabilities = integer(input.capabilities ?? 0, 0, 0xffffffff);
       this.consumeChallenge(input);
       await verifyCredentials(this.env, input);
-      if (this.store.list("device:").length >= 100)
+      if (
+        this.store.list("device:").length >=
+        integerSetting(this.env.MAX_DEVICES, 100, 1, 1000)
+      )
         fail("rate_limited", "device limit reached", 429);
       if (!this.store.get("meta"))
         this.store.set("meta", {
