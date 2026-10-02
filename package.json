@@ -12,6 +12,22 @@
     "deploy:raw": "wrangler deploy",
     "test:deploy": "node --test scripts/deploy.test.mjs"
   },
+  "cloudflare": {
+    "bindings": {
+      "ALLOWED_IDENTITY_ORIGINS": {
+        "description": "Trusted HTTPS Navidrome/Subsonic origins, comma-separated; do not include a port unless the origin actually uses a non-default HTTPS port."
+      },
+      "ENABLE_OFFLINE_HANDOFF": {
+        "description": "Boolean: allow a device to take over playback from an offline device within the eight-hour snapshot window."
+      },
+      "MAX_DEVICES": {
+        "description": "Number from 1 to 1000: maximum registered devices per account."
+      },
+      "STABLE_KEY": {
+        "description": "Secret HMAC key, at least 32 random characters. Generate it in a password manager and keep it unchanged across deployments."
+      }
+    }
+  },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260930.1",
     "esbuild": "0.28.1",

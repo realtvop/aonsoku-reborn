@@ -33,12 +33,18 @@
    | 名称 | 类型 | 值 |
    | --- | --- | --- |
    | `ALLOWED_IDENTITY_ORIGINS` | Text | 你信任的 Navidrome/Subsonic HTTPS origin，例如 `https://music.example.com`；多个用逗号分隔 |
+   | `ENABLE_OFFLINE_HANDOFF` | Boolean | 是否允许从离线设备接管播放，默认 `true` |
+   | `MAX_DEVICES` | Number | 每个账号最多注册设备数，范围 1–1000，默认 `100` |
    | `STABLE_KEY` | Secret | 用密码管理器生成并保存的至少 32 字符随机密钥 |
 
-   **运行时配置和构建变量是两个不同的页面。** 未配置时 `/readyz` 会报错，
+   **运行时配置和构建变量是两个不同的页面。** `ALLOWED_IDENTITY_ORIGINS` 是普通
+   Text 变量，只有 `STABLE_KEY` 是 Secret；Secret 在 Cloudflare 中始终只显示
+   名称而隐藏值，这是预期的安全行为。未配置时 `/readyz` 会报错，
    服务不接受注册；补齐后才能使用。地址只填 origin，不包含 Navidrome 的路径。
    `STABLE_KEY` 只设置一次，并保存在密码管理器中；后续更新不要更换。
    Wrangler 使用 `keep_vars` 保留网页设置的变量，部署不会覆盖已有密钥。
+   Workers 由 Cloudflare 管理监听端口，部署不需要也不能设置 `PORT`；如果模板
+   里出现 `PORT`，可以删除，它不会被本 Worker 读取。
 5. 打开部署得到的 HTTPS URL 的 `/readyz`，确认返回成功。
    将该 URL 填入 Aonsoku 的协调服务设置。
 

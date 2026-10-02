@@ -12,6 +12,10 @@ Fork on GitHub, connect Cloudflare Workers Builds, configure two runtime values
 in the dashboard, and optionally enable daily upstream synchronization. No local
 clone or terminal is required. The checked-in Wrangler config preserves dashboard
 variables with `keep_vars`; set allowed origins before using the service.
+Only `STABLE_KEY` is a secret; `ALLOWED_IDENTITY_ORIGINS` is a normal text
+variable. `ENABLE_OFFLINE_HANDOFF` is a Boolean and `MAX_DEVICES` is a Number;
+both are Worker-only runtime settings. Workers manage their own listener, so
+this service has no `PORT` setting.
 
 ## Runtime and storage
 
