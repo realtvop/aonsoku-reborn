@@ -52,6 +52,8 @@ pnpm --filter @aonsoku/coordination-worker dev
 pnpm --filter @aonsoku/coordination-worker check
 pnpm --filter @aonsoku/coordination-worker test
 pnpm --filter @aonsoku/coordination-worker build # Deployment dry-run, no account needed
+pnpm --filter @aonsoku/coordination-worker build:ci # Workers Builds dry-run; preserves dashboard runtime vars
+pnpm --filter @aonsoku/coordination-worker deploy:ci # Workers Builds deployment; preserves dashboard runtime vars
 pnpm coordination:deploy # Guided login/configuration/key creation/deployment; reuses saved choices
 pnpm --filter @aonsoku/coordination-worker test:deploy # Deployment wizard regression tests
 pnpm --filter @aonsoku/coordination-worker deploy:raw # Direct Wrangler deployment for operators/CI

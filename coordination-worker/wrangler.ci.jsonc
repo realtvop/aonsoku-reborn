@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "aonsoku-coordination",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-30",
+  "workers_dev": true,
+  "keep_vars": true,
+  "durable_objects": {
+    "bindings": [{ "name": "ACCOUNTS", "class_name": "AccountCoordinator" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AccountCoordinator"] }],
+  "vars": {
+    "ENABLE_OFFLINE_HANDOFF": true
+  },
+  "secrets": {
+    "required": ["STABLE_KEY"]
+  }
+}

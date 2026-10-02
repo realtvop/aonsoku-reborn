@@ -9,6 +9,8 @@
     "test": "vitest run --config vitest.config.ts",
     "build": "wrangler deploy --dry-run --outdir dist",
     "deploy": "wrangler deploy",
+    "build:ci": "wrangler deploy --config wrangler.ci.jsonc --dry-run --outdir dist",
+    "deploy:ci": "wrangler deploy --config wrangler.ci.jsonc --keep-vars",
     "deploy:guided": "node scripts/deploy.mjs",
     "deploy:raw": "wrangler deploy",
     "test:deploy": "node --test scripts/deploy.test.mjs"
