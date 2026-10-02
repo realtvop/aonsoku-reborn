@@ -12,7 +12,7 @@
   "productName": "Aonsoku",
   "scripts": {
     "dev": "vite",
-    "coordination:deploy": "pnpm --filter @aonsoku/coordination-worker deploy",
+    "coordination:deploy": "pnpm --filter @aonsoku/coordination-worker deploy:guided",
     "build": "tsc && vite build",
     "build:mobile": "tsc && vite build --mode mobile",
     "preview": "vite preview",

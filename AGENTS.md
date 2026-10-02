@@ -227,11 +227,16 @@ policy. Rust and Workers have separate databases/credentials; switching URLs
 requires device registration, not automatic data migration. See
 `coordination-worker/README.md` for deployment and local Miniflare integration
 tests; `.github/workflows/coordination-worker.yml` checks this runtime on Node 22.
-Browser-only deployment uses Cloudflare Workers Builds connected to the full
-repository. The root `wrangler.jsonc` is the Deploy to Cloudflare entry point and
-mirrors the Worker binding/migration config in `coordination-worker/wrangler.jsonc`;
-runtime origins/key are set in the dashboard and preserved by Wrangler
-`keep_vars`. `coordination-worker/ONLINE-DEPLOY.md` documents setup.
+The Deploy to Cloudflare button targets the self-contained
+`coordination-worker/` subtree, so the main app's root `.env.example` is not
+treated as a Worker secret template. Full-repository Cloudflare Workers Builds
+remain available for GitHub forks that need the daily upstream-sync workflow;
+the root `wrangler.jsonc` is that path's entry point and mirrors the Worker
+binding/migration config in `coordination-worker/wrangler.jsonc`. Runtime
+origins/key are set in the dashboard and preserved by Wrangler `keep_vars`.
+`coordination-worker/ONLINE-DEPLOY.md` documents both setup paths. The Worker
+keeps a local copy of the protocol types in `coordination-worker/src/protocol.ts`
+so its button deployment has no dependency outside the subtree.
 `.github/workflows/coordination-upstream-sync.yml` optionally syncs direct forks
 daily via GitHub's merge-upstream API when repository variable
 `COORDINATION_AUTO_SYNC=true`; no force push or personal token is used.

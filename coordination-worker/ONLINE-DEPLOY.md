@@ -3,7 +3,26 @@
 整个流程在 GitHub 和 Cloudflare 网页中完成，无需 clone、本地 Node.js 或终端。
 构建命令只是复制到 Cloudflare 表单，服务器会代为执行。
 
-## 首次部署
+## 一键部署（无需 clone）
+
+点击 README 中的 **Deploy to Cloudflare** 按钮。按钮指向
+`coordination-worker` 子目录，Cloudflare 会把它当成独立仓库根目录；主应用根目录的
+`.env.example`、`PORT`、`SERVER_URL`、`APP_USER` 等字段不会进入这个设置页面。
+子目录包含自己的 Wrangler 配置、依赖清单、协议类型和 `.dev.vars.example`，所以不需要
+本地 Node.js 或终端。Cloudflare 会创建自己的 Git 仓库并在该仓库的生产分支更新时重新部署。
+
+首次表单只需要填写 Worker 运行时配置：
+
+| 名称 | 类型 | 值 |
+| --- | --- | --- |
+| `ALLOWED_IDENTITY_ORIGINS` | Text | 你信任的 Navidrome/Subsonic HTTPS origin，多个用逗号分隔 |
+| `ENABLE_OFFLINE_HANDOFF` | Boolean | 是否允许离线设备接管播放，默认 `true` |
+| `MAX_DEVICES` | Number | 每个账号最多注册设备数，范围 1–1000，默认 `100` |
+| `STABLE_KEY` | Secret | 至少 32 字符的随机密钥 |
+
+`PORT` 由 Workers 管理，不能配置；如果页面出现它，说明打开的是旧的根目录部署链接。
+
+## GitHub fork 自动跟随上游
 
 1. [在 GitHub 创建 fork](https://github.com/realtvop/aonsoku-reborn/fork)，保留
    `main` 分支。使用真正的 fork，以便同步上游；不要创建没有 fork 关系的代码副本。
@@ -14,14 +33,14 @@
 
    | 字段 | 值 |
    | --- | --- |
-   | Root directory | 仓库根目录 `/`（根目录的 `wrangler.jsonc` 是在线部署入口） |
+   | Root directory | 仓库根目录 `/`（根目录的 `wrangler.jsonc` 是 fork/Workers Builds 入口） |
    | Build command | `pnpm --config.node-linker=isolated install --filter @aonsoku/coordination-worker --frozen-lockfile --ignore-scripts && pnpm --filter @aonsoku/coordination-worker check` |
    | Deploy command | `npx wrangler deploy` |
    | Build variable `SKIP_DEPENDENCY_INSTALL` | `1` |
    | Build variable `NODE_VERSION` | `22` |
    | Build variable `PNPM_VERSION` | `10` |
 
-   使用整个仓库，因为 Worker 引用了 `src/coordination/types.ts`。根目录
+   使用整个仓库是为了让 fork 的上游同步工作流和客户端协议源文件保持可用。根目录
    `wrangler.jsonc` 会指向 `coordination-worker/src/index.ts`，并声明 Durable Object
    绑定和 SQLite migration。只安装 Worker
    依赖（覆盖仓库的 hoisted 链接设置），跳过 Electron/Cypress 等安装脚本。
@@ -29,8 +48,8 @@
    这些环境变量填在 **Build Variables and Secrets** 中。
 
    仓库根目录的 `.env.example` 是主 Web 应用的 Docker/静态站点模板，
-   不属于 Worker 配置。已有的 Cloudflare 设置页可能仍显示它解析出的旧字段；
-   关闭旧流程并从最新提交重新开始，才能读取根目录 `wrangler.jsonc`。
+   不属于 Worker 配置。它不会影响上面的子目录一键部署；如果 fork/Workers Builds
+   表单显示 `PORT` 等字段，请在仓库根目录部署中手动删除这些无关变量。
 4. 首次部署完成后，在该 Worker 的 **Settings → Variables and Secrets**
    中添加以下运行时配置，然后保存并部署：
 
@@ -78,7 +97,6 @@ Cloudflare Workers Builds 会在你的 fork 的生产分支有更新时构建并
 
 ```text
 coordination-worker/**
-src/coordination/types.ts
 pnpm-lock.yaml
 pnpm-workspace.yaml
 package.json
@@ -91,12 +109,12 @@ GitHub 的定时任务可能延迟；公共仓库 60 天无活动时定时工作
 届时需在 Actions 网页重新启用。此流程跟随上游默认分支，每天检查一次，
 不是实时更新或永远无需维护的保证。可随时在网页关闭自动同步或自动部署。
 
-## 为什么没有子目录一键部署按钮
+## 为什么按钮使用子目录
 
-Cloudflare 的 Deploy to Cloudflare 按钮会把指定子目录当作新仓库根目录。
-当前 Worker 使用目录外的共享协议类型，直接提供子目录按钮会造成构建失败；
-按钮创建的代码副本也不能直接使用 fork 同步 API。因此这里采用 GitHub fork
-和 Cloudflare 原生 Git 集成，保留整个仓库及自动更新关系。
+Cloudflare 的 Deploy to Cloudflare 按钮会把指定子目录当作新仓库根目录，因此该目录必须
+自包含。Worker 的协议类型现在保存在 `src/protocol.ts`，不再依赖主应用目录；主应用根目录
+`.env.example` 也就不会被 Cloudflare 当成 Worker 的 secret 模板。按钮创建的副本与原仓库
+分开管理；如果需要每天跟随上游，请使用上面的 GitHub fork + Workers Builds 流程。
 
 依据：[Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/)、
 [构建配置](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/)、

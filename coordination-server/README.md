@@ -8,10 +8,11 @@ For Cloudflare Workers, use the alternative TypeScript implementation in
 [`../coordination-worker/`](../coordination-worker/README.md). It preserves the
 client protocol; storage and device credentials are separate deployments.
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/realtvop/aonsoku-reborn)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/realtvop/aonsoku-reborn/tree/main/coordination-worker)
 
-The button deploys the Cloudflare Workers implementation through the repository
-root `wrangler.jsonc` entry point. For required dashboard variables and automatic upstream updates, see
+The button deploys the isolated `coordination-worker/` subtree, so the main
+application's root `.env.example` is not used as a Worker secret template. For
+required dashboard variables and automatic upstream updates, see
 [`coordination-worker/ONLINE-DEPLOY.md`](../coordination-worker/ONLINE-DEPLOY.md).
 
 See `docs/spark/2026-06-20-cross-device-coordination-server-design.md` for

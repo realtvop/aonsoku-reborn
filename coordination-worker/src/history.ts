@@ -1,4 +1,4 @@
-import type { HistoryOperationInput } from "../../src/coordination/types";
+import type { HistoryOperationInput } from "./protocol";
 import { fail, integer, object, string, uuid } from "./security";
 import {
   type Entry,

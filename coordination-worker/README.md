@@ -2,16 +2,18 @@
 
 A TypeScript implementation of the existing coordination protocol, alongside
 `../coordination-server/` (Rust/Axum for self-hosting). The HTTP `/v1/*` routes
-and version-1 WebSocket messages use the shared client types from
-`../src/coordination/types.ts`. Web, Electron, iOS and Android continue using
-their existing transports; configure the deployed URL in coordination settings.
+and version-1 WebSocket messages use the same protocol types as the client.
+`src/protocol.ts` is kept in this isolated deployment tree so the Cloudflare
+button does not need files outside the subtree. Web, Electron, iOS and Android
+continue using their existing transports; configure the deployed URL in
+coordination settings.
 
-**Deploy entirely in your browser:** [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/realtvop/aonsoku-reborn)
+**Deploy entirely in your browser:** [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/realtvop/aonsoku-reborn/tree/main/coordination-worker)
 See [在线部署与自动更新](ONLINE-DEPLOY.md) for the dashboard settings.
-Fork on GitHub, connect Cloudflare Workers Builds, configure two runtime values
-in the dashboard, and optionally enable daily upstream synchronization. No local
-clone or terminal is required. The checked-in Wrangler config preserves dashboard
-variables with `keep_vars`; set allowed origins before using the service.
+The button points at this isolated directory, so the main application's root
+`.env.example` is not included in the setup form. No local clone or terminal is
+required. The checked-in Wrangler config preserves dashboard variables with
+`keep_vars`; set allowed origins before using the service.
 Only `STABLE_KEY` is a secret; `ALLOWED_IDENTITY_ORIGINS` is a normal text
 variable. `ENABLE_OFFLINE_HANDOFF` is a Boolean and `MAX_DEVICES` is a Number;
 both are Worker-only runtime settings. Workers manage their own listener, so

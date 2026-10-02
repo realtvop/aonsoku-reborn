@@ -1,0 +1,2 @@
+# Required secret for account routing. Generate a random value of at least 32 characters.
+STABLE_KEY=replace-with-a-random-secret-of-at-least-32-characters
