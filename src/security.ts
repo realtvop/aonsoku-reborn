@@ -1,4 +1,4 @@
-import type { CoordinationErrorCode } from "../../src/coordination/types";
+import type { CoordinationErrorCode } from "./protocol";
 
 export interface Env {
   ACCOUNTS: DurableObjectNamespace;

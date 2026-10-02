@@ -4,7 +4,7 @@ import type {
   Envelope,
   Payload,
   PlaybackSnapshot,
-} from "../../src/coordination/types";
+} from "./protocol";
 import { ApiError, fail, integer, uuid } from "./security";
 import { type Device, type Handoff, type Session, Store } from "./store";
 import { command, snapshot } from "./validation";

@@ -2,7 +2,7 @@ import type {
   Envelope,
   PlaybackSnapshot,
   RemoteCommand,
-} from "../../src/coordination/types";
+} from "./protocol";
 import { fail, integer, MAX_BYTES, object, string, uuid } from "./security";
 
 function finite(value: unknown, min = 0, max = Number.MAX_VALUE) {

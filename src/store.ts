@@ -3,7 +3,7 @@ import type {
   HistoryEntryDto,
   HistoryTombstoneDto,
   PlaybackSnapshot,
-} from "../../src/coordination/types";
+} from "./protocol";
 
 export interface Device extends DeviceDto {
   refreshHash: string;

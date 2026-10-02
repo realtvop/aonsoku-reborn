@@ -2,7 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import type {
   Envelope,
   LegacyImportRequest,
-} from "../../src/coordination/types";
+} from "./protocol";
 import { applyOperation, mergeLegacy, operationInput } from "./history";
 import { type Attachment, GRACE, OFFLINE_TTL, Realtime } from "./realtime";
 import {
