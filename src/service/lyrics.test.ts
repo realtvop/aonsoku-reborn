@@ -41,9 +41,11 @@ import {
   type GetLyricsData,
   getCustomLyricsBody,
   getCustomLyricsCandidateKey,
+  getCustomLyricsRomajiBody,
   getCustomLyricsSongKey,
   getSelectedCustomLyrics,
   setCustomLyricsBody,
+  setCustomLyricsRomajiBody,
 } from "./lyrics";
 
 describe("getCustomLyricsSongKey", () => {
@@ -211,14 +213,20 @@ describe("custom lyrics IDB operations", () => {
     expect(stored).toBe("some lyrics");
   });
 
-  it("deletes specified song keys", async () => {
+  it("deletes lyrics and romaji for specified song keys", async () => {
     await setCustomLyricsBody("key1", "lyrics 1");
     await setCustomLyricsBody("key2", "lyrics 2");
     await setCustomLyricsBody("key3", "lyrics 3");
+    await setCustomLyricsRomajiBody("key1", "romaji 1");
+    await setCustomLyricsRomajiBody("key2", "romaji 2");
+    await setCustomLyricsRomajiBody("key3", "romaji 3");
     await deleteCustomLyricsBodies(["key1", "key3"]);
     expect(await getCustomLyricsBody("key1")).toBeUndefined();
     expect(await getCustomLyricsBody("key2")).toBe("lyrics 2");
     expect(await getCustomLyricsBody("key3")).toBeUndefined();
+    expect(await getCustomLyricsRomajiBody("key1")).toBeUndefined();
+    expect(await getCustomLyricsRomajiBody("key2")).toBe("romaji 2");
+    expect(await getCustomLyricsRomajiBody("key3")).toBeUndefined();
   });
 
   it("handles empty array for deletion", async () => {
@@ -228,8 +236,10 @@ describe("custom lyrics IDB operations", () => {
   });
 
   it("handles non-existent keys gracefully", async () => {
-    const results = await deleteCustomLyricsBodies(["non-existent"]);
-    expect(results).toHaveLength(1);
+    await expect(deleteCustomLyricsBodies(["non-existent"])).resolves.toEqual([
+      undefined,
+      undefined,
+    ]);
   });
 
   it("isolates different song keys", async () => {
