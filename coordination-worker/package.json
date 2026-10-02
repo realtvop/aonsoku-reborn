@@ -19,10 +19,10 @@
         "description": "Trusted HTTPS Navidrome/Subsonic origins, comma-separated; do not include a port unless the origin actually uses a non-default HTTPS port."
       },
       "ENABLE_OFFLINE_HANDOFF": {
-        "description": "Boolean: allow a device to take over playback from an offline device within the eight-hour snapshot window."
+        "description": "Boolean value (true or false): allow a device to take over playback from an offline device within the eight-hour snapshot window. Leave empty for the default true."
       },
       "MAX_DEVICES": {
-        "description": "Number from 1 to 1000: maximum registered devices per account."
+        "description": "Number from 1 to 1000: maximum registered devices per account. Leave empty for the default 100."
       },
       "STABLE_KEY": {
         "description": "Secret HMAC key, at least 32 random characters. Generate it in a password manager and keep it unchanged across deployments."
