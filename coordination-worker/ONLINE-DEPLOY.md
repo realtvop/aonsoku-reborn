@@ -48,7 +48,7 @@
    这些环境变量填在 **Build Variables and Secrets** 中。
 
    仓库根目录的 `.env.example` 是主 Web 应用的 Docker/静态站点模板，
-   不属于 Worker 配置。它不会影响上面的子目录一键部署；如果 fork/Workers Builds
+   不属于 Worker 配置。它不会影响上面的独立分支一键部署；如果 fork/Workers Builds
    表单显示 `PORT` 等字段，请在仓库根目录部署中手动删除这些无关变量。
 4. 首次部署完成后，在该 Worker 的 **Settings → Variables and Secrets**
    中添加以下运行时配置，然后保存并部署：
