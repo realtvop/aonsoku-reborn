@@ -1,14 +1,14 @@
 # Aonsoku coordination on Cloudflare Workers
 
-A TypeScript implementation of the existing coordination protocol, alongside
-`../coordination-server/` (Rust/Axum for self-hosting). The HTTP `/v1/*` routes
+A TypeScript implementation of the existing coordination protocol. The Rust/Axum
+self-hosting implementation remains in the main repository. The HTTP `/v1/*` routes
 and version-1 WebSocket messages use the same protocol types as the client.
 `src/protocol.ts` is kept in this isolated deployment tree so the Cloudflare
 button does not need files outside the subtree. Web, Electron, iOS and Android
 continue using their existing transports; configure the deployed URL in
 coordination settings.
 
-**Deploy entirely in your browser:** [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/realtvop/aonsoku-reborn/tree/main/coordination-worker)
+**Deploy entirely in your browser:** [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/realtvop/aonsoku-reborn/tree/coordination-worker)
 See [在线部署与自动更新](ONLINE-DEPLOY.md) for the dashboard settings.
 The button points at this isolated directory, so the main application's root
 `.env.example` is not included in the setup form. No local clone or terminal is

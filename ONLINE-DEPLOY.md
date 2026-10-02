@@ -5,10 +5,10 @@
 
 ## 一键部署（无需 clone）
 
-点击 README 中的 **Deploy to Cloudflare** 按钮。按钮指向
-`coordination-worker` 子目录，Cloudflare 会把它当成独立仓库根目录；主应用根目录的
+点击 README 中的 **Deploy to Cloudflare** 按钮。按钮指向自动生成的
+`coordination-worker` 分支，Cloudflare 会把这个分支当成独立仓库根目录；主应用根目录的
 `.env.example`、`PORT`、`SERVER_URL`、`APP_USER` 等字段不会进入这个设置页面。
-子目录包含自己的 Wrangler 配置、依赖清单、协议类型和 `.dev.vars.example`，所以不需要
+分支包含自己的 Wrangler 配置、依赖清单、协议类型和 `.dev.vars.example`，所以不需要
 本地 Node.js 或终端。Cloudflare 会创建自己的 Git 仓库并在该仓库的生产分支更新时重新部署。
 
 首次表单只需要填写 Worker 运行时配置：
@@ -109,12 +109,13 @@ GitHub 的定时任务可能延迟；公共仓库 60 天无活动时定时工作
 届时需在 Actions 网页重新启用。此流程跟随上游默认分支，每天检查一次，
 不是实时更新或永远无需维护的保证。可随时在网页关闭自动同步或自动部署。
 
-## 为什么按钮使用子目录
+## 为什么按钮使用独立分支
 
-Cloudflare 的 Deploy to Cloudflare 按钮会把指定子目录当作新仓库根目录，因此该目录必须
-自包含。Worker 的协议类型现在保存在 `src/protocol.ts`，不再依赖主应用目录；主应用根目录
-`.env.example` 也就不会被 Cloudflare 当成 Worker 的 secret 模板。按钮创建的副本与原仓库
-分开管理；如果需要每天跟随上游，请使用上面的 GitHub fork + Workers Builds 流程。
+Cloudflare 的 Deploy to Cloudflare 表单会扫描源仓库中的 `.env.example`。主应用必须保留
+根目录模板，因此按钮使用由 `.github/workflows/coordination-worker-branch.yml` 从
+`coordination-worker/` 自动生成的独立分支。这个分支根目录没有主应用模板，Worker 的协议
+类型也已经自包含；主分支每次更新 Worker 目录后，分支会自动更新。按钮创建的副本仍与
+原仓库分开管理；如果需要每天跟随上游，请使用上面的 GitHub fork + Workers Builds 流程。
 
 依据：[Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/)、
 [构建配置](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/)、
