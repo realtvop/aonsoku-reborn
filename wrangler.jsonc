@@ -11,7 +11,7 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AccountCoordinator"] }],
   "vars": {
     "ALLOWED_IDENTITY_ORIGINS": "",
-    "ENABLE_OFFLINE_HANDOFF": "",
+    "ENABLE_OFFLINE_HANDOFF": true,
     "MAX_DEVICES": ""
   },
   "secrets": {
