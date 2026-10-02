@@ -160,7 +160,7 @@ WantedBy=multi-user.target default.target
   <summary>Environment Variables</summary>
   </br>
 
-Below is a table describing the environment variables that can be used in this project. Adjust them as necessary in your `.env` file.
+Below is a table describing the environment variables that can be used in this project. Copy [`docs/aonsoku.env.example`](docs/aonsoku.env.example) to `.env` and adjust it as necessary.
 
 | Variable              | Default    | Description                                                                                                       | Required for Automatic Login |
 | --------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------- |
