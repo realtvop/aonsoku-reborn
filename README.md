@@ -6,13 +6,12 @@ and version-1 WebSocket messages use the shared client types from
 `../src/coordination/types.ts`. Web, Electron, iOS and Android continue using
 their existing transports; configure the deployed URL in coordination settings.
 
-**Deploy entirely in your browser:** [在线部署与自动更新](ONLINE-DEPLOY.md).
+**Deploy entirely in your browser:** [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/realtvop/aonsoku-reborn)
+See [在线部署与自动更新](ONLINE-DEPLOY.md) for the dashboard settings.
 Fork on GitHub, connect Cloudflare Workers Builds, configure two runtime values
 in the dashboard, and optionally enable daily upstream synchronization. No local
 clone or terminal is required. The checked-in Wrangler config preserves dashboard
 variables with `keep_vars`; set allowed origins before using the service.
-
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/realtvop/aonsoku-reborn)
 
 ## Runtime and storage
 

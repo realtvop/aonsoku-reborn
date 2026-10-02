@@ -14,14 +14,16 @@
 
    | 字段 | 值 |
    | --- | --- |
-   | Root directory | 仓库根目录 `/` |
+   | Root directory | 仓库根目录 `/`（根目录的 `wrangler.jsonc` 是在线部署入口） |
    | Build command | `pnpm --config.node-linker=isolated install --filter @aonsoku/coordination-worker --frozen-lockfile --ignore-scripts && pnpm --filter @aonsoku/coordination-worker check` |
-   | Deploy command | `pnpm --filter @aonsoku/coordination-worker deploy:raw` |
+   | Deploy command | `npx wrangler deploy` |
    | Build variable `SKIP_DEPENDENCY_INSTALL` | `1` |
    | Build variable `NODE_VERSION` | `22` |
    | Build variable `PNPM_VERSION` | `10` |
 
-   使用整个仓库，因为 Worker 引用了 `src/coordination/types.ts`。只安装 Worker
+   使用整个仓库，因为 Worker 引用了 `src/coordination/types.ts`。根目录
+   `wrangler.jsonc` 会指向 `coordination-worker/src/index.ts`，并声明 Durable Object
+   绑定和 SQLite migration。只安装 Worker
    依赖（覆盖仓库的 hoisted 链接设置），跳过 Electron/Cypress 等安装脚本。
    不要使用交互式的 `coordination:deploy`。
    这些环境变量填在 **Build Variables and Secrets** 中。
