@@ -207,3 +207,24 @@ public struct AudioServiceError: LocalizedError, Equatable, Sendable {
         self.message = message
     }
 }
+
+public final class AudioStateSubscription: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancellation: (() -> Void)?
+
+    init(cancellation: @escaping () -> Void) {
+        self.cancellation = cancellation
+    }
+
+    public func cancel() {
+        lock.lock()
+        let cancellation = cancellation
+        self.cancellation = nil
+        lock.unlock()
+        cancellation?()
+    }
+
+    deinit {
+        cancel()
+    }
+}

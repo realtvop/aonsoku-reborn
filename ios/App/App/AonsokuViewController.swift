@@ -35,7 +35,7 @@ class AonsokuViewController: CAPBridgeViewController {
 
     private func presentDebugMenu() {
         guard presentedViewController == nil else { return }
-        let debugVC = DebugViewController(bridge: bridge)
+        let debugVC = DebugViewController(audioService: AppServices.shared.audio)
         let nav = UINavigationController(rootViewController: debugVC)
         nav.modalPresentationStyle = .pageSheet
         if let sheet = nav.sheetPresentationController {

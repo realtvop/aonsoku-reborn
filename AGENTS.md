@@ -108,7 +108,9 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   downloads, scrobbling, playback persistence, and system media controls;
   `AonsokuNativeAudioPlugin` is only the Capacitor payload/event adapter. New
   native UI surfaces must call the typed service rather than locating a plugin
-  through `CAPBridgeProtocol`.
+  through `CAPBridgeProtocol`. `AudioCommand`, `AudioPlaybackSnapshot`, and
+  `AudioQueueSnapshot` are the native command/state contract; SwiftUI clients
+  can use `observeState` or `stateUpdates()` without depending on Capacitor.
 - Platform/runtime detection is centralized in `src/utils/capabilities.ts`,
   with lower-level helpers in `src/utils/desktop.ts` and
   `src/utils/platform.ts`.

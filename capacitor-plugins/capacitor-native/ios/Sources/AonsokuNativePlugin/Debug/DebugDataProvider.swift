@@ -1,5 +1,4 @@
 import AVFoundation
-import Capacitor
 
 struct QueueItemInfo {
     let id: String
@@ -49,30 +48,63 @@ struct AudioSessionSnapshot {
 }
 
 final class DebugDataProvider {
-    private weak var bridge: (any CAPBridgeProtocol)?
+    private let audioService: AudioService
 
-    init(bridge: (any CAPBridgeProtocol)?) {
-        self.bridge = bridge
-    }
-
-    private var audioPlugin: AonsokuNativeAudioPlugin? {
-        bridge?.plugin(withName: "AonsokuNativeAudio") as? AonsokuNativeAudioPlugin
+    init(audioService: AudioService = AppServices.shared.audio) {
+        self.audioService = audioService
     }
 
     func audioSnapshot() -> AudioDebugSnapshot? {
-        audioPlugin?.debugSnapshot()
+        let snapshot = audioService.playbackSnapshot()
+        let context = snapshot.queue?.contextSongs ?? []
+        let currentId = snapshot.queue?.currentSongId
+        return AudioDebugSnapshot(
+            title: snapshot.metadata.title,
+            artist: snapshot.metadata.artist,
+            album: snapshot.metadata.album,
+            isPlaying: snapshot.state == .playing,
+            currentTime: snapshot.currentTime,
+            duration: snapshot.duration,
+            bufferedTime: snapshot.bufferedTime,
+            sourceKind: nil,
+            bufferEmpty: false,
+            likelyToKeepUp: true,
+            recoveryState: "idle",
+            repeatMode: snapshot.queue?.loopState.rawValue ?? "off",
+            shuffleEnabled: snapshot.queue?.isShuffleActive ?? false,
+            queueIndex: snapshot.queue?.currentIndex ?? 0,
+            queueItemCount: context.count,
+            queue: context.map {
+                QueueItemInfo(
+                    id: $0.id,
+                    title: $0.title,
+                    artist: $0.artist,
+                    duration: $0.duration,
+                    isCurrent: $0.id == currentId
+                )
+            },
+            userQueue: (snapshot.queue?.userQueue ?? []).map {
+                QueueItemInfo(
+                    id: $0.id,
+                    title: $0.title,
+                    artist: $0.artist,
+                    duration: $0.duration,
+                    isCurrent: $0.id == currentId
+                )
+            }
+        )
     }
 
     func playPause() {
-        audioPlugin?.debugPlayPause()
+        _ = audioService.execute(.togglePlayPause)
     }
 
     func skipNext() {
-        audioPlugin?.debugSkipNext()
+        audioService.skipToNext()
     }
 
     func skipPrevious() {
-        audioPlugin?.debugSkipPrevious()
+        audioService.skipToPrevious()
     }
 
     func connectionSnapshot() -> ConnectionDebugSnapshot? {

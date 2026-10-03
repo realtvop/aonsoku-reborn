@@ -1,6 +1,5 @@
 import UIKit
 import AVFoundation
-import Capacitor
 
 public final class DebugViewController: UIViewController {
     private let dataProvider: DebugDataProvider
@@ -31,8 +30,8 @@ public final class DebugViewController: UIViewController {
     private var isSelectingLogs = false
     private var selectedLogIndices: Set<Int> = []
 
-    public init(bridge: (any CAPBridgeProtocol)?) {
-        self.dataProvider = DebugDataProvider(bridge: bridge)
+    public init(audioService: AudioService = AppServices.shared.audio) {
+        self.dataProvider = DebugDataProvider(audioService: audioService)
         super.init(nibName: nil, bundle: nil)
     }
 

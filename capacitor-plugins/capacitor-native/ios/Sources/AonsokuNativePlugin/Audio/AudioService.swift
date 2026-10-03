@@ -24,6 +24,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     )
 
     private var listeners: [UUID: EventHandler] = [:]
+    private var stateListeners: [UUID: @Sendable (AudioPlaybackSnapshot) -> Void] = [:]
     private var player: AVPlayer?
     private var playerItem: AVPlayerItem?
     private var timeObserver: Any?
@@ -111,6 +112,31 @@ public final class AudioService: NSObject, @unchecked Sendable {
 
     public func unsubscribe(_ token: UUID) {
         listenerQueue.sync { listeners.removeValue(forKey: token) }
+    }
+
+    public func observeState(
+        _ handler: @escaping @Sendable (AudioPlaybackSnapshot) -> Void
+    ) -> AudioStateSubscription {
+        let token = UUID()
+        listenerQueue.sync { stateListeners[token] = handler }
+        dispatchMain { [weak self] in
+            guard let self else { return }
+            handler(self.playbackSnapshot())
+        }
+        return AudioStateSubscription { [weak self] in
+            self?.listenerQueue.sync {
+                self?.stateListeners.removeValue(forKey: token)
+            }
+        }
+    }
+
+    public func stateUpdates() -> AsyncStream<AudioPlaybackSnapshot> {
+        AsyncStream { continuation in
+            let subscription = observeState { snapshot in
+                continuation.yield(snapshot)
+            }
+            continuation.onTermination = { _ in subscription.cancel() }
+        }
     }
 
     public func load(_ request: AudioLoadRequest, completion: @escaping (Result<Void, AudioServiceError>) -> Void) {
@@ -1203,6 +1229,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
         playbackState = state
         emit(.playbackStateChanged(state, requestId: currentRequestId))
         updateNowPlayingPlaybackInfo()
+        publishStateUpdate()
         NotificationCenter.default.post(name: .aonsokuAudioStateDidChange, object: self)
     }
 
@@ -1213,6 +1240,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
             bufferedTime: bufferedTime,
             requestId: currentRequestId
         ))
+        publishStateUpdate()
     }
 
     private func emitDuration() {
@@ -1236,6 +1264,17 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private func emit(_ event: AudioServiceEvent) {
         let handlers = listenerQueue.sync { Array(listeners.values) }
         for handler in handlers { handler(event) }
+    }
+
+    private func publishStateUpdate() {
+        dispatchMain { [weak self] in
+            guard let self else { return }
+            let snapshot = self.playbackSnapshot()
+            let handlers = self.listenerQueue.sync {
+                Array(self.stateListeners.values)
+            }
+            for handler in handlers { handler(snapshot) }
+        }
     }
 
     private var currentTime: Double {
@@ -1402,6 +1441,7 @@ extension AudioService: NativeQueueEngineDelegate {
             reason: reason.rawValue,
             isInUserQueue: engine.isInUserQueue
         ))
+        publishStateUpdate()
         NotificationCenter.default.post(name: .aonsokuAudioStateDidChange, object: self)
     }
 
@@ -1411,6 +1451,7 @@ extension AudioService: NativeQueueEngineDelegate {
     ) {
         persistence.markStateDirty()
         emit(.queueContentsChanged(reason: reason))
+        publishStateUpdate()
         NotificationCenter.default.post(name: .aonsokuAudioStateDidChange, object: self)
     }
 

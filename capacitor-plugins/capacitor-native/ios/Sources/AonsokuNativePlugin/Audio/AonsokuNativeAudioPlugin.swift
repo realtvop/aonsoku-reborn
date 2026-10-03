@@ -369,51 +369,6 @@ public final class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve(["remainingSeconds": service.sleepTimerRemaining])
     }
 
-    func debugSnapshot() -> AudioDebugSnapshot {
-        let snapshot = service.playbackSnapshot()
-        let context = snapshot.queue?.contextSongs ?? []
-        let currentId = snapshot.queue?.currentSongId
-        return AudioDebugSnapshot(
-            title: snapshot.metadata.title,
-            artist: snapshot.metadata.artist,
-            album: snapshot.metadata.album,
-            isPlaying: snapshot.state == .playing,
-            currentTime: snapshot.currentTime,
-            duration: snapshot.duration,
-            bufferedTime: snapshot.bufferedTime,
-            sourceKind: nil,
-            bufferEmpty: false,
-            likelyToKeepUp: true,
-            recoveryState: "idle",
-            repeatMode: snapshot.queue?.loopState.rawValue ?? "off",
-            shuffleEnabled: snapshot.queue?.isShuffleActive ?? false,
-            queueIndex: snapshot.queue?.currentIndex ?? 0,
-            queueItemCount: context.count,
-            queue: context.map {
-                QueueItemInfo(
-                    id: $0.id,
-                    title: $0.title,
-                    artist: $0.artist,
-                    duration: $0.duration,
-                    isCurrent: $0.id == currentId
-                )
-            },
-            userQueue: (snapshot.queue?.userQueue ?? []).map {
-                QueueItemInfo(
-                    id: $0.id,
-                    title: $0.title,
-                    artist: $0.artist,
-                    duration: $0.duration,
-                    isCurrent: $0.id == currentId
-                )
-            }
-        )
-    }
-
-    func debugPlayPause() { _ = service.execute(.togglePlayPause) }
-    func debugSkipNext() { service.skipToNext() }
-    func debugSkipPrevious() { service.skipToPrevious() }
-
     private func forward(_ event: AudioServiceEvent) {
         let name: String
         let data: JSObject
