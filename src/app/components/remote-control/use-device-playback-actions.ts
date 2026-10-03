@@ -295,12 +295,9 @@ export function useDevicePlaybackActions(): DevicePlaybackActions {
   }, []);
 
   useEffect(() => {
-    const originalCommitted = manager.callbacks.onHandoffCommitted;
-    const originalFailed = manager.callbacks.onHandoffFailed;
     const originalError = manager.callbacks.onError;
 
-    manager.callbacks.onHandoffCommitted = (snapshot, newGeneration) => {
-      originalCommitted(snapshot, newGeneration);
+    const onHandoffCommitted = () => {
       if (!activeHandoffRef.current) return;
       finishHandoff("committed", null);
       toast.success(
@@ -310,20 +307,16 @@ export function useDevicePlaybackActions(): DevicePlaybackActions {
       );
     };
 
-    manager.callbacks.onHandoffFailed = (transactionId, code) => {
-      originalFailed(transactionId, code);
+    const onHandoffFailed = (_transactionId: string, code: string) => {
       if (!activeHandoffRef.current) return;
       const message = getHandoffErrorMessage(t, code);
       finishHandoff(null, message);
       toast.error(message);
     };
 
-    manager.callbacks.onError = (code, reason) => {
+    const onError = (code: string, reason: string): boolean => {
       const activeHandoff = activeHandoffRef.current;
-      if (!activeHandoff) {
-        originalError(code, reason);
-        return;
-      }
+      if (!activeHandoff) return false;
 
       if (
         code === "source_changed" &&
@@ -337,7 +330,7 @@ export function useDevicePlaybackActions(): DevicePlaybackActions {
           const message = getHandoffErrorMessage(t, code, reason);
           finishHandoff(null, message);
           toast.error(message);
-          return;
+          return true;
         }
 
         manager.requestSnapshots();
@@ -355,7 +348,7 @@ export function useDevicePlaybackActions(): DevicePlaybackActions {
             cached.generation,
             cached.snapshotRevision,
           );
-          return;
+          return true;
         }
 
         manager
@@ -379,20 +372,21 @@ export function useDevicePlaybackActions(): DevicePlaybackActions {
             finishHandoff(null, message);
             toast.error(message);
           });
-        return;
+        return true;
       }
 
       originalError(code as CoordinationErrorCode, reason);
       const message = getHandoffErrorMessage(t, code, reason);
       finishHandoff(null, message);
       toast.error(message);
+      return true;
     };
 
-    return () => {
-      manager.callbacks.onHandoffCommitted = originalCommitted;
-      manager.callbacks.onHandoffFailed = originalFailed;
-      manager.callbacks.onError = originalError;
-    };
+    return manager.subscribeHandoffEvents({
+      onHandoffCommitted,
+      onHandoffFailed,
+      onError,
+    });
   }, [finishHandoff, manager, t]);
 
   useEffect(() => clearHandoffTimers, [clearHandoffTimers]);

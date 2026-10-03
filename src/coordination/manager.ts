@@ -109,7 +109,15 @@ export interface CoordinationManagerCallbacks {
   onError: (code: string, reason: string) => void;
 }
 
+type HandoffEventCallbacks = Partial<
+  Pick<CoordinationManagerCallbacks, "onHandoffCommitted" | "onHandoffFailed">
+> & {
+  // Return true when the subscriber has handled this error.
+  onError?: (code: string, reason: string) => boolean;
+};
+
 export class CoordinationManager {
+  private handoffListeners = new Set<HandoffEventCallbacks>();
   private httpClient: CoordinationHttpClient | null = null;
   /// Unified coordination client — either `CoordinationWsClient` (web)
   /// or `NativeCoordinationClient` (Electron/iOS/Android).
@@ -146,9 +154,16 @@ export class CoordinationManager {
   private fetchImpl: typeof fetch = fetch.bind(globalThis);
 
   constructor(
-    private readonly callbacks: CoordinationManagerCallbacks,
+    readonly callbacks: CoordinationManagerCallbacks,
     private readonly getRecoveryCredentials?: CoordinationRecoveryProvider,
   ) {}
+
+  subscribeHandoffEvents(callbacks: HandoffEventCallbacks): () => void {
+    this.handoffListeners.add(callbacks);
+    return () => {
+      this.handoffListeners.delete(callbacks);
+    };
+  }
 
   isConfigured(): boolean {
     return this.config !== null;
@@ -348,11 +363,17 @@ export class CoordinationManager {
       },
       onHandoffCommitted: (env) => {
         if (env.type === "handoff_committed") {
+          for (const listener of this.handoffListeners) {
+            listener.onHandoffCommitted?.(env.snapshot, env.newGeneration);
+          }
           this.callbacks.onHandoffCommitted(env.snapshot, env.newGeneration);
         }
       },
       onHandoffFailed: (env) => {
         if (env.type === "handoff_failed") {
+          for (const listener of this.handoffListeners) {
+            listener.onHandoffFailed?.(env.transactionId, env.code);
+          }
           this.callbacks.onHandoffFailed(env.transactionId, env.code);
         }
       },
@@ -369,7 +390,13 @@ export class CoordinationManager {
           );
         }
       },
-      onError: (code, reason) => this.callbacks.onError(code, reason),
+      onError: (code, reason) => {
+        let handled = false;
+        for (const listener of this.handoffListeners) {
+          if (listener.onError?.(code, reason)) handled = true;
+        }
+        if (!handled) this.callbacks.onError(code, reason);
+      },
     };
     const ticketFn = async (): Promise<string | null> => {
       if (!this.httpClient) return null;

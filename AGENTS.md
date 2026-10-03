@@ -252,6 +252,11 @@ daily via GitHub's merge-upstream API when repository variable
 The client-side orchestration lives in `src/coordination/`
 with React state in `src/coordination/store.ts`.
 
+Player and fullscreen handoff UI subscribe through
+`CoordinationManager.subscribeHandoffEvents()`. These independent subscriptions
+survive observer reconnects and unsubscribe without replacing other UI handlers;
+do not stack and restore mutable completion callbacks in component effects.
+
 Mobile handoff restores context/user queues and previous user songs without
 reshuffling the transferred order. Candidate preparation suppresses snapshots;
 failure or disconnect restores the preceding local queue. Native commit events
