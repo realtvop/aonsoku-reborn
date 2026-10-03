@@ -50,9 +50,8 @@
   state after stop events.
 - Android native unit tests, mobile bundle, Capacitor sync and debug APK build
   passed. The rebuilt APK is installed on Pixel 5.
-- Electron production build passed before `84e1f561`; that final Electron-only
-  change was unit-tested and exercised through the running development app, but
-  its production build has not yet been rerun.
+- Electron production build passed after `84e1f561`; the final Electron-only
+  change was also unit-tested and exercised through the running development app.
 - Repository lint passed for the fix commits. Standalone web type checking is
   still blocked by baseline TS6305 missing Electron declaration outputs.
 - Pixel 9 was not connected for this final retest. No iOS runtime test or iOS
