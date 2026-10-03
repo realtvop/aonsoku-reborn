@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AlertDialog,
@@ -9,18 +10,33 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/app/components/ui/alert-dialog";
+import { useCoordinationStore } from "@/coordination/store";
 import { getReplacementPlayNextSongs } from "@/player/queue-replacement";
 import { usePlaybackReplacementStore } from "@/store/playback-replacement.store";
-import { usePlayerActions } from "@/store/player.store";
+import { usePlayerActions, usePlayerStore } from "@/store/player.store";
 
 export function QueueReplacementConfirmationDialog() {
   const { t } = useTranslation();
   const { playSong, setNextOnQueue, setSongList } = usePlayerActions();
-  const { open, request, reset, setOpen } = usePlaybackReplacementStore();
+  const { open, request, reset, setOpen, takeRequest } =
+    usePlaybackReplacementStore();
+  const remoteActive = usePlayerStore((state) => state.remoteControl.active);
+  const controlledDeviceId = useCoordinationStore(
+    (state) => state.controlledDeviceId,
+  );
+  const targetDeviceId = remoteActive ? controlledDeviceId : null;
+
+  useEffect(() => {
+    if (request && (request.targetDeviceId ?? null) !== targetDeviceId) {
+      reset();
+    }
+  }, [request, reset, targetDeviceId]);
 
   function handleChoice(choice: "replace" | "next") {
-    const pending = request;
-    reset();
+    const currentTarget = usePlayerStore.getState().remoteControl.active
+      ? useCoordinationStore.getState().controlledDeviceId
+      : null;
+    const pending = takeRequest(currentTarget);
     if (!pending) return;
 
     if (choice === "next") {

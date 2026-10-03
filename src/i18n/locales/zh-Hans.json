@@ -374,7 +374,7 @@
     "close": "关闭队列",
     "open": "打开队列",
     "replacementConfirmation": {
-      "description": "当前播放队列不为空。",
+      "description": "播放所选内容将清除你手动加入队列的待播放歌曲。",
       "playNext": "在本曲后播放",
       "replace": "替换当前播放队列",
       "title": "选择播放方式"

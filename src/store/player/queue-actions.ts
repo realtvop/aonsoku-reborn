@@ -1,6 +1,8 @@
 import type { Draft } from "immer";
+import type { PlaybackSnapshot } from "@/coordination/types";
 import { seekPlaybackTarget } from "@/player/playback/backend-registry";
 import { getNativeQueueController } from "@/player/queue-controller";
+import { shouldConfirmQueueReplacement } from "@/player/queue-replacement";
 import { usePlaybackReplacementStore } from "@/store/playback-replacement.store";
 import { useSleepTimerStore } from "@/store/sleep-timer.store";
 import { LanControlMessageType } from "@/types/lanControl";
@@ -33,6 +35,7 @@ import {
   emptyContextQueue,
   findSongTier,
   getCurrentSong,
+  getSourceQueueSongs,
   hasNextEffectiveSong,
   hasPrevEffectiveSong,
   isPlayingOneSong,
@@ -48,6 +51,10 @@ interface SharedDeps {
   get: () => IPlayerContext;
   isRemoteActive: () => boolean;
   remoteSend: (type: LanControlMessageType, data?: unknown) => boolean;
+  getRemotePlaybackTarget?: () => {
+    deviceId: string;
+    snapshot: PlaybackSnapshot | null;
+  } | null;
   clearSonglistState: (state: Draft<ISongList>) => void;
 }
 
@@ -134,6 +141,41 @@ function sendSongListRemote(
 export function createQueueActions(shared: SharedDeps) {
   const { set, get, isRemoteActive, remoteSend, clearSonglistState } = shared;
 
+  function needsQueueConfirmation(
+    remote: boolean,
+    snapshot: PlaybackSnapshot | null | undefined,
+    options?: QueueReplacementOptions,
+  ) {
+    const state = get();
+    return shouldConfirmQueueReplacement({
+      isPlaying: remote
+        ? (snapshot?.isPlaying ?? false)
+        : state.playerState.isPlaying,
+      userQueueLength: remote
+        ? (snapshot?.userQueue.length ?? 0)
+        : state.songlist.userQueue.songs.length,
+      isInUserQueue: remote
+        ? (snapshot?.inUserQueue ?? false)
+        : state.songlist.isInUserQueue,
+      bypassQueueConfirmation: options?.bypassQueueConfirmation,
+    });
+  }
+
+  function resumeCurrentPlayback(remote: boolean) {
+    if (remote) {
+      remoteSend(LanControlMessageType.PLAY);
+      return;
+    }
+    const nativeController = getNativeQueueController();
+    if (nativeController) {
+      nativeController.play();
+    } else {
+      set((state) => {
+        state.playerState.isPlaying = true;
+      });
+    }
+  }
+
   return {
     setSongList: (
       songlist: ISong[],
@@ -158,7 +200,58 @@ export function createQueueActions(shared: SharedDeps) {
       }
       targetIndex = Math.max(0, Math.min(targetIndex, songlist.length - 1));
 
-      if (isRemoteActive()) {
+      const state = get();
+      const remote = isRemoteActive();
+      const target = remote ? shared.getRemotePlaybackTarget?.() : null;
+      const snapshot = target?.snapshot;
+      const normalizedId = normalizeSourceId(sourceId);
+      const { contextQueue } = state.songlist;
+      const sourceSongs = getSourceQueueSongs(state.songlist);
+      const listsAreEqual = areSongListsEqual(sourceSongs, songlist);
+      const currentSong = getCurrentSong(state.songlist);
+      const sameIndex = currentSong?.id === songlist[targetIndex]?.id;
+      const sameSourceId =
+        JSON.stringify(contextQueue.sourceId) === JSON.stringify(normalizedId);
+      const encodedSourceId = normalizedId
+        ? `${normalizedId.type}:${normalizedId.id}`
+        : null;
+      const remoteContext = snapshot?.contextQueue.slice(
+        snapshot.contextIndex ?? 0,
+      );
+      const requestedContext = songlist.slice(targetIndex);
+      const sameContext = remote
+        ? snapshot &&
+          !snapshot.inUserQueue &&
+          !snapshot.shuffle &&
+          snapshot.songId === songlist[targetIndex]?.id &&
+          snapshot.sourceId === encodedSourceId &&
+          remoteContext?.length === requestedContext.length &&
+          remoteContext.every((id, i) => id === requestedContext[i].id)
+        : listsAreEqual &&
+          sameIndex &&
+          sameSourceId &&
+          !state.songlist.isInUserQueue &&
+          !state.songlist.isShuffleActive;
+
+      if (!shuffle && sameContext) {
+        resumeCurrentPlayback(remote);
+        return;
+      }
+
+      if (needsQueueConfirmation(remote, snapshot, options)) {
+        usePlaybackReplacementStore.getState().show({
+          kind: "songList",
+          songs: [...songlist],
+          index: targetIndex,
+          shuffle,
+          sourceId,
+          sourceName,
+          targetDeviceId: target?.deviceId ?? null,
+        });
+        return;
+      }
+
+      if (remote) {
         sendSongListRemote(
           remoteSend,
           songlist,
@@ -173,22 +266,6 @@ export function createQueueActions(shared: SharedDeps) {
         return;
       }
 
-      if (
-        get().songlist.contextQueue.songs.length > 0 &&
-        get().playerState.isPlaying &&
-        !options?.bypassQueueConfirmation
-      ) {
-        usePlaybackReplacementStore.getState().show({
-          kind: "songList",
-          songs: [...songlist],
-          index,
-          shuffle,
-          sourceId,
-          sourceName,
-        });
-        return;
-      }
-
       const nativeController = getNativeQueueController();
       if (nativeController) {
         nativeController.setSongList(
@@ -198,23 +275,6 @@ export function createQueueActions(shared: SharedDeps) {
           sourceId,
           sourceName,
         );
-        return;
-      }
-
-      const normalizedId = normalizeSourceId(sourceId);
-      const { contextQueue, sourceQueue } = get().songlist;
-      const sourceSongs =
-        sourceQueue.songs.length > 0 ? sourceQueue.songs : contextQueue.songs;
-      const listsAreEqual = areSongListsEqual(sourceSongs, songlist);
-      const currentSong = getCurrentSong(get().songlist);
-      const sameIndex = currentSong?.id === songlist[targetIndex]?.id;
-      const sameSourceId =
-        JSON.stringify(contextQueue.sourceId) === JSON.stringify(normalizedId);
-
-      if (listsAreEqual && sameIndex && !shuffle) {
-        set((state) => {
-          state.playerState.isPlaying = true;
-        });
         return;
       }
 
@@ -440,25 +500,32 @@ export function createQueueActions(shared: SharedDeps) {
       sourceName?: string,
       options?: QueueReplacementOptions,
     ) => {
-      const { isPlaying } = get().playerState;
-      const songIsAlreadyPlaying = get().actions.checkActiveSong(song.id);
-      const onlyResumesCurrentSong = songIsAlreadyPlaying && !isPlaying;
+      const state = get();
+      const remote = isRemoteActive();
+      const target = remote ? shared.getRemotePlaybackTarget?.() : null;
+      const snapshot = target?.snapshot;
+      const songIsAlreadyPlaying = remote
+        ? snapshot?.songId === song.id
+        : state.playerState.mediaType !== "radio" &&
+          getCurrentSong(state.songlist)?.id === song.id;
 
-      if (remoteSend(LanControlMessageType.PLAY_SONG, { songId: song.id })) {
+      if (songIsAlreadyPlaying) {
+        resumeCurrentPlayback(remote);
         return;
       }
 
-      if (
-        get().songlist.contextQueue.songs.length > 0 &&
-        isPlaying &&
-        !onlyResumesCurrentSong &&
-        !options?.bypassQueueConfirmation
-      ) {
+      if (needsQueueConfirmation(remote, snapshot, options)) {
         usePlaybackReplacementStore.getState().show({
           kind: "song",
           song,
           sourceName,
+          targetDeviceId: target?.deviceId ?? null,
         });
+        return;
+      }
+
+      if (remote) {
+        remoteSend(LanControlMessageType.PLAY_SONG, { songId: song.id });
         return;
       }
 
@@ -468,38 +535,30 @@ export function createQueueActions(shared: SharedDeps) {
         return;
       }
 
-      if (songIsAlreadyPlaying && !isPlaying) {
-        set((state) => {
-          state.playerState.isPlaying = true;
-        });
-      } else {
-        set((state) => {
-          state.playerProgress.progress = 0;
-          state.playerProgress.bufferedProgress = 0;
-          state.playerState.mediaType = "song";
-          state.songlist.contextQueue = {
-            ...emptyContextQueue(),
-            songs: [song],
-            currentIndex: 0,
-            sourceName:
-              sourceName !== undefined
-                ? sourceName || null
-                : song.album || null,
-          };
-          state.songlist.sourceQueue = {
-            ...emptyContextQueue(),
-            songs: [song],
-            currentIndex: 0,
-            sourceName: state.songlist.contextQueue.sourceName,
-          };
-          resetUserQueue(state.songlist);
-          state.songlist.originalContextSongs = [song];
-          state.songlist.isShuffleActive = false;
-          state.songlist.shuffleHistory = [];
-          state.playerState.isPlaying = true;
-          state.songlist.radioList = [];
-        });
-      }
+      set((state) => {
+        state.playerProgress.progress = 0;
+        state.playerProgress.bufferedProgress = 0;
+        state.playerState.mediaType = "song";
+        state.songlist.contextQueue = {
+          ...emptyContextQueue(),
+          songs: [song],
+          currentIndex: 0,
+          sourceName:
+            sourceName !== undefined ? sourceName || null : song.album || null,
+        };
+        state.songlist.sourceQueue = {
+          ...emptyContextQueue(),
+          songs: [song],
+          currentIndex: 0,
+          sourceName: state.songlist.contextQueue.sourceName,
+        };
+        resetUserQueue(state.songlist);
+        state.songlist.originalContextSongs = [song];
+        state.songlist.isShuffleActive = false;
+        state.songlist.shuffleHistory = [];
+        state.playerState.isPlaying = true;
+        state.songlist.radioList = [];
+      });
     },
 
     setNextOnQueue: (
@@ -508,7 +567,7 @@ export function createQueueActions(shared: SharedDeps) {
     ) => {
       if (isRemoteActive()) {
         if (list.length === 0) return;
-        sendAddToQueueRemote(remoteSend, sourceId, list);
+        sendAddToQueueRemote(remoteSend, list, "next");
         return;
       }
       if (!list || list.length === 0) return;
@@ -537,7 +596,7 @@ export function createQueueActions(shared: SharedDeps) {
     ) => {
       if (isRemoteActive()) {
         if (list.length === 0) return;
-        sendAddToQueueRemote(remoteSend, sourceId, list);
+        sendAddToQueueRemote(remoteSend, list, "last");
         return;
       }
       if (!list || list.length === 0) return;

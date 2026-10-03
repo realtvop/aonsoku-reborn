@@ -428,34 +428,14 @@ export function normalizeSourceId(
 }
 
 export function sendAddToQueueRemote(
-  remoteSend: (type: unknown, data?: unknown) => boolean,
-  sourceId:
-    | QueueSourceId
-    | { albumId: string }
-    | { playlistId: string }
-    | undefined,
+  remoteSend: (type: LanControlMessageType, data?: unknown) => boolean,
   list: ISong[],
+  position: "next" | "last",
 ): void {
-  const normalized = normalizeSourceId(sourceId);
-  if (normalized) {
-    if (normalized.type === "album") {
-      remoteSend(LanControlMessageType.ADD_ALBUM_TO_QUEUE, {
-        albumId: normalized.id,
-      });
-    } else if (normalized.type === "playlist") {
-      remoteSend(LanControlMessageType.ADD_PLAYLIST_TO_QUEUE, {
-        playlistId: normalized.id,
-      });
-    } else {
-      remoteSend(LanControlMessageType.ADD_TO_QUEUE, {
-        songIds: list.map((song) => song.id),
-      });
-    }
-  } else {
-    remoteSend(LanControlMessageType.ADD_TO_QUEUE, {
-      songIds: list.map((song) => song.id),
-    });
-  }
+  remoteSend(LanControlMessageType.ADD_TO_QUEUE, {
+    songIds: list.map((song) => song.id),
+    position,
+  });
 }
 
 export function reshuffleContextForWrap(

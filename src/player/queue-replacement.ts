@@ -2,6 +2,21 @@ import type { PlaybackReplacementRequest } from "@/store/playback-replacement.st
 import type { ISong } from "@/types/responses/song";
 import { shuffleWithGapAvoidance } from "@/utils/songListFunctions";
 
+export function shouldConfirmQueueReplacement({
+  isPlaying,
+  userQueueLength,
+  isInUserQueue,
+  bypassQueueConfirmation = false,
+}: {
+  isPlaying: boolean;
+  userQueueLength: number;
+  isInUserQueue: boolean;
+  bypassQueueConfirmation?: boolean;
+}): boolean {
+  const remaining = userQueueLength - (isInUserQueue ? 1 : 0);
+  return isPlaying && remaining > 0 && !bypassQueueConfirmation;
+}
+
 export function getReplacementPlayNextSongs(
   request: PlaybackReplacementRequest,
   shuffle: (songs: ISong[]) => ISong[] = (songs) =>

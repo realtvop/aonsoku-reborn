@@ -109,6 +109,16 @@ describe("mapLanControlToRemoteCommand", () => {
     ).toEqual({ type: "set_repeat", mode: "off" });
   });
 
+  it("distinguishes play-next from add-to-queue without extending the wire protocol", () => {
+    expect(
+      mapLanControlToRemoteCommand(
+        LanControlMessageType.ADD_TO_QUEUE,
+        { songIds: ["selected"], position: "next" },
+        () => playerState(),
+      ),
+    ).toEqual({ type: "add_to_queue_next", song_ids: ["selected"] });
+  });
+
   it("returns null for malformed commands", () => {
     expect(
       mapLanControlToRemoteCommand(

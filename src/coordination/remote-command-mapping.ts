@@ -85,7 +85,11 @@ export function mapLanControlToRemoteCommand(
         : null;
     case LanControlMessageType.ADD_TO_QUEUE:
       return Array.isArray(d?.songIds)
-        ? { type: "add_to_queue_last", song_ids: d.songIds as string[] }
+        ? {
+            type:
+              d.position === "next" ? "add_to_queue_next" : "add_to_queue_last",
+            song_ids: d.songIds as string[],
+          }
         : null;
     case LanControlMessageType.CLEAR_QUEUE:
       return { type: "clear_queue" };

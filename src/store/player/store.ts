@@ -2,6 +2,7 @@ import { devtools, persist, subscribeWithSelector } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
+import { useCoordinationStore } from "@/coordination/store";
 import {
   CurrentSongData,
   LanControlMessageType,
@@ -16,8 +17,8 @@ import {
   initialRemoteControl,
   initialSonglist,
 } from "./initial-state";
-import { createPlaybackActions } from "./playback-actions";
 import { createPlayerPersistOptions } from "./persistence";
+import { createPlaybackActions } from "./playback-actions";
 import { createQueueActions } from "./queue-actions";
 import { clearSonglistState } from "./queue-utils";
 
@@ -103,6 +104,17 @@ export const usePlayerStore = createWithEqualityFn<IPlayerContext>()(
             get,
             isRemoteActive,
             remoteSend,
+            getRemotePlaybackTarget: () => {
+              const { controlledDeviceId, deviceSnapshots } =
+                useCoordinationStore.getState();
+              return controlledDeviceId
+                ? {
+                    deviceId: controlledDeviceId,
+                    snapshot:
+                      deviceSnapshots[controlledDeviceId]?.snapshot ?? null,
+                  }
+                : null;
+            },
             mapRepeatMode,
             remoteSongToISong,
             clearSonglistState,

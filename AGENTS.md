@@ -289,6 +289,18 @@ When changing playback controls, queue semantics, lyrics timing, scrobbling, or
 handoff behavior, check local playback, remote-control projection, and native
 coordination behavior together.
 
+Queue replacement confirmation is owned by the shared player actions in
+`src/store/player/queue-actions.ts`, before local native-controller dispatch or
+remote command submission. It protects remaining manually added `userQueue`
+songs (excluding the current song while `isInUserQueue`), not the album/playlist
+`contextQueue`. Paused playback, current-song/context resume, queue navigation,
+and queue additions do not prompt. Remote confirmation reads the controlled
+device's coordination snapshot rather than the preserved local queue; pending
+dialogs are bound to that device and canceled when the playback target changes.
+Remote Play Next and Add to Queue map to the existing `add_to_queue_next` and
+`add_to_queue_last` protocol commands, using the exact selected song IDs. Native
+receivers execute already-confirmed remote commands without another dialog.
+
 ### Routing
 
 React Router v6 uses hash routing (data router via `createHashRouter` in

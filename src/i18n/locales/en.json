@@ -542,7 +542,7 @@
     "open": "Open queue",
     "replacementConfirmation": {
       "title": "Choose how to continue",
-      "description": "The current playback queue is not empty.",
+      "description": "Playing this selection will clear the songs you added to the queue.",
       "replace": "Replace current queue",
       "playNext": "Play after this song"
     }

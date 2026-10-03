@@ -226,6 +226,30 @@ describe("NativeQueueController terminal playback reset", () => {
     controller.dispose();
   });
 
+  it("replaces an identical context after leaving manual playback instead of taking the old resume shortcut", async () => {
+    const song = { id: "context", duration: 123 } as never;
+    mocks.storeState.songlist.contextQueue.songs = [song];
+    mocks.storeState.songlist.userQueue.songs = [
+      { id: "manual-current", duration: 123 } as never,
+    ];
+    mocks.storeState.songlist.isInUserQueue = true;
+    const controller = new NativeQueueController();
+    await vi.runAllTimersAsync();
+
+    controller.setSongList([song], 0, false);
+
+    expect(mocks.plugin.setContextQueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        songs: [expect.objectContaining({ id: "context" })],
+        currentIndex: 0,
+        autoplay: true,
+      }),
+    );
+    expect(mocks.storeState.songlist.userQueue.songs).toEqual([]);
+    expect(mocks.storeState.songlist.isInUserQueue).toBe(false);
+    controller.dispose();
+  });
+
   it("does not rewind to zero when native playback advances to the next track", async () => {
     mocks.storeState.songlist.contextQueue.songs = [
       { id: "song-1", duration: 123 } as never,
