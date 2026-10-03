@@ -62,6 +62,9 @@ pnpm --filter @aonsoku/coordination-worker deploy:raw # Direct Wrangler deployme
 cd android && ./gradlew :aonsoku-capacitor-native:compileDebugKotlin
 cd android && ./gradlew :aonsoku-capacitor-native:testDebugUnitTest
 
+# iOS native core
+cd ios/App && xcodebuild -scheme App -destination 'generic/platform=iOS Simulator' build
+
 # Electron desktop native audio
 pnpm native-audio:build   # Build the Node-API libmpv addon
 pnpm native-audio:prepare # Copy addon/runtime libs into resources/native-audio
@@ -100,6 +103,12 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   `dist`. The custom native plugin lives in
   `capacitor-plugins/capacitor-native` and is included through pnpm workspace
   package `@aonsoku/capacitor-native`.
+- The iOS host owns long-lived native services through
+  `AonsokuNativePlugin.AppServices`. `AudioService` owns AVPlayer, queue,
+  downloads, scrobbling, playback persistence, and system media controls;
+  `AonsokuNativeAudioPlugin` is only the Capacitor payload/event adapter. New
+  native UI surfaces must call the typed service rather than locating a plugin
+  through `CAPBridgeProtocol`.
 - Platform/runtime detection is centralized in `src/utils/capabilities.ts`,
   with lower-level helpers in `src/utils/desktop.ts` and
   `src/utils/platform.ts`.

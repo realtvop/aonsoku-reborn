@@ -1,16 +1,40 @@
 import Foundation
 
-struct QueueSong: Codable {
-    let id: String
-    let title: String
-    let artist: String
-    let artistId: String?
-    let album: String
-    let albumId: String?
-    let duration: Double
-    let coverArtId: String?
-    let streamUrl: String
-    let cachedFileUri: String?
+public struct QueueSong: Codable, Equatable, Sendable {
+    public let id: String
+    public let title: String
+    public let artist: String
+    public let artistId: String?
+    public let album: String
+    public let albumId: String?
+    public let duration: Double
+    public let coverArtId: String?
+    public let streamUrl: String
+    public let cachedFileUri: String?
+
+    public init(
+        id: String,
+        title: String,
+        artist: String,
+        artistId: String? = nil,
+        album: String,
+        albumId: String? = nil,
+        duration: Double,
+        coverArtId: String? = nil,
+        streamUrl: String,
+        cachedFileUri: String? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.artist = artist
+        self.artistId = artistId
+        self.album = album
+        self.albumId = albumId
+        self.duration = duration
+        self.coverArtId = coverArtId
+        self.streamUrl = streamUrl
+        self.cachedFileUri = cachedFileUri
+    }
 
     init(from dict: [String: Any]) {
         self.id = dict["id"] as? String ?? ""

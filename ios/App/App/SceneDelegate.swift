@@ -11,14 +11,38 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         window?.rootViewController = AonsokuViewController()
         window?.makeKeyAndVisible()
 
-        SceneDelegateProxy.shared.scene(scene, willConnectTo: session, options: connectionOptions)
+        NotificationCenter.default.post(
+            name: Notification.Name("CapacitorSceneWillConnect"),
+            object: scene
+        )
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
-        SceneDelegateProxy.shared.scene(scene, openURLContexts: URLContexts)
+        for context in URLContexts {
+            NotificationCenter.default.post(
+                name: .capacitorOpenURL,
+                object: ["url": context.url]
+            )
+            NotificationCenter.default.post(
+                name: Notification.Name("CapacitorSceneOpenURLNotification"),
+                object: scene,
+                userInfo: ["url": context.url]
+            )
+        }
     }
 
     func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
-        SceneDelegateProxy.shared.scene(scene, continue: userActivity)
+        guard let url = userActivity.webpageURL else { return }
+        NotificationCenter.default.post(
+            name: .capacitorOpenUniversalLink,
+            object: ["url": url]
+        )
+        NotificationCenter.default.post(
+            name: Notification.Name(
+                "CapacitorSceneOpenUniversalLinkNotification"
+            ),
+            object: scene,
+            userInfo: ["url": url]
+        )
     }
 }

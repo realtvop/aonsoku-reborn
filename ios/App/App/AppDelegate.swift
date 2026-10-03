@@ -6,10 +6,12 @@ import AonsokuNativePlugin
 class AppDelegate: UIResponder, UIApplicationDelegate {
 
     var window: UIWindow?
+    private let services = AppServices.shared
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         application.applicationSupportsShakeToEdit = false
         SyncScheduler.register()
+        services.audio.start()
         return true
     }
 
