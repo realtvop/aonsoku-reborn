@@ -2362,6 +2362,30 @@ describe("NativeAudioService", () => {
     });
   });
 
+  it("does not advance the queue or fire the track-end sleep timer on source replacement stops", async () => {
+    const events: NativeAudioServiceEvent[] = [];
+    service.onEvent((event) => events.push(event));
+    await service.setContextQueue({
+      songs: [queueSong("1"), queueSong("2")],
+      currentIndex: 0,
+    });
+    const loads = engine.load.mock.calls.length;
+    engine.emit({ type: "ended", reason: "stopped" });
+    engine.emit({ type: "ended", reason: "stopped" });
+    await service.pauseAndGetFullState();
+    expect(engine.load).toHaveBeenCalledTimes(loads);
+    await expect(service.getFullState()).resolves.toMatchObject({
+      currentSongId: "1",
+      contextQueue: { currentIndex: 0 },
+    });
+    await service.setSleepTimer({ mode: "endOfTrack", seconds: 0 });
+    engine.emit({ type: "ended", reason: "stopped" });
+    await service.pauseAndGetFullState();
+    expect(events.some((event) => event.eventName === "sleepTimerFired")).toBe(
+      false,
+    );
+  });
+
   it("uses the queue engine for ended, repeat all, and repeat one", async () => {
     await service.setContextQueue({
       songs: [queueSong("1"), queueSong("2")],

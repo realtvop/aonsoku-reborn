@@ -367,6 +367,26 @@ describe("LibMpvAudioEngine", () => {
     ).toHaveLength(1);
   });
 
+  it("ignores delayed replacement stops when handoff commits before the prepared source opens", async () => {
+    const { engine, events, player } = createHarness();
+    const source = { kind: "stream" as const, target: "https://server/stream" };
+    await engine.load({ source, autoplay: true });
+    player.emit({ type: "file-loaded" });
+    await engine.load({ source, autoplay: false, startTime: 42 });
+    await engine.load({ source, autoplay: true, startTime: 43 });
+    events.length = 0;
+    player.emit({ type: "end-file", reason: "stop" });
+    player.emit({ type: "end-file", reason: "stop" });
+    player.emit({ type: "file-loaded" });
+    expect(events).not.toContainEqual(
+      expect.objectContaining({ type: "ended" }),
+    );
+    expect(events).toContainEqual({
+      type: "playbackStateChanged",
+      state: "playing",
+    });
+  });
+
   it("sets player volume through the mpv volume property", async () => {
     const { engine, player } = createHarness();
 

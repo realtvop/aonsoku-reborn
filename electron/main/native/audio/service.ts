@@ -998,6 +998,9 @@ export class NativeAudioService implements AonsokuAudioApi {
         });
         break;
       case "ended":
+        // Replacing a source or explicitly stopping it is not a track finish.
+        // Rapid prepare/commit loads can deliver delayed libmpv stop events.
+        if (event.reason !== "finished") break;
         nativeLogger.info(
           `ended reason=${event.reason ?? "unknown"}`,
           "audio-service",
