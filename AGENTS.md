@@ -110,6 +110,8 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
 - The iOS host owns long-lived native services through
   `AonsokuNativePlugin.AppServices`. `AudioService` owns AVPlayer, queue,
   downloads, scrobbling, playback persistence, and system media controls;
+  direct streams retain background cache downloads and the staged
+  `PlaybackRecoveryController` seek/reload fallback inside that service;
   `AonsokuNativeAudioPlugin` is only the Capacitor payload/event adapter. New
   native UI surfaces must call the typed service rather than locating a plugin
   through `CAPBridgeProtocol`. `AudioCommand`, `AudioPlaybackSnapshot`, and
