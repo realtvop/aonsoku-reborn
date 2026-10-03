@@ -23,6 +23,7 @@
 | Offline handoff | Desktop displayed **Continue from offline playback** and accepted the phone's retained snapshot. On the final run it resumed **海辺の電話ボックス**, context index 1, with all 39 songs and nonzero progress; a native read showed 163.46 seconds. No rapid replacement-driven skipping recurred. The following track advanced normally later. |
 | Background reconnection and fencing | Phone log recorded reconnect at 14:18:58 and `session_superseded` at 14:19:13. Android MediaSession then reported **PAUSED**, position 93.075 seconds on **NONSENSE**. No manual pause was issued during this check. The phone had naturally advanced while offline. |
 | Fullscreen remote controls | Phone fullscreen displayed the desktop's title/progress; pause and resume affected desktop playback. Next changed the desktop to **SPEED OF SPICE**, and the phone projection followed. A later native desktop read confirmed paused playback at 43.32 seconds. |
+| Android ping-timeout recovery and remote queue controls | The phone log reproduced OkHttp's `sent ping but didn't receive pong within 15000ms` failure. The foreground-service reconnect path then resumed the stream: the phone Home page showed the desktop as **Connected**, its remote projection continued updating, and the phone's shuffle command changed the desktop queue back to its non-shuffled order. The phone's repeat and play/pause controls remained usable after recovery. |
 | Current manual queue item handed off and returned | Desktop had `isInUserQueue=true`, one manual item, context index 3 and 39 context songs. After transfer, Android persistence retained those fields and nonzero progress. Returning to desktop retained the manual item and index; the phone automatically paused. After progression, desktop had an empty manual queue, one played manual-history item, and resumed the context queue. |
 
 ## Fix commits
@@ -43,8 +44,9 @@
 
 - Workers: 11 integration tests, type check and deployment dry-run passed for
   the fencing fix.
-- Manager/native coordination/native queue controller: 48 focused tests passed
-  for the UI subscription change.
+- Manager/native coordination: 47 focused Vitest tests passed in the current
+  reconnect/remote-control regression run.
+- Android native coordination unit tests passed with Gradle.
 - libmpv engine and desktop audio service: 78 tests passed for the final stop
   event fix, including rapid prepare/commit replacement and unchanged queue/sleep
   state after stop events.
@@ -59,5 +61,4 @@
   validation.
 - Reconnection uses retry backoff and is not immediate on restored networking.
   These checks do not prove indefinite background operation, process-killed
-  recovery, shuffled/repeated queue parity, or every remote command.
-- Further work was stopped at the user's request after committing this record.
+  recovery, every repeat-mode transition, or every remote command.
