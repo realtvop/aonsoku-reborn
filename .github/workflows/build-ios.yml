@@ -30,6 +30,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Test native iOS core
+        run: ./scripts/test-ios-native.sh
+
       - name: Build mobile web assets
         run: pnpm run build:mobile
 

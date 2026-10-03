@@ -20,6 +20,14 @@ final class DatabaseManager {
 
         let dbPath = dbDirectory.appendingPathComponent("library.sqlite").path
 
+        dbPool = try! Self.makePool(path: dbPath)
+    }
+
+    init(path: String) throws {
+        dbPool = try Self.makePool(path: path)
+    }
+
+    private static func makePool(path: String) throws -> DatabasePool {
         var config = Configuration()
         config.prepareDatabase { db in
             #if DEBUG
@@ -28,11 +36,12 @@ final class DatabaseManager {
             db.add(function: DatabaseManager.normalizeFunction)
         }
 
-        dbPool = try! DatabasePool(path: dbPath, configuration: config)
+        let dbPool = try DatabasePool(path: path, configuration: config)
 
         var migrator = DatabaseMigrator()
         Migrations.registerAll(&migrator)
-        try! migrator.migrate(dbPool)
+        try migrator.migrate(dbPool)
+        return dbPool
     }
 
     var reader: DatabaseReader { dbPool }

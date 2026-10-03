@@ -62,6 +62,10 @@ pnpm --filter @aonsoku/coordination-worker deploy:raw # Direct Wrangler deployme
 cd android && ./gradlew :aonsoku-capacitor-native:compileDebugKotlin
 cd android && ./gradlew :aonsoku-capacitor-native:testDebugUnitTest
 
+# iOS native plugin (selects the first available iPhone Simulator; override
+# with IOS_SIMULATOR_ID=<uuid>)
+./scripts/test-ios-native.sh
+
 # iOS native core
 cd ios/App && xcodebuild -scheme App -destination 'generic/platform=iOS Simulator' build
 
@@ -123,6 +127,9 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   relaunch callbacks to the audio download manager. WebSockets use a normal
   URLSession because iOS background sessions are reserved for transfer tasks;
   downloads use `github.realtvop.aonsoku.audio.downloads` and survive relaunch.
+  The Swift package owns `AonsokuNativePluginTests`, which exercises queue,
+  persistence restore, handoff contracts, downloads, typed library queries,
+  and lifecycle transitions; `build-ios.yml` runs it before packaging.
 - Platform/runtime detection is centralized in `src/utils/capabilities.ts`,
   with lower-level helpers in `src/utils/desktop.ts` and
   `src/utils/platform.ts`.

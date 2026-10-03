@@ -22,6 +22,10 @@ let package = Package(
                 .product(name: "Cordova", package: "capacitor-swift-pm"),
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],
-            path: "ios/Sources/AonsokuNativePlugin")
+            path: "ios/Sources/AonsokuNativePlugin"),
+        .testTarget(
+            name: "AonsokuNativePluginTests",
+            dependencies: ["AonsokuNativePlugin"],
+            path: "ios/Tests/AonsokuNativePluginTests")
     ]
 )

@@ -509,6 +509,12 @@ extension AonsokuNativeAudioPlugin {
         AppServices.shared.audio.rollbackHandoff()
     }
 
+    internal static func decodeHandoffSnapshot(
+        _ object: [String: Any]
+    ) -> AudioHandoffSnapshot? {
+        handoffSnapshot(from: object)
+    }
+
     internal static func isSupportedRemoteControlCommand(_ type: String) -> Bool {
         command(from: ["type": type]) != nil || [
             "play_song", "play_album", "play_playlist", "play_at_index",
