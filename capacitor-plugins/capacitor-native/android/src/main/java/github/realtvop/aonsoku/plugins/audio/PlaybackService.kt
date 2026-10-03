@@ -1375,7 +1375,6 @@ class PlaybackService : MediaSessionService() {
         loadSong(song, autoplay, state.currentTime)
         persistence.markStateDirty()
         emitQueueContentsChanged("queue-edit")
-        emitQueueStateChanged(queueEngine.currentIndex, song.id, "skip", state.isInUserQueue)
         handleScrobbleSongStarted(song.id, song.duration)
     }
 

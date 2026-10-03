@@ -669,10 +669,6 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
                     if let current {
                         self.queueEngine(self.queueEngine, loadSong: current, autoplay: autoplay, startTime: progressSeconds)
                         self.forceNextSnapshotProgress(progressSeconds)
-                        self.notifyListeners("queueStateChanged", data: [
-                            "currentIndex": resolvedIndex, "songId": current.id,
-                            "reason": "skip", "isInUserQueue": inUserQueue,
-                        ])
                     }
                     self.queueEngine(self.queueEngine, didChangeContents: "queue-edit")
                     self.persistence.markStateDirty()
@@ -704,10 +700,6 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             if let song = instance.queueEngine.currentSong {
                 instance.queueEngine(instance.queueEngine, loadSong: song, autoplay: autoplay, startTime: state.currentTime)
                 instance.forceNextSnapshotProgress(state.currentTime)
-                instance.notifyListeners("queueStateChanged", data: [
-                    "currentIndex": state.currentIndex, "songId": song.id,
-                    "reason": "skip", "isInUserQueue": state.isInUserQueue,
-                ])
             } else {
                 DispatchQueue.main.async {
                     instance.player?.pause()

@@ -608,13 +608,6 @@ export class NativeAudioService implements AonsokuAudioApi {
         });
         this.#persistPlaybackState();
         this.#emitQueueContentsChanged("queue-edit");
-        this.#emit("queueStateChanged", {
-          requestId: this.#requestId,
-          currentIndex: this.#queueEngine.currentIndex,
-          songId: song.id,
-          reason: "skip",
-          isInUserQueue: state.isInUserQueue,
-        });
       }),
     );
   }

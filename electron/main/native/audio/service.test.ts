@@ -1933,7 +1933,15 @@ describe("NativeAudioService", () => {
       userQueue: [],
       isInUserQueue: false,
     });
+    const events: NativeAudioServiceEvent[] = [];
+    service.onEvent((event) => events.push(event));
     await service.restoreQueueState(prepared, false);
+    expect(events).toContainEqual(
+      expect.objectContaining({ eventName: "queueContentsChanged" }),
+    );
+    expect(events).not.toContainEqual(
+      expect.objectContaining({ eventName: "queueStateChanged" }),
+    );
     expect(engine.load).toHaveBeenLastCalledWith(
       expect.objectContaining({
         metadata: expect.objectContaining({ title: "Title u" }),
