@@ -612,7 +612,13 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 if (this@AonsokuNativeCoordinationPlugin.webSocket !== webSocket) return
+                this@AonsokuNativeCoordinationPlugin.webSocket = null
+                client = null
                 isConnecting = false
+                if (handoffPreparing) {
+                    handoffPreparing = false
+                    AudioPlugin.rollbackHandoffPlaybackFromActive()
+                }
                 stopHeartbeat()
                 stopSnapshotHeartbeat()
                 foregroundServiceConnection = null
@@ -623,7 +629,13 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 if (this@AonsokuNativeCoordinationPlugin.webSocket !== webSocket) return
                 Log.e(TAG, "WS failure", t)
+                this@AonsokuNativeCoordinationPlugin.webSocket = null
+                client = null
                 isConnecting = false
+                if (handoffPreparing) {
+                    handoffPreparing = false
+                    AudioPlugin.rollbackHandoffPlaybackFromActive()
+                }
                 stopHeartbeat()
                 stopSnapshotHeartbeat()
                 foregroundServiceConnection = null
@@ -1042,6 +1054,9 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             seqTracker.observe(extractSeq(parsed))
             // §9.1: dedup command/snapshot_projection envelopes by messageId.
             val type = extractType(parsed)
+            if (type == "prepare_relinquish" || type?.startsWith("handoff_") == true || type == "session_superseded") {
+                logDebug("coordination: received $type")
+            }
             if (type == "snapshot_projection") {
                 val snapshotDeviceId = parsed.optString("deviceId", "")
                 val generation = parsed.optInt("generation", 0)
@@ -1123,6 +1138,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             if (type == "prepare_relinquish") {
                 val transactionId = parsed.optString("transactionId", "")
                 val audioState = AudioPlugin.pauseAndGetFullStateFromActive()
+                logDebug("coordination: relinquish captured=${audioState != null}")
                 val snapshot = if (audioState != null) {
                     buildPlaybackSnapshot(
                         sessionId = nativeSessionId,
