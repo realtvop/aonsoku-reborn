@@ -52,6 +52,11 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
+		<string>fetch</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>github.realtvop.aonsoku.sync.refresh</string>
 	</array>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>

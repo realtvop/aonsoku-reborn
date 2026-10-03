@@ -31,12 +31,16 @@ class PlaybackStatePersistence {
         pendingProgress = time
     }
 
-    func flushNow() {
+    func flushNow(wait: Bool = false) {
         debounceTimer?.cancel()
         debounceTimer = nil
 
-        persistQueue.async { [weak self] in
-            self?.performFullSave()
+        if wait {
+            persistQueue.sync { performFullSave() }
+        } else {
+            persistQueue.async { [weak self] in
+                self?.performFullSave()
+            }
         }
     }
 

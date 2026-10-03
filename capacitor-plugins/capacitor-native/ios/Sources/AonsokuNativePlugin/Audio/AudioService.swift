@@ -103,6 +103,42 @@ public final class AudioService: NSObject, @unchecked Sendable {
         }
     }
 
+    public func applicationDidEnterBackground() {
+        persistence.flushNow()
+    }
+
+    public func applicationWillEnterForeground() {
+        start(volumeHostView: volumeHostView)
+        dispatchMain { [weak self] in
+            guard let self else { return }
+            do {
+                try self.configureAudioSession()
+            } catch {
+                self.emitError(
+                    code: "audio_session_failed",
+                    message: error.localizedDescription
+                )
+            }
+            self.scrobbleSubmitter.submitPending(buffer: self.scrobbleBuffer)
+        }
+    }
+
+    public func applicationWillTerminate() {
+        persistence.flushNow(wait: true)
+        shutdown()
+    }
+
+    @discardableResult
+    public func handleEventsForBackgroundURLSession(
+        identifier: String,
+        completionHandler: @escaping () -> Void
+    ) -> Bool {
+        downloadManager.handleEvents(
+            forBackgroundSession: identifier,
+            completionHandler: completionHandler
+        )
+    }
+
     @discardableResult
     public func subscribe(_ handler: @escaping EventHandler) -> UUID {
         let token = UUID()

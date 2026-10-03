@@ -116,6 +116,13 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   cover/avatar caching through `AppServices.library`; native UI must not open
   `DatabaseManager` or construct repository types directly. The Capacitor data
   plugin reuses this same service and adapts its typed events for the WebView.
+- `AppLifecycleService` is the App/Scene lifecycle boundary shared by the iOS
+  host and `AppServices`. It starts/restores audio once, flushes playback state
+  on background/termination, validates coordination with a foreground ping and
+  capped fresh-ticket reconnect requests, and routes background URLSession
+  relaunch callbacks to the audio download manager. WebSockets use a normal
+  URLSession because iOS background sessions are reserved for transfer tasks;
+  downloads use `github.realtvop.aonsoku.audio.downloads` and survive relaunch.
 - Platform/runtime detection is centralized in `src/utils/capabilities.ts`,
   with lower-level helpers in `src/utils/desktop.ts` and
   `src/utils/platform.ts`.

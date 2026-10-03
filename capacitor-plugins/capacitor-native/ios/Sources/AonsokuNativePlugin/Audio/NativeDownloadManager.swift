@@ -14,14 +14,22 @@ enum DownloadError: Error {
 }
 
 class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
+    static let backgroundSessionIdentifier = "github.realtvop.aonsoku.audio.downloads"
+
     weak var delegate: NativeDownloadManagerDelegate?
 
     private var activeTasks: [Int: String] = [:]
+    private var backgroundCompletionHandler: (() -> Void)?
     private let lock = NSLock()
 
     private lazy var session: URLSession = {
-        let config = URLSessionConfiguration.default
+        let config = URLSessionConfiguration.background(
+            withIdentifier: Self.backgroundSessionIdentifier
+        )
         config.timeoutIntervalForResource = 600
+        config.waitsForConnectivity = true
+        config.isDiscretionary = false
+        config.sessionSendsLaunchEvents = true
         return URLSession(configuration: config, delegate: self, delegateQueue: nil)
     }()
 
@@ -55,6 +63,7 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
         }
 
         let task = session.downloadTask(with: url)
+        task.taskDescription = songId
         lock.lock()
         activeTasks[task.taskIdentifier] = songId
         lock.unlock()
@@ -81,27 +90,33 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
         lock.unlock()
     }
 
+    func handleEvents(
+        forBackgroundSession identifier: String,
+        completionHandler: @escaping () -> Void
+    ) -> Bool {
+        guard identifier == Self.backgroundSessionIdentifier else { return false }
+        lock.lock()
+        backgroundCompletionHandler = completionHandler
+        lock.unlock()
+        _ = session
+        return true
+    }
+
     // MARK: - URLSessionDownloadDelegate
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
-        lock.lock()
-        guard let songId = activeTasks[downloadTask.taskIdentifier] else {
-            lock.unlock()
+        guard let songId = songId(for: downloadTask) else {
             return
         }
-        lock.unlock()
 
         let total = totalBytesExpectedToWrite > 0 ? totalBytesExpectedToWrite : 0
         delegate?.downloadManager(self, didProgress: songId, loaded: totalBytesWritten, total: total)
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        lock.lock()
-        guard let songId = activeTasks.removeValue(forKey: downloadTask.taskIdentifier) else {
-            lock.unlock()
+        guard let songId = removeSongId(for: downloadTask) else {
             return
         }
-        lock.unlock()
 
         let httpResponse = downloadTask.response as? HTTPURLResponse
         let statusCode = httpResponse?.statusCode ?? 200
@@ -146,14 +161,35 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         guard let error else { return }
 
-        lock.lock()
-        guard let songId = activeTasks.removeValue(forKey: task.taskIdentifier) else {
-            lock.unlock()
+        guard let songId = removeSongId(for: task) else {
             return
         }
-        lock.unlock()
 
         if (error as NSError).code == NSURLErrorCancelled { return }
         delegate?.downloadManager(self, didFail: songId, error: error)
+    }
+
+    func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
+        lock.lock()
+        let completionHandler = backgroundCompletionHandler
+        backgroundCompletionHandler = nil
+        lock.unlock()
+        DispatchQueue.main.async { completionHandler?() }
+    }
+
+    private func songId(for task: URLSessionTask) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        if let songId = activeTasks[task.taskIdentifier] { return songId }
+        guard let songId = task.taskDescription, !songId.isEmpty else { return nil }
+        activeTasks[task.taskIdentifier] = songId
+        return songId
+    }
+
+    private func removeSongId(for task: URLSessionTask) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return activeTasks.removeValue(forKey: task.taskIdentifier)
+            ?? task.taskDescription
     }
 }
