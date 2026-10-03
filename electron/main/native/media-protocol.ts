@@ -1,7 +1,7 @@
 import { protocol } from "electron";
-import { AsyncLimiter } from "./concurrency";
-import { desktopNativeBridgeService } from "./bridge/ipc";
 import { subsonicFetch } from "./bridge/http-agent";
+import { desktopNativeBridgeService } from "./bridge/ipc";
+import { AsyncLimiter } from "./concurrency";
 import { getDesktopNativeDataService } from "./data/ipc";
 
 export const DESKTOP_MEDIA_SCHEME = "aonsoku-media";
@@ -53,7 +53,10 @@ export function registerDesktopMediaScheme(): void {
 export function setupDesktopMediaProtocol(): void {
   protocol.handle(DESKTOP_MEDIA_SCHEME, async (request) => {
     const incoming = new URL(request.url);
-    const operation = incoming.hostname || incoming.pathname.replace(/^\//, "");
+    // Chromium lowercases hosts for this standard scheme, including getCoverArt.
+    const operation = (
+      incoming.hostname || incoming.pathname.replace(/^\//, "")
+    ).toLowerCase();
     const query = Object.fromEntries(incoming.searchParams.entries());
     if (operation === "cached") {
       const cached = await getDesktopNativeDataService()?.readCover(
@@ -66,9 +69,9 @@ export function setupDesktopMediaProtocol(): void {
         : new Response("Cached media not found", { status: 404 });
     }
     const path =
-      operation === "getCoverArt"
+      operation === "getcoverart"
         ? "/getCoverArt.view"
-        : operation === "getAvatar"
+        : operation === "getavatar"
           ? "/getAvatar.view"
           : operation === "stream"
             ? "/stream.view"
@@ -78,11 +81,9 @@ export function setupDesktopMediaProtocol(): void {
 
     // Image operations: prefer disk cache, then bounded-concurrency fetch
     // with a stall timeout. Stream stays unthrottled (long-lived, streaming).
-    if (operation === "getCoverArt" || operation === "getAvatar") {
+    if (operation === "getcoverart" || operation === "getavatar") {
       const cacheKey =
-        operation === "getCoverArt"
-          ? (query.id ?? "")
-          : (query.username ?? "");
+        operation === "getcoverart" ? (query.id ?? "") : (query.username ?? "");
       const requestedSize =
         typeof query.size === "string" ? query.size : undefined;
       try {
@@ -104,10 +105,10 @@ export function setupDesktopMediaProtocol(): void {
     // so the stream no longer competes with an unbounded image flood for the
     // default pool's connections.
     try {
-      return await fetch(
-        desktopNativeBridgeService.getMediaUrl(path, query),
-        { headers: request.headers, signal: request.signal },
-      );
+      return await fetch(desktopNativeBridgeService.getMediaUrl(path, query), {
+        headers: request.headers,
+        signal: request.signal,
+      });
     } catch (error) {
       return new Response(
         error instanceof Error ? error.message : String(error),
@@ -126,7 +127,7 @@ export function setupDesktopMediaProtocol(): void {
  *    dispatcher, with a stall timeout layered on top of `request.signal`.
  */
 async function proxyImage(
-  operation: "getCoverArt" | "getAvatar",
+  operation: "getcoverart" | "getavatar",
   cacheKey: string,
   requestedSize: string | undefined,
   query: Record<string, string>,
@@ -148,7 +149,7 @@ async function proxyImage(
   }
 
   const path =
-    operation === "getCoverArt" ? "/getCoverArt.view" : "/getAvatar.view";
+    operation === "getcoverart" ? "/getCoverArt.view" : "/getAvatar.view";
   const timeoutSignal = AbortSignal.any([
     request.signal,
     AbortSignal.timeout(IMAGE_PROXY_TIMEOUT_MS),
