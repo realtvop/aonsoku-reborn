@@ -787,13 +787,16 @@ export function CoordinationObserver() {
   // Handle handoff_committed: apply the final snapshot (with A's last-second
   // state) and resume playback (design §11.1 step 7).
   useEffect(() => {
-    if (nativeCoordinationAvailable) return;
     if (!isConnected) return;
     const original = manager.callbacks.onHandoffCommitted;
     manager.callbacks.onHandoffCommitted = (
       snapshot: PlaybackSnapshot,
       _newGeneration: number,
     ) => {
+      if (nativeCoordinationAvailable) {
+        getNativeQueueController()?.syncFromNative(true);
+        return;
+      }
       if (!snapshot.songId) return;
       const state = usePlayerStore.getState();
       const isSameSong = state.songlist.currentSong?.id === snapshot.songId;

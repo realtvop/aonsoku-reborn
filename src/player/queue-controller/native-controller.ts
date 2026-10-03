@@ -1004,7 +1004,7 @@ export class NativeQueueController implements QueueController {
     this.#listeners.clear();
   }
 
-  async syncFromNative(): Promise<void> {
+  async syncFromNative(replaceQueue = false): Promise<void> {
     try {
       const nativeState = await this.#plugin.getFullState();
       if (nativeState.currentSongId) {
@@ -1012,8 +1012,12 @@ export class NativeQueueController implements QueueController {
       }
 
       const isRestoredColdStart =
-        usePlayerStore.getState().songlist.contextQueue.songs.length === 0 &&
-        (nativeState.isRestored || nativeState.contextQueue.songs.length > 0);
+        replaceQueue ||
+        (usePlayerStore.getState().songlist.contextQueue.songs.length === 0 &&
+          (nativeState.isRestored ||
+            nativeState.contextQueue.songs.length > 0));
+
+      if (isRestoredColdStart) this.#nativeDrivenTransition = true;
 
       usePlayerStore.setState((s) => {
         s.playerState.isPlaying = nativeState.isPlaying;
@@ -1038,6 +1042,19 @@ export class NativeQueueController implements QueueController {
 
         if (isRestoredColdStart) {
           s.playerState.mediaType = "song";
+          s.songlist.sourceQueue = {
+            songs: nativeState.sourceQueue.songs.map(nativeQueueSongToISong),
+            currentIndex: nativeState.sourceQueue.currentIndex,
+            sourceId: nativeSourceIdToQueueSourceId(
+              nativeState.sourceQueue.sourceId,
+            ),
+            sourceName: nativeState.sourceQueue.sourceName,
+          };
+          s.songlist.contextQueue.sourceId = nativeSourceIdToQueueSourceId(
+            nativeState.contextQueue.sourceId,
+          );
+          s.songlist.contextQueue.sourceName =
+            nativeState.contextQueue.sourceName;
           s.songlist.contextQueue.songs = nativeState.contextQueue.songs.map(
             nativeQueueSongToISong,
           );
@@ -1089,6 +1106,7 @@ export class NativeQueueController implements QueueController {
           }
         }
 
+        if (isRestoredColdStart) s.songlist.currentSong = null;
         if (nativeState.currentSongId) {
           let song = s.songlist.userQueue.songs.find(
             (song) => song.id === nativeState.currentSongId,
@@ -1335,6 +1353,8 @@ export class NativeQueueController implements QueueController {
       );
       if (event.reason === "shuffle" || event.reason === "unshuffle") {
         this.syncFromNative();
+      } else if (event.reason === "queue-edit") {
+        this.syncFromNative(true);
       }
     });
 

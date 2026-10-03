@@ -438,6 +438,60 @@ describe("NativeQueueController handoff preparation", () => {
 
     controller.dispose();
   });
+
+  it("replaces an existing renderer queue after a native handoff", async () => {
+    const previous = await mocks.plugin.getFullState();
+    const contextSong = {
+      id: "target-context",
+      title: "Context",
+      duration: 300,
+    };
+    const userSong = { id: "target-user", title: "User", duration: 240 };
+    vi.mocked(mocks.plugin.getFullState).mockResolvedValue({
+      ...previous,
+      contextQueue: {
+        songs: [contextSong],
+        currentIndex: 0,
+        sourceId: null,
+        sourceName: null,
+      },
+      sourceQueue: {
+        songs: [contextSong],
+        currentIndex: 0,
+        sourceId: null,
+        sourceName: null,
+      },
+      userQueue: [userSong],
+      playedUserQueueHistory: [contextSong],
+      currentSongId: userSong.id,
+      currentTime: 61,
+      duration: 240,
+      isPlaying: true,
+      isInUserQueue: true,
+      loopState: "one",
+    } as never);
+    const controller = new NativeQueueController();
+    await controller.syncFromNative(true);
+
+    expect(mocks.storeState.songlist.contextQueue.songs).toEqual([
+      expect.objectContaining({ id: contextSong.id }),
+    ]);
+    expect(mocks.storeState.songlist.userQueue.songs).toEqual([
+      expect.objectContaining({ id: userSong.id }),
+    ]);
+    expect(mocks.storeState.songlist.currentSong).toMatchObject({
+      id: userSong.id,
+    });
+    expect(mocks.storeState.songlist.isInUserQueue).toBe(true);
+    expect(mocks.storeState.songlist.contextQueue.sourceId).toBeNull();
+    expect(mocks.storeState.playerProgress.progress).toBe(61);
+    expect(mocks.storeState.playerState.loopState).toBe(LoopState.One);
+    expect(controller.consumeNativeDrivenTransition()).toBe(true);
+    expect(mocks.plugin.setContextQueue).not.toHaveBeenCalled();
+
+    controller.dispose();
+    vi.mocked(mocks.plugin.getFullState).mockResolvedValue(previous);
+  });
 });
 
 function emit<TEvent extends keyof NativeAudioEvents>(
