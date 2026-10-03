@@ -308,6 +308,9 @@ export class Realtime {
       this.store.transaction(() => {
         this.store.set(`session:${s.sessionId}`, current);
         this.store.delete(`grant:${s.sessionId}`);
+        // A former owner can take the same session back. Once the grant is
+        // consumed, its old fencing record must not reject later snapshots.
+        this.store.delete(`superseded:${s.sessionId}:${a.deviceId}`);
         // New activity replaces this device's older snapshots, including offline candidates.
         for (const old of this.store.list<Session>("session:"))
           if (
