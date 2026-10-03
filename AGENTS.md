@@ -111,6 +111,11 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   through `CAPBridgeProtocol`. `AudioCommand`, `AudioPlaybackSnapshot`, and
   `AudioQueueSnapshot` are the native command/state contract; SwiftUI clients
   can use `observeState` or `stateUpdates()` without depending on Capacitor.
+- `LibraryService` is the public iOS library boundary for native UI. It owns
+  GRDB repository access, metadata sync/scheduling, typed library queries, and
+  cover/avatar caching through `AppServices.library`; native UI must not open
+  `DatabaseManager` or construct repository types directly. The Capacitor data
+  plugin reuses this same service and adapts its typed events for the WebView.
 - Platform/runtime detection is centralized in `src/utils/capabilities.ts`,
   with lower-level helpers in `src/utils/desktop.ts` and
   `src/utils/platform.ts`.

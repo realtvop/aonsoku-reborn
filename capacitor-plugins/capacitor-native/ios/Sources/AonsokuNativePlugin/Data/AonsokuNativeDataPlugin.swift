@@ -1,6 +1,5 @@
 import Foundation
 import Capacitor
-import GRDB
 
 @objc(AonsokuNativeDataPlugin)
 public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
@@ -36,42 +35,39 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "downloadAvatar", returnType: CAPPluginReturnPromise),
     ]
 
-    private var dbManager: DatabaseManager!
-    private var syncEngine: SyncEngine!
-    private var syncScheduler: SyncScheduler!
     private var eventEmitter: EventEmitter!
+    private let libraryService = AppServices.shared.library
+    private var libraryEventToken: UUID?
     private let dataQueue = DispatchQueue(label: "com.aonsoku.data.query", qos: .userInitiated, attributes: .concurrent)
 
     // MARK: - Initialization
 
     @objc func initialize(_ call: CAPPluginCall) {
-        dbManager = DatabaseManager.shared
         eventEmitter = EventEmitter(plugin: self)
-
-        let httpClient = SubsonicHTTPClient()
-        syncEngine = SyncEngine(db: dbManager.dbPool, httpClient: httpClient)
-        syncEngine.onSyncStateChanged = { [weak self] state in
-            self?.eventEmitter.emitSyncStateChanged(state)
+        if libraryEventToken == nil {
+            libraryEventToken = libraryService.subscribe { [weak self] event in
+                DispatchQueue.main.async {
+                    switch event {
+                    case .syncStateChanged(let state):
+                        self?.eventEmitter.emitSyncStateChanged([
+                            "phase": state.phase,
+                            "tier": state.tier as Any,
+                            "isSyncing": state.isSyncing,
+                            "processedItems": state.processedItems,
+                            "totalItems": state.totalItems,
+                        ])
+                    case .dataChanged(let tables):
+                        self?.eventEmitter.emitDataChanged(tables: tables, tier: "")
+                    }
+                }
+            }
         }
-        syncEngine.onDataChanged = { [weak self] tables in
-            self?.eventEmitter.emitDataChanged(tables: tables, tier: "")
-        }
-
-        syncScheduler = SyncScheduler(syncEngine: syncEngine)
-
-        let hasData = (try? SyncStateRepository(db: dbManager.dbPool).getFullSyncTimestamp()) != nil
+        let initialization = libraryService.initialize()
 
         call.resolve([
-            "ready": true,
-            "needsMigration": !hasData,
+            "ready": initialization.ready,
+            "needsMigration": initialization.needsMigration,
         ])
-
-        syncScheduler.startForegroundSchedule()
-        if hasData {
-            syncEngine.syncIncremental()
-        } else {
-            syncEngine.syncAll()
-        }
     }
 
     @objc func importBulk(_ call: CAPPluginCall) {
@@ -82,24 +78,24 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
     // MARK: - Sync Control
 
     @objc func syncAll(_ call: CAPPluginCall) {
-        syncEngine.syncAll()
+        libraryService.syncAll()
         call.resolve()
     }
 
     @objc func syncIncremental(_ call: CAPPluginCall) {
-        syncEngine.syncIncremental()
+        libraryService.syncIncremental()
         call.resolve()
     }
 
     @objc func cancelSync(_ call: CAPPluginCall) {
-        syncEngine.cancel()
+        libraryService.cancelSync()
         call.resolve()
     }
 
     @objc func getSyncState(_ call: CAPPluginCall) {
         call.resolve([
             "phase": "idle",
-            "isSyncing": syncEngine?.isSyncing ?? false,
+            "isSyncing": libraryService.isSyncing,
             "progress": 0,
             "processedItems": 0,
             "totalItems": 0,
@@ -111,7 +107,7 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func getArtists(_ call: CAPPluginCall) {
         let limit = call.getInt("limit") ?? 100
         let offset = call.getInt("offset") ?? 0
-        let filter = ArtistQueryFilter(
+        let filter = LibraryArtistFilter(
             search: call.getString("search"),
             starredOnly: call.getBool("starredOnly"),
             sortBy: call.getString("sortBy"),
@@ -120,12 +116,15 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
 
         dataQueue.async {
             do {
-                let repo = ArtistRepository(db: self.dbManager.dbPool)
-                let (items, total) = try repo.getAll(limit: limit, offset: offset, filter: filter)
+                let page = try self.libraryService.artists(
+                    limit: limit,
+                    offset: offset,
+                    filter: filter
+                )
                 call.resolve([
-                    "items": items.map { $0.toDictionary().compactMapValues { $0 } },
-                    "total": total,
-                    "hasMore": offset + limit < total,
+                    "items": page.items.map(Self.dictionary),
+                    "total": page.total,
+                    "hasMore": page.hasMore,
                 ])
             } catch {
                 call.reject("Failed to query artists: \(error.localizedDescription)")
@@ -140,9 +139,8 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         dataQueue.async {
             do {
-                let repo = ArtistRepository(db: self.dbManager.dbPool)
-                if let artist = try repo.getById(id) {
-                    call.resolve(artist.toDictionary().compactMapValues { $0 })
+                if let artist = try self.libraryService.artist(id: id) {
+                    call.resolve(Self.dictionary(artist))
                 } else {
                     call.resolve([:])
                 }
@@ -155,7 +153,7 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func getAlbums(_ call: CAPPluginCall) {
         let limit = call.getInt("limit") ?? 100
         let offset = call.getInt("offset") ?? 0
-        let filter = AlbumQueryFilter(
+        let filter = LibraryAlbumFilter(
             search: call.getString("search"),
             artistId: call.getString("artistId"),
             genre: call.getString("genre"),
@@ -168,12 +166,15 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
 
         dataQueue.async {
             do {
-                let repo = AlbumRepository(db: self.dbManager.dbPool)
-                let (items, total) = try repo.getAll(limit: limit, offset: offset, filter: filter)
+                let page = try self.libraryService.albums(
+                    limit: limit,
+                    offset: offset,
+                    filter: filter
+                )
                 call.resolve([
-                    "items": items.map { $0.toDictionary().compactMapValues { $0 } },
-                    "total": total,
-                    "hasMore": offset + limit < total,
+                    "items": page.items.map(Self.dictionary),
+                    "total": page.total,
+                    "hasMore": page.hasMore,
                 ])
             } catch {
                 call.reject("Failed to query albums: \(error.localizedDescription)")
@@ -188,10 +189,9 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         dataQueue.async {
             do {
-                let repo = AlbumRepository(db: self.dbManager.dbPool)
-                if let result = try repo.getWithSongs(id) {
-                    var dict = result.album.toDictionary().compactMapValues { $0 }
-                    dict["song"] = result.songs.map { $0.toDictionary().compactMapValues { $0 } }
+                if let result = try self.libraryService.album(id: id) {
+                    var dict = Self.dictionary(result.album)
+                    dict["song"] = result.songs.map(Self.dictionary)
                     call.resolve(dict)
                 } else {
                     call.resolve([:])
@@ -205,7 +205,7 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func getSongs(_ call: CAPPluginCall) {
         let limit = call.getInt("limit") ?? 100
         let offset = call.getInt("offset") ?? 0
-        let filter = SongQueryFilter(
+        let filter = LibrarySongFilter(
             search: call.getString("search"),
             albumId: call.getString("albumId"),
             artistId: call.getString("artistId"),
@@ -217,12 +217,15 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
 
         dataQueue.async {
             do {
-                let repo = SongRepository(db: self.dbManager.dbPool)
-                let (items, total) = try repo.getAll(limit: limit, offset: offset, filter: filter)
+                let page = try self.libraryService.songs(
+                    limit: limit,
+                    offset: offset,
+                    filter: filter
+                )
                 call.resolve([
-                    "items": items.map { $0.toDictionary().compactMapValues { $0 } },
-                    "total": total,
-                    "hasMore": offset + limit < total,
+                    "items": page.items.map(Self.dictionary),
+                    "total": page.total,
+                    "hasMore": page.hasMore,
                 ])
             } catch {
                 call.reject("Failed to query songs: \(error.localizedDescription)")
@@ -236,12 +239,14 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
 
         dataQueue.async {
             do {
-                let repo = PlaylistRepository(db: self.dbManager.dbPool)
-                let (items, total) = try repo.getAll(limit: limit, offset: offset)
+                let page = try self.libraryService.playlists(
+                    limit: limit,
+                    offset: offset
+                )
                 call.resolve([
-                    "items": items.map { $0.toDictionary().compactMapValues { $0 } },
-                    "total": total,
-                    "hasMore": offset + limit < total,
+                    "items": page.items.map(Self.dictionary),
+                    "total": page.total,
+                    "hasMore": page.hasMore,
                 ])
             } catch {
                 call.reject("Failed to query playlists: \(error.localizedDescription)")
@@ -256,9 +261,13 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         dataQueue.async {
             do {
-                let repo = PlaylistRepository(db: self.dbManager.dbPool)
-                if let detail = try repo.getDetailById(id) {
-                    call.resolve(detail.toDictionary().compactMapValues { $0 })
+                if let detail = try self.libraryService.playlist(id: id) {
+                    var dictionary = Self.dictionary(detail.playlist)
+                    if let data = detail.entriesJSON.data(using: .utf8),
+                       let entries = try? JSONSerialization.jsonObject(with: data) {
+                        dictionary["entry"] = entries
+                    }
+                    call.resolve(dictionary)
                 } else {
                     call.resolve([:])
                 }
@@ -271,10 +280,9 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func getGenres(_ call: CAPPluginCall) {
         dataQueue.async {
             do {
-                let repo = GenreRepository(db: self.dbManager.dbPool)
-                let items = try repo.getAll()
+                let items = try self.libraryService.genres()
                 call.resolve([
-                    "items": items.map { $0.toDictionary().compactMapValues { $0 } },
+                    "items": items.map(Self.dictionary),
                 ])
             } catch {
                 call.reject("Failed to query genres: \(error.localizedDescription)")
@@ -291,31 +299,49 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
             do {
                 switch type {
                 case "artists":
-                    let repo = ArtistRepository(db: self.dbManager.dbPool)
-                    let filter = ArtistQueryFilter(starredOnly: true, sortBy: "starredAt", sortOrder: "desc")
-                    let (items, total) = try repo.getAll(limit: limit, offset: offset, filter: filter)
+                    let page = try self.libraryService.artists(
+                        limit: limit,
+                        offset: offset,
+                        filter: LibraryArtistFilter(
+                            starredOnly: true,
+                            sortBy: "starredAt",
+                            sortOrder: "desc"
+                        )
+                    )
                     call.resolve([
-                        "items": items.map { $0.toDictionary().compactMapValues { $0 } },
-                        "total": total,
-                        "hasMore": offset + limit < total,
+                        "items": page.items.map(Self.dictionary),
+                        "total": page.total,
+                        "hasMore": page.hasMore,
                     ])
                 case "albums":
-                    let repo = AlbumRepository(db: self.dbManager.dbPool)
-                    let filter = AlbumQueryFilter(starredOnly: true, sortBy: "starredAt", sortOrder: "desc")
-                    let (items, total) = try repo.getAll(limit: limit, offset: offset, filter: filter)
+                    let page = try self.libraryService.albums(
+                        limit: limit,
+                        offset: offset,
+                        filter: LibraryAlbumFilter(
+                            starredOnly: true,
+                            sortBy: "starredAt",
+                            sortOrder: "desc"
+                        )
+                    )
                     call.resolve([
-                        "items": items.map { $0.toDictionary().compactMapValues { $0 } },
-                        "total": total,
-                        "hasMore": offset + limit < total,
+                        "items": page.items.map(Self.dictionary),
+                        "total": page.total,
+                        "hasMore": page.hasMore,
                     ])
                 default:
-                    let repo = SongRepository(db: self.dbManager.dbPool)
-                    let filter = SongQueryFilter(starredOnly: true, sortBy: "starredAt", sortOrder: "desc")
-                    let (items, total) = try repo.getAll(limit: limit, offset: offset, filter: filter)
+                    let page = try self.libraryService.songs(
+                        limit: limit,
+                        offset: offset,
+                        filter: LibrarySongFilter(
+                            starredOnly: true,
+                            sortBy: "starredAt",
+                            sortOrder: "desc"
+                        )
+                    )
                     call.resolve([
-                        "items": items.map { $0.toDictionary().compactMapValues { $0 } },
-                        "total": total,
-                        "hasMore": offset + limit < total,
+                        "items": page.items.map(Self.dictionary),
+                        "total": page.total,
+                        "hasMore": page.hasMore,
                     ])
                 }
             } catch {
@@ -334,44 +360,18 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
         let albumCount = call.getInt("albumCount") ?? 20
         let songCount = call.getInt("songCount") ?? 20
 
-        guard let artistCondition = SearchHelper.buildCondition(query: query, columns: ["name"]),
-              let albumCondition = SearchHelper.buildCondition(query: query, columns: ["name", "artist"]),
-              let songCondition = SearchHelper.buildCondition(query: query, columns: ["title", "artist", "album"])
-        else {
-            call.resolve(["artists": [], "albums": [], "songs": []])
-            return
-        }
-
         dataQueue.async {
             do {
-                let artists: [[String: Any]] = try self.dbManager.dbPool.read { db in
-                    try ArtistRecord
-                        .filter(artistCondition)
-                        .limit(artistCount)
-                        .fetchAll(db)
-                        .map { $0.toDictionary().compactMapValues { $0 } }
-                }
-
-                let albums: [[String: Any]] = try self.dbManager.dbPool.read { db in
-                    try AlbumRecord
-                        .filter(albumCondition)
-                        .limit(albumCount)
-                        .fetchAll(db)
-                        .map { $0.toDictionary().compactMapValues { $0 } }
-                }
-
-                let songs: [[String: Any]] = try self.dbManager.dbPool.read { db in
-                    try SongRecord
-                        .filter(songCondition)
-                        .limit(songCount)
-                        .fetchAll(db)
-                        .map { $0.toDictionary().compactMapValues { $0 } }
-                }
-
+                let result = try self.libraryService.search(
+                    query: query,
+                    artistCount: artistCount,
+                    albumCount: albumCount,
+                    songCount: songCount
+                )
                 call.resolve([
-                    "artists": artists,
-                    "albums": albums,
-                    "songs": songs,
+                    "artists": result.artists.map(Self.dictionary),
+                    "albums": result.albums.map(Self.dictionary),
+                    "songs": result.songs.map(Self.dictionary),
                 ])
             } catch {
                 call.reject("Failed to search: \(error.localizedDescription)")
@@ -386,10 +386,8 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         dataQueue.async {
             do {
-                let repo = LyricsRepository(db: self.dbManager.dbPool)
-                if let lyrics = try repo.getBySongId(songId) {
-                    try? repo.updateAccessTime(songId: songId)
-                    call.resolve(lyrics.toDictionary().compactMapValues { $0 })
+                if let lyrics = try self.libraryService.lyrics(songId: songId) {
+                    call.resolve(Self.dictionary(lyrics))
                 } else {
                     call.resolve([:])
                 }
@@ -406,18 +404,13 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
         let synced = call.getBool("synced") ?? false
-        let now = Int(Date().timeIntervalSince1970 * 1000)
-
         dataQueue.async {
             do {
-                let repo = LyricsRepository(db: self.dbManager.dbPool)
-                try repo.upsert(LyricsRecord(
+                try self.libraryService.storeLyrics(
                     songId: songId,
                     content: content,
-                    synced: synced,
-                    cachedAt: now,
-                    lastAccessedAt: now
-                ))
+                    synced: synced
+                )
                 call.resolve()
             } catch {
                 call.reject("Failed to store lyrics: \(error.localizedDescription)")
@@ -428,8 +421,7 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func getCacheStats(_ call: CAPPluginCall) {
         dataQueue.async {
             do {
-                let repo = CacheMetaRepository(db: self.dbManager.dbPool)
-                let stats = try repo.getStats()
+                let stats = try self.libraryService.cacheStats()
                 call.resolve([
                     "totalItems": stats.totalItems,
                     "totalSizeBytes": stats.totalSizeBytes,
@@ -444,24 +436,17 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func isDataAvailableOffline(_ call: CAPPluginCall) {
         dataQueue.async {
-            let lastSynced = try? SyncStateRepository(db: self.dbManager.dbPool).getFullSyncTimestamp()
+            let availability = self.libraryService.availability()
             call.resolve([
-                "available": lastSynced != nil,
-                "lastSyncedAt": lastSynced as Any,
+                "available": availability.available,
+                "lastSyncedAt": availability.lastSyncedAt as Any,
             ])
         }
     }
 
     // MARK: - Cover Image Cache
 
-    private func ensureInitialized() {
-        if dbManager == nil {
-            dbManager = DatabaseManager.shared
-        }
-    }
-
     @objc func storeCoverImage(_ call: CAPPluginCall) {
-        ensureInitialized()
         guard let coverArtId = call.getString("coverArtId"), !coverArtId.isEmpty else {
             call.reject("Missing coverArtId")
             return
@@ -479,23 +464,14 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
                     call.reject("Invalid base64 data")
                     return
                 }
-                let manager = ImageCacheManager(db: self.dbManager.dbPool)
-                let fileURL = try manager.storeCoverImage(
-                    coverArtId: coverArtId,
+                let file = try self.libraryService.storeCover(
+                    id: coverArtId,
                     data: data,
                     contentType: contentType,
-                    coverSize: coverSize
+                    size: coverSize
                 )
                 DispatchQueue.main.async {
-                    call.resolve([
-                        "file": [
-                            "coverArtId": coverArtId,
-                            "uri": fileURL.absoluteString,
-                            "contentType": contentType,
-                            "sizeBytes": data.count,
-                            "coverSize": coverSize,
-                        ] as [String: Any],
-                    ])
+                    call.resolve(["file": Self.fileDictionary(file)])
                 }
             } catch {
                 DispatchQueue.main.async {
@@ -506,46 +482,38 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func resolveCoverImage(_ call: CAPPluginCall) {
-        ensureInitialized()
         guard let coverArtId = call.getString("coverArtId"), !coverArtId.isEmpty else {
             call.reject("Missing coverArtId")
             return
         }
 
         DispatchQueue.global(qos: .utility).async {
-            let manager = ImageCacheManager(db: self.dbManager.dbPool)
-            guard let fileURL = manager.resolveCoverImage(coverArtId: coverArtId) else {
+            guard let file = self.libraryService.resolveCover(
+                id: coverArtId,
+                requestedSize: ""
+            ) else {
                 DispatchQueue.main.async {
                     call.resolve(["file": NSNull()])
                 }
                 return
             }
 
-            let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
-            let sizeBytes = (attrs?[.size] as? NSNumber)?.intValue
-
             DispatchQueue.main.async {
-                call.resolve([
-                    "file": [
-                        "coverArtId": coverArtId,
-                        "uri": fileURL.absoluteString,
-                        "sizeBytes": sizeBytes as Any,
-                    ] as [String: Any],
-                ])
+                var dictionary = Self.fileDictionary(file)
+                dictionary.removeValue(forKey: "coverSize")
+                call.resolve(["file": dictionary])
             }
         }
     }
 
     @objc func getCoverImageSize(_ call: CAPPluginCall) {
-        ensureInitialized()
         guard let coverArtId = call.getString("coverArtId"), !coverArtId.isEmpty else {
             call.reject("Missing coverArtId")
             return
         }
 
         DispatchQueue.global(qos: .utility).async {
-            let manager = ImageCacheManager(db: self.dbManager.dbPool)
-            let result = manager.getCoverImageSize(coverArtId: coverArtId)
+            let result = self.libraryService.coverSize(id: coverArtId)
             DispatchQueue.main.async {
                 call.resolve([
                     "sizeBytes": result.map { NSNumber(value: $0.sizeBytes) } ?? NSNull(),
@@ -556,7 +524,6 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func deleteCoverImage(_ call: CAPPluginCall) {
-        ensureInitialized()
         guard let coverArtId = call.getString("coverArtId"), !coverArtId.isEmpty else {
             call.reject("Missing coverArtId")
             return
@@ -564,8 +531,7 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
 
         DispatchQueue.global(qos: .utility).async {
             do {
-                let manager = ImageCacheManager(db: self.dbManager.dbPool)
-                let deleted = try manager.deleteCoverImage(coverArtId: coverArtId)
+                let deleted = try self.libraryService.deleteCover(id: coverArtId)
                 DispatchQueue.main.async {
                     call.resolve(["deleted": deleted])
                 }
@@ -578,11 +544,9 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func clearCoverImages(_ call: CAPPluginCall) {
-        ensureInitialized()
         DispatchQueue.global(qos: .utility).async {
             do {
-                let manager = ImageCacheManager(db: self.dbManager.dbPool)
-                let deletedCount = try manager.clearCoverImages()
+                let deletedCount = try self.libraryService.clearCovers()
                 DispatchQueue.main.async {
                     call.resolve(["deletedCount": deletedCount])
                 }
@@ -595,7 +559,6 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func downloadAvatar(_ call: CAPPluginCall) {
-        ensureInitialized()
         guard let username = call.getString("username"), !username.isEmpty else {
             call.reject("Missing username")
             return
@@ -604,18 +567,11 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
 
         Task {
             do {
-                let manager = ImageCacheManager(db: self.dbManager.dbPool)
-                let fileURL = try await manager.downloadAvatar(username: username, size: size)
-                let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
-                let sizeBytes = (attrs?[.size] as? NSNumber)?.intValue
-                call.resolve([
-                    "file": [
-                        "coverArtId": username,
-                        "uri": fileURL.absoluteString,
-                        "sizeBytes": sizeBytes as Any,
-                        "coverSize": size,
-                    ] as [String: Any],
-                ])
+                let file = try await self.libraryService.downloadAvatar(
+                    username: username,
+                    size: size
+                )
+                call.resolve(["file": Self.fileDictionary(file)])
             } catch {
                 call.reject("Failed to download avatar: \(error.localizedDescription)")
             }
@@ -623,7 +579,6 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func downloadCoverImage(_ call: CAPPluginCall) {
-        ensureInitialized()
         guard let coverArtId = call.getString("coverArtId"), !coverArtId.isEmpty else {
             call.reject("Missing coverArtId")
             return
@@ -632,21 +587,33 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
 
         Task {
             do {
-                let manager = ImageCacheManager(db: self.dbManager.dbPool)
-                let fileURL = try await manager.downloadCoverImage(coverArtId: coverArtId, size: size)
-                let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
-                let sizeBytes = (attrs?[.size] as? NSNumber)?.intValue
-                call.resolve([
-                    "file": [
-                        "coverArtId": coverArtId,
-                        "uri": fileURL.absoluteString,
-                        "sizeBytes": sizeBytes as Any,
-                        "coverSize": size,
-                    ] as [String: Any],
-                ])
+                let file = try await self.libraryService.downloadCover(
+                    id: coverArtId,
+                    size: size
+                )
+                call.resolve(["file": Self.fileDictionary(file)])
             } catch {
                 call.reject("Failed to download cover image: \(error.localizedDescription)")
             }
         }
+    }
+
+    private static func dictionary<T: Encodable>(_ value: T) -> [String: Any] {
+        guard let data = try? JSONEncoder().encode(value),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let dictionary = object as? [String: Any] else {
+            return [:]
+        }
+        return dictionary
+    }
+
+    private static func fileDictionary(_ file: LibraryCachedImage) -> [String: Any] {
+        [
+            "coverArtId": file.id,
+            "uri": file.uri,
+            "contentType": file.contentType as Any,
+            "sizeBytes": file.sizeBytes as Any,
+            "coverSize": file.requestedSize,
+        ]
     }
 }
