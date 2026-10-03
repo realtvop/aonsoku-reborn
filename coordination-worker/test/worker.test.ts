@@ -436,6 +436,78 @@ describe("Workers realtime protocol", () => {
     right.send({ type: "heartbeat" });
     expect((await right.next("heartbeat_ack")).serverTime).toBeTypeOf("number");
   });
+  it("keeps a returned session writable after consuming its handoff grant", async () => {
+    const a = await register("roundtrip");
+    const b = await register("roundtrip");
+    const left = await connect(a);
+    const right = await connect(b);
+    const s = snapshot();
+    left.send({
+      type: "snapshot",
+      sessionId: s.sessionId,
+      generation: 1,
+      snapshotRevision: 1,
+      snapshot: s,
+    });
+    await right.next("snapshot_projection");
+    let generation = 1;
+    for (const [source, target, device] of [
+      [left, right, a],
+      [right, left, b],
+      [left, right, a],
+    ] as const) {
+      target.send({
+        type: "handoff_candidate_request",
+        sourceDeviceId: device.deviceId,
+        expectedGeneration: generation,
+        expectedSnapshotRevision: generation === 1 ? 1 : 2,
+      });
+      const candidate = await target.next("handoff_candidate");
+      if (candidate.type !== "handoff_candidate") throw new Error();
+      target.send({
+        type: "target_ready",
+        transactionId: candidate.transactionId,
+        sourceDeviceId: device.deviceId,
+        sessionId: s.sessionId,
+        generation,
+        snapshotRevision: generation === 1 ? 1 : 2,
+      });
+      await source.next("prepare_relinquish");
+      source.send({
+        type: "relinquish_ack",
+        transactionId: candidate.transactionId,
+        snapshot: s,
+      });
+      generation++;
+      expect(await target.next("handoff_committed")).toMatchObject({
+        newGeneration: generation,
+      });
+      await source.next("session_superseded");
+      for (const snapshotRevision of [1, 2]) {
+        target.send({
+          type: "snapshot",
+          sessionId: s.sessionId,
+          generation,
+          snapshotRevision,
+          snapshot: s,
+        });
+        expect(await source.next("snapshot_projection")).toMatchObject({
+          generation,
+          snapshotRevision,
+        });
+        if (snapshotRevision === 1) await hibernate(a.accountId);
+      }
+      source.send({
+        type: "snapshot",
+        sessionId: s.sessionId,
+        generation: generation - 1,
+        snapshotRevision: 3,
+        snapshot: s,
+      });
+      await source.next("session_superseded");
+    }
+  });
+
   it("commits online handoff once and rejects spoofed relinquish acknowledgements", async () => {
     const a = await register("handoff");
     const b = await register("handoff");
