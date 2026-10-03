@@ -91,11 +91,13 @@ export class LibMpvAudioEngine implements DesktopAudioEngine {
 
     await this.#setProperty(player, "pause", this.#isPaused);
     await this.updateMetadata(options.metadata ?? {});
-    await this.#command(player, ["loadfile", options.source.target, "replace"]);
-
-    if (this.#currentTime > 0) {
-      await this.seek(this.#currentTime);
-    }
+    // loadfile returns before the new file opens. An immediate seek can fail
+    // with no loaded file or seek the old source during replacement.
+    const loadCommand = ["loadfile", options.source.target, "replace"];
+    if (this.#currentTime > 0)
+      loadCommand.push("-1", `start=${this.#currentTime}`);
+    await this.#command(player, loadCommand);
+    if (this.#currentTime > 0) this.#emitProgress();
   }
 
   async play(): Promise<void> {

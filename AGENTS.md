@@ -132,7 +132,9 @@ empty renderer songlist, takes the cold-start branch, sets
 `src/app/components/player/audio.tsx` skips re-issuing `load()`. The Electron
 main process restores position itself in
 `electron/main/native/audio/service.ts` `#restorePlaybackState()` (persisted via
-`playback-state.json`). Desktop writes are coordinated asynchronously outside
+`playback-state.json`). libmpv receives restored/handoff progress through the
+per-file `loadfile` start option, because its asynchronous load command returns
+before the new source can accept a seek. Desktop writes are coordinated asynchronously outside
 the playback-command FIFO: full-state changes use a 500ms debounce, progress
 uses a 5s/meaningful-change throttle, and the store serializes atomic temporary
 file replacements so older writes cannot overwrite newer state. Clear cancels

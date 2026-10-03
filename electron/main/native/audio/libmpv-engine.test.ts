@@ -103,8 +103,15 @@ describe("LibMpvAudioEngine", () => {
       ["force-media-title", "Track"],
     ]);
     expect(player.command.mock.calls).toEqual([
-      [["loadfile", "https://server/rest/stream?id=song-1", "replace"]],
-      [["seek", "12", "absolute", "exact"]],
+      [
+        [
+          "loadfile",
+          "https://server/rest/stream?id=song-1",
+          "replace",
+          "-1",
+          "start=12",
+        ],
+      ],
     ]);
     expect(events).toEqual([
       { type: "playbackStateChanged", state: "loading" },
@@ -115,6 +122,39 @@ describe("LibMpvAudioEngine", () => {
         duration: 123,
         bufferedTime: 12,
       },
+    ]);
+  });
+
+  it("restores paused progress before a newly opened source is seekable", async () => {
+    const { engine, player } = createHarness();
+    let loaded = false;
+    player.command.mockImplementation(async (args) => {
+      if (args[0] === "seek" && !loaded) throw new Error("no file loaded");
+    });
+    await engine.load({
+      source: {
+        kind: "stream",
+        target: "https://server/rest/stream?id=handoff",
+      },
+      autoplay: false,
+      startTime: 61.8,
+    });
+    expect(player.command).toHaveBeenCalledWith([
+      "loadfile",
+      "https://server/rest/stream?id=handoff",
+      "replace",
+      "-1",
+      "start=61.8",
+    ]);
+    expect(player.setProperty).toHaveBeenCalledWith("pause", true);
+    loaded = true;
+    player.emit({ type: "file-loaded" });
+    await engine.seek(80);
+    expect(player.command).toHaveBeenLastCalledWith([
+      "seek",
+      "80",
+      "absolute",
+      "exact",
     ]);
   });
 
