@@ -791,8 +791,9 @@ export function CoordinationObserver() {
     const original = manager.callbacks.onHandoffCommitted;
     manager.callbacks.onHandoffCommitted = (
       snapshot: PlaybackSnapshot,
-      _newGeneration: number,
+      newGeneration: number,
     ) => {
+      original(snapshot, newGeneration);
       if (nativeCoordinationAvailable) {
         getNativeQueueController()?.syncFromNative(true);
         return;

@@ -1042,13 +1042,23 @@ export class NativeQueueController implements QueueController {
 
         if (isRestoredColdStart) {
           s.playerState.mediaType = "song";
+          const sourceSongs = nativeState.originalContextSongs.length
+            ? nativeState.originalContextSongs
+            : nativeState.contextQueue.songs;
+          const contextSong =
+            nativeState.contextQueue.songs[
+              nativeState.contextQueue.currentIndex
+            ];
           s.songlist.sourceQueue = {
-            songs: nativeState.sourceQueue.songs.map(nativeQueueSongToISong),
-            currentIndex: nativeState.sourceQueue.currentIndex,
-            sourceId: nativeSourceIdToQueueSourceId(
-              nativeState.sourceQueue.sourceId,
+            songs: sourceSongs.map(nativeQueueSongToISong),
+            currentIndex: Math.max(
+              0,
+              sourceSongs.findIndex((song) => song.id === contextSong?.id),
             ),
-            sourceName: nativeState.sourceQueue.sourceName,
+            sourceId: nativeSourceIdToQueueSourceId(
+              nativeState.contextQueue.sourceId,
+            ),
+            sourceName: nativeState.contextQueue.sourceName,
           };
           s.songlist.contextQueue.sourceId = nativeSourceIdToQueueSourceId(
             nativeState.contextQueue.sourceId,

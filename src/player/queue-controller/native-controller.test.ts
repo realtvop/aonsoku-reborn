@@ -46,12 +46,6 @@ const mocks = vi.hoisted(() => {
     playAtIndex: vi.fn(async () => {}),
     markAsShuffled: vi.fn(async () => {}),
     getFullState: vi.fn(async () => ({
-      sourceQueue: {
-        songs: [],
-        currentIndex: 0,
-        sourceId: null,
-        sourceName: null,
-      },
       contextQueue: {
         songs: [],
         currentIndex: 0,
@@ -455,12 +449,7 @@ describe("NativeQueueController handoff preparation", () => {
         sourceId: null,
         sourceName: null,
       },
-      sourceQueue: {
-        songs: [contextSong],
-        currentIndex: 0,
-        sourceId: null,
-        sourceName: null,
-      },
+      originalContextSongs: [contextSong],
       userQueue: [userSong],
       playedUserQueueHistory: [contextSong],
       currentSongId: userSong.id,
@@ -474,6 +463,9 @@ describe("NativeQueueController handoff preparation", () => {
     await controller.syncFromNative(true);
 
     expect(mocks.storeState.songlist.contextQueue.songs).toEqual([
+      expect.objectContaining({ id: contextSong.id }),
+    ]);
+    expect(mocks.storeState.songlist.sourceQueue.songs).toEqual([
       expect.objectContaining({ id: contextSong.id }),
     ]);
     expect(mocks.storeState.songlist.userQueue.songs).toEqual([
