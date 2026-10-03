@@ -7,12 +7,18 @@ import type {
   CoordinationTokenOptions,
 } from "@aonsoku/capacitor-native/coordination";
 import WebSocket from "ws";
+import type { Envelope } from "../../../../src/coordination/types";
 import { AonsokuStore } from "../../core/store";
+import {
+  DesktopCoordinationPlayback,
+  type DesktopCoordinationPlaybackState,
+} from "./playback";
 
 interface CoordinationStore {
   tokens?: CoordinationTokenOptions;
   config?: CoordinationConfigOptions;
   lastSeq?: number;
+  playback?: DesktopCoordinationPlaybackState;
 }
 
 type Emit = (event: string, payload: unknown) => void;
@@ -32,8 +38,24 @@ export class DesktopNativeCoordinationService {
   private generationByDevice = new Map<string, number>();
   private revisionByDevice = new Map<string, number>();
   private activeControlTarget: string | null = null;
+  private readonly playback: DesktopCoordinationPlayback | null;
 
-  constructor(private readonly emit: Emit) {}
+  constructor(
+    private readonly emit: Emit,
+    playbackOptions?: Omit<
+      ConstructorParameters<typeof DesktopCoordinationPlayback>[0],
+      "send" | "loadState" | "saveState"
+    >,
+  ) {
+    this.playback = playbackOptions
+      ? new DesktopCoordinationPlayback({
+          ...playbackOptions,
+          send: (message) => this.send(message),
+          loadState: () => this.store.get("playback"),
+          saveState: (state) => this.store.set("playback", state),
+        })
+      : null;
+  }
 
   storeTokens(options: CoordinationTokenOptions): void {
     this.store.set("tokens", options);
@@ -73,6 +95,10 @@ export class DesktopNativeCoordinationService {
       const ws = new WebSocket(url);
       this.ws = ws;
       ws.once("open", () => {
+        if (this.ws !== ws) {
+          resolve();
+          return;
+        }
         this.setState("connected", options.deviceId);
         this.send({
           version: options.protocolVersion,
@@ -89,12 +115,16 @@ export class DesktopNativeCoordinationService {
         }, 15_000);
         resolve();
       });
-      ws.on("message", (data) => this.handleMessage(data.toString()));
+      ws.on("message", (data) => {
+        if (this.ws === ws) this.handleMessage(data.toString());
+      });
       ws.once("error", (error) => {
-        this.setState("error", options.deviceId);
+        if (this.ws === ws) this.setState("error", options.deviceId);
         reject(error);
       });
       ws.on("close", () => {
+        if (this.ws !== ws) return;
+        this.playback?.stop();
         this.stopHeartbeat();
         if (this.ws === ws) this.ws = null;
         this.setState("reconnecting", options.deviceId);
@@ -104,6 +134,7 @@ export class DesktopNativeCoordinationService {
   }
 
   async disconnect(): Promise<void> {
+    this.playback?.stop();
     this.stopHeartbeat();
     const ws = this.ws;
     this.ws = null;
@@ -112,6 +143,11 @@ export class DesktopNativeCoordinationService {
       ws.close();
     }
     this.setState("disconnected", null);
+  }
+
+  async destroy(): Promise<void> {
+    await this.disconnect();
+    this.playback?.destroy();
   }
 
   getState() {
@@ -223,6 +259,7 @@ export class DesktopNativeCoordinationService {
     targetDeviceId: string;
   }): void {
     this.activeControlTarget = targetDeviceId;
+    this.playback?.setControlling(true);
     this.send({
       version: 1,
       messageId: randomUUID(),
@@ -233,6 +270,7 @@ export class DesktopNativeCoordinationService {
 
   sendControlSessionEnd(): void {
     this.activeControlTarget = null;
+    this.playback?.setControlling(false);
     this.send({
       version: 1,
       messageId: randomUUID(),
@@ -260,6 +298,7 @@ export class DesktopNativeCoordinationService {
     } catch {
       return;
     }
+    if (envelope.type === "welcome") this.playback?.start();
     if (typeof envelope.seq === "number")
       this.store.set("lastSeq", envelope.seq);
     if (
@@ -277,6 +316,51 @@ export class DesktopNativeCoordinationService {
         resultJson: JSON.stringify(envelope.result),
       });
       return;
+    }
+    if (
+      this.playback &&
+      [
+        "command",
+        "handoff_candidate",
+        "prepare_relinquish",
+        "handoff_committed",
+        "handoff_failed",
+        "session_superseded",
+      ].includes(String(envelope.type))
+    ) {
+      this.playback
+        .handle(envelope as unknown as Envelope)
+        .then(() => {
+          // UI completion still needs the committed event; playback has already
+          // been applied by the native owner.
+          if (envelope.type !== "command")
+            this.emit("coordinationEvent", { envelopeJson: raw });
+        })
+        .catch((error) => {
+          this.emit("coordinationEvent", {
+            envelopeJson: JSON.stringify({
+              version: 1,
+              messageId: randomUUID(),
+              type: "handoff_failed",
+              transactionId: envelope.transactionId,
+              code: "unsupported_media",
+            }),
+          });
+          console.error(
+            "Native coordination playback failed",
+            error instanceof Error ? error.message : "unknown error",
+          );
+        });
+      return;
+    }
+    if (!this.playback && envelope.type === "command") {
+      // Web Audio fallback uses the same immediate ACK behavior as wsClient.
+      this.send({
+        version: 1,
+        messageId: envelope.messageId,
+        type: "command_ack",
+        result: { status: "ok" },
+      });
     }
     this.emit("coordinationEvent", { envelopeJson: raw });
   }

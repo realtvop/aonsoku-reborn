@@ -1,10 +1,10 @@
 import {
+  Link,
   Loader2,
   MonitorSpeaker,
   RefreshCw,
   Settings,
   WifiOff,
-  Link,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -42,7 +42,7 @@ interface DevicePanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   actions: DevicePlaybackActions;
-  trigger: React.ReactNode;
+  trigger?: React.ReactNode;
 }
 
 export function DevicePanel({
@@ -80,7 +80,7 @@ export function DevicePanel({
         activeSnapPoint={activeSnapPoint}
         setActiveSnapPoint={setActiveSnapPoint}
       >
-        <DrawerTrigger asChild>{trigger}</DrawerTrigger>
+        {trigger && <DrawerTrigger asChild>{trigger}</DrawerTrigger>}
         <DrawerContent className="h-[calc(100dvh-env(safe-area-inset-top)-12px)] rounded-t-[24px]">
           <DevicePanelContent
             onOpenChange={onOpenChange}
@@ -94,7 +94,7 @@ export function DevicePanel({
 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      {trigger && <PopoverTrigger asChild>{trigger}</PopoverTrigger>}
       <PopoverContent
         align="end"
         side="top"

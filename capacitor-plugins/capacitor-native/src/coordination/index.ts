@@ -1,7 +1,7 @@
 import { registerPlugin } from "@capacitor/core";
 import {
-  COORDINATION_PLUGIN_NAME,
   type AonsokuNativeCoordinationPlugin,
+  COORDINATION_PLUGIN_NAME,
 } from "./definitions";
 import { AonsokuNativeCoordinationWeb } from "./web";
 
@@ -14,14 +14,14 @@ export { AonsokuNativeCoordinationWeb } from "./web";
 export { COORDINATION_PLUGIN_NAME };
 export type {
   AonsokuNativeCoordinationPlugin,
-  CoordinationConnectOptions,
-  CoordinationStateResult,
-  CoordinationSnapshotOptions,
+  CoordinationAckEvent,
   CoordinationCommandOptions,
-  CoordinationHandoffOptions,
-  CoordinationTokenOptions,
   CoordinationConfigOptions,
+  CoordinationConnectOptions,
+  CoordinationHandoffOptions,
   CoordinationHttpRequestOptions,
   CoordinationHttpResponse,
-  CoordinationAckEvent,
-};
+  CoordinationSnapshotOptions,
+  CoordinationStateResult,
+  CoordinationTokenOptions,
+} from "./definitions";

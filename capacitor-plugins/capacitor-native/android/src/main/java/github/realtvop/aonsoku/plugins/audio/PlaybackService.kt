@@ -28,6 +28,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.SilenceMediaSource
 import android.os.Bundle
 import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaSession
@@ -75,6 +76,7 @@ class PlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
     private var player: Player? = null
+    private var basePlayer: ExoPlayer? = null
     private var cachedArtworkBitmap: Bitmap? = null
     private var artworkLoadRevision = 0
     private var isBoundToActivity = false
@@ -407,6 +409,7 @@ class PlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
+        this.basePlayer = basePlayer
 
         // Force skip commands so notification action buttons are always visible.
         // ExoPlayer only advertises COMMAND_SEEK_TO_NEXT / _PREVIOUS when the
@@ -1154,6 +1157,7 @@ class PlaybackService : MediaSessionService() {
             mediaSession = null
         }
         player = null
+        basePlayer = null
         super.onDestroy()
     }
 
@@ -1361,6 +1365,20 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    internal fun restoreHandoffState(state: PlaybackPersistState, autoplay: Boolean) {
+        handleScrobbleSongEnded()
+        isQueueEngineActive = true
+        queueEngine.restoreState(state)
+        player?.shuffleModeEnabled = state.isShuffleActive
+        val song = requireNotNull(queueEngine.currentSong)
+        savedRestoreTime = state.currentTime
+        loadSong(song, autoplay, state.currentTime)
+        persistence.markStateDirty()
+        emitQueueContentsChanged("queue-edit")
+        emitQueueStateChanged(queueEngine.currentIndex, song.id, "skip", state.isInUserQueue)
+        handleScrobbleSongStarted(song.id, song.duration)
+    }
+
     fun updateContextQueue(songs: List<QueueSong>, currentIndex: Int) {
         queueEngine.updateContextQueue(songs, currentIndex)
         persistence.markStateDirty()
@@ -1471,6 +1489,7 @@ class PlaybackService : MediaSessionService() {
         mediaSession?.setCustomLayout(getCustomLayoutButtons())
     }
 
+    @OptIn(UnstableApi::class)
     private fun projectRemoteMediaItemToPlayer() {
         val currentPlayer = player ?: return
         val remoteItem = remotePlaybackMediaItem ?: return
@@ -1485,7 +1504,14 @@ class PlaybackService : MediaSessionService() {
                     .build()
             )
         } else {
-            currentPlayer.setMediaItem(remoteItem)
+            // A metadata-only MediaItem has no localConfiguration and crashes
+            // DefaultMediaSourceFactory. Supply a local silent timeline for an
+            // empty player; the forwarding player exposes the remote state.
+            basePlayer?.setMediaSource(
+                SilenceMediaSource.Factory()
+                    .setDurationUs(1_000_000L)
+                    .createMediaSource()
+            )
         }
     }
 

@@ -2,23 +2,23 @@ import { Loader2, Pause, Play, SkipForward } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "react-toastify";
-import { PlayerDeviceButton } from "@/app/components/remote-control/device-button";
-import { DevicePanel } from "@/app/components/remote-control/device-panel";
-import { useDevicePlaybackActions } from "@/app/components/remote-control/use-device-playback-actions";
-import { HandoffConfirmationDialog } from "@/app/components/remote-control/handoff-confirmation-dialog";
-import { useRemotePlaybackProjection } from "@/app/components/remote-control/use-remote-playback-projection";
 import { MiniPlayerButton } from "@/app/components/mini-player/button";
 import { RadioInfo } from "@/app/components/player/radio-info";
 import { TrackInfo } from "@/app/components/player/track-info";
+import { PlayerDeviceButton } from "@/app/components/remote-control/device-button";
+import { DevicePanel } from "@/app/components/remote-control/device-panel";
+import { HandoffConfirmationDialog } from "@/app/components/remote-control/handoff-confirmation-dialog";
+import { useDevicePlaybackActions } from "@/app/components/remote-control/use-device-playback-actions";
+import { useRemotePlaybackProjection } from "@/app/components/remote-control/use-remote-playback-projection";
 import { Button } from "@/app/components/ui/button";
 import { useAudioSource } from "@/app/hooks/use-audio-source";
 import { useCoordinationReconnectOnOpen } from "@/app/hooks/use-coordination-reconnect-on-open";
+import { useNativeForegroundSync } from "@/app/hooks/use-native-foreground-sync";
 import { usePlayHistory } from "@/app/hooks/use-play-history";
 import { usePlayerBreakpoint } from "@/app/hooks/use-player-breakpoint";
 import { usePreloadAudio } from "@/app/hooks/use-preload-audio";
 import { useScrobble } from "@/app/hooks/use-scrobble";
 import { useSleepTimer } from "@/app/hooks/use-sleep-timer";
-import { useNativeForegroundSync } from "@/app/hooks/use-native-foreground-sync";
 import {
   getAudioDurationSeconds,
   getAudioProgressSnapshot,
@@ -26,6 +26,11 @@ import {
   type PlaybackMetadata,
 } from "@/player/playback";
 import { openFullscreenPlayerWithHistory } from "@/routes/fullscreenRouter";
+import {
+  type AudioSourceDescriptor,
+  audioSourceResolver,
+  getAudioSourceUrl,
+} from "@/service/cache";
 import {
   useIsRemoteControlActive,
   usePlayerActions,
@@ -41,17 +46,12 @@ import {
 } from "@/store/player.store";
 import { LoopState } from "@/types/playerContext";
 import { hasMiniPlayerSupport } from "@/utils/browser";
-import { logger } from "@/utils/logger";
 import { getCoverArtUrlFromSongPreference } from "@/utils/coverArt";
+import { logger } from "@/utils/logger";
 import {
   type ReplayGainParams,
   resolveReplayGainParams,
 } from "@/utils/replayGain";
-import {
-  audioSourceResolver,
-  getAudioSourceUrl,
-  type AudioSourceDescriptor,
-} from "@/service/cache";
 import { AudioPlayer } from "./audio";
 import { PlayerClearQueueButton } from "./clear-queue-button";
 import { PlayerControls } from "./controls";
@@ -75,6 +75,10 @@ const MemoAudioPlayer = memo(AudioPlayer);
 
 export function Player() {
   const { t } = useTranslation();
+  const isMobile = usePlayerBreakpoint();
+  const fullscreenPlayerOpen = usePlayerStore(
+    (state) => state.playerState.fullscreenPlayerOpen,
+  );
   const [panelOpen, setPanelOpen] = useState(false);
   const reconnectCoordinationOnOpen = useCoordinationReconnectOnOpen();
   const deviceActions = useDevicePlaybackActions();
@@ -88,15 +92,20 @@ export function Player() {
   );
 
   useEffect(() => {
-    const handleOpen = () => handleDevicePanelOpenChange(true);
+    const handleOpen = () => {
+      if (!isMobile || !fullscreenPlayerOpen) handleDevicePanelOpenChange(true);
+    };
     window.addEventListener("open-device-panel", handleOpen);
     return () => window.removeEventListener("open-device-panel", handleOpen);
-  }, [handleDevicePanelOpenChange]);
+  }, [handleDevicePanelOpenChange, isMobile, fullscreenPlayerOpen]);
+
+  useEffect(() => {
+    if (fullscreenPlayerOpen) setPanelOpen(false);
+  }, [fullscreenPlayerOpen]);
 
   const radioLabel = t("radios.label");
   const audioRef = useRef<HTMLAudioElement>(null);
   const radioRef = useRef<HTMLAudioElement>(null);
-  const isMobile = usePlayerBreakpoint();
   const {
     setAudioPlayerRef,
     setRadioPlayerRef,
@@ -515,6 +524,14 @@ export function Player() {
           onPlaying={handleAudioPlaying}
           onCanPlay={handleAudioCanPlay}
           data-testid="player-radio-audio"
+        />
+      )}
+
+      {isMobile && !fullscreenPlayerOpen && (
+        <DevicePanel
+          open={panelOpen}
+          onOpenChange={handleDevicePanelOpenChange}
+          actions={deviceActions}
         />
       )}
 

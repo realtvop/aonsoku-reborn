@@ -250,9 +250,30 @@ daily via GitHub's merge-upstream API when repository variable
 The client-side orchestration lives in `src/coordination/`
 with React state in `src/coordination/store.ts`.
 
+Mobile handoff restores context/user queues and previous user songs without
+reshuffling the transferred order. Candidate preparation suppresses snapshots;
+failure or disconnect restores the preceding local queue. Native commit events
+reach the UI after queue preparation completes. The compact mobile player owns
+the device drawer outside fullscreen, so home-page device links also work before
+local playback begins; fullscreen owns its own drawer while open.
+
 - Web uses the TypeScript WebSocket client (`src/coordination/wsClient.ts`).
 - Electron, iOS, and Android use `src/native/coordination/facade.ts` and their
   runtime-native coordination implementations.
+- Electron native playback coordination is executed by
+  `electron/main/native/coordination/playback.ts`: it publishes native queue
+  snapshots, executes and acknowledges remote commands, prepares full queues
+  paused before `target_ready`, relinquishes through the audio FIFO, and adopts
+  the committed session/generation. Coordination session state is persisted in
+  the main-process coordination store. Disconnect stops publication; shutdown
+  tears down coordination before the audio service. When native playback is
+  unavailable, Electron keeps native networking but the renderer observer owns
+  Web Audio playback orchestration. Native handoff completion is forwarded to
+  the facade for UI status, without executing playback again in the renderer.
+- The native facade retains its listeners across reconnects and retries fresh
+  WebSocket tickets with exponential backoff capped at 30 seconds, including
+  when the network is unavailable before the native socket can be opened.
+  Manual disconnect cancels retries.
 - The root app mounts `CoordinationObserver`, and player/fullscreen/lyrics
   surfaces can project remote playback through
   `src/app/components/remote-control/`.

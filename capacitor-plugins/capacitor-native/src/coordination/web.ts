@@ -72,7 +72,7 @@ export class AonsokuNativeCoordinationWeb
   }
   async addListener(
     eventName: string,
-    _listenerFunc: (data: unknown) => void,
+    _listenerFunc: (data: never) => void,
   ): Promise<import("@capacitor/core").PluginListenerHandle> {
     // The web runtime uses CoordinationWsClient directly; no native events.
     return await Promise.reject(

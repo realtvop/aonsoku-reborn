@@ -1,4 +1,4 @@
-import type { NativeFullState } from "@/native/audio";
+import type { NativeFullState } from "@aonsoku/audio-contract";
 import type { PlaybackSnapshot } from "./types";
 
 export interface NativeFullStateSnapshotOptions {

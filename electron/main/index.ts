@@ -5,6 +5,7 @@ import { updateElectronApp } from "update-electron-app";
 import { createAppMenu } from "./core/menu";
 import { destroyMiniPlayerWindow } from "./mini-player";
 import { destroyDesktopNativeAudioService } from "./native/audio/ipc";
+import { destroyDesktopNativeCoordinationService } from "./native/coordination/ipc";
 import { destroyNativeDebugWindow } from "./native/debug/native-debug-window";
 import {
   registerDesktopMediaScheme,
@@ -102,7 +103,8 @@ if (!instanceLock) {
 
     destroyMiniPlayerWindow();
     destroyNativeDebugWindow();
-    Promise.resolve(destroyDesktopNativeAudioService())
+    destroyDesktopNativeCoordinationService()
+      .then(() => destroyDesktopNativeAudioService())
       .catch((error) => {
         console.error("Failed to destroy desktop native audio service.", error);
       })

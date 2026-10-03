@@ -39,6 +39,16 @@ import type {
   RefreshGenerationFn,
   SendCommandOptions,
 } from "@/coordination/wsClient";
+import { getNativeAudioPluginAvailability } from "@/native/audio/facade";
+import { getPlaybackCapabilities } from "@/utils/capabilities";
+
+export function isNativeCoordinationPlaybackOwned(): boolean {
+  return (
+    isNativeCoordinationAvailable() &&
+    getPlaybackCapabilities().supportsNativePlayback &&
+    getNativeAudioPluginAvailability().available
+  );
+}
 
 export type NativeCoordinationAvailability =
   | { available: true; plugin: AonsokuNativeCoordinationPlugin }
@@ -271,6 +281,8 @@ export class NativeCoordinationClient implements CoordinationClient {
   private reconnectHandler: (() => Promise<void>) | null = null;
   private listeners: PluginListenerHandle[] = [];
   private disposed = false;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private retryAttempt = 0;
   /// §9.2: highest server seq the client has processed. Submitted in the
   /// next `connect()` call's `lastSeq` option.
   private lastSeq: ConnectionSeq = 0;
@@ -288,6 +300,7 @@ export class NativeCoordinationClient implements CoordinationClient {
     deviceId: DeviceId | null,
     capabilities: number,
     private readonly callbacks: ConnectionCallbacks,
+    private readonly playbackOwned = true,
   ) {
     this.deviceId = deviceId;
     this.capabilities = capabilities;
@@ -330,16 +343,12 @@ export class NativeCoordinationClient implements CoordinationClient {
     if (this.state === "connecting" || this.state === "connected") return;
     this.setState("connecting");
 
-    const ticket = await this.ticketFn();
-    if (!ticket) {
-      this.setState("error");
-      this.callbacks.onError("authentication_failed", "no ws ticket available");
-      return;
-    }
-
-    await this.attachListeners();
-
     try {
+      const ticket = await this.ticketFn();
+      if (this.disposed) return;
+      if (!ticket) throw new Error("no ws ticket available");
+      await this.attachListeners();
+      if (this.disposed) return;
       await this.plugin.connect({
         wsUrl: this.urlFn(),
         ticket,
@@ -349,16 +358,19 @@ export class NativeCoordinationClient implements CoordinationClient {
         lastSeq: this.lastSeq,
       });
     } catch (err) {
-      this.setState("error");
+      if (this.disposed) return;
       this.callbacks.onError(
         "internal",
         err instanceof Error ? err.message : "native connect failed",
       );
+      this.scheduleRetry();
     }
   }
 
   disconnect(): void {
     this.disposed = true;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
     for (const handle of this.listeners) {
       handle.remove().catch(() => {});
     }
@@ -575,7 +587,7 @@ export class NativeCoordinationClient implements CoordinationClient {
         }
       },
     );
-    this.listeners.push(eventHandle);
+    if (!this.keepListener(eventHandle)) return;
 
     // §9.1 `coordinationAck` — emitted by the native plugin when a
     // `command_ack` envelope arrives, so the facade can resolve the
@@ -640,7 +652,7 @@ export class NativeCoordinationClient implements CoordinationClient {
         pending.resolve(result);
       },
     );
-    this.listeners.push(ackHandle);
+    if (!this.keepListener(ackHandle)) return;
 
     // `coordinationStateChange` — connection state updates from the native
     // layer. Forwarded through the same `ConnectionCallbacks`.
@@ -651,7 +663,7 @@ export class NativeCoordinationClient implements CoordinationClient {
         this.setState(data.state);
       },
     );
-    this.listeners.push(stateHandle);
+    if (!this.keepListener(stateHandle)) return;
 
     // `coordinationReconnectNeeded` — the native layer cannot self-reconnect
     // (single-use ticket), so it asks the WebView to fetch a fresh ticket and
@@ -659,16 +671,27 @@ export class NativeCoordinationClient implements CoordinationClient {
     const reconnectHandle = await this.plugin.addListener(
       "coordinationReconnectNeeded",
       (_data: { attempt: number }) => {
+        if (this.disposed) return;
         this.setState("reconnecting");
         if (this.reconnectHandler) {
           this.reconnectHandler().catch(() => {});
         }
       },
     );
-    this.listeners.push(reconnectHandle);
+    this.keepListener(reconnectHandle);
+  }
+
+  private keepListener(handle: PluginListenerHandle): boolean {
+    if (this.disposed) {
+      handle.remove().catch(() => {});
+      return false;
+    }
+    this.listeners.push(handle);
+    return true;
   }
 
   private handleEnvelope(env: Envelope): void {
+    if (this.disposed) return;
     // §9.2: track the incoming seq on every envelope so the next `connect()`
     // can submit `lastSeq` and the server can skip already-delivered messages.
     if (typeof env.seq === "number" && env.seq > this.lastSeq) {
@@ -710,6 +733,7 @@ export class NativeCoordinationClient implements CoordinationClient {
       case "command":
         // Playback control is native-owned on mobile. If an older native layer
         // still bridges this envelope, do not reintroduce WebView execution.
+        if (!this.playbackOwned) this.callbacks.onCommand(env);
         break;
       case "command_ack":
         // The native plugin emits `coordinationAck` separately; the envelope
@@ -717,18 +741,22 @@ export class NativeCoordinationClient implements CoordinationClient {
         break;
       case "handoff_candidate":
         // Handoff prepare is native-owned on mobile.
+        if (!this.playbackOwned) this.callbacks.onHandoffCandidate(env);
         break;
       case "prepare_relinquish":
         // Source relinquish is native-owned on mobile.
+        if (!this.playbackOwned) this.callbacks.onPrepareRelinquish(env);
         break;
       case "handoff_committed":
-        // Final handoff apply is native-owned on mobile.
+        // Native playback is already applied; UI consumers need completion.
+        this.callbacks.onHandoffCommitted(env);
         break;
       case "handoff_failed":
         this.callbacks.onHandoffFailed(env);
         break;
       case "session_superseded":
         // Playback teardown is native-owned on mobile.
+        if (!this.playbackOwned) this.callbacks.onSessionSuperseded(env);
         break;
       case "error":
         this.callbacks.onError(env.code, env.reason);
@@ -747,9 +775,28 @@ export class NativeCoordinationClient implements CoordinationClient {
   }
 
   private setState(state: ConnectionState): void {
+    if (this.disposed && state !== "disconnected") return;
+    if (state === "connected") {
+      if (this.retryTimer) clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+      this.retryAttempt = 0;
+    }
     if (this.state === state) return;
     this.state = state;
     this.callbacks.onStateChange(state);
+  }
+
+  private scheduleRetry(): void {
+    if (this.disposed || this.retryTimer) return;
+    this.setState("reconnecting");
+    const delay = Math.min(
+      30_000,
+      1000 * 2 ** Math.min(this.retryAttempt++, 5),
+    );
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      this.connect().catch(() => this.scheduleRetry());
+    }, delay);
   }
 }
 

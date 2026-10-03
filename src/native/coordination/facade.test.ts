@@ -1,13 +1,14 @@
 import type { AonsokuNativeCoordinationPlugin } from "@aonsoku/capacitor-native/coordination";
 import type { PluginListenerHandle } from "@capacitor/core";
 import { Capacitor } from "@capacitor/core";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Envelope, PlaybackSnapshot } from "@/coordination/types";
 import type { ConnectionCallbacks } from "@/coordination/wsClient";
 import {
   createNativeCoordinationFetch,
   getNativeCoordinationAvailability,
   isNativeCoordinationAvailable,
+  isNativeCoordinationPlaybackOwned,
   NativeCoordinationClient,
   NativeCoordinationTokenStore,
 } from "./facade";
@@ -39,6 +40,7 @@ const mocks = vi.hoisted(() => {
     mockIsNativePlatform: vi.fn(),
     mockGetPlatform: vi.fn(),
     mockIsPluginAvailable: vi.fn(),
+    mockNativeAudioAvailability: vi.fn().mockReturnValue({ available: true }),
   };
 });
 
@@ -53,6 +55,13 @@ vi.mock("@capacitor/core", () => ({
 vi.mock("@aonsoku/capacitor-native/coordination", () => ({
   AonsokuNativeCoordination: mocks.mockPlugin,
   COORDINATION_PLUGIN_NAME: "AonsokuNativeCoordination",
+}));
+
+vi.mock("@/native/audio/facade", () => ({
+  getNativeAudioPluginAvailability: mocks.mockNativeAudioAvailability,
+}));
+vi.mock("@/utils/capabilities", () => ({
+  getPlaybackCapabilities: () => ({ supportsNativePlayback: true }),
 }));
 
 const mockIsNativePlatform = vi.mocked(Capacitor.isNativePlatform);
@@ -115,6 +124,16 @@ describe("native coordination facade availability", () => {
     mockIsNativePlatform.mockReturnValue(false);
     mockGetPlatform.mockReturnValue("web");
     mockIsPluginAvailable.mockReturnValue(false);
+    mocks.mockNativeAudioAvailability.mockReturnValue({ available: true });
+  });
+
+  it("keeps renderer playback ownership when the Electron native handshake fails", () => {
+    vi.stubGlobal("window", { aonsokuNativeCoordination: mockPlugin });
+    mocks.mockNativeAudioAvailability.mockReturnValue({ available: false });
+    expect(isNativeCoordinationAvailable()).toBe(true);
+    expect(isNativeCoordinationPlaybackOwned()).toBe(false);
+    mocks.mockNativeAudioAvailability.mockReturnValue({ available: true });
+    expect(isNativeCoordinationPlaybackOwned()).toBe(true);
   });
 
   it("uses the Electron coordination bridge exposed by preload", () => {
@@ -327,6 +346,8 @@ describe("createNativeCoordinationFetch", () => {
 
 describe("NativeCoordinationClient", () => {
   let listeners: Record<string, ((data: unknown) => void)[]>;
+
+  afterEach(() => vi.useRealTimers());
 
   beforeEach(() => {
     for (const value of Object.values(mocks.mockPlugin)) {
@@ -564,7 +585,7 @@ describe("NativeCoordinationClient", () => {
       snapshot: snapshot("sess-2"),
     };
     emit("coordinationEvent", { envelopeJson: JSON.stringify(committedEnv) });
-    expect(cb.onHandoffCommitted).not.toHaveBeenCalled();
+    expect(cb.onHandoffCommitted).toHaveBeenCalledWith(committedEnv);
 
     const supersededEnv: Envelope = {
       version: 1,
@@ -657,23 +678,72 @@ describe("NativeCoordinationClient", () => {
     });
   });
 
-  it("surfaces error state when no ticket is available", async () => {
+  it("keeps retrying fresh tickets after a network failure", async () => {
+    vi.useFakeTimers();
     const cb = makeCallbacks();
+    const ticket = vi
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue("fresh-ticket");
     const client = new NativeCoordinationClient(
       mockPlugin,
       () => "wss://coord.example/v1/realtime",
-      async () => null,
+      ticket,
       "dev-1",
       15,
       cb,
     );
     await client.connect();
-    expect(cb.onStateChange).toHaveBeenCalledWith("error");
+    expect(cb.onStateChange).toHaveBeenCalledWith("reconnecting");
     expect(cb.onError).toHaveBeenCalledWith(
-      "authentication_failed",
+      "internal",
       "no ws ticket available",
     );
     expect(mockPlugin.connect).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(mockPlugin.connect).toHaveBeenCalledWith(
+      expect.objectContaining({ ticket: "fresh-ticket" }),
+    );
+    emit("coordinationStateChange", { state: "connected", deviceId: "dev-1" });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(ticket).toHaveBeenCalledTimes(2);
+    client.disconnect();
+  });
+
+  it("cancels offline retries on manual disconnect", async () => {
+    vi.useFakeTimers();
+    const ticket = vi.fn().mockResolvedValue(null);
+    const client = new NativeCoordinationClient(
+      mockPlugin,
+      () => "wss://coord.example",
+      ticket,
+      "dev-1",
+      15,
+      makeCallbacks(),
+    );
+    await client.connect();
+    client.disconnect();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(ticket).toHaveBeenCalledTimes(1);
+    expect(client.getState()).toBe("disconnected");
+  });
+
+  it("does not duplicate listeners when reconnecting", async () => {
+    const client = new NativeCoordinationClient(
+      mockPlugin,
+      () => "wss://coord.example",
+      async () => "ticket",
+      "dev-1",
+      15,
+      makeCallbacks(),
+    );
+    client.setReconnectHandler(() => client.connect());
+    await client.connect();
+    emit("coordinationReconnectNeeded", { attempt: 1 });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(mockPlugin.addListener).toHaveBeenCalledTimes(4);
+    client.disconnect();
   });
 
   it("disconnect calls the native plugin and removes listeners", async () => {
@@ -690,5 +760,61 @@ describe("NativeCoordinationClient", () => {
     client.disconnect();
     expect(mockPlugin.disconnect).toHaveBeenCalled();
     expect(cb.onStateChange).toHaveBeenCalledWith("disconnected");
+  });
+
+  it("removes a listener that finishes registering after disconnect", async () => {
+    let registered!: (handle: PluginListenerHandle) => void;
+    vi.mocked(mockPlugin.addListener).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          registered = resolve;
+        }),
+    );
+    const client = new NativeCoordinationClient(
+      mockPlugin,
+      () => "wss://coord.example",
+      async () => "ticket",
+      "dev-1",
+      15,
+      makeCallbacks(),
+    );
+    const connecting = client.connect();
+    await Promise.resolve();
+    client.disconnect();
+    const remove = vi.fn().mockResolvedValue(undefined);
+    registered({ remove });
+    await connecting;
+    expect(remove).toHaveBeenCalledOnce();
+    expect(mockPlugin.addListener).toHaveBeenCalledTimes(1);
+    expect(mockPlugin.connect).not.toHaveBeenCalled();
+  });
+
+  it("forwards controls to the renderer when Electron uses Web Audio", async () => {
+    const callbacks = makeCallbacks();
+    const client = new NativeCoordinationClient(
+      mockPlugin,
+      () => "wss://coord.example",
+      async () => "ticket",
+      "dev-1",
+      15,
+      callbacks,
+      false,
+    );
+    await client.connect();
+    const command: Envelope = {
+      version: 1,
+      messageId: "fallback-command",
+      type: "command",
+      targetDeviceId: "dev-1",
+      expectedGeneration: 1,
+      command: { type: "pause" },
+    };
+    emit("coordinationEvent", { envelopeJson: JSON.stringify(command) });
+    expect(callbacks.onCommand).toHaveBeenCalledWith(command);
+    client.disconnect();
+    emit("coordinationEvent", {
+      envelopeJson: JSON.stringify({ ...command, messageId: "late" }),
+    });
+    expect(callbacks.onCommand).toHaveBeenCalledOnce();
   });
 });

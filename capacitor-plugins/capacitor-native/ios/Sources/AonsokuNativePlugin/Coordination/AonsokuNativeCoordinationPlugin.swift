@@ -213,6 +213,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     private var connectLastSeq: Int = 0
     private var nativeSessionId = UUID().uuidString
     private var nativeGeneration = 1
+    private var handoffPreparing = false
     private var nativeSnapshotRevision = 0
     private var deviceGenerations: [String: Int] = [:]
     private var deviceSnapshotRevisions: [String: Int] = [:]
@@ -824,6 +825,10 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     // MARK: - Private Helpers
 
     private func disconnectInternal() {
+        if handoffPreparing {
+            handoffPreparing = false
+            AonsokuNativeAudioPlugin.rollbackHandoffPlaybackFromActive()
+        }
         self.heartbeatTimer?.invalidate()
         self.heartbeatTimer = nil
         self.stopSnapshotHeartbeat()
@@ -886,8 +891,9 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     }
 
     private func receiveMessage() {
-        self.webSocketTask?.receive { [weak self] result in
-            guard let self = self else { return }
+        guard let task = self.webSocketTask else { return }
+        task.receive { [weak self] result in
+            guard let self = self, self.webSocketTask === task else { return }
             switch result {
             case .success(let message):
                 switch message {
@@ -1038,6 +1044,8 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
             }
             if let type = dict["type"] as? String,
                type == "handoff_candidate" {
+                handoffPreparing = true
+                let connection = webSocketTask
                 let snapshot = dict["snapshot"] as? [String: Any]
                 let transactionId = dict["transactionId"] as? String ?? ""
                 let sourceDeviceId = dict["sourceDeviceId"] as? String ?? ""
@@ -1050,6 +1058,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
                     snapshot: snapshot ?? [:],
                     autoplay: false,
                     completion: { prepared in
+                        guard self.webSocketTask === connection, self.handoffPreparing else { return }
                         if prepared {
                             self.sendEnvelope(Self.buildTargetReadyEnvelope(
                                 protocolVersion: self.protocolVersion,
@@ -1060,6 +1069,8 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
                                 sessionId: sessionId
                             ))
                         } else {
+                            self.handoffPreparing = false
+                            AonsokuNativeAudioPlugin.rollbackHandoffPlaybackFromActive()
                             self.sendEnvelope(Self.buildHandoffFailedEnvelope(
                                 protocolVersion: self.protocolVersion,
                                 transactionId: transactionId,
@@ -1069,6 +1080,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
                     }
                 )
                 if !accepted && !transactionId.isEmpty {
+                    handoffPreparing = false
                     self.sendEnvelope(Self.buildHandoffFailedEnvelope(
                         protocolVersion: self.protocolVersion,
                         transactionId: transactionId,
@@ -1079,18 +1091,46 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
             }
             if let type = dict["type"] as? String,
                type == "handoff_committed",
-               let snapshot = dict["snapshot"] as? [String: Any],
-               AonsokuNativeAudioPlugin.prepareHandoffPlaybackFromActive(
+               let snapshot = dict["snapshot"] as? [String: Any] {
+                nativeSessionId = snapshot["sessionId"] as? String ?? nativeSessionId
+                nativeGeneration = dict["newGeneration"] as? Int ?? nativeGeneration
+                nativeSnapshotRevision = 0
+                let accepted = AonsokuNativeAudioPlugin.prepareHandoffPlaybackFromActive(
                    snapshot: snapshot,
                    autoplay: true,
-                   completion: { _ in }
-               ) {
+                   completion: { prepared in
+                       self.handoffPreparing = false
+                       if prepared {
+                           DispatchQueue.main.async {
+                               _ = self.publishNativePlaybackSnapshot()
+                               self.notifyListeners("coordinationEvent", data: ["envelopeJson": json])
+                           }
+                       } else {
+                           AonsokuNativeAudioPlugin.rollbackHandoffPlaybackFromActive()
+                           let failure = Self.buildHandoffFailedEnvelope(
+                               protocolVersion: self.protocolVersion,
+                               transactionId: dict["transactionId"] as? String ?? "",
+                               code: "unsupported_media"
+                           )
+                           if let data = try? JSONSerialization.data(withJSONObject: failure),
+                              let failureJson = String(data: data, encoding: .utf8) {
+                               DispatchQueue.main.async {
+                                   self.notifyListeners("coordinationEvent", data: ["envelopeJson": failureJson])
+                               }
+                           }
+                       }
+                   }
+                )
                 pendingNativeHandoffSourceDeviceId = nil
                 pendingNativeHandoffRetryWaitingForSnapshot = false
                 pendingNativeHandoffRetryCount = 0
-                return
+                if accepted {
+                    return
+                }
             }
             if let type = dict["type"] as? String, type == "handoff_failed" {
+                handoffPreparing = false
+                AonsokuNativeAudioPlugin.rollbackHandoffPlaybackFromActive()
                 pendingNativeHandoffSourceDeviceId = nil
                 pendingNativeHandoffRetryWaitingForSnapshot = false
                 pendingNativeHandoffRetryCount = 0
@@ -1116,6 +1156,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     }
 
     private func publishNativePlaybackSnapshot(onlyWhenPlaying: Bool = false) -> Bool {
+        if handoffPreparing { return false }
         guard self.webSocketTask != nil,
               let audioState = AonsokuNativeAudioPlugin.getFullStateFromActive(),
               let snapshot = Self.buildPlaybackSnapshot(

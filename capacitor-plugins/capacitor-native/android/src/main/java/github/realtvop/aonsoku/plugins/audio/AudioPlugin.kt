@@ -114,6 +114,11 @@ class AudioPlugin : Plugin() {
             return true
         }
 
+        @JvmStatic
+        fun rollbackHandoffPlaybackFromActive() {
+            activeInstance?.rollbackHandoffPlayback()
+        }
+
         internal fun isSupportedRemoteControlCommand(type: String): Boolean {
             return type == "play" ||
                 type == "pause" ||
@@ -140,6 +145,8 @@ class AudioPlugin : Plugin() {
     private val pluginName = "AudioPlugin"
     private val mainHandler = Handler(Looper.getMainLooper())
     private var playbackService: PlaybackService? = null
+    private val handoffEpoch = java.util.concurrent.atomic.AtomicInteger(0)
+    private var preparedHandoffBefore: Pair<PlaybackPersistState, Boolean>? = null
     private var isBound = false
     private var isWebViewActive = true
     private var currentRequestId: String? = null
@@ -556,6 +563,7 @@ class AudioPlugin : Plugin() {
         autoplay: Boolean,
         completion: (Boolean) -> Unit,
     ) {
+        val epoch = handoffEpoch.incrementAndGet()
         pluginScope.launch {
             try {
                 val songId = snapshot.optString("songId", "")
@@ -564,46 +572,29 @@ class AudioPlugin : Plugin() {
                     return@launch
                 }
 
-                val contextIds = snapshot.optStringArray("contextQueue")
-                    .ifEmpty { listOf(songId) }
-                val songs = loadQueueSongs(contextIds)
-                    .ifEmpty { loadQueueSongs(listOf(songId)) }
-                if (songs.isEmpty()) {
-                    completion(false)
-                    return@launch
-                }
-
-                val currentIndexFromSnapshot = snapshot.optInt("contextIndex", -1)
-                val currentIndex = if (currentIndexFromSnapshot >= 0) {
-                    currentIndexFromSnapshot
-                } else {
-                    songs.indexOfFirst { it.id == songId }
-                }.coerceAtLeast(0)
-                val progressSeconds = snapshot.optDouble("progressSeconds", 0.0)
-                    .takeIf { it.isFinite() }
-                    ?.coerceAtLeast(0.0)
-                    ?: 0.0
-                val repeatMode = snapshot.optString("repeat", "off")
-                val shuffle = snapshot.optBoolean("shuffle", false)
-                val sourceId = parseSnapshotSourceId(snapshot.optString("sourceId", ""))
-                val sourceName = snapshot.optString("sourceName")
-                    .takeIf { it.isNotEmpty() }
+                val ids = snapshot.optStringArray("contextQueue") +
+                    snapshot.optStringArray("userQueue") +
+                    snapshot.optStringArray("restorePrevious") + listOf(songId)
+                val state = handoffPlaybackState(snapshot, loadQueueSongs(ids.distinct()))
 
                 val service = awaitService()
                 mainHandler.post {
                     try {
-                        service.setRepeatMode(repeatMode)
-                        service.setContextQueue(
-                            songs,
-                            currentIndex,
-                            autoplay,
-                            progressSeconds,
-                            sourceId,
-                            sourceName,
-                        )
-                        service.setShuffle(shuffle)
+                        if (epoch != handoffEpoch.get()) {
+                            completion(false)
+                            return@post
+                        }
+                        if (!autoplay && preparedHandoffBefore == null) {
+                            val player = service.getPlayer()
+                            preparedHandoffBefore = Pair(
+                                PlaybackPersistState.from(service.queueEngine, player?.currentPosition?.div(1000.0) ?: 0.0),
+                                player?.isPlaying ?: false,
+                            )
+                        }
+                        service.restoreHandoffState(state, autoplay)
                         val volume = snapshot.optDouble("volume", Double.NaN)
-                        if (!volume.isNaN()) setSystemVolumeValue(volume)
+                        if (autoplay && !volume.isNaN()) setSystemVolumeValue(volume)
+                        if (autoplay) preparedHandoffBefore = null
                         completion(true)
                     } catch (error: Throwable) {
                         NativeLogger.warn(
@@ -619,6 +610,23 @@ class AudioPlugin : Plugin() {
                     "audio-plugin",
                 )
                 completion(false)
+            }
+        }
+    }
+
+    private fun rollbackHandoffPlayback() {
+        handoffEpoch.incrementAndGet()
+        mainHandler.post {
+            val before = preparedHandoffBefore ?: return@post
+            preparedHandoffBefore = null
+            val service = playbackService ?: return@post
+            if (before.first.contextSongs.isNotEmpty() || before.first.userQueue.isNotEmpty()) {
+                service.restoreHandoffState(before.first, before.second)
+            } else {
+                service.getPlayer()?.stop()
+                service.getPlayer()?.clearMediaItems()
+                service.clearQueueState()
+                emitPlaybackState("idle", currentRequestId)
             }
         }
     }

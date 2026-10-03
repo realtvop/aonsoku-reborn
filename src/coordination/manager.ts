@@ -9,6 +9,7 @@ import {
   createNativeCoordinationFetch,
   getNativeCoordinationAvailability,
   isNativeCoordinationAvailable,
+  isNativeCoordinationPlaybackOwned,
   NativeCoordinationClient,
   NativeCoordinationTokenStore,
 } from "@/native/coordination";
@@ -37,6 +38,7 @@ import type {
   PlaybackSnapshot,
   RemoteCommand,
   SessionGeneration,
+  SessionId,
   SnapshotRevision,
 } from "./types";
 import { COORDINATION_PROTOCOL_VERSION, CoordinationCapability } from "./types";
@@ -388,22 +390,12 @@ export class CoordinationManager {
           this.deviceId,
           this.capabilities,
           cb,
+          isNativeCoordinationPlaybackOwned(),
         );
-        // Reconnect path: the native layer cannot self-reconnect (single-use
-        // ticket, §6.3), so it fires `coordinationReconnectNeeded` and we
-        // re-fetch a ticket via `openWebSocket()` (which re-ents connect()).
-        // We reuse the existing `reconnect()` flow — it re-fetches a ticket
-        // and calls `connect()` on the native plugin again.
+        // Keep the facade and its listeners alive while acquiring a fresh
+        // one-time ticket. It retries ticket/network failures with backoff.
         nativeClient.setReconnectHandler(async () => {
-          // Drop the stale client and open a fresh connection. The old ticket
-          // is single-use and expired, so we must build a new client.
-          try {
-            await this.coordClient?.disconnect();
-          } catch {
-            // ignore
-          }
-          this.coordClient = null;
-          await this.openWebSocket();
+          await nativeClient.connect();
         });
         this.coordClient = nativeClient;
         this.wireRefreshGeneration(nativeClient);

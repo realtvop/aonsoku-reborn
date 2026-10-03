@@ -150,6 +150,8 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
     private var coverImageCachedObserver: NSObjectProtocol?
     private let loadQueue = DispatchQueue(label: "com.aonsoku.NativeAudio.load", qos: .userInitiated)
     private let stateQueue = DispatchQueue(label: "com.aonsoku.NativeAudio.state", qos: .userInitiated)
+    private var handoffGeneration = 0
+    private var preparedHandoffBefore: (PlaybackPersistState, Bool)?
     private let progressQueue = DispatchQueue(label: "com.aonsoku.NativeAudio.progress", qos: .userInitiated)
     private var wasPlayingBeforeInterruption = false
     private var repeatMode = "off"
@@ -595,6 +597,10 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         autoplay: Bool,
         completion: @escaping (Bool) -> Void
     ) {
+        let generation = stateQueue.sync { () -> Int in
+            handoffGeneration += 1
+            return handoffGeneration
+        }
         DispatchQueue.global(qos: .userInitiated).async {
             guard let songId = snapshot["songId"] as? String, !songId.isEmpty else {
                 completion(false)
@@ -602,20 +608,27 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             }
 
             do {
-                let contextIds = self.stringArray(snapshot["contextQueue"])
-                var songs = try self.loadQueueSongs(ids: contextIds.isEmpty ? [songId] : contextIds)
-                if songs.isEmpty {
-                    songs = try self.loadQueueSongs(ids: [songId])
-                }
-                guard !songs.isEmpty else {
+                let inUserQueue = snapshot["inUserQueue"] as? Bool ?? false
+                var contextIds = self.stringArray(snapshot["contextQueue"])
+                if contextIds.isEmpty && !inUserQueue { contextIds = [songId] }
+                let userIds = self.stringArray(snapshot["userQueue"])
+                let historyIds = self.stringArray(snapshot["restorePrevious"])
+                let ids = Array(Set(contextIds + userIds + historyIds + [songId]))
+                let resolved = try self.loadQueueSongs(ids: ids)
+                let byId = Dictionary(uniqueKeysWithValues: resolved.map { ($0.id, $0) })
+                guard ids.allSatisfy({ byId[$0] != nil }) else {
                     completion(false)
                     return
                 }
-
-                let snapshotIndex = snapshot["contextIndex"] as? Int ?? -1
-                let resolvedIndex = snapshotIndex >= 0
-                    ? snapshotIndex
-                    : (songs.firstIndex { $0.id == songId } ?? 0)
+                let songs = contextIds.compactMap { byId[$0] }
+                let userSongs = userIds.compactMap { byId[$0] }
+                let history = historyIds.compactMap { byId[$0] }
+                let resolvedIndex = snapshot["contextIndex"] as? Int ?? (contextIds.firstIndex(of: songId) ?? 0)
+                let current = inUserQueue ? userSongs.first : (songs.indices.contains(resolvedIndex) ? songs[resolvedIndex] : nil)
+                guard current?.id == songId else {
+                    completion(false)
+                    return
+                }
                 let progressSeconds = max(0, self.numberValue(snapshot["progressSeconds"]) ?? 0)
                 let repeatMode = snapshot["repeat"] as? String ?? "off"
                 let shuffle = snapshot["shuffle"] as? Bool ?? false
@@ -624,25 +637,49 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
                 let volume = self.numberValue(snapshot["volume"])
 
                 self.stateQueue.async {
-                    self.isQueueEngineActive = true
-                    if let loopState = LoopState(rawValue: repeatMode) {
-                        self.queueEngine.setLoopState(loopState)
-                        self.repeatMode = repeatMode
+                    guard generation == self.handoffGeneration else {
+                        completion(false)
+                        return
                     }
-                    self.queueEngine.setContextQueue(
-                        songs: songs,
-                        currentIndex: resolvedIndex,
-                        autoplay: autoplay,
-                        startTime: progressSeconds,
-                        sourceId: sourceId,
-                        sourceName: sourceName
-                    )
+                    if !autoplay, self.preparedHandoffBefore == nil {
+                        let time = self.player?.currentTime().seconds ?? 0
+                        self.preparedHandoffBefore = (
+                            PlaybackPersistState(from: self.queueEngine, currentTime: time.isFinite ? time : 0),
+                            (self.player?.rate ?? 0) > 0
+                        )
+                    }
+                    self.isQueueEngineActive = true
+                    var state = PlaybackPersistState(from: self.queueEngine, currentTime: progressSeconds)
+                    state.contextSongs = songs
+                    state.currentIndex = resolvedIndex
+                    state.userQueue = userSongs
+                    state.originalContextSongs = songs
+                    state.originalUserSongs = userSongs
+                    state.playedUserQueueHistory = history
+                    state.isInUserQueue = inUserQueue
+                    state.isShuffleActive = shuffle
+                    state.shuffleHistory = []
+                    state.shuffleStartHistory = []
+                    state.loopState = repeatMode
+                    state.sourceId = sourceId
+                    state.sourceName = sourceName
+                    self.queueEngine.restoreState(from: state)
+                    self.repeatMode = repeatMode
                     self.shuffleEnabled = shuffle
-                    self.queueEngine.setShuffleActive(shuffle)
+                    if let current {
+                        self.queueEngine(self.queueEngine, loadSong: current, autoplay: autoplay, startTime: progressSeconds)
+                        self.forceNextSnapshotProgress(progressSeconds)
+                        self.notifyListeners("queueStateChanged", data: [
+                            "currentIndex": resolvedIndex, "songId": current.id,
+                            "reason": "skip", "isInUserQueue": inUserQueue,
+                        ])
+                    }
+                    self.queueEngine(self.queueEngine, didChangeContents: "queue-edit")
                     self.persistence.markStateDirty()
-                    if let volume {
+                    if autoplay, let volume {
                         self.setSystemVolumeValue(volume)
                     }
+                    if autoplay { self.preparedHandoffBefore = nil }
                     completion(true)
                 }
             } catch {
@@ -652,6 +689,33 @@ public class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin {
                 )
                 completion(false)
             }
+        }
+    }
+
+    internal static func rollbackHandoffPlaybackFromActive() {
+        guard let instance = activeInstance else { return }
+        instance.stateQueue.async {
+            instance.handoffGeneration += 1
+            guard let (state, autoplay) = instance.preparedHandoffBefore else { return }
+            instance.preparedHandoffBefore = nil
+            instance.queueEngine.restoreState(from: state)
+            instance.repeatMode = state.loopState
+            instance.shuffleEnabled = state.isShuffleActive
+            if let song = instance.queueEngine.currentSong {
+                instance.queueEngine(instance.queueEngine, loadSong: song, autoplay: autoplay, startTime: state.currentTime)
+                instance.forceNextSnapshotProgress(state.currentTime)
+                instance.notifyListeners("queueStateChanged", data: [
+                    "currentIndex": state.currentIndex, "songId": song.id,
+                    "reason": "skip", "isInUserQueue": state.isInUserQueue,
+                ])
+            } else {
+                DispatchQueue.main.async {
+                    instance.player?.pause()
+                    instance.player?.replaceCurrentItem(with: nil)
+                }
+            }
+            instance.queueEngine(instance.queueEngine, didChangeContents: "queue-edit")
+            instance.persistence.markStateDirty()
         }
     }
 
