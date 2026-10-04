@@ -31,7 +31,17 @@ jobs:
         run: pnpm install
 
       - name: Test native iOS core
+        env:
+          IOS_TEST_RESULT_BUNDLE: ${{ runner.temp }}/AonsokuNativeTests.xcresult
         run: ./scripts/test-ios-native.sh
+
+      - name: Upload native iOS test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-native-xcresult
+          path: ${{ runner.temp }}/AonsokuNativeTests.xcresult
+          if-no-files-found: warn
 
       - name: Build mobile web assets
         run: pnpm run build:mobile
