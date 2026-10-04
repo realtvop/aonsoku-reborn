@@ -1,77 +1,82 @@
 # Android to iOS Native Test Coverage Matrix
 
-This matrix tracks native test parity by behavior and regression risk. It does
-not treat raw test-count parity as the goal: Android-only platform contracts
-are marked not applicable, and one iOS integration test may cover several
-smaller Android helper tests when it exercises the same failure surface.
+This matrix tracks native parity by behavior and regression risk, not by raw
+test count. Android-only contracts are marked not applicable. An iOS
+integration test may cover several Android helper tests when it exercises the
+same failure surface through the real service boundary.
 
-## Baseline inventory
+## Inventory
 
 Inventory date: 2026-10-04.
 
-- Android: 25 test files and 142 `@Test` cases across
+- Android: 25 Kotlin/Java test files and 142 `@Test` cases across
   `android/app/src/{test,androidTest}` and
   `capacitor-plugins/capacitor-native/android/src/{test,androidTest}`.
-- iOS: 6 XCTest files and 11 `test*` methods in
+- iOS before this parity pass: 6 XCTest files and 11 `test*` methods.
+- iOS after this parity pass: 20 XCTest files and 85 `test*` methods in
   `capacitor-plugins/capacitor-native/ios/Tests/AonsokuNativePluginTests`.
 - Status legend:
-  - **Covered**: iOS verifies the same behavior and failure risk.
-  - **Partial**: iOS covers part of the behavior but leaves a material branch
-    or integration boundary untested.
-  - **Missing**: the behavior applies to iOS and has no meaningful XCTest.
-  - **N/A**: Android-specific behavior with no equivalent iOS contract, or
-    generated boilerplate with no product behavior.
+  - **Covered**: iOS verifies the same behavior and regression risk.
+  - **N/A**: the Android behavior has no iOS equivalent or is generated
+    boilerplate without Aonsoku product behavior.
 
 ## Coverage matrix
 
-| Area | Android test inventory | iOS baseline coverage | Status | iOS action / rationale |
-| --- | --- | --- | --- | --- |
-| App template unit test | `ExampleUnitTest` (1): `addition_isCorrect` | None | N/A | Generated arithmetic smoke test; it protects no Aonsoku behavior. |
-| App package instrumentation | `ExampleInstrumentedTest` (1): `useAppContext` | None | N/A | Android package-name contract. iOS bundle/build validity belongs in the App build verification. |
-| Debug gesture | `DebugShakeDetectorTest` (6): valid alternating sequence; same-direction rejection; single-spike rejection; slow-stroke expiry; cooldown/retrigger; accelerometer low-pass fallback | iOS receives the OS shake gesture through `AonsokuViewController.motionEnded`; it has no custom sensor detector | N/A | The Android filtering algorithm has no iOS counterpart. App-level debug presentation remains a manual simulator/device check. |
-| Android playback service manifest | `PlaybackServiceManifestTest` (4): service resolvability; foreground-media permission; MediaSessionService intent filter; internet permission | iOS has no Android service/manifest contract | N/A | iOS background audio mode and packaging are verified through the App build; runtime background playback still needs device validation. |
-| Audio cache naming | `AudioCacheUtilsTest` (2): URL-safe stable cache id; audio MIME extension mapping | `DownloadTests.testCacheIdentityIsPathSafeAndStable`, `testContentTypeSelectsExpectedFileExtension` | Covered | Keep parity when MIME types or on-disk naming change. |
-| Remote command allowlist | `AudioPluginRemoteCommandTest` (2): every coordination command accepted; unknown commands rejected | None | Missing | Test the iOS adapter allowlist and dispatch rejection without a Capacitor bridge. |
-| Handoff queue decoding | `HandoffPlaybackStateTest` (5): full user/history/shuffle/source restore; empty-context user queue; missing-song rejection; inconsistent current-song rejection; legacy single-song snapshot | `HandoffTests.testHandoffSnapshotPreservesQueueOrderAndSource` covers the valid full snapshot only | Partial | Add empty-context, malformed/fenced queue, and legacy compatibility cases. |
-| Capacitor audio payload parsing | `NativeAudioSourceParserTest` (7): stream; native file; radio; blob; null source; metadata fields; null metadata | None | Missing | Exercise the iOS Capacitor adapter's payload decoding while preserving TS event/API shapes. |
-| Download manager basics | `NativeDownloadManagerTest` (3): initialization; listener add/remove; inactive cancel/cancel-all | `DownloadTests.testBackgroundSessionIdentifierIsStable` only verifies the identifier | Partial | Verify request creation, cancellation, delegate completion/failure, relaunch completion handling, and no-network fakes. |
-| Queue engine | `NativeQueueEngineTest` (5): set/load context; next/previous; manual queue precedence/consumption; reorder/remove; state restoration/full-state | `QueueTests.testUserQueueRunsBeforeRemainingContextAndCanNavigateBack`; `RestorationTests.testPlaybackRepositoryRoundTripsQueueAndProgress` | Partial | Add delegate load/advance semantics, previous restart threshold, reorder/remove/current-index invariants, exhaustion, and full-state compatibility. |
-| Scrobble buffer | `NativeScrobbleBufferTest` (9): start/stop; zero-time suppression; pause/resume; ordered entries; clear; selective removal; persistence restart; replacing active tracking; duration retention | None | Missing | Inject a clock and store; verify durable ordering and threshold inputs without sleeps. |
-| Shuffle history | `NativeShuffleEngineTest` (3): permutation; recent-history gap avoidance; bounded history | None | Missing | Inject deterministic randomness so assertions verify behavior rather than chance. |
-| Source resolution | `NativeSourceResolverTest` (7): explicit cached URI; cache-directory hit; authenticated custom stream; direct HTTP pass-through; radio pass-through without credentials; custom stream rejection without credentials; bitrate/format propagation | None | Missing | Inject file locations and credential lookup; verify cache-first resolution and authenticated URL construction without network. |
-| Subsonic authentication | `SubsonicAuthBuilderTest` (5): token salt/hash; encoded password; token query; password query; protocol version parsing contract | None | Missing | Cover both auth modes, percent-safe query values, and version compatibility. |
-| Subsonic HTTP URL construction | `SubsonicHttpClientTest` (2): REST path/auth query; existing path query preservation | None | Missing | Inject `URLSession`; test URL/request construction and response/error mapping with `URLProtocol`. |
-| Android foreground-service coordination ownership | `AonsokuNativeCoordinationLifecycleTest` (9): attach without/with connection; idempotent attach; detach paths; socket ownership; manual-disconnect state; static attach/detach helpers | iOS has no foreground service, but it has application lifecycle and reconnect ownership | Partial | Mark service attachment mechanics N/A; cover the shared risks: manual disconnect suppresses reconnect, transport failure schedules reconnect, foreground requests a fresh ticket, and shutdown cancels work. |
-| Coordination envelopes and snapshots | `AonsokuNativeCoordinationPluginTest` (18): heartbeat shape/version/unique id; hello handshake; target-ready fencing; command ACK; relinquish ACK; handoff failure; playback snapshot mapping/empty state; JSON object valid/malformed/array/empty; ticket URL append/preserve/encode; token-store namespace | Only `HandoffTests.testTargetReadyEnvelopeCarriesFencingState` | Partial | Cover every protocol envelope, JSON rejection, ticket encoding, playback snapshot mapping, and persistent key namespace. |
-| Coordination deduplication and sequence | `CoordinationDedupSeqTest` (14): mark/detect; bounded eviction; idempotent mark; clear; monotonic sequence; null sequence; reset; numeric/string/absent sequence extraction; message-id extraction; type extraction | None | Missing | Test bounded dedup and monotonic sequence helpers directly, then one adapter-level duplicate-message regression. |
-| Data event contract | `EventEmitterContractTest` (4): `syncStateChanged`; `dataChanged`; terminal immediate flush; intermediate coalesced flush | None | Missing | Inject scheduling and the Capacitor notifier; verify exact event names/payload keys and terminal flushing. |
-| Image cache behavior | `ImageCacheUtilsTest` (11): URL-safe/deterministic/distinct ids; JPEG/PNG/WebP/GIF/default/parameterized MIME mapping; known-extension lookup; multi-extension deletion | None | Missing | Inject the cache directory and test lookup/deletion against a temporary file system. |
-| Search behavior | `SearchHelperTest` (7): normalized token split; diacritic folding; blank query; empty condition; single/multi-column condition; multi-token AND | `LibraryServiceTests.testTypedArtistQueryFiltersAndPaginatesRepositoryData` covers an end-to-end ASCII filter, starred constraint, sort, and pagination | Partial | Add normalization/diacritic and multi-token repository queries; prefer result behavior over SQL-string assertions. |
-| Sync freshness tiers | `SyncTierTest` (4): T1/T2/T3 windows and ordering | None | Missing | Verify freshness boundary decisions with an injected clock, not constants alone. |
-| Full-library sync search query | `SyncEngineSearchQueryTest` (3): Navidrome quoted-empty query; Subsonic empty query; unknown-server fallback | None | Missing | Test the outgoing sync request through a fake HTTP client so the assertion protects server interoperability. |
-| Native logger | `NativeLoggerTest` (7): level/message retrieval; empty source; per-source cap; multi-source order; clear; timestamp order; independent buckets | None | Missing | Inject time, verify bounded per-source retention and stable global order. |
-| Preference play history | `PlayHistoryCodecTest` (3): corrupt/missing decode; prepend/trim; zero-size clear | None | Missing | Test codec plus a temporary `UserDefaults` suite through `PreferencesManager`. |
+| Area | Android test inventory | iOS final evidence | Status |
+| --- | --- | --- | --- |
+| App template unit test | `ExampleUnitTest` (1): generated arithmetic smoke test | No equivalent; it protects no Aonsoku behavior | N/A |
+| App package instrumentation | `ExampleInstrumentedTest` (1): Android package context | iOS bundle and host validity are covered by the App build | N/A |
+| Debug gesture | `DebugShakeDetectorTest` (6): sensor filtering, expiry, cooldown, fallback | iOS uses the OS shake gesture and has no custom detector algorithm | N/A |
+| Playback service manifest | `PlaybackServiceManifestTest` (4): service, permissions, intent filter | iOS has no Android service/manifest contract; background modes are an App packaging/device concern | N/A |
+| Audio cache naming | `AudioCacheUtilsTest` (2): stable safe id and MIME extension | `DownloadTests`: cache identity and content-type extension behavior | Covered |
+| Remote command allowlist | `AudioPluginRemoteCommandTest` (2): supported and rejected commands | `AudioAdapterTests`: exact coordination allowlist, rejection, selected IDs and positions | Covered |
+| Handoff queue decoding | `HandoffPlaybackStateTest` (5): full, user-only, malformed, inconsistent and legacy snapshots | `HandoffTests` (5) plus `NativeIntegrationTests`: decode compatibility, fencing, injected-library resolution, missing-song rejection and queue restoration | Covered |
+| Capacitor audio payload parsing | `NativeAudioSourceParserTest` (7): all source kinds and metadata/null handling | `AudioAdapterTests` (5): all source kinds, invalid payloads, numeric metadata and command payloads | Covered |
+| Downloads and cancellation | `NativeDownloadManagerTest` (3): initialization, listener lifecycle and inactive cancellation | `DownloadTests` (8): auth/transcoding URL, missing credentials, active cancel/cancel-all, completion file and metadata finalization, stable background identifier and relaunch completion ownership, all without real network | Covered |
+| Queue engine | `NativeQueueEngineTest` (5): set/load, navigation, manual queue, edits and restore | `QueueTests` (6), `RestorationTests` and `NativeIntegrationTests`: delegate load/advance, manual precedence, repeat/exhaustion, current-song-preserving reorder, persistence and adapter-compatible full state | Covered |
+| Scrobble buffer | `NativeScrobbleBufferTest` (9): timing, pause/resume, persistence, ordering and mutations | `ScrobbleTests` (6): injected clock/store, zero-time suppression, pause exclusion, duration retention, ordered durable mutations and 50%/240-second eligibility | Covered |
+| Shuffle history | `NativeShuffleEngineTest` (3): permutation, recent-gap avoidance and bounds | `ShuffleTests` (3): deterministic randomness, permutation, history avoidance/deduplication and bounds | Covered |
+| Source resolution | `NativeSourceResolverTest` (7): cache-first, direct URLs, credentials and transcode options | `SourceResolverTests` (5): injected file system/credentials/clock, cache-first lookup, passthrough, rejection, credential invalidation and option preservation | Covered |
+| Subsonic authentication | `SubsonicAuthBuilderTest` (5): token/hash, encoded password, query modes and version | `AuthenticationTests` (4): token salt/hash, encoded password, mutually exclusive query modes and numeric version parsing | Covered |
+| Subsonic HTTP | `SubsonicHttpClientTest` (2): REST/auth URL and existing query | `HTTPClientTests` (3): injected `URLSession`/`URLProtocol`, URL preservation, count/payload parsing and auth failure mapping | Covered |
+| Coordination lifecycle and reconnect | `AonsokuNativeCoordinationLifecycleTest` (9): Android service/socket ownership and disconnect paths | Android foreground-service attachment is platform-only; shared risks are covered by `CoordinationTests.testReconnectPolicyBacksOffCapsAndStopsForManualOrBackgroundState`, `LifecycleTests` and AppServices integration | Covered |
+| Coordination envelopes and snapshots | `AonsokuNativeCoordinationPluginTest` (18): hello/heartbeat/ACK/handoff, snapshots, JSON and ticket URL | `CoordinationTests` (11) and `HandoffTests`: protocol shapes, fencing data, empty snapshot rejection, JSON rejection and reserved-character ticket encoding | Covered |
+| Coordination deduplication and sequence | `CoordinationDedupSeqTest` (14): bounded idempotence, sequence and extraction | `CoordinationTests`: bounded eviction/idempotence, clear, monotonic/reset sequence and numeric/string/absent extraction | Covered |
+| Data event contract | `EventEmitterContractTest` (4): exact events, terminal flush and coalescing | `EventEmitterTests` (3): public event names/payloads, terminal immediate flush and intermediate coalescing | Covered |
+| Image cache behavior | `ImageCacheUtilsTest` (11): ids, MIME mapping, lookup and deletion | `ImageCacheTests` (3): stable/distinct safe ids, compatible extensions, known-extension lookup and multi-extension deletion | Covered |
+| Search behavior | `SearchHelperTest` (7): normalization, tokenization and AND conditions | `SearchAndSyncTests` plus `LibraryServiceTests`: width/case/diacritic normalization, multi-token repository results, filters, sorting and pagination | Covered |
+| Sync freshness tiers | `SyncTierTest` (4): windows and ordering | `SearchAndSyncTests.testSyncFreshnessUsesStrictBoundaryAndHandlesClockSkew`: strict edge behavior for every tier plus ordering | Covered |
+| Full-library search query | `SyncEngineSearchQueryTest` (3): Navidrome quoted-empty and Subsonic/fallback empty query | `SearchAndSyncTests.testFullLibrarySearchQueryMatchesServerDialect`: the same server interoperability decisions used by `SyncEngine` | Covered |
+| Native logger | `NativeLoggerTest` (7): content, cap, ordering, sources and clear | `NativeLoggerTests` (3): injected time, per-source caps, cross-source ordering, levels/messages and clear | Covered |
+| Preference play history | `PlayHistoryCodecTest` (3): corrupt/missing, prepend/trim and zero-size clear | `PreferencesTests`: database-backed newest-first persistence, limit, trim and zero-size clear; typed preferences also round-trip through an injected database | Covered |
 
-## iOS-only high-risk surfaces
+## iOS-specific risk coverage
 
-Android parity does not cover several iOS-specific risks. They are required in
-addition to the mapping above:
+Parity also includes iOS risks with no direct Android test counterpart:
 
-- `AVPlayer` item replacement, seek/recovery staging, and stale callback
-  suppression.
-- Background `URLSession` download relaunch and completion-handler ownership.
-- `AppServices` singleton wiring and the typed service boundaries exposed to
-  SwiftUI and Capacitor.
-- `AudioService` persistence flush/restore and event ordering.
-- `LibraryService` repository/sync/cache ownership and sync event forwarding.
-- `AppLifecycleService` launch/background/foreground/termination routing.
-- Capacitor adapter payload and event compatibility for existing TypeScript
-  consumers.
+- `DependencyBoundaryTests` injects the AVPlayer factory and verifies real
+  player construction; `AudioService` teardown removes observers safely even
+  when the service was loaded before `start()`.
+- `RestorationTests` drives seek retries, reload escalation, exhaustion,
+  and success cancellation with an injected scheduler.
+- `DownloadTests` verifies background `URLSession` relaunch ownership,
+  cancellation, cache finalization and metadata without network access.
+- `NativeIntegrationTests` covers the `AppServices` service graph,
+  `AudioService` queue event/persistence/restore path, handoff through the
+  injected library database, `LibraryService` initialization/query/lyrics,
+  `AppLifecycleService` routing, and both audio/data Capacitor payload shapes.
+- `LifecycleTests` verifies idempotent launch/background/foreground/terminate
+  routing and background transfer completion ownership.
 
-## Completion criteria
+## Verification contract and device-only remainder
 
-Parity is complete only when all non-N/A rows are **Covered**, the iOS test
-command reports executed XCTest cases (not merely a successful build), the iOS
-App builds, and Android native unit tests still pass. Simulator coverage does
-not replace device validation for background audio, media controls, protected
-data, background transfer relaunch, or real network transitions.
+`./scripts/test-ios-native.sh` writes an `.xcresult`, parses its test summary,
+and fails if zero XCTest cases ran, any test failed, or no requested simulator
+is available. `IOS_SIMULATOR_ID=<uuid>` selects a simulator and
+`IOS_TEST_RESULT_BUNDLE=<path>` preserves the result bundle for CI artifacts.
+
+Simulator parity does not replace real-device validation for background audio
+continuity, lock-screen/Control Center commands, protected-data transitions,
+OS relaunch of a background transfer after process termination, audio-route
+changes/interruption recovery, and connectivity changes involving a real
+Subsonic and coordination server.

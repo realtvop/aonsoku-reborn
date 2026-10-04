@@ -62,9 +62,12 @@ pnpm --filter @aonsoku/coordination-worker deploy:raw # Direct Wrangler deployme
 cd android && ./gradlew :aonsoku-capacitor-native:compileDebugKotlin
 cd android && ./gradlew :aonsoku-capacitor-native:testDebugUnitTest
 
-# iOS native plugin (selects the first available iPhone Simulator; override
-# with IOS_SIMULATOR_ID=<uuid>)
+# iOS native plugin. Selects the first available iPhone Simulator; override
+# with IOS_SIMULATOR_ID=<uuid>. Fails when no simulator is available, when no
+# XCTest executes, or when any test fails. The optional result path must not
+# already exist.
 ./scripts/test-ios-native.sh
+IOS_TEST_RESULT_BUNDLE=/tmp/AonsokuNativeTests.xcresult ./scripts/test-ios-native.sh
 
 # iOS native core
 cd ios/App && xcodebuild -scheme App -destination 'generic/platform=iOS Simulator' build
@@ -129,9 +132,15 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   relaunch callbacks to the audio download manager. WebSockets use a normal
   URLSession because iOS background sessions are reserved for transfer tasks;
   downloads use `github.realtvop.aonsoku.audio.downloads` and survive relaunch.
-  The Swift package owns `AonsokuNativePluginTests`, which exercises queue,
-  persistence restore, handoff contracts, downloads, typed library queries,
-  and lifecycle transitions; `build-ios.yml` runs it before packaging.
+  The Swift package owns `AonsokuNativePluginTests`, which exercises queue and
+  shuffle behavior, staged playback recovery and persistence, source/cache and
+  download behavior, scrobbling, handoff and coordination contracts, auth and
+  HTTP behavior, preferences, event contracts, typed library queries/sync,
+  lifecycle transitions, the `AppServices` graph, and Capacitor adapters. The
+  tests use injectable AVPlayer, URLSession, time, file-system, database, and
+  lifecycle boundaries and do not require real network access. The test script
+  parses its `.xcresult` and requires a non-zero executed test count;
+  `build-ios.yml` preserves that result bundle before packaging.
 - Platform/runtime detection is centralized in `src/utils/capabilities.ts`,
   with lower-level helpers in `src/utils/desktop.ts` and
   `src/utils/platform.ts`.
