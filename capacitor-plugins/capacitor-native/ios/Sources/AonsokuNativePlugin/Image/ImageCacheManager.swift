@@ -295,24 +295,11 @@ final class ImageCacheManager {
     }
 
     private func findCoverImageURL(cacheId: String, in directory: URL) throws -> URL? {
-        ImageCacheUtils.cachedImageExtensions
-            .map { directory.appendingPathComponent("\(cacheId).\($0)", isDirectory: false) }
-            .first { FileManager.default.fileExists(atPath: $0.path) }
+        ImageCacheUtils.coverImageURL(in: directory, cacheId: cacheId)
     }
 
     @discardableResult
     private func removeCoverImageFiles(cacheId: String, in directory: URL) -> Bool {
-        var deleted = false
-        for ext in ImageCacheUtils.cachedImageExtensions {
-            let url = directory.appendingPathComponent("\(cacheId).\(ext)", isDirectory: false)
-            guard FileManager.default.fileExists(atPath: url.path) else {
-                continue
-            }
-            do {
-                try FileManager.default.removeItem(at: url)
-                deleted = true
-            } catch {}
-        }
-        return deleted
+        ImageCacheUtils.removeCoverImageFiles(in: directory, cacheId: cacheId)
     }
 }

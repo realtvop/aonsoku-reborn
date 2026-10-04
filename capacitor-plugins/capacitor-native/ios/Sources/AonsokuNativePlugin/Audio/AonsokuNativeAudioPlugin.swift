@@ -515,6 +515,20 @@ extension AonsokuNativeAudioPlugin {
         handoffSnapshot(from: object)
     }
 
+    internal static func decodeSource(_ object: JSObject?) -> AudioSource? {
+        source(from: object)
+    }
+
+    internal static func decodeMetadata(_ object: JSObject?) -> AudioMetadata {
+        metadata(from: object)
+    }
+
+    internal static func decodeRemoteControlCommand(
+        _ object: [String: Any]
+    ) -> AudioCommand? {
+        command(from: object)
+    }
+
     internal static func isSupportedRemoteControlCommand(_ type: String) -> Bool {
         command(from: ["type": type]) != nil || [
             "play_song", "play_album", "play_playlist", "play_at_index",
@@ -692,6 +706,14 @@ private extension AonsokuNativeAudioPlugin {
         guard let songId = object["songId"] as? String, !songId.isEmpty else {
             return nil
         }
+        var contextQueue = object["contextQueue"] as? [String] ?? []
+        let userQueue = object["userQueue"] as? [String] ?? []
+        let inUserQueue = object["inUserQueue"] as? Bool ?? false
+        var contextIndex = object["contextIndex"] as? Int ?? 0
+        if contextQueue.isEmpty, userQueue.isEmpty {
+            contextQueue = [songId]
+            contextIndex = 0
+        }
         let sourceId: AudioQueueSource?
         if let raw = object["sourceId"] as? String,
            let separator = raw.firstIndex(of: ":") {
@@ -705,10 +727,10 @@ private extension AonsokuNativeAudioPlugin {
         return AudioHandoffSnapshot(
             songId: songId,
             progressSeconds: number(object["progressSeconds"]) ?? 0,
-            contextQueue: object["contextQueue"] as? [String] ?? [],
-            contextIndex: object["contextIndex"] as? Int ?? 0,
-            userQueue: object["userQueue"] as? [String] ?? [],
-            inUserQueue: object["inUserQueue"] as? Bool ?? false,
+            contextQueue: contextQueue,
+            contextIndex: contextIndex,
+            userQueue: userQueue,
+            inUserQueue: inUserQueue,
             restorePrevious: object["restorePrevious"] as? [String] ?? [],
             shuffle: object["shuffle"] as? Bool ?? false,
             repeatMode: AudioRepeatMode(rawValue: object["repeat"] as? String ?? "off") ?? .off,

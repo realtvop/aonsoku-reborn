@@ -322,12 +322,7 @@ public class AonsokuNativeBridgePlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private func parseVersionNumber(_ version: String) -> Int {
-        let parts = version.split(separator: ".")
-        guard parts.count >= 2 else { return 0 }
-        let major = Int(parts[0]) ?? 0
-        let minor = Int(parts[1]) ?? 0
-        let patch = parts.count > 2 ? (Int(parts[2]) ?? 0) : 0
-        return major * 10000 + minor * 100 + patch
+        SubsonicAuthBuilder.parseVersionNumber(version)
     }
 
     private func errorMessage(_ error: SubsonicHTTPError) -> String {

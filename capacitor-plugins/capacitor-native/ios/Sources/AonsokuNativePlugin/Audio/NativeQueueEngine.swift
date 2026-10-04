@@ -193,8 +193,13 @@ class NativeQueueEngine {
               fromIndex >= 0, fromIndex < contextSongs.count,
               toIndex >= 0, toIndex < contextSongs.count else { return }
 
+        let currentSongId = currentSong?.id
         let song = contextSongs.remove(at: fromIndex)
         contextSongs.insert(song, at: toIndex)
+        if let currentSongId,
+           let retainedIndex = contextSongs.firstIndex(where: { $0.id == currentSongId }) {
+            currentIndex = retainedIndex
+        }
         delegate?.queueEngine(self, didChangeContents: "queue-edit")
     }
 

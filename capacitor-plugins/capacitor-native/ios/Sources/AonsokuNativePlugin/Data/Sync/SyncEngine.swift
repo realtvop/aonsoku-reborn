@@ -225,7 +225,7 @@ final class SyncEngine {
         try Task.checkCancellation()
         emitState(phase: "songs", tier: "t3", processed: 0, total: 0)
 
-        let searchAllQuery = credentials.serverType == "navidrome" ? "\"\"" : ""
+        let searchAllQuery = buildAllSongsQuery(serverType: credentials.serverType)
         let pageSize = 500
         var allSongs: [SongRecord] = []
         var songOffset = 0
@@ -587,4 +587,8 @@ final class SyncEngine {
         }
         return nil
     }
+}
+
+func buildAllSongsQuery(serverType: String) -> String {
+    serverType == "navidrome" ? "\"\"" : ""
 }

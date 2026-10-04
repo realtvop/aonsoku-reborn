@@ -59,6 +59,34 @@ enum ImageCacheUtils {
             return "jpg"
         }
     }
+
+    static func coverImageURL(
+        in directory: URL,
+        cacheId: String,
+        fileManager: FileManager = .default
+    ) -> URL? {
+        cachedImageExtensions
+            .map { directory.appendingPathComponent("\(cacheId).\($0)") }
+            .first { fileManager.fileExists(atPath: $0.path) }
+    }
+
+    @discardableResult
+    static func removeCoverImageFiles(
+        in directory: URL,
+        cacheId: String,
+        fileManager: FileManager = .default
+    ) -> Bool {
+        var deleted = false
+        for ext in cachedImageExtensions {
+            let url = directory.appendingPathComponent("\(cacheId).\(ext)")
+            guard fileManager.fileExists(atPath: url.path) else { continue }
+            do {
+                try fileManager.removeItem(at: url)
+                deleted = true
+            } catch {}
+        }
+        return deleted
+    }
 }
 
 enum ImageCacheError: Error {

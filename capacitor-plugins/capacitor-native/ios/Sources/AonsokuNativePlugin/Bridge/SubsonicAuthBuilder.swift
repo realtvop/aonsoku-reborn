@@ -47,6 +47,15 @@ public struct SubsonicAuthBuilder {
         }
     }
 
+    public static func parseVersionNumber(_ version: String) -> Int {
+        let parts = version.split(separator: ".")
+        guard parts.count >= 2 else { return 0 }
+        let major = Int(parts[0]) ?? 0
+        let minor = Int(parts[1]) ?? 0
+        let patch = parts.count > 2 ? (Int(parts[2]) ?? 0) : 0
+        return major * 10_000 + minor * 100 + patch
+    }
+
     private static func md5(_ string: String) -> String {
         let data = Data(string.utf8)
         var digest = [UInt8](repeating: 0, count: Int(CC_MD5_DIGEST_LENGTH))

@@ -62,6 +62,35 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         activeInstance?.publishNativePlaybackSnapshot() ?? false
     }
 
+    internal static func buildHeartbeatEnvelope(
+        protocolVersion: Int
+    ) -> [String: Any] {
+        [
+            "version": protocolVersion,
+            "messageId": UUID().uuidString,
+            "type": "heartbeat",
+        ]
+    }
+
+    internal static func buildHelloEnvelope(
+        protocolVersion: Int,
+        capabilities: Int,
+        deviceId: String,
+        ticket: String,
+        lastSeq: Int
+    ) -> [String: Any] {
+        [
+            "version": protocolVersion,
+            "messageId": UUID().uuidString,
+            "type": "hello",
+            "protocolVersion": protocolVersion,
+            "capabilities": capabilities,
+            "deviceId": deviceId,
+            "ticket": ticket,
+            "lastSeq": lastSeq,
+        ]
+    }
+
     internal static func buildCommandAckEnvelope(
         protocolVersion: Int,
         messageId: String,
@@ -833,12 +862,9 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     private func startHeartbeat() {
         self.heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 15.0, repeats: true) { [weak self] _ in
             guard let self = self else { return }
-            let env: [String: Any] = [
-                "version": self.protocolVersion,
-                "messageId": UUID().uuidString,
-                "type": "heartbeat",
-            ]
-            self.sendEnvelope(env)
+            self.sendEnvelope(Self.buildHeartbeatEnvelope(
+                protocolVersion: self.protocolVersion
+            ))
         }
     }
 
@@ -859,17 +885,13 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
               let ticket = self.currentTicket else {
             return
         }
-        let env: [String: Any] = [
-            "version": self.protocolVersion,
-            "messageId": UUID().uuidString,
-            "type": "hello",
-            "protocolVersion": self.protocolVersion,
-            "capabilities": self.capabilities,
-            "deviceId": deviceId,
-            "ticket": ticket,
-            "lastSeq": self.connectLastSeq,
-        ]
-        self.sendEnvelope(env)
+        self.sendEnvelope(Self.buildHelloEnvelope(
+            protocolVersion: self.protocolVersion,
+            capabilities: self.capabilities,
+            deviceId: deviceId,
+            ticket: ticket,
+            lastSeq: self.connectLastSeq
+        ))
     }
 
     private func receiveMessage() {
@@ -902,13 +924,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         // to the WebView so it can re-parse into the full Envelope type.
         if let dict = JSONUtilities.parse(json) {
             // §9.2: track the incoming seq on every envelope.
-            if let seq = dict["seq"] as? Int64 {
-                self.seqTracker.observe(seq)
-            } else if let seq = dict["seq"] as? Int {
-                self.seqTracker.observe(Int64(seq))
-            } else if let seq = dict["seq"] as? Double {
-                self.seqTracker.observe(Int64(seq))
-            }
+            self.seqTracker.observe(CoordinationEnvelope.seq(dict))
             // §9.1: dedup command/snapshot_projection envelopes by messageId.
             if let type = dict["type"] as? String,
                type == "snapshot_projection",
@@ -1288,13 +1304,35 @@ enum JSONUtilities {
     }
 }
 
+enum CoordinationEnvelope {
+    static func seq(_ envelope: [String: Any]) -> Int64? {
+        switch envelope["seq"] {
+        case let value as Int64: return value
+        case let value as Int: return Int64(value)
+        case let value as Double: return Int64(value)
+        case let value as String: return Int64(value)
+        default: return nil
+        }
+    }
+
+    static func messageId(_ envelope: [String: Any]) -> String? {
+        envelope["messageId"] as? String
+    }
+
+    static func type(_ envelope: [String: Any]) -> String? {
+        envelope["type"] as? String
+    }
+}
+
 /// Append the one-time WebSocket ticket as a URL-encoded query parameter so
 /// tickets containing &/=/?/# do not break the URL.
 enum CoordinationURL {
     static func buildTicketUrl(_ wsUrl: String, ticket: String) -> String {
         let separator = wsUrl.contains("?") ? "&" : "?"
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: ":#[]@!$&'()*+,;=/?")
         let encoded = ticket.addingPercentEncoding(
-            withAllowedCharacters: .urlQueryAllowed,
+            withAllowedCharacters: allowed,
         ) ?? ticket
         return wsUrl + separator + "ticket=" + encoded
     }

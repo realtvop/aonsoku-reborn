@@ -43,4 +43,32 @@ final class HandoffTests: XCTestCase {
         XCTAssertEqual(envelope["snapshotRevision"] as? Int, 12)
         XCTAssertEqual(envelope["sessionId"] as? String, "session")
     }
+
+    func testHandoffSnapshotSupportsEmptyContextWhileInUserQueue() throws {
+        let snapshot = try XCTUnwrap(AonsokuNativeAudioPlugin.decodeHandoffSnapshot([
+            "songId": "u1",
+            "contextQueue": [],
+            "userQueue": ["u1", "u2"],
+            "inUserQueue": true,
+        ]))
+
+        XCTAssertTrue(snapshot.contextQueue.isEmpty)
+        XCTAssertEqual(snapshot.userQueue, ["u1", "u2"])
+        XCTAssertTrue(snapshot.inUserQueue)
+    }
+
+    func testHandoffSnapshotSupportsLegacySingleSongPayload() throws {
+        let snapshot = try XCTUnwrap(AonsokuNativeAudioPlugin.decodeHandoffSnapshot([
+            "songId": "song-1",
+        ]))
+
+        XCTAssertEqual(snapshot.contextQueue, ["song-1"])
+        XCTAssertEqual(snapshot.contextIndex, 0)
+        XCTAssertFalse(snapshot.inUserQueue)
+    }
+
+    func testHandoffSnapshotRejectsMissingCurrentSongId() {
+        XCTAssertNil(AonsokuNativeAudioPlugin.decodeHandoffSnapshot([:]))
+        XCTAssertNil(AonsokuNativeAudioPlugin.decodeHandoffSnapshot(["songId": ""]))
+    }
 }
