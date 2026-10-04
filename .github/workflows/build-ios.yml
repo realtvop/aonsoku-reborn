@@ -53,6 +53,7 @@ jobs:
         working-directory: ios/App
         run: |
           xcodebuild archive \
+            -project App.xcodeproj \
             -scheme App \
             -archivePath $RUNNER_TEMP/App.xcarchive \
             -destination "generic/platform=iOS" \

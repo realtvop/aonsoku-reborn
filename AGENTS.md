@@ -70,7 +70,8 @@ cd android && ./gradlew :aonsoku-capacitor-native:testDebugUnitTest
 IOS_TEST_RESULT_BUNDLE=/tmp/AonsokuNativeTests.xcresult ./scripts/test-ios-native.sh
 
 # iOS native core
-cd ios/App && xcodebuild -scheme App -destination 'generic/platform=iOS Simulator' build
+cd ios/App && xcodebuild -project App.xcodeproj -scheme App \
+  -destination 'generic/platform=iOS Simulator' build
 
 # Electron desktop native audio
 pnpm native-audio:build   # Build the Node-API libmpv addon
