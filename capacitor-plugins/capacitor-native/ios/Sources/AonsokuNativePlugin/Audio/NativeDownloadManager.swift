@@ -96,6 +96,7 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
     func cancel(songId: String) {
         lock.lock()
         let taskId = activeTasks.first(where: { $0.value == songId })?.key
+        if let taskId { activeTasks.removeValue(forKey: taskId) }
         lock.unlock()
 
         guard let taskId else { return }
@@ -111,6 +112,12 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
         lock.lock()
         activeTasks.removeAll()
         lock.unlock()
+    }
+
+    var activeDownloadSongIds: Set<String> {
+        lock.lock()
+        defer { lock.unlock() }
+        return Set(activeTasks.values)
     }
 
     func handleEvents(
