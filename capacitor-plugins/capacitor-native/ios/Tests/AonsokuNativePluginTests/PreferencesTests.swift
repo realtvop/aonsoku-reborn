@@ -47,4 +47,30 @@ final class PreferencesTests: XCTestCase {
             PreferencesManager(db: database.manager.dbPool).getString("remove")
         )
     }
+
+    func testPlayHistoryPersistsNewestFirstTrimsAndZeroClears() throws {
+        let database = try TemporaryDatabase()
+        var timestamp = 100
+        let store = PlayHistoryStore(
+            db: database.manager.dbPool,
+            now: {
+                defer { timestamp += 1 }
+                return timestamp
+            }
+        )
+
+        try store.add(songJSON: "song-1", maxSize: 2)
+        try store.add(songJSON: "song-2", maxSize: 2)
+        try store.add(songJSON: "song-3", maxSize: 2)
+
+        XCTAssertEqual(
+            try PlayHistoryStore(db: database.manager.dbPool).history(limit: 10),
+            ["song-3", "song-2"]
+        )
+        XCTAssertEqual(try store.history(limit: 1), ["song-3"])
+        XCTAssertEqual(try store.history(limit: 0), [])
+
+        try store.add(songJSON: "song-4", maxSize: 0)
+        XCTAssertEqual(try store.history(limit: 10), [])
+    }
 }

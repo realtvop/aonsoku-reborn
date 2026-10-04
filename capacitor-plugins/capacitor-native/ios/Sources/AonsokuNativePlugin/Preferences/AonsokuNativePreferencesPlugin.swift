@@ -20,6 +20,7 @@ public class AonsokuNativePreferencesPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private var db: DatabasePool { DatabaseManager.shared.dbPool }
     private var prefs: PreferencesManager { PreferencesManager.shared }
+    private lazy var playHistory = PlayHistoryStore(db: db)
 
     // MARK: - Preferences
 
@@ -120,15 +121,9 @@ public class AonsokuNativePreferencesPlugin: CAPPlugin, CAPBridgedPlugin {
         let limit = call.getInt("limit") ?? 100
         DispatchQueue.global(qos: .userInitiated).async {
             do {
-                let rows = try self.db.read { db in
-                    try Row.fetchAll(
-                        db,
-                        sql: "SELECT songJson FROM playHistory ORDER BY playedAt DESC LIMIT ?",
-                        arguments: [limit]
-                    )
-                }
-                let songs = rows.map { $0["songJson"] as String }
-                call.resolve(["history": songs])
+                call.resolve([
+                    "history": try self.playHistory.history(limit: limit),
+                ])
             } catch {
                 call.reject("Failed to read play history", nil, error)
             }
@@ -141,35 +136,24 @@ public class AonsokuNativePreferencesPlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
         let maxSize = call.getInt("maxSize") ?? 100
-        let now = Int(Date().timeIntervalSince1970 * 1000)
         DispatchQueue.global(qos: .utility).async {
-            try? self.db.write { db in
-                try db.execute(
-                    sql: "INSERT INTO playHistory (songJson, playedAt) VALUES (?, ?)",
-                    arguments: [songJson, now]
-                )
-                let count = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM playHistory") ?? 0
-                if count > maxSize {
-                    try db.execute(
-                        sql: """
-                            DELETE FROM playHistory WHERE id IN (
-                                SELECT id FROM playHistory ORDER BY playedAt ASC LIMIT ?
-                            )
-                            """,
-                        arguments: [count - maxSize]
-                    )
-                }
+            do {
+                try self.playHistory.add(songJSON: songJson, maxSize: maxSize)
+                call.resolve()
+            } catch {
+                call.reject("Failed to update play history", nil, error)
             }
-            call.resolve()
         }
     }
 
     @objc func clearPlayHistory(_ call: CAPPluginCall) {
         DispatchQueue.global(qos: .utility).async {
-            try? self.db.write { db in
-                try db.execute(sql: "DELETE FROM playHistory")
+            do {
+                try self.playHistory.clear()
+                call.resolve()
+            } catch {
+                call.reject("Failed to clear play history", nil, error)
             }
-            call.resolve()
         }
     }
 }

@@ -24,6 +24,11 @@ enum RecoverySourceKind {
 }
 
 class PlaybackRecoveryController {
+    typealias RecoveryScheduler = (
+        TimeInterval,
+        @escaping @Sendable () -> Void
+    ) -> DispatchWorkItem
+
     weak var delegate: PlaybackRecoveryDelegate?
 
     private(set) var state: RecoveryState = .idle
@@ -44,10 +49,19 @@ class PlaybackRecoveryController {
     private var recoveryTimer: DispatchWorkItem?
     private var progressMonitorTimer: DispatchSourceTimer?
     private var likelyToKeepUpDebounceTimer: DispatchWorkItem?
+    private let recoveryScheduler: RecoveryScheduler
 
     private var lastProgressTime: CMTime = .zero
     private var lastProgressAdvanceDate: Date?
     private var isMonitoringProgress = false
+
+    init(recoveryScheduler: @escaping RecoveryScheduler = { delay, action in
+        let work = DispatchWorkItem(block: action)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+        return work
+    }) {
+        self.recoveryScheduler = recoveryScheduler
+    }
 
     // MARK: - Public API
 
@@ -230,12 +244,12 @@ class PlaybackRecoveryController {
         let delay = level1BaseDelay * pow(2.0, Double(attempt - 1))
         let gen = generation
 
-        let work = DispatchWorkItem { [weak self] in
+        let work = recoveryScheduler(delay) { [weak self] in
             guard let self, self.generation == gen, self.state == .level1(attempt: attempt) else { return }
+            self.recoveryTimer = nil
             self.delegate?.recoverySeek(self, to: self.savedPosition, generation: gen)
         }
         recoveryTimer = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     private func scheduleLevel2(attempt: Int) {
@@ -246,12 +260,12 @@ class PlaybackRecoveryController {
         let delay = baseDelay * pow(2.0, Double(attempt - 1))
         let gen = generation
 
-        let work = DispatchWorkItem { [weak self] in
+        let work = recoveryScheduler(delay) { [weak self] in
             guard let self, self.generation == gen, self.state == .level2(attempt: attempt) else { return }
+            self.recoveryTimer = nil
             self.delegate?.recoveryReload(self, generation: gen, savedPosition: self.savedPosition)
         }
         recoveryTimer = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     private func giveUp() {

@@ -117,10 +117,19 @@ final class SourceResolverTests: XCTestCase {
         let cached = try XCTUnwrap(resolver.buildStreamUrl(songId: "song"))
         resolver.invalidateCredentialsCache()
         let refreshed = try XCTUnwrap(resolver.buildStreamUrl(songId: "song"))
+        let firstQuery = queryDictionary(try XCTUnwrap(
+            URLComponents(string: first)
+        ))
+        let cachedQuery = queryDictionary(try XCTUnwrap(
+            URLComponents(string: cached)
+        ))
+        let refreshedQuery = queryDictionary(try XCTUnwrap(
+            URLComponents(string: refreshed)
+        ))
 
-        XCTAssertTrue(first.contains("u=first"))
-        XCTAssertEqual(first, cached)
-        XCTAssertTrue(refreshed.contains("u=second"))
+        XCTAssertEqual(firstQuery["u"], "first")
+        XCTAssertEqual(firstQuery, cachedQuery)
+        XCTAssertEqual(refreshedQuery["u"], "second")
     }
 
     private var credentials: ServerCredentials {

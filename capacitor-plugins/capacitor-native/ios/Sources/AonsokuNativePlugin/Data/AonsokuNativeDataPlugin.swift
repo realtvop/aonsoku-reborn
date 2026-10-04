@@ -121,11 +121,7 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
                     offset: offset,
                     filter: filter
                 )
-                call.resolve([
-                    "items": page.items.map(Self.dictionary),
-                    "total": page.total,
-                    "hasMore": page.hasMore,
-                ])
+                call.resolve(Self.pageDictionary(page))
             } catch {
                 call.reject("Failed to query artists: \(error.localizedDescription)")
             }
@@ -171,11 +167,7 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
                     offset: offset,
                     filter: filter
                 )
-                call.resolve([
-                    "items": page.items.map(Self.dictionary),
-                    "total": page.total,
-                    "hasMore": page.hasMore,
-                ])
+                call.resolve(Self.pageDictionary(page))
             } catch {
                 call.reject("Failed to query albums: \(error.localizedDescription)")
             }
@@ -222,11 +214,7 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
                     offset: offset,
                     filter: filter
                 )
-                call.resolve([
-                    "items": page.items.map(Self.dictionary),
-                    "total": page.total,
-                    "hasMore": page.hasMore,
-                ])
+                call.resolve(Self.pageDictionary(page))
             } catch {
                 call.reject("Failed to query songs: \(error.localizedDescription)")
             }
@@ -243,11 +231,7 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
                     limit: limit,
                     offset: offset
                 )
-                call.resolve([
-                    "items": page.items.map(Self.dictionary),
-                    "total": page.total,
-                    "hasMore": page.hasMore,
-                ])
+                call.resolve(Self.pageDictionary(page))
             } catch {
                 call.reject("Failed to query playlists: \(error.localizedDescription)")
             }
@@ -598,7 +582,17 @@ public class AonsokuNativeDataPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    private static func dictionary<T: Encodable>(_ value: T) -> [String: Any] {
+    static func pageDictionary<T: Encodable & Sendable>(
+        _ page: LibraryPage<T>
+    ) -> [String: Any] {
+        [
+            "items": page.items.map(dictionary),
+            "total": page.total,
+            "hasMore": page.hasMore,
+        ]
+    }
+
+    static func dictionary<T: Encodable>(_ value: T) -> [String: Any] {
         guard let data = try? JSONEncoder().encode(value),
               let object = try? JSONSerialization.jsonObject(with: data),
               let dictionary = object as? [String: Any] else {

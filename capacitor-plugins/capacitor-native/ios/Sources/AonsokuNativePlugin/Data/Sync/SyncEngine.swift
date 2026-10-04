@@ -337,7 +337,7 @@ final class SyncEngine {
             return false
         }
         let now = Int(Date().timeIntervalSince1970 * 1000)
-        return (now - lastSynced) < tier.freshWindowMs
+        return tier.isFresh(lastSyncedAtMs: lastSynced, nowMs: now)
     }
 
     private func emitState(phase: String, tier: String?, processed: Int, total: Int) {

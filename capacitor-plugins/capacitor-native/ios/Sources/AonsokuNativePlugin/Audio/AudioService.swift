@@ -8,6 +8,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     typealias PlayerFactory = (AVPlayerItem) -> AVPlayer
 
     private let audioSession = AVAudioSession.sharedInstance()
+    private let databaseManager: DatabaseManager
     private let queueEngine: NativeQueueEngine
     private let sourceResolver: NativeSourceResolver
     private let downloadManager: NativeDownloadManager
@@ -78,6 +79,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
         recoveryController: PlaybackRecoveryController = PlaybackRecoveryController(),
         playerFactory: @escaping PlayerFactory = { AVPlayer(playerItem: $0) }
     ) {
+        self.databaseManager = databaseManager
         self.queueEngine = queueEngine
         self.sourceResolver = sourceResolver
         self.downloadManager = downloadManager
@@ -593,7 +595,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                         snapshot.restorePrevious + [snapshot.songId]
                 )
                 let records = try SongRepository(
-                    db: DatabaseManager.shared.dbPool
+                    db: self.databaseManager.dbPool
                 ).getByIds(ids: ids)
                 let byId = Dictionary(
                     uniqueKeysWithValues: records.map { ($0.id, $0.queueSong) }
@@ -688,7 +690,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     func resolveSongs(ids: [String]) -> [SongRecord] {
-        (try? SongRepository(db: DatabaseManager.shared.dbPool).getByIds(ids: ids)) ?? []
+        (try? SongRepository(db: databaseManager.dbPool).getByIds(ids: ids)) ?? []
     }
 
     func scrobbleEntries() -> [ScrobbleEntry] {
@@ -1225,7 +1227,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self,
                   let result = try? AlbumRepository(
-                      db: DatabaseManager.shared.dbPool
+                      db: self.databaseManager.dbPool
                   ).getWithSongs(id),
                   !result.songs.isEmpty else { return }
             self.setContextQueue(
@@ -1242,7 +1244,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self,
                   let detail = try? PlaylistRepository(
-                      db: DatabaseManager.shared.dbPool
+                      db: self.databaseManager.dbPool
                   ).getDetailById(id),
                   let data = detail.entriesJson.data(using: .utf8),
                   let entries = try? JSONDecoder().decode(
@@ -1272,7 +1274,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private func toggleLike() {
         stateQueue.async { [weak self] in
             guard let self, let song = self.queueEngine.currentSong else { return }
-            let repository = SongRepository(db: DatabaseManager.shared.dbPool)
+            let repository = SongRepository(db: self.databaseManager.dbPool)
             guard let record = try? repository.getById(song.id) else { return }
             let next = record.starredAt == nil
                 ? Int(Date().timeIntervalSince1970)

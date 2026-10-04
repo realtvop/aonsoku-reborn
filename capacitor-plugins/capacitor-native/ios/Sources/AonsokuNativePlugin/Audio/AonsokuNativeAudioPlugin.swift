@@ -529,6 +529,12 @@ extension AonsokuNativeAudioPlugin {
         command(from: object)
     }
 
+    internal static func encodeQueueSnapshot(
+        _ snapshot: AudioQueueSnapshot
+    ) -> [String: Any] {
+        object(from: snapshot)
+    }
+
     internal static func isSupportedRemoteControlCommand(_ type: String) -> Bool {
         command(from: ["type": type]) != nil || [
             "play_song", "play_album", "play_playlist", "play_at_index",

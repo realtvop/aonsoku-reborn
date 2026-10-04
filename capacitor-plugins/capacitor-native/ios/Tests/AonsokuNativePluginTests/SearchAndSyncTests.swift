@@ -55,4 +55,21 @@ final class SearchAndSyncTests: XCTestCase {
         XCTAssertEqual(buildAllSongsQuery(serverType: "gonic"), "")
         XCTAssertEqual(buildAllSongsQuery(serverType: ""), "")
     }
+
+    func testSyncFreshnessUsesStrictBoundaryAndHandlesClockSkew() {
+        let now = 10_000_000
+        for tier in SyncTier.allCases {
+            XCTAssertTrue(tier.isFresh(
+                lastSyncedAtMs: now - tier.freshWindowMs + 1,
+                nowMs: now
+            ))
+            XCTAssertFalse(tier.isFresh(
+                lastSyncedAtMs: now - tier.freshWindowMs,
+                nowMs: now
+            ))
+            XCTAssertTrue(tier.isFresh(lastSyncedAtMs: now + 1, nowMs: now))
+        }
+        XCTAssertLessThan(SyncTier.t1.freshWindowMs, SyncTier.t2.freshWindowMs)
+        XCTAssertLessThan(SyncTier.t2.freshWindowMs, SyncTier.t3.freshWindowMs)
+    }
 }

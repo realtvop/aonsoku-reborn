@@ -16,4 +16,9 @@ enum SyncTier: String, CaseIterable {
     var freshWindowMs: Int {
         Int(freshWindowSeconds * 1000)
     }
+
+    func isFresh(lastSyncedAtMs: Int, nowMs: Int) -> Bool {
+        let age = max(0, nowMs - lastSyncedAtMs)
+        return age < freshWindowMs
+    }
 }
