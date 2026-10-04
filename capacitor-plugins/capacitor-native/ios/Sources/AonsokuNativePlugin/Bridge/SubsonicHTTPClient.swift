@@ -16,11 +16,15 @@ public struct SubsonicResponse {
 public final class SubsonicHTTPClient {
     private let session: URLSession
 
-    public init() {
+    public convenience init() {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 300
-        self.session = URLSession(configuration: config)
+        self.init(session: URLSession(configuration: config))
+    }
+
+    init(session: URLSession) {
+        self.session = session
     }
 
     public func request(
@@ -142,7 +146,7 @@ public final class SubsonicHTTPClient {
         }
     }
 
-    private func buildURL(
+    func buildURL(
         baseUrl: String,
         path: String,
         credentials: ServerCredentials,
@@ -155,14 +159,20 @@ public final class SubsonicHTTPClient {
             protocolVersion: credentials.protocolVersion
         )
 
+        let cleanBaseUrl = baseUrl.trimmingCharacters(
+            in: CharacterSet(charactersIn: "/")
+        )
         let cleanPath = path.hasPrefix("/") ? String(path.dropFirst()) : path
-        let baseString = "\(baseUrl)/rest/\(cleanPath)"
+        let baseString = "\(cleanBaseUrl)/rest/\(cleanPath)"
 
         guard var components = URLComponents(string: baseString) else {
             throw SubsonicHTTPError.parseError("Invalid URL: \(baseString)")
         }
 
-        var queryItems = authParams.map { URLQueryItem(name: $0.key, value: $0.value) }
+        var queryItems = components.queryItems ?? []
+        queryItems.append(contentsOf: authParams.map {
+            URLQueryItem(name: $0.key, value: $0.value)
+        })
         for (key, value) in extraQuery {
             queryItems.append(URLQueryItem(name: key, value: value))
         }

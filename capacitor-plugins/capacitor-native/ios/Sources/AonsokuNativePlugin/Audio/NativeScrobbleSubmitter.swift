@@ -22,11 +22,23 @@ class NativeScrobbleSubmitter {
     }
 
     func submitIfEligible(entry: ScrobbleEntry, songDurationSeconds: Double) {
-        let playedSeconds = Double(entry.playedDurationMs) / 1000.0
-        let threshold = min(songDurationSeconds * thresholdPercent, thresholdMaxSeconds)
-
-        guard playedSeconds >= threshold, threshold > 0 else { return }
+        guard isEligible(
+            entry: entry,
+            songDurationSeconds: songDurationSeconds
+        ) else { return }
         submit(songId: entry.songId, timestamp: entry.timestamp)
+    }
+
+    func isEligible(
+        entry: ScrobbleEntry,
+        songDurationSeconds: Double
+    ) -> Bool {
+        let playedSeconds = Double(entry.playedDurationMs) / 1000
+        let threshold = min(
+            songDurationSeconds * thresholdPercent,
+            thresholdMaxSeconds
+        )
+        return threshold > 0 && playedSeconds >= threshold
     }
 
     func submitPending(buffer: NativeScrobbleBuffer) {

@@ -15,14 +15,51 @@ enum DownloadError: Error {
 
 class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
     static let backgroundSessionIdentifier = "github.realtvop.aonsoku.audio.downloads"
+    typealias SessionFactory = (URLSessionDownloadDelegate) -> URLSession
 
     weak var delegate: NativeDownloadManagerDelegate?
 
     private var activeTasks: [Int: String] = [:]
     private var backgroundCompletionHandler: (() -> Void)?
     private let lock = NSLock()
+    private let sessionFactory: SessionFactory
+    private let credentialsProvider: () -> ServerCredentials?
+    private let cacheDirectoryProvider: (Bool) throws -> URL
+    private let fileManager: FileManager
+    private let now: () -> Date
 
     private lazy var session: URLSession = {
+        sessionFactory(self)
+    }()
+
+    override convenience init() {
+        self.init(sessionFactory: { delegate in
+            Self.makeBackgroundSession(delegate: delegate)
+        })
+    }
+
+    init(
+        sessionFactory: @escaping SessionFactory,
+        credentialsProvider: @escaping () -> ServerCredentials? = {
+            KeychainManager.retrieve()
+        },
+        cacheDirectoryProvider: @escaping (Bool) throws -> URL = {
+            try AudioCacheUtils.cacheDirectoryURL(createIfNeeded: $0)
+        },
+        fileManager: FileManager = .default,
+        now: @escaping () -> Date = Date.init
+    ) {
+        self.sessionFactory = sessionFactory
+        self.credentialsProvider = credentialsProvider
+        self.cacheDirectoryProvider = cacheDirectoryProvider
+        self.fileManager = fileManager
+        self.now = now
+        super.init()
+    }
+
+    private static func makeBackgroundSession(
+        delegate: URLSessionDownloadDelegate
+    ) -> URLSession {
         let config = URLSessionConfiguration.background(
             withIdentifier: Self.backgroundSessionIdentifier
         )
@@ -30,34 +67,20 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
         config.waitsForConnectivity = true
         config.isDiscretionary = false
         config.sessionSendsLaunchEvents = true
-        return URLSession(configuration: config, delegate: self, delegateQueue: nil)
-    }()
+        return URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
+    }
 
     func download(songId: String, maxBitRate: Int? = nil, format: String? = nil) {
-        guard let credentials = KeychainManager.retrieve() else {
+        guard let credentials = credentialsProvider() else {
             delegate?.downloadManager(self, didFail: songId, error: DownloadError.noCredentials)
             return
         }
-
-        var params = SubsonicAuthBuilder.buildQueryParams(
-            username: credentials.username,
-            password: credentials.password,
-            authType: credentials.authType,
-            protocolVersion: credentials.protocolVersion
-        )
-        params["id"] = songId
-        params["estimateContentLength"] = "true"
-        if let maxBitRate { params["maxBitRate"] = String(maxBitRate) }
-        if let format { params["format"] = format }
-
-        let baseString = "\(credentials.serverUrl)/rest/stream"
-        guard var components = URLComponents(string: baseString) else {
-            delegate?.downloadManager(self, didFail: songId, error: DownloadError.invalidURL)
-            return
-        }
-        components.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
-
-        guard let url = components.url else {
+        guard let url = buildDownloadURL(
+            songId: songId,
+            credentials: credentials,
+            maxBitRate: maxBitRate,
+            format: format
+        ) else {
             delegate?.downloadManager(self, didFail: songId, error: DownloadError.invalidURL)
             return
         }
@@ -102,6 +125,37 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
         return true
     }
 
+    func buildDownloadURL(
+        songId: String,
+        credentials: ServerCredentials,
+        maxBitRate: Int?,
+        format: String?
+    ) -> URL? {
+        var params = SubsonicAuthBuilder.buildQueryParams(
+            username: credentials.username,
+            password: credentials.password,
+            authType: credentials.authType,
+            protocolVersion: credentials.protocolVersion
+        )
+        params["id"] = songId
+        params["estimateContentLength"] = "true"
+        if let maxBitRate { params["maxBitRate"] = String(maxBitRate) }
+        if let format { params["format"] = format }
+
+        let cleanBaseUrl = credentials.serverUrl.trimmingCharacters(
+            in: CharacterSet(charactersIn: "/")
+        )
+        guard var components = URLComponents(
+            string: "\(cleanBaseUrl)/rest/stream"
+        ) else {
+            return nil
+        }
+        components.queryItems = params.map {
+            URLQueryItem(name: $0.key, value: $0.value)
+        }
+        return components.url
+    }
+
     // MARK: - URLSessionDownloadDelegate
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
@@ -131,22 +185,22 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
         let cacheId = AudioCacheUtils.cacheId(for: songId)
 
         do {
-            let directory = try AudioCacheUtils.cacheDirectoryURL(createIfNeeded: true)
+            let directory = try cacheDirectoryProvider(true)
             let destURL = directory.appendingPathComponent("\(cacheId).\(ext)", isDirectory: false)
 
-            if FileManager.default.fileExists(atPath: destURL.path) {
-                try FileManager.default.removeItem(at: destURL)
+            if fileManager.fileExists(atPath: destURL.path) {
+                try fileManager.removeItem(at: destURL)
             }
-            try FileManager.default.moveItem(at: location, to: destURL)
+            try fileManager.moveItem(at: location, to: destURL)
 
-            let attrs = try? FileManager.default.attributesOfItem(atPath: destURL.path)
+            let attrs = try? fileManager.attributesOfItem(atPath: destURL.path)
             let sizeBytes = (attrs?[.size] as? NSNumber)?.int64Value ?? 0
 
             let metadata = NativeCachedAudioFileMetadata(
                 songId: songId,
                 fileName: "\(cacheId).\(ext)",
                 contentType: contentType,
-                lastModifiedAt: Date().timeIntervalSince1970 * 1000
+                lastModifiedAt: now().timeIntervalSince1970 * 1000
             )
             let metadataData = try JSONEncoder().encode(metadata)
             let metadataURL = directory.appendingPathComponent("\(cacheId).json", isDirectory: false)

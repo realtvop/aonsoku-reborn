@@ -9,6 +9,35 @@ private struct PendingNativeCommand {
     let attemptedStaleRetry: Bool
 }
 
+struct CoordinationReconnectPolicy: Equatable {
+    let baseDelay: TimeInterval
+    let maxDelay: TimeInterval
+    let maxAttempts: Int
+
+    init(
+        baseDelay: TimeInterval = 1,
+        maxDelay: TimeInterval = 30,
+        maxAttempts: Int = 10
+    ) {
+        self.baseDelay = baseDelay
+        self.maxDelay = maxDelay
+        self.maxAttempts = maxAttempts
+    }
+
+    func next(after attempts: Int) -> (attempt: Int, delay: TimeInterval) {
+        let attempt = min(max(attempts + 1, 1), maxAttempts)
+        let delay = min(baseDelay * pow(2, Double(attempt - 1)), maxDelay)
+        return (attempt, delay)
+    }
+
+    func permitsReconnect(
+        manualDisconnect: Bool,
+        isAppInBackground: Bool
+    ) -> Bool {
+        !manualDisconnect && !isAppInBackground
+    }
+}
+
 /// Native coordination plugin for iOS — maintains a WebSocket
 /// connection to the coordination server, bridging remote commands and
 /// handoff events to the native queue controller (design §8, §9, §10, §11).
@@ -25,11 +54,18 @@ private struct PendingNativeCommand {
 /// this plugin when running on capacitor-ios.
 @objc(AonsokuNativeCoordination)
 public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDelegate, URLSessionDelegate {
-    /// §13: exponential backoff. Base 1s, doubled per attempt, capped at 30s.
-    private static let baseReconnectDelay: TimeInterval = 1.0
-    private static let maxReconnectDelay: TimeInterval = 30.0
-    private static let maxReconnectAttempts = 10
     private static weak var activeInstance: AonsokuNativeCoordinationPlugin?
+    internal var reconnectPolicy = CoordinationReconnectPolicy()
+    internal var sessionFactory: (
+        URLSessionConfiguration,
+        URLSessionDelegate
+    ) -> URLSession = { configuration, delegate in
+        URLSession(
+            configuration: configuration,
+            delegate: delegate,
+            delegateQueue: nil
+        )
+    }
 
     public static func applicationDidEnterBackground() {
         activeInstance?.handleApplicationDidEnterBackground()
@@ -450,7 +486,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         let config = URLSessionConfiguration.default
         config.shouldUseExtendedBackgroundIdleMode = true
         config.waitsForConnectivity = true
-        self.session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
+        self.session = sessionFactory(config, self)
 
         let task = self.session?.webSocketTask(with: url)
         self.webSocketTask = task
@@ -1254,17 +1290,17 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     }
 
     private func scheduleReconnect() {
-        guard !manualDisconnect, !isAppInBackground else { return }
+        guard reconnectPolicy.permitsReconnect(
+            manualDisconnect: manualDisconnect,
+            isAppInBackground: isAppInBackground
+        ) else { return }
         reconnectWorkItem?.cancel()
-        self.reconnectAttempts += 1
-        // §13: exponential backoff with a cap. Tickets expire in 30s so the
-        // native layer only emits the request; the WebView performs the
-        // actual reconnect after refreshing the ticket (§6.3).
-        let attempt = min(self.reconnectAttempts, Self.maxReconnectAttempts)
-        let delay = min(
-            Self.baseReconnectDelay * pow(2.0, Double(attempt - 1)),
-            Self.maxReconnectDelay,
-        )
+        let next = reconnectPolicy.next(after: reconnectAttempts)
+        self.reconnectAttempts = next.attempt
+        // Tickets expire in 30s so the native layer only emits the request;
+        // the WebView performs the reconnect after refreshing the ticket.
+        let attempt = next.attempt
+        let delay = next.delay
         let workItem = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
             self.notifyReconnectNeeded(attempt: attempt)

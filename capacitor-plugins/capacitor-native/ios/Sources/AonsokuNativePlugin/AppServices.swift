@@ -7,9 +7,19 @@ public final class AppServices: @unchecked Sendable {
     public let library: LibraryService
     public let lifecycle: AppLifecycleService
 
-    private init() {
-        audio = AudioService()
-        library = LibraryService()
-        lifecycle = AppLifecycleService(audio: audio)
+    private convenience init() {
+        self.init(audio: AudioService(), library: LibraryService())
+    }
+
+    init(
+        audio: AudioService,
+        library: LibraryService,
+        lifecycleFactory: (AudioService) -> AppLifecycleService = {
+            AppLifecycleService(audio: $0)
+        }
+    ) {
+        self.audio = audio
+        self.library = library
+        self.lifecycle = lifecycleFactory(audio)
     }
 }

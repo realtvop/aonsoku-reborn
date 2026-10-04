@@ -180,4 +180,26 @@ final class CoordinationTests: XCTestCase {
         XCTAssertEqual(CoordinationEnvelope.type(["type": "command_ack"]), "command_ack")
         XCTAssertNil(CoordinationEnvelope.type([:]))
     }
+
+    func testReconnectPolicyBacksOffCapsAndStopsForManualOrBackgroundState() {
+        let policy = CoordinationReconnectPolicy()
+        XCTAssertEqual(policy.next(after: 0).attempt, 1)
+        XCTAssertEqual(policy.next(after: 0).delay, 1)
+        XCTAssertEqual(policy.next(after: 1).delay, 2)
+        XCTAssertEqual(policy.next(after: 5).delay, 30)
+        XCTAssertEqual(policy.next(after: 100).attempt, 10)
+        XCTAssertEqual(policy.next(after: 100).delay, 30)
+        XCTAssertTrue(policy.permitsReconnect(
+            manualDisconnect: false,
+            isAppInBackground: false
+        ))
+        XCTAssertFalse(policy.permitsReconnect(
+            manualDisconnect: true,
+            isAppInBackground: false
+        ))
+        XCTAssertFalse(policy.permitsReconnect(
+            manualDisconnect: false,
+            isAppInBackground: true
+        ))
+    }
 }

@@ -5,11 +5,26 @@ final class PreferencesManager {
     static let shared = PreferencesManager()
 
     private let db: DatabasePool
+    private let now: () -> Date
+    private let writeQueue: DispatchQueue
     private var cache: [String: String] = [:]
     private let queue = DispatchQueue(label: "com.aonsoku.preferences", attributes: .concurrent)
 
-    private init() {
-        self.db = DatabaseManager.shared.dbPool
+    private convenience init() {
+        self.init(db: DatabaseManager.shared.dbPool)
+    }
+
+    init(
+        db: DatabasePool,
+        now: @escaping () -> Date = Date.init,
+        writeQueue: DispatchQueue = DispatchQueue(
+            label: "com.aonsoku.preferences.write",
+            qos: .utility
+        )
+    ) {
+        self.db = db
+        self.now = now
+        self.writeQueue = writeQueue
         loadAll()
     }
 
@@ -55,14 +70,14 @@ final class PreferencesManager {
     }
 
     func setValue(_ key: String, value: String) {
-        queue.async(flags: .barrier) {
+        queue.sync(flags: .barrier) {
             self.cache[key] = value
         }
         writeToDb(key: key, value: value)
     }
 
     func setValues(_ pairs: [String: String]) {
-        queue.async(flags: .barrier) {
+        queue.sync(flags: .barrier) {
             for (key, value) in pairs {
                 self.cache[key] = value
             }
@@ -71,14 +86,18 @@ final class PreferencesManager {
     }
 
     func deleteValue(_ key: String) {
-        queue.async(flags: .barrier) {
+        queue.sync(flags: .barrier) {
             self.cache.removeValue(forKey: key)
         }
-        DispatchQueue.global(qos: .utility).async {
+        writeQueue.async {
             try? self.db.write { db in
                 try db.execute(sql: "DELETE FROM preferences WHERE key = ?", arguments: [key])
             }
         }
+    }
+
+    func waitForPendingWrites() {
+        writeQueue.sync {}
     }
 
     private func loadAll() {
@@ -95,8 +114,8 @@ final class PreferencesManager {
     }
 
     private func writeToDb(key: String, value: String) {
-        let now = Int(Date().timeIntervalSince1970 * 1000)
-        DispatchQueue.global(qos: .utility).async {
+        let now = Int(now().timeIntervalSince1970 * 1000)
+        writeQueue.async {
             try? self.db.write { db in
                 try db.execute(
                     sql: """
@@ -110,8 +129,8 @@ final class PreferencesManager {
     }
 
     private func writeMultipleToDb(_ pairs: [String: String]) {
-        let now = Int(Date().timeIntervalSince1970 * 1000)
-        DispatchQueue.global(qos: .utility).async {
+        let now = Int(now().timeIntervalSince1970 * 1000)
+        writeQueue.async {
             try? self.db.write { db in
                 for (key, value) in pairs {
                     try db.execute(

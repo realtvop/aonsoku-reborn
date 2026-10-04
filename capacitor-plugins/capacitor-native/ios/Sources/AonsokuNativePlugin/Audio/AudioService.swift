@@ -5,14 +5,16 @@ import UIKit
 
 public final class AudioService: NSObject, @unchecked Sendable {
     public typealias EventHandler = @Sendable (AudioServiceEvent) -> Void
+    typealias PlayerFactory = (AVPlayerItem) -> AVPlayer
 
     private let audioSession = AVAudioSession.sharedInstance()
-    private let queueEngine = NativeQueueEngine()
-    private let sourceResolver = NativeSourceResolver()
-    private let downloadManager = NativeDownloadManager()
-    private let scrobbleBuffer = NativeScrobbleBuffer()
-    private let scrobbleSubmitter = NativeScrobbleSubmitter()
-    private let recoveryController = PlaybackRecoveryController()
+    private let queueEngine: NativeQueueEngine
+    private let sourceResolver: NativeSourceResolver
+    private let downloadManager: NativeDownloadManager
+    private let scrobbleBuffer: NativeScrobbleBuffer
+    private let scrobbleSubmitter: NativeScrobbleSubmitter
+    private let recoveryController: PlaybackRecoveryController
+    private let playerFactory: PlayerFactory
     private let stateQueue = DispatchQueue(
         label: "com.aonsoku.AudioService.state",
         qos: .userInitiated
@@ -20,9 +22,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private let listenerQueue = DispatchQueue(
         label: "com.aonsoku.AudioService.listeners"
     )
-    private let persistence = PlaybackStatePersistence(
-        repository: PlaybackStateRepository(db: DatabaseManager.shared.dbPool)
-    )
+    private let persistence: PlaybackStatePersistence
 
     private var listeners: [UUID: EventHandler] = [:]
     private var stateListeners: [UUID: @Sendable (AudioPlaybackSnapshot) -> Void] = [:]
@@ -64,7 +64,30 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private var sleepTimerMode = "duration"
     private var started = false
 
-    public override init() {
+    public override convenience init() {
+        self.init(databaseManager: .shared)
+    }
+
+    init(
+        databaseManager: DatabaseManager,
+        queueEngine: NativeQueueEngine = NativeQueueEngine(),
+        sourceResolver: NativeSourceResolver = NativeSourceResolver(),
+        downloadManager: NativeDownloadManager = NativeDownloadManager(),
+        scrobbleBuffer: NativeScrobbleBuffer = NativeScrobbleBuffer(),
+        scrobbleSubmitter: NativeScrobbleSubmitter = NativeScrobbleSubmitter(),
+        recoveryController: PlaybackRecoveryController = PlaybackRecoveryController(),
+        playerFactory: @escaping PlayerFactory = { AVPlayer(playerItem: $0) }
+    ) {
+        self.queueEngine = queueEngine
+        self.sourceResolver = sourceResolver
+        self.downloadManager = downloadManager
+        self.scrobbleBuffer = scrobbleBuffer
+        self.scrobbleSubmitter = scrobbleSubmitter
+        self.recoveryController = recoveryController
+        self.playerFactory = playerFactory
+        self.persistence = PlaybackStatePersistence(
+            repository: PlaybackStateRepository(db: databaseManager.dbPool)
+        )
         super.init()
         queueEngine.delegate = self
         downloadManager.delegate = self
@@ -72,7 +95,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     deinit {
-        shutdown()
+        teardown(deactivateSession: false)
     }
 
     public func start(volumeHostView: UIView? = nil) {
@@ -100,19 +123,22 @@ public final class AudioService: NSObject, @unchecked Sendable {
 
     public func shutdown() {
         dispatchMain { [weak self] in
-            guard let self, self.started else { return }
-            self.started = false
-            self.persistence.flushNow()
-            self.persistence.stopProgressTracking()
-            self.recoveryController.stopProgressMonitoring()
-            self.unregisterRemoteCommands()
-            self.removeAudioSessionObservers()
-            self.volumeObservation?.invalidate()
-            self.volumeObservation = nil
-            self.sleepTimer?.invalidate()
-            self.sleepTimer = nil
-            self.clearPlayer(deactivateSession: true)
+            self?.teardown(deactivateSession: true)
         }
+    }
+
+    private func teardown(deactivateSession: Bool) {
+        started = false
+        persistence.flushNow()
+        persistence.stopProgressTracking()
+        recoveryController.stopProgressMonitoring()
+        unregisterRemoteCommands()
+        removeAudioSessionObservers()
+        volumeObservation?.invalidate()
+        volumeObservation = nil
+        sleepTimer?.invalidate()
+        sleepTimer = nil
+        clearPlayer(deactivateSession: deactivateSession)
     }
 
     public func applicationDidEnterBackground() {
@@ -856,7 +882,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
         item.preferredForwardBufferDuration = kind == "radio"
             ? 0
             : .greatestFiniteMagnitude
-        let player = AVPlayer(playerItem: item)
+        let player = playerFactory(item)
         self.playerItem = item
         self.player = player
         observe(item: item, player: player, generation: generation)
@@ -1085,7 +1111,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                 if let entry = self.scrobbleBuffer.stopTracking() {
                     self.scrobbleSubmitter.submitIfEligible(
                         entry: entry,
-                        songDurationSeconds: song.duration
+                        songDurationSeconds: self.scrobbleBuffer.lastEntryDuration ?? 0
                     )
                 }
                 self.currentSource = resolved.kind == "native-file"
