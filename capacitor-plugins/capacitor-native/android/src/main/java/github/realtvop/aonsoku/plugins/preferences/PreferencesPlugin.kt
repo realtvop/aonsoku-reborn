@@ -9,8 +9,10 @@ import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -20,8 +22,29 @@ import github.realtvop.aonsoku.plugins.debug.NativeLogger
 class PreferencesPlugin : Plugin() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val pluginScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val store: NativePreferencesStore by lazy {
-        NativePreferencesStore(context)
+    private val preferencesService: PreferencesService by lazy {
+        PreferencesService.getInstance(context)
+    }
+    private var changeJob: Job? = null
+
+    override fun load() {
+        super.load()
+        changeJob = pluginScope.launch {
+            preferencesService.changes.collect { change ->
+                val payload = JSObject().apply {
+                    change.key?.let { put("key", it) }
+                    change.value?.let { put("value", it) }
+                    put("preferences", JSObject().apply {
+                        for ((key, value) in change.preferences) {
+                            put(key, value)
+                        }
+                    })
+                }
+                mainHandler.post {
+                    notifyListeners("preferencesChanged", payload)
+                }
+            }
+        }
     }
 
     @PluginMethod
@@ -29,7 +52,7 @@ class PreferencesPlugin : Plugin() {
         pluginScope.launch {
             try {
                 val preferences = JSObject()
-                for ((key, value) in store.getAllPreferences()) {
+                for ((key, value) in preferencesService.getAllPreferences()) {
                     preferences.put(key, value)
                 }
                 resolve(
@@ -60,7 +83,7 @@ class PreferencesPlugin : Plugin() {
 
         pluginScope.launch {
             try {
-                store.setPreferences(pairs)
+                preferencesService.setPreferences(pairs)
                 resolve(call)
             } catch (e: Exception) {
                 NativeLogger.error("Failed to write preferences: ${e.localizedMessage}", "preferences-plugin")
@@ -80,7 +103,7 @@ class PreferencesPlugin : Plugin() {
         val value = valueToString(call.data.opt("value"))
         pluginScope.launch {
             try {
-                store.setPreference(key, value)
+                preferencesService.setPreference(key, value)
                 resolve(call)
             } catch (e: Exception) {
                 NativeLogger.error("Failed to write preference: ${e.localizedMessage}", "preferences-plugin")
@@ -99,7 +122,7 @@ class PreferencesPlugin : Plugin() {
 
         pluginScope.launch {
             try {
-                store.deletePreference(key)
+                preferencesService.deletePreference(key)
                 resolve(call)
             } catch (e: Exception) {
                 NativeLogger.error("Failed to delete preference: ${e.localizedMessage}", "preferences-plugin")
@@ -112,7 +135,7 @@ class PreferencesPlugin : Plugin() {
     fun getQueueState(call: PluginCall) {
         pluginScope.launch {
             try {
-                val state = store.getQueueState()
+                val state = preferencesService.getQueueState()
                 resolve(
                     call,
                     JSObject().apply { put("state", state ?: JSONObject.NULL) },
@@ -134,7 +157,7 @@ class PreferencesPlugin : Plugin() {
 
         pluginScope.launch {
             try {
-                store.setQueueState(state)
+                preferencesService.setQueueState(state)
                 resolve(call)
             } catch (e: Exception) {
                 NativeLogger.error("Failed to write queue state: ${e.localizedMessage}", "preferences-plugin")
@@ -151,7 +174,7 @@ class PreferencesPlugin : Plugin() {
                 resolve(
                     call,
                     JSObject().apply {
-                        put("history", JSONArray(store.getPlayHistory(limit)))
+                        put("history", JSONArray(preferencesService.getPlayHistory(limit)))
                     },
                 )
             } catch (_: Exception) {
@@ -171,7 +194,7 @@ class PreferencesPlugin : Plugin() {
         val maxSize = call.getInt("maxSize") ?: DEFAULT_HISTORY_LIMIT
         pluginScope.launch {
             try {
-                store.addToPlayHistory(song, maxSize)
+                preferencesService.addToPlayHistory(song, maxSize)
                 resolve(call)
             } catch (_: Exception) {
                 reject(call, "Failed to write play history")
@@ -183,7 +206,7 @@ class PreferencesPlugin : Plugin() {
     fun clearPlayHistory(call: PluginCall) {
         pluginScope.launch {
             try {
-                store.clearPlayHistory()
+                preferencesService.clearPlayHistory()
                 resolve(call)
             } catch (_: Exception) {
                 reject(call, "Failed to clear play history")
@@ -192,6 +215,7 @@ class PreferencesPlugin : Plugin() {
     }
 
     override fun handleOnDestroy() {
+        changeJob?.cancel()
         pluginScope.cancel()
         super.handleOnDestroy()
     }

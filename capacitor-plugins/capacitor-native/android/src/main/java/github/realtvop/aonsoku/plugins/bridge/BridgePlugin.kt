@@ -20,9 +20,8 @@ class BridgePlugin : Plugin() {
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val pluginScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val httpClient = SubsonicHttpClient()
-    private val credentialStore: AndroidCredentialStore by lazy {
-        AndroidCredentialStore(context)
+    private val authenticationService: AuthenticationService by lazy {
+        AuthenticationService.getInstance(context)
     }
 
     @PluginMethod
@@ -46,7 +45,7 @@ class BridgePlugin : Plugin() {
 
         val password = call.getString("password")
             ?.takeIf { it.isNotEmpty() }
-            ?: credentialStore.retrieve()?.password
+            ?: authenticationService.getCredentials()?.password
 
         if (password.isNullOrEmpty()) {
             reject(call, "Missing password and no existing credentials found")
@@ -54,7 +53,7 @@ class BridgePlugin : Plugin() {
         }
 
         try {
-            credentialStore.store(
+            authenticationService.storeCredentials(
                 ServerCredentials(
                     serverUrl = serverUrl,
                     username = username,
@@ -73,7 +72,7 @@ class BridgePlugin : Plugin() {
 
     @PluginMethod
     fun getCredentials(call: PluginCall) {
-        val credentials = credentialStore.retrieve()
+        val credentials = authenticationService.getCredentials()
         if (credentials == null) {
             resolve(call, JSObject())
             return
@@ -84,13 +83,13 @@ class BridgePlugin : Plugin() {
 
     @PluginMethod
     fun clearCredentials(call: PluginCall) {
-        credentialStore.delete()
+        authenticationService.clearCredentials()
         resolve(call)
     }
 
     @PluginMethod
     fun hasCredentials(call: PluginCall) {
-        resolve(call, JSObject().apply { put("stored", credentialStore.exists()) })
+        resolve(call, JSObject().apply { put("stored", authenticationService.hasCredentials()) })
     }
 
     @PluginMethod
@@ -111,13 +110,13 @@ class BridgePlugin : Plugin() {
         val fallbackUrl = call.getString("fallbackUrl")
 
         pluginScope.launch {
-            val result = performLogin(
+            val result = authenticationService.login(
                 primaryUrl = primaryUrl,
                 fallbackUrl = fallbackUrl,
                 username = username,
                 rawPassword = rawPassword,
             )
-            resolve(call, result)
+            resolve(call, result.toJsObject())
         }
     }
 
@@ -139,8 +138,8 @@ class BridgePlugin : Plugin() {
         }
 
         pluginScope.launch {
-            val result = httpClient.ping(
-                baseUrl = url,
+            val result = authenticationService.ping(
+                url = url,
                 username = username,
                 password = password,
                 authType = authType,
@@ -162,7 +161,7 @@ class BridgePlugin : Plugin() {
         }
 
         pluginScope.launch {
-            val info = httpClient.queryServerInfo(url)
+            val info = authenticationService.queryServerInfo(url)
             resolve(
                 call,
                 JSObject().apply {
@@ -187,7 +186,7 @@ class BridgePlugin : Plugin() {
             return
         }
 
-        val credentials = credentialStore.retrieve()
+        val credentials = authenticationService.getCredentials()
         if (credentials == null) {
             reject(call, "No stored credentials")
             return
@@ -210,10 +209,9 @@ class BridgePlugin : Plugin() {
 
         pluginScope.launch {
             try {
-                val response = httpClient.request(
-                    baseUrl = credentials.serverUrl,
-                    path = path,
+                val response = authenticationService.request(
                     credentials = credentials,
+                    path = path,
                     extraQuery = extraQuery,
                     method = method,
                     body = body,
@@ -238,80 +236,6 @@ class BridgePlugin : Plugin() {
         super.handleOnDestroy()
     }
 
-    private suspend fun performLogin(
-        primaryUrl: String,
-        fallbackUrl: String?,
-        username: String,
-        rawPassword: String,
-    ): JSObject {
-        attemptLogin(primaryUrl, fallbackUrl, username, rawPassword, "primary")
-            ?.let { return it }
-
-        if (!fallbackUrl.isNullOrBlank()) {
-            attemptLogin(fallbackUrl, null, username, rawPassword, "fallback")
-                ?.let { return it }
-        }
-
-        return JSObject().apply {
-            put("success", false)
-            put("error", "auth_failed")
-        }
-    }
-
-    private suspend fun attemptLogin(
-        url: String,
-        fallbackUrl: String?,
-        username: String,
-        rawPassword: String,
-        activeServerType: String,
-    ): JSObject? {
-        for (authType in listOf("token", "password")) {
-            val storedPassword = SubsonicAuthBuilder.hashPasswordForStorage(
-                rawPassword,
-                authType,
-            )
-            val ping = httpClient.ping(
-                baseUrl = url,
-                username = username,
-                password = storedPassword,
-                authType = authType,
-            )
-
-            if (!ping.reachable) continue
-
-            val serverInfo = httpClient.queryServerInfo(url)
-            val credentials = ServerCredentials(
-                serverUrl = url,
-                username = username,
-                password = storedPassword,
-                authType = authType,
-                protocolVersion = serverInfo.protocolVersion,
-                serverType = serverInfo.serverType,
-                fallbackUrl = fallbackUrl,
-            )
-
-            return try {
-                credentialStore.store(credentials)
-                JSObject().apply {
-                    put("success", true)
-                    put("authType", authType)
-                    put("protocolVersion", serverInfo.protocolVersion)
-                    put("serverType", serverInfo.serverType)
-                    put("activeUrl", url)
-                    put("activeServerType", activeServerType)
-                    put("password", storedPassword)
-                }
-            } catch (_: Exception) {
-                JSObject().apply {
-                    put("success", false)
-                    put("error", "keystore_store_failed")
-                }
-            }
-        }
-
-        return null
-    }
-
     private fun errorMessage(error: SubsonicHttpError): String = when (error) {
         is SubsonicHttpError.AuthFailed -> "auth_failed: ${error.message}"
         is SubsonicHttpError.HttpError -> "http_error: ${error.statusCode}"
@@ -332,6 +256,17 @@ class BridgePlugin : Plugin() {
 
     private fun reject(call: PluginCall, message: String) {
         mainHandler.post { call.reject(message) }
+    }
+
+    private fun AuthenticationResult.toJsObject(): JSObject = JSObject().apply {
+        put("success", success)
+        authType?.let { put("authType", it) }
+        protocolVersion?.let { put("protocolVersion", it) }
+        serverType?.let { put("serverType", it) }
+        activeUrl?.let { put("activeUrl", it) }
+        activeServerType?.let { put("activeServerType", it) }
+        password?.let { put("password", it) }
+        error?.let { put("error", it) }
     }
 
     private fun ServerCredentials.toPublicJsObject(): JSObject = JSObject().apply {

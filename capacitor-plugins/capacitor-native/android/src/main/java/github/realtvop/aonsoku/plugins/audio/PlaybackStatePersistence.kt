@@ -1,11 +1,11 @@
 package github.realtvop.aonsoku.plugins.audio
 
-import github.realtvop.aonsoku.plugins.preferences.NativePreferencesStore
+import github.realtvop.aonsoku.plugins.preferences.PreferencesService
 import kotlinx.coroutines.*
 import org.json.JSONObject
 
 class PlaybackStatePersistence(
-    private val preferencesStore: NativePreferencesStore,
+    private val preferencesService: PreferencesService,
     private val scope: CoroutineScope
 ) {
     private var stateProvider: (() -> PlaybackPersistState?)? = null
@@ -38,7 +38,7 @@ class PlaybackStatePersistence(
         lastSavedProgress = state.currentTime
         scope.launch(Dispatchers.IO) {
             try {
-                preferencesStore.setQueueState(state.toJson().toString())
+                preferencesService.setQueueState(state.toJson().toString())
             } catch (_: Exception) {
             }
         }
@@ -82,7 +82,7 @@ class PlaybackStatePersistence(
         fullStateDirty = false
         lastSavedProgress = state.currentTime
         try {
-            preferencesStore.setQueueState(state.toJson().toString())
+            preferencesService.setQueueState(state.toJson().toString())
         } catch (_: Exception) {
         }
     }
@@ -101,11 +101,11 @@ class PlaybackStatePersistence(
             }
         }
 
-        val stateJsonStr = preferencesStore.getQueueState() ?: return
+        val stateJsonStr = preferencesService.getQueueState() ?: return
         try {
             val json = JSONObject(stateJsonStr)
             json.put("currentTime", progress)
-            preferencesStore.setQueueState(json.toString())
+            preferencesService.setQueueState(json.toString())
         } catch (_: Exception) {
         }
     }

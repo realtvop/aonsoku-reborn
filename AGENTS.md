@@ -136,6 +136,21 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   handoffs. Download manager, playback persistence, and scrobble buffering are
   also owned by `PlaybackService`; `AudioPlugin` retains only JSON parsing and
   JS result/event adaptation.
+- Android authentication and Subsonic HTTP access are owned by the
+  application-scoped `bridge/AuthenticationService`. It owns the encrypted
+  credential store, login/fallback probing, server discovery, and typed
+  requests. `BridgePlugin` keeps the existing method names and JSON fields but
+  only validates `PluginCall` input and converts service results. `LibraryService`,
+  `PlaybackService`, download/source resolution, and native scrobbling use the
+  same authentication service rather than creating plugin-scoped credential or
+  HTTP clients.
+- Android preferences are owned by the application-scoped
+  `preferences/PreferencesService`, which wraps `NativePreferencesStore` and
+  preserves the `pref.` keys, queue-state key, play-history codec, and existing
+  serialization. It exposes a shared change flow so native UI and the
+  Capacitor `PreferencesPlugin` can subscribe independently. The plugin only
+  converts values and forwards a `preferencesChanged` event; destroying it
+  does not close or reset the service.
 - The iOS host owns long-lived native services through
   `AonsokuNativePlugin.AppServices`. `AudioService` owns AVPlayer, queue,
   downloads, scrobbling, playback persistence, and system media controls;

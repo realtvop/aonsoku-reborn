@@ -21,8 +21,7 @@ import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import com.getcapacitor.annotation.Permission
 import com.getcapacitor.annotation.PermissionCallback
-import github.realtvop.aonsoku.plugins.bridge.AndroidCredentialStore
-import github.realtvop.aonsoku.plugins.bridge.SubsonicHttpClient
+import github.realtvop.aonsoku.plugins.bridge.AuthenticationService
 import github.realtvop.aonsoku.plugins.coordination.AonsokuNativeCoordinationPlugin
 import github.realtvop.aonsoku.plugins.data.db.AonsokuDatabase
 import github.realtvop.aonsoku.plugins.data.db.entity.SongEntity
@@ -159,9 +158,8 @@ class AudioPlugin : Plugin() {
         return withTimeout(timeoutMs) { serviceReady.await() }
     }
 
-    private val httpClient = SubsonicHttpClient()
-    private val credentialStore: AndroidCredentialStore by lazy {
-        AndroidCredentialStore(context)
+    private val authenticationService: AuthenticationService by lazy {
+        AuthenticationService.getInstance(context)
     }
 
     private val db by lazy { AonsokuDatabase.getInstance(context) }
@@ -630,12 +628,11 @@ class AudioPlugin : Plugin() {
         }
 
     private suspend fun fetchRemotePlaybackSong(songId: String): SongEntity? {
-        val credentials = credentialStore.retrieve() ?: return null
+        val credentials = authenticationService.getCredentials() ?: return null
         return try {
-            val response = httpClient.request(
-                baseUrl = credentials.serverUrl,
-                path = "getSong.view",
+            val response = authenticationService.request(
                 credentials = credentials,
+                path = "getSong.view",
                 extraQuery = mapOf("id" to songId),
             )
             val song = parseRemotePlaybackSong(
@@ -1047,7 +1044,7 @@ class AudioPlugin : Plugin() {
                         streamUrl = url,
                         cachedFileUri = null
                     )
-                    val resolver = NativeSourceResolver(context, credentialStore)
+                    val resolver = NativeSourceResolver(context, authenticationService)
                     val resolved = resolver.resolveSource(song)
                     if (resolved == null) {
                         call.reject("Failed to resolve stream source: missing or invalid credentials for aonsoku-media URL")

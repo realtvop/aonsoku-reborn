@@ -2,7 +2,7 @@ package github.realtvop.aonsoku.plugins.audio
 
 import android.content.Context
 import android.net.Uri
-import github.realtvop.aonsoku.plugins.bridge.AndroidCredentialStore
+import github.realtvop.aonsoku.plugins.bridge.AuthenticationService
 import github.realtvop.aonsoku.plugins.bridge.SubsonicAuthBuilder
 import kotlinx.coroutines.*
 import org.json.JSONObject
@@ -14,7 +14,11 @@ import java.net.URL
 import java.net.URLEncoder
 import java.util.concurrent.ConcurrentHashMap
 
-class NativeDownloadManager(private val context: Context) {
+class NativeDownloadManager(
+    private val context: Context,
+    private val authenticationService: AuthenticationService =
+        AuthenticationService.getInstance(context),
+) {
     interface Listener {
         fun onDownloadProgress(songId: String, loaded: Long, total: Long)
         fun onDownloadCompleted(songId: String, fileUri: String, contentType: String, sizeBytes: Long)
@@ -90,8 +94,8 @@ class NativeDownloadManager(private val context: Context) {
     }
 
     private suspend fun executeDownload(songId: String, maxBitRate: Int?, format: String?) {
-        val credentialStore = AndroidCredentialStore(context)
-        val credentials = credentialStore.retrieve() ?: throw IOException("No credentials found")
+        val credentials = authenticationService.getCredentials()
+            ?: throw IOException("No credentials found")
 
         val baseString = "${credentials.serverUrl.trimEnd('/')}/rest/stream"
         val authParams = SubsonicAuthBuilder.buildQueryParams(

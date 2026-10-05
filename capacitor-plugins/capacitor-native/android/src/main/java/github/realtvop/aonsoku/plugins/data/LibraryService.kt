@@ -2,9 +2,8 @@ package github.realtvop.aonsoku.plugins.data
 
 import android.content.Context
 import android.util.Base64
-import github.realtvop.aonsoku.plugins.bridge.AndroidCredentialStore
+import github.realtvop.aonsoku.plugins.bridge.AuthenticationService
 import github.realtvop.aonsoku.plugins.bridge.ServerCredentials
-import github.realtvop.aonsoku.plugins.bridge.SubsonicHttpClient
 import github.realtvop.aonsoku.plugins.data.db.AonsokuDatabase
 import github.realtvop.aonsoku.plugins.data.db.entity.AlbumEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.ArtistEntity
@@ -114,8 +113,8 @@ data class LibraryCacheStats(
 class LibraryService private constructor(context: Context) {
     private val appContext = context.applicationContext
     private val database = AonsokuDatabase.getInstance(appContext)
-    private val credentialStore = AndroidCredentialStore(appContext)
-    private val httpClient = SubsonicHttpClient()
+    private val authenticationService = AuthenticationService.getInstance(appContext)
+    private val httpClient = authenticationService.httpClient
     private val imageCache = ImageCacheManager(
         appContext.cacheDir,
         database.cacheMetaDao(),
@@ -161,7 +160,7 @@ class LibraryService private constructor(context: Context) {
         initializationJob?.join()
         if (!initialized) {
             initializationJob = serviceScope.launch {
-                credentialStore.retrieve()?.let(syncEngine::updateCredentials)
+                authenticationService.getCredentials()?.let(syncEngine::updateCredentials)
                 initialized = true
             }
             initializationJob?.join()
@@ -174,7 +173,7 @@ class LibraryService private constructor(context: Context) {
 
     suspend fun refreshCredentials() {
         initialize()
-        credentialStore.retrieve()?.let(syncEngine::updateCredentials)
+        authenticationService.getCredentials()?.let(syncEngine::updateCredentials)
     }
 
     fun syncAll(options: LibrarySyncOptions = LibrarySyncOptions()) {
@@ -402,7 +401,7 @@ class LibraryService private constructor(context: Context) {
     }
 
     suspend fun downloadCoverImage(coverArtId: String, size: String): CachedImageFile {
-        val credentials = credentialStore.retrieve()
+        val credentials = authenticationService.getCredentials()
             ?: throw IllegalStateException("No stored credentials")
         return withContext(Dispatchers.IO) {
             val file = imageCache.downloadCoverImage(coverArtId, size, credentials)
@@ -411,7 +410,7 @@ class LibraryService private constructor(context: Context) {
     }
 
     suspend fun downloadAvatar(username: String, size: String): CachedImageFile {
-        val credentials = credentialStore.retrieve()
+        val credentials = authenticationService.getCredentials()
             ?: throw IllegalStateException("No stored credentials")
         return withContext(Dispatchers.IO) {
             val file = imageCache.downloadAvatar(username, size, credentials)
@@ -419,7 +418,7 @@ class LibraryService private constructor(context: Context) {
         }
     }
 
-    fun storedCredentials(): ServerCredentials? = credentialStore.retrieve()
+    fun storedCredentials(): ServerCredentials? = authenticationService.getCredentials()
 
     companion object {
         private val IDLE_SYNC_STATE = LibrarySyncState(

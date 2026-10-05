@@ -42,9 +42,8 @@ import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import github.realtvop.aonsoku.plugins.debug.NativeLogger
-import github.realtvop.aonsoku.plugins.preferences.NativePreferencesStore
-import github.realtvop.aonsoku.plugins.bridge.AndroidCredentialStore
-import github.realtvop.aonsoku.plugins.bridge.SubsonicHttpClient
+import github.realtvop.aonsoku.plugins.preferences.PreferencesService
+import github.realtvop.aonsoku.plugins.bridge.AuthenticationService
 import github.realtvop.aonsoku.plugins.data.db.AonsokuDatabase
 import github.realtvop.aonsoku.plugins.data.db.entity.SongEntity
 import github.realtvop.aonsoku.plugins.data.image.ImageCacheManager
@@ -153,10 +152,10 @@ class PlaybackService : MediaSessionService(), AudioService {
     private var sleepTimerHandler: Handler? = null
     private var sleepTimerEndTime: Long = 0L
 
-    private val httpClient = SubsonicHttpClient()
-    private val credentialStore by lazy {
-        AndroidCredentialStore(this)
+    private val authenticationService by lazy {
+        AuthenticationService.getInstance(applicationContext)
     }
+    private val httpClient = authenticationService.httpClient
     val scrobbleBuffer by lazy {
         NativeScrobbleBuffer(ScrobbleFileStore(this))
     }
@@ -217,7 +216,9 @@ class PlaybackService : MediaSessionService(), AudioService {
         }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    private val preferencesStore by lazy { NativePreferencesStore(this) }
+    private val preferencesService by lazy {
+        PreferencesService.getInstance(applicationContext)
+    }
     lateinit var persistence: PlaybackStatePersistence
 
     val downloadManager by lazy { NativeDownloadManager(this) }
@@ -420,7 +421,7 @@ class PlaybackService : MediaSessionService(), AudioService {
     fun handleScrobbleSongEnded() {
         val entry = scrobbleBuffer.stopTracking()
         if (entry != null) {
-            val credentials = credentialStore.retrieve()
+            val credentials = authenticationService.getCredentials()
             if (credentials != null) {
                 scrobbleSubmitter.submitIfEligible(entry, currentScrobbleSongDuration, credentials, scrobbleBuffer)
             }
@@ -432,7 +433,7 @@ class PlaybackService : MediaSessionService(), AudioService {
         currentScrobbleSongId = songId
         currentScrobbleSongDuration = duration
         scrobbleBuffer.startTracking(songId, duration)
-        val credentials = credentialStore.retrieve()
+        val credentials = authenticationService.getCredentials()
         if (credentials != null) {
             serviceScope.launch {
                 scrobbleSubmitter.sendNowPlaying(songId, credentials)
@@ -441,7 +442,7 @@ class PlaybackService : MediaSessionService(), AudioService {
     }
 
     fun submitPendingScrobbles() {
-        val credentials = credentialStore.retrieve()
+        val credentials = authenticationService.getCredentials()
         if (credentials != null) {
             CoroutineScope(Dispatchers.IO).launch {
                 scrobbleSubmitter.submitPending(scrobbleBuffer, credentials)
@@ -1005,7 +1006,7 @@ class PlaybackService : MediaSessionService(), AudioService {
             }
         }
 
-        persistence = PlaybackStatePersistence(preferencesStore, serviceScope).apply {
+        persistence = PlaybackStatePersistence(preferencesService, serviceScope).apply {
             setStateProvider {
                 val currentPlayer = player ?: return@setStateProvider null
                 val progressSec = currentPlayer.currentPosition / 1000.0
@@ -1769,7 +1770,7 @@ class PlaybackService : MediaSessionService(), AudioService {
         AonsokuNativeCoordinationPlugin.detachActiveForegroundService()
         handleScrobbleSongEnded()
         CoroutineScope(Dispatchers.IO).launch {
-            val credentials = credentialStore.retrieve()
+            val credentials = authenticationService.getCredentials()
             if (credentials != null) {
                 scrobbleSubmitter.submitPending(scrobbleBuffer, credentials)
             }
@@ -1914,7 +1915,7 @@ class PlaybackService : MediaSessionService(), AudioService {
                     BitmapFactory.decodeFile(filePath)
                 } else {
                     val coverArtId = song?.coverArtId ?: coverArtIdOverride ?: extractCoverArtId(url)
-                    val credentials = credentialStore.retrieve()
+                    val credentials = authenticationService.getCredentials()
                     if (!coverArtId.isNullOrEmpty() && credentials != null) {
                         try {
                             val db = AonsokuDatabase.getInstance(this@PlaybackService)
@@ -1959,7 +1960,7 @@ class PlaybackService : MediaSessionService(), AudioService {
     private fun restorePlaybackState() {
         serviceScope.launch(Dispatchers.IO) {
             try {
-                val stateJsonStr = preferencesStore.getQueueState()
+                val stateJsonStr = preferencesService.getQueueState()
                 if (!stateJsonStr.isNullOrEmpty()) {
                     val json = JSONObject(stateJsonStr)
                     val persistedState = PlaybackPersistState.fromJson(json)
@@ -2188,7 +2189,7 @@ class PlaybackService : MediaSessionService(), AudioService {
         persistence.stopProgressTracking()
         currentSongMetadata = null
         serviceScope.launch(Dispatchers.IO) {
-            preferencesStore.setQueueState("")
+            preferencesService.setQueueState("")
         }
     }
 }

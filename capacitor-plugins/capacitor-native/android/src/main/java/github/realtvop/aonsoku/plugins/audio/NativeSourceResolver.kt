@@ -3,15 +3,32 @@ package github.realtvop.aonsoku.plugins.audio
 import android.content.Context
 import android.net.Uri
 import github.realtvop.aonsoku.plugins.bridge.AndroidCredentialStore
+import github.realtvop.aonsoku.plugins.bridge.AuthenticationService
 import github.realtvop.aonsoku.plugins.bridge.SubsonicAuthBuilder
+import github.realtvop.aonsoku.plugins.bridge.ServerCredentials
 import github.realtvop.aonsoku.plugins.debug.NativeLogger
 import java.io.File
 import java.net.URLEncoder
 
 class NativeSourceResolver(
     private val context: Context,
-    private val credentialStore: AndroidCredentialStore = AndroidCredentialStore(context)
+    private val credentialsProvider: () -> ServerCredentials?,
 ) {
+    constructor(context: Context) : this(context, {
+        AuthenticationService.getInstance(context).getCredentials()
+    })
+
+    constructor(context: Context, authenticationService: AuthenticationService) : this(
+        context,
+        { authenticationService.getCredentials() },
+    )
+
+    @Suppress("UNUSED_PARAMETER")
+    constructor(context: Context, credentialStore: AndroidCredentialStore) : this(
+        context,
+        { credentialStore.retrieve() },
+    )
+
     private val cacheDirectories = listOf(
         AudioCacheUtils.getCacheDirectory(context),
         AudioCacheUtils.getSecondaryCacheDirectory(context)
@@ -61,7 +78,7 @@ class NativeSourceResolver(
     }
 
     fun resolveCoverArtUrl(coverArtId: String, size: Int = 300): String? {
-        val credentials = credentialStore.retrieve()
+        val credentials = credentialsProvider()
         if (credentials == null) {
             NativeLogger.warn("Cannot resolve cover art: no credentials", "source-resolver")
             return null
@@ -87,7 +104,7 @@ class NativeSourceResolver(
         val maxBitRate = uri.getQueryParameter("maxBitRate")
         val format = uri.getQueryParameter("format")
 
-        val credentials = credentialStore.retrieve()
+        val credentials = credentialsProvider()
         if (credentials == null) {
             NativeLogger.error("Cannot resolve aonsoku-media://stream: no credentials for song ${song.id}", "source-resolver")
             return null
