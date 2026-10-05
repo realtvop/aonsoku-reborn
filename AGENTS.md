@@ -111,6 +111,16 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   `dist`. The custom native plugin lives in
   `capacitor-plugins/capacitor-native` and is included through pnpm workspace
   package `@aonsoku/capacitor-native`.
+- Android native pages use the application-scoped
+  `github.realtvop.aonsoku.plugins.data.LibraryService` for Room queries,
+  metadata sync, lyrics, and image-cache ownership. It is created with the
+  application context, exposes typed Kotlin paging/filter/search and
+  `StateFlow`/`SharedFlow` sync notifications, and is not cancelled when
+  `DataPlugin` is destroyed. `DataPlugin` is only the Capacitor adapter: it
+  parses `PluginCall` arguments, converts entities to the existing JS shapes,
+  and forwards service events through `notifyListeners`. Android native UI
+  should call `LibraryService.getInstance(context)` directly rather than
+  locating a Capacitor plugin instance.
 - The iOS host owns long-lived native services through
   `AonsokuNativePlugin.AppServices`. `AudioService` owns AVPlayer, queue,
   downloads, scrobbling, playback persistence, and system media controls;

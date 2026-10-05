@@ -2,24 +2,23 @@ package github.realtvop.aonsoku.plugins.data
 
 import android.os.Handler
 import android.os.Looper
-import android.util.Base64
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
-import github.realtvop.aonsoku.plugins.bridge.AndroidCredentialStore
-import github.realtvop.aonsoku.plugins.bridge.SubsonicHttpClient
-import github.realtvop.aonsoku.plugins.data.db.AonsokuDatabase
-import github.realtvop.aonsoku.plugins.data.db.entity.LyricsEntity
-import github.realtvop.aonsoku.plugins.data.db.toJSObject
+import github.realtvop.aonsoku.plugins.data.db.entity.AlbumEntity
+import github.realtvop.aonsoku.plugins.data.db.entity.ArtistEntity
+import github.realtvop.aonsoku.plugins.data.db.entity.SongEntity
 import github.realtvop.aonsoku.plugins.data.db.toJSArray
-import github.realtvop.aonsoku.plugins.data.image.ImageCacheManager
-import github.realtvop.aonsoku.plugins.data.sync.SyncEngine
+import github.realtvop.aonsoku.plugins.data.db.toJSObject
+import github.realtvop.aonsoku.plugins.debug.NativeLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -28,175 +27,372 @@ import org.json.JSONObject
 class DataPlugin : Plugin() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val http = SubsonicHttpClient()
-    private lateinit var credStore: AndroidCredentialStore
-    private lateinit var db: AonsokuDatabase
-    private lateinit var sync: SyncEngine
-    private lateinit var imgCache: ImageCacheManager
-    private lateinit var emitter: EventEmitter
+    private var library: LibraryService? = null
+    private var syncStateJob: Job? = null
+    private var dataChangesJob: Job? = null
     private var ready = false
+    private val emitter = EventEmitter { event, data -> notifyListeners(event, data) }
 
-    private fun init() {
-        if (ready) return
-        val ctx = context ?: return
-        credStore = AndroidCredentialStore(ctx)
-        db = AonsokuDatabase.getInstance(ctx)
-        imgCache = ImageCacheManager(ctx.cacheDir, db.cacheMetaDao())
-        emitter = EventEmitter { event, data -> notifyListeners(event, data) }
-        sync = SyncEngine(http, db.artistDao(), db.albumDao(), db.songDao(), db.playlistDao(), db.genreDao(), db.syncStateDao())
-        sync.onSyncStateChanged = { emitter.emitSyncStateChanged(it) }
-        sync.onDataChanged = { emitter.emitDataChanged(it, "") }
-        credStore.retrieve()?.let { sync.updateCredentials(it) }
-        ready = true
+    private fun service(): LibraryService {
+        library?.let { return it }
+        return LibraryService.getInstance(context).also {
+            library = it
+            subscribeToService(it)
+        }
     }
 
-    override fun handleOnDestroy() { scope.cancel(); if (::sync.isInitialized) sync.cleanup(); super.handleOnDestroy() }
-
-    @PluginMethod fun initialize(call: PluginCall) {
-        try {
-            init()
-            val hasSync = kotlinx.coroutines.runBlocking { try { db.syncStateDao().get("full-sync") != null } catch (_: Exception) { false } }
-            resolve(call, JSObject().apply { put("ready", true); put("needsMigration", !hasSync) })
-            credStore.retrieve()?.let { sync.updateCredentials(it); if (hasSync) sync.syncIncremental() else sync.syncAll() }
-        } catch (e: Exception) { reject(call, "Init: ${e.message}") }
-    }
-
-    @PluginMethod fun importBulk(call: PluginCall) { call.resolve() }
-    @PluginMethod fun syncAll(call: PluginCall) { init(); credStore.retrieve()?.let { sync.updateCredentials(it) }; sync.syncAll(); call.resolve() }
-    @PluginMethod fun syncIncremental(call: PluginCall) { init(); credStore.retrieve()?.let { sync.updateCredentials(it) }; sync.syncIncremental(); call.resolve() }
-    @PluginMethod fun cancelSync(call: PluginCall) { sync.cancel(); call.resolve() }
-    @PluginMethod fun getSyncState(call: PluginCall) { call.resolve(JSObject().apply { put("phase", "idle"); put("isSyncing", sync.isSyncing) }) }
-
-    @PluginMethod fun getArtists(call: PluginCall) {
-        init(); val l = call.getInt("limit") ?: 100; val o = call.getInt("offset") ?: 0; val s = call.getString("search"); val st = if (call.getBoolean("starredOnly") == true) 1 else 0; val sb = call.getString("sortBy")
-        scope.launch { try { val items = db.artistDao().getFiltered(l, o, s, st, sb); val t = db.artistDao().countFiltered(s, st); resolve(call, JSObject().apply { put("items", items.map { it.toJSObject() }.toJSArray()); put("total", t); put("hasMore", o + l < t) }) } catch (e: Exception) { reject(call, e.message ?: "error") } }
-    }
-
-    @PluginMethod fun getArtist(call: PluginCall) {
-        val id = call.getString("id") ?: run { reject(call, "no id"); return }; init()
-        scope.launch { try { resolve(call, db.artistDao().getById(id)?.toJSObject() ?: JSObject()) } catch (e: Exception) { reject(call, e.message ?: "error") } }
-    }
-
-    @PluginMethod fun getAlbums(call: PluginCall) {
-        init(); val l = call.getInt("limit") ?: 100; val o = call.getInt("offset") ?: 0
-        val s = call.getString("search"); val ai = call.getString("artistId"); val g = call.getString("genre")
-        val fy = call.getInt("fromYear"); val ty = call.getInt("toYear"); val st = if (call.getBoolean("starredOnly") == true) 1 else 0; val sb = call.getString("sortBy")
-        scope.launch { try { val items = db.albumDao().getFiltered(l, o, s, ai, g, fy, ty, st, sb); val t = db.albumDao().countFiltered(s, ai, g, fy, ty, st); resolve(call, JSObject().apply { put("items", items.map { it.toJSObject() }.toJSArray()); put("total", t); put("hasMore", o + l < t) }) } catch (e: Exception) { reject(call, e.message ?: "error") } }
-    }
-
-    @PluginMethod fun getAlbum(call: PluginCall) {
-        val id = call.getString("id") ?: run { reject(call, "no id"); return }; init()
-        scope.launch { try { val a = db.albumDao().getById(id); if (a != null) { val obj = a.toJSObject(); obj.put("song", db.albumDao().getSongsByAlbumId(id).map { it.toJSObject() }.toJSArray()); resolve(call, obj) } else resolve(call, JSObject()) } catch (e: Exception) { reject(call, e.message ?: "error") } }
-    }
-
-    @PluginMethod fun getSongs(call: PluginCall) {
-        init(); val l = call.getInt("limit") ?: 100; val o = call.getInt("offset") ?: 0
-        val s = call.getString("search"); val ai = call.getString("albumId"); val ari = call.getString("artistId"); val g = call.getString("genre"); val st = if (call.getBoolean("starredOnly") == true) 1 else 0; val sb = call.getString("sortBy")
-        scope.launch { try { val items = db.songDao().getFiltered(l, o, s, ai, ari, g, st, sb); val t = db.songDao().countFiltered(s, ai, ari, g, st); resolve(call, JSObject().apply { put("items", items.map { it.toJSObject() }.toJSArray()); put("total", t); put("hasMore", o + l < t) }) } catch (e: Exception) { reject(call, e.message ?: "error") } }
-    }
-
-    @PluginMethod fun getPlaylists(call: PluginCall) {
-        init(); val l = call.getInt("limit") ?: 100; val o = call.getInt("offset") ?: 0
-        scope.launch { try { val items = db.playlistDao().getAll(l, o); val t = db.playlistDao().count(); resolve(call, JSObject().apply { put("items", items.map { it.toJSObject() }.toJSArray()); put("total", t); put("hasMore", o + l < t) }) } catch (e: Exception) { reject(call, e.message ?: "error") } }
-    }
-
-    @PluginMethod fun getPlaylist(call: PluginCall) {
-        val id = call.getString("id") ?: run { reject(call, "no id"); return }; init()
-        scope.launch { try { resolve(call, db.playlistDao().getDetailById(id)?.toJSObject() ?: JSObject()) } catch (e: Exception) { reject(call, e.message ?: "error") } }
-    }
-
-    @PluginMethod fun getGenres(call: PluginCall) {
-        init()
-        scope.launch { try { resolve(call, JSObject().apply { put("items", db.genreDao().getAll().map { it.toJSObject() }.toJSArray()) }) } catch (e: Exception) { reject(call, e.message ?: "error") } }
-    }
-
-    @PluginMethod fun getFavorites(call: PluginCall) {
-        init(); val l = call.getInt("limit") ?: 100; val o = call.getInt("offset") ?: 0; val t = call.getString("type") ?: "songs"
-        scope.launch {
-            try {
-                val result = when (t) {
-                    "artists" -> { val items = db.artistDao().getFiltered(l, o, null, 1, "starredAt"); val total = db.artistDao().countFiltered(null, 1); JSObject().apply { put("items", items.map { it.toJSObject() }.toJSArray()); put("total", total); put("hasMore", o + l < total) } }
-                    "albums" -> { val items = db.albumDao().getFiltered(l, o, null, null, null, null, null, 1, "starredAt"); val total = db.albumDao().countFiltered(null, null, null, null, null, 1); JSObject().apply { put("items", items.map { it.toJSObject() }.toJSArray()); put("total", total); put("hasMore", o + l < total) } }
-                    else -> { val items = db.songDao().getFiltered(l, o, null, null, null, null, 1, "starredAt"); val total = db.songDao().countFiltered(null, null, null, null, 1); JSObject().apply { put("items", items.map { it.toJSObject() }.toJSArray()); put("total", total); put("hasMore", o + l < total) } }
+    private fun subscribeToService(service: LibraryService) {
+        if (syncStateJob == null) {
+            syncStateJob = scope.launch {
+                service.syncState.collect { state ->
+                    emitter.emitSyncStateChanged(
+                        mapOf(
+                            "phase" to state.phase,
+                            "tier" to state.tier,
+                            "isSyncing" to state.isSyncing,
+                            "progress" to state.progress,
+                            "processedItems" to state.processedItems,
+                            "totalItems" to state.totalItems,
+                        ),
+                    )
                 }
-                resolve(call, result)
-            } catch (e: Exception) { reject(call, e.message ?: "error") }
+            }
+        }
+        if (dataChangesJob == null) {
+            dataChangesJob = scope.launch {
+                service.dataChanges.collect { change ->
+                    emitter.emitDataChanged(change.tables, change.tier)
+                }
+            }
         }
     }
 
-    @PluginMethod fun search(call: PluginCall) {
-        val query = call.getString("query") ?: ""
-        if (query.isBlank()) { resolve(call, JSObject().apply { put("artists", JSONArray()); put("albums", JSONArray()); put("songs", JSONArray()) }); return }
-        init(); val ac = call.getInt("artistCount") ?: 20; val alc = call.getInt("albumCount") ?: 20; val sc = call.getInt("songCount") ?: 20
+    override fun handleOnDestroy() {
+        syncStateJob?.cancel()
+        dataChangesJob?.cancel()
+        scope.cancel()
+        // LibraryService is application scoped. Destroying this adapter must
+        // not stop a sync job or close Room for native screens.
+        super.handleOnDestroy()
+    }
+
+    @PluginMethod
+    fun initialize(call: PluginCall) = launch(call) {
+        val service = service()
+        val result = service.initialize()
+        service.refreshCredentials()
+        if (result.needsMigration) service.syncAll() else service.syncIncremental()
+        JSObject().apply {
+            put("ready", true)
+            put("needsMigration", result.needsMigration)
+        }
+    }
+
+    @PluginMethod
+    fun importBulk(call: PluginCall) = resolve(call)
+
+    @PluginMethod
+    fun syncAll(call: PluginCall) {
+        service().syncAll()
+        resolve(call)
+    }
+
+    @PluginMethod
+    fun syncIncremental(call: PluginCall) {
+        service().syncIncremental()
+        resolve(call)
+    }
+
+    @PluginMethod
+    fun cancelSync(call: PluginCall) {
+        service().cancelSync()
+        resolve(call)
+    }
+
+    @PluginMethod
+    fun getSyncState(call: PluginCall) {
+        val state = service().syncState.value
+        resolve(
+            call,
+            JSObject().apply {
+                put("phase", state.phase)
+                put("tier", state.tier ?: JSONObject.NULL)
+                put("isSyncing", state.isSyncing)
+                put("progress", state.progress)
+                put("processedItems", state.processedItems)
+                put("totalItems", state.totalItems)
+            },
+        )
+    }
+
+    @PluginMethod
+    fun getArtists(call: PluginCall) = launch(call) {
+        service().getArtists(
+            pagination(call),
+            ArtistFilter(
+                search = call.getString("search"),
+                starredOnly = call.getBoolean("starredOnly") == true,
+                sortBy = call.getString("sortBy"),
+            ),
+        ).toJS { it.toJSObject() }
+    }
+
+    @PluginMethod
+    fun getArtist(call: PluginCall) {
+        val id = call.getString("id") ?: return reject(call, "no id")
+        launch(call) { service().getArtist(id)?.toJSObject() ?: JSObject() }
+    }
+
+    @PluginMethod
+    fun getAlbums(call: PluginCall) = launch(call) {
+        service().getAlbums(
+            pagination(call),
+            AlbumFilter(
+                search = call.getString("search"),
+                artistId = call.getString("artistId"),
+                genre = call.getString("genre"),
+                fromYear = call.getInt("fromYear"),
+                toYear = call.getInt("toYear"),
+                starredOnly = call.getBoolean("starredOnly") == true,
+                sortBy = call.getString("sortBy"),
+            ),
+        ).toJS { it.toJSObject() }
+    }
+
+    @PluginMethod
+    fun getAlbum(call: PluginCall) {
+        val id = call.getString("id") ?: return reject(call, "no id")
+        launch(call) {
+            service().getAlbum(id)?.let { (album, songs) ->
+                album.toJSObject().apply {
+                    put("song", songs.map { it.toJSObject() }.toJSArray())
+                }
+            } ?: JSObject()
+        }
+    }
+
+    @PluginMethod
+    fun getSongs(call: PluginCall) = launch(call) {
+        service().getSongs(
+            pagination(call),
+            SongFilter(
+                search = call.getString("search"),
+                albumId = call.getString("albumId"),
+                artistId = call.getString("artistId"),
+                genre = call.getString("genre"),
+                starredOnly = call.getBoolean("starredOnly") == true,
+                sortBy = call.getString("sortBy"),
+            ),
+        ).toJS { it.toJSObject() }
+    }
+
+    @PluginMethod
+    fun getPlaylists(call: PluginCall) = launch(call) {
+        service().getPlaylists(pagination(call)).toJS { it.toJSObject() }
+    }
+
+    @PluginMethod
+    fun getPlaylist(call: PluginCall) {
+        val id = call.getString("id") ?: return reject(call, "no id")
+        launch(call) { service().getPlaylist(id)?.toJSObject() ?: JSObject() }
+    }
+
+    @PluginMethod
+    fun getGenres(call: PluginCall) = launch(call) {
+        JSObject().apply {
+            put("items", service().getGenres().map { it.toJSObject() }.toJSArray())
+        }
+    }
+
+    @PluginMethod
+    fun getFavorites(call: PluginCall) = launch(call) {
+        service().getFavorites(
+            pagination(call),
+            call.getString("type") ?: "songs",
+        ).toJS {
+            when (it) {
+                is ArtistEntity -> it.toJSObject()
+                is AlbumEntity -> it.toJSObject()
+                is SongEntity -> it.toJSObject()
+                else -> JSObject()
+            }
+        }
+    }
+
+    @PluginMethod
+    fun search(call: PluginCall) = launch(call) {
+        val result = service().search(
+            query = call.getString("query") ?: "",
+            artistCount = call.getInt("artistCount") ?: 20,
+            albumCount = call.getInt("albumCount") ?: 20,
+            songCount = call.getInt("songCount") ?: 20,
+        )
+        JSObject().apply {
+            put("artists", result.artists.map { it.toJSObject() }.toJSArray())
+            put("albums", result.albums.map { it.toJSObject() }.toJSArray())
+            put("songs", result.songs.map { it.toJSObject() }.toJSArray())
+        }
+    }
+
+    @PluginMethod
+    fun getLyrics(call: PluginCall) {
+        val songId = call.getString("songId") ?: return reject(call, "no songId")
+        launch(call) { service().getLyrics(songId)?.toJSObject() ?: JSObject() }
+    }
+
+    @PluginMethod
+    fun storeLyrics(call: PluginCall) {
+        val songId = call.getString("songId")
+        val content = call.getString("content")
+        if (songId == null || content == null) return reject(call, "missing params")
+        launch(call) {
+            service().storeLyrics(songId, content, call.getBoolean("synced") ?: false)
+            null
+        }
+    }
+
+    @PluginMethod
+    fun getCacheStats(call: PluginCall) = launch(call) {
+        service().getCacheStats().let {
+            JSObject().apply {
+                put("totalItems", it.totalItems)
+                put("totalSizeBytes", it.totalSizeBytes)
+                put("audioCount", it.audioCount)
+                put("coverCount", it.coverCount)
+            }
+        }
+    }
+
+    @PluginMethod
+    fun isDataAvailableOffline(call: PluginCall) = launch(call) {
+        val lastSyncedAt = service().isDataAvailableOffline()
+        JSObject().apply {
+            put("available", lastSyncedAt != null)
+            put("lastSyncedAt", lastSyncedAt ?: JSONObject.NULL)
+        }
+    }
+
+    @PluginMethod
+    fun storeCoverImage(call: PluginCall) {
+        val id = call.getString("coverArtId") ?: return reject(call, "no id")
+        val data = call.getString("dataBase64") ?: return reject(call, "no data")
+        launch(call) {
+            service().storeCoverImage(
+                id,
+                data,
+                call.getString("contentType") ?: "image/jpeg",
+                call.getString("coverSize") ?: "700",
+            ).toJSObject()
+        }
+    }
+
+    @PluginMethod
+    fun resolveCoverImage(call: PluginCall) {
+        val id = call.getString("coverArtId") ?: return reject(call, "no id")
+        launch(call) { service().resolveCoverImage(id).toJSResult() }
+    }
+
+    @PluginMethod
+    fun getCoverImageSize(call: PluginCall) {
+        val id = call.getString("coverArtId") ?: return reject(call, "no id")
+        launch(call) {
+            service().getCoverImageSize(id).let { result ->
+                JSObject().apply {
+                    put("sizeBytes", result?.first ?: JSONObject.NULL)
+                    put("coverSize", result?.second ?: JSONObject.NULL)
+                }
+            }
+        }
+    }
+
+    @PluginMethod
+    fun deleteCoverImage(call: PluginCall) {
+        val id = call.getString("coverArtId") ?: return reject(call, "no id")
+        launch(call) { JSObject().put("deleted", service().deleteCoverImage(id)) }
+    }
+
+    @PluginMethod
+    fun clearCoverImages(call: PluginCall) = launch(call) {
+        JSObject().put("deletedCount", service().clearCoverImages())
+    }
+
+    @PluginMethod
+    fun downloadCoverImage(call: PluginCall) {
+        val id = call.getString("coverArtId") ?: return reject(call, "no id")
+        launch(call) {
+            service().downloadCoverImage(id, call.getString("size") ?: "700").toJSObject()
+        }
+    }
+
+    @PluginMethod
+    fun downloadAvatar(call: PluginCall) {
+        val username = call.getString("username") ?: return reject(call, "no username")
+        launch(call) {
+            service().downloadAvatar(username, call.getString("size") ?: "150").toJSObject()
+        }
+    }
+
+    private fun pagination(call: PluginCall) = LibraryPagination(
+        limit = call.getInt("limit") ?: 100,
+        offset = call.getInt("offset") ?: 0,
+    )
+
+    private fun <T> LibraryPage<T>.toJS(convert: (T) -> JSObject): JSObject = JSObject().apply {
+        put("items", items.map(convert).toJSArray())
+        put("total", total)
+        put("hasMore", hasMore)
+    }
+
+    private fun CachedImageFile.toJSObject(): JSObject = JSObject().apply {
+        put("file", JSObject().apply {
+            put("coverArtId", id)
+            put("uri", file.toURI().toString())
+            contentType?.let { put("contentType", it) }
+            put("sizeBytes", sizeBytes)
+            coverSize?.let { put("coverSize", it) }
+        })
+    }
+
+    private fun CachedImageFile?.toJSResult(): JSObject = JSObject().apply {
+        put("file", this@toJSResult?.let { image ->
+            JSObject().apply {
+                put("coverArtId", image.id)
+                put("uri", image.file.toURI().toString())
+                put("sizeBytes", image.sizeBytes)
+                image.contentType?.let { put("contentType", it) }
+                image.coverSize?.let { put("coverSize", it) }
+            }
+        } ?: JSONObject.NULL)
+    }
+
+    private fun <T> launch(call: PluginCall, block: suspend () -> T?) {
+        if (!ready) {
+            ready = true
+            service()
+        }
         scope.launch {
             try {
-                val artists = db.artistDao().getFiltered(ac, 0, query, 0, "name").map { it.toJSObject() }.toJSArray()
-                val albums = db.albumDao().getFiltered(alc, 0, query, null, null, null, null, 0, "name").map { it.toJSObject() }.toJSArray()
-                val songs = db.songDao().getFiltered(sc, 0, query, null, null, null, 0, "title").map { it.toJSObject() }.toJSArray()
-                resolve(call, JSObject().apply { put("artists", artists); put("albums", albums); put("songs", songs) })
-            } catch (e: Exception) { reject(call, e.message ?: "error") }
+                val result = block()
+                if (result is JSObject) resolve(call, result) else resolve(call)
+            } catch (error: Throwable) {
+                NativeLogger.error(
+                    "Native library operation failed: ${error.message}",
+                    "data-plugin",
+                )
+                reject(call, error.message ?: "error")
+            }
         }
     }
 
-    @PluginMethod fun getLyrics(call: PluginCall) {
-        val songId = call.getString("songId") ?: run { reject(call, "no songId"); return }; init()
-        scope.launch { try { val lyr = db.lyricsDao().getBySongId(songId); if (lyr != null) { db.lyricsDao().updateAccessTime(songId, System.currentTimeMillis()); resolve(call, lyr.toJSObject()) } else resolve(call, JSObject()) } catch (e: Exception) { reject(call, e.message ?: "error") } }
+    private fun resolve(call: PluginCall) {
+        mainHandler.post { call.resolve() }
     }
 
-    @PluginMethod fun storeLyrics(call: PluginCall) {
-        val sid = call.getString("songId"); val ct = call.getString("content")
-        if (sid == null || ct == null) { reject(call, "missing params"); return }; init()
-        val synced = call.getBoolean("synced") ?: false; val now = System.currentTimeMillis()
-        scope.launch { try { db.lyricsDao().upsert(LyricsEntity(sid, ct, synced, now, now)); resolve(call) } catch (e: Exception) { reject(call, e.message ?: "error") } }
+    private fun resolve(call: PluginCall, data: JSObject) {
+        mainHandler.post { call.resolve(data) }
     }
 
-    @PluginMethod fun getCacheStats(call: PluginCall) {
-        init()
-        scope.launch { try { resolve(call, JSObject().apply { put("totalItems", db.cacheMetaDao().totalItems()); put("totalSizeBytes", db.cacheMetaDao().totalSizeBytes()); put("audioCount", db.cacheMetaDao().audioCount()); put("coverCount", db.cacheMetaDao().coverCount()) }) } catch (e: Exception) { reject(call, e.message ?: "error") } }
+    private fun reject(call: PluginCall, message: String) {
+        mainHandler.post { call.reject(message) }
     }
-
-    @PluginMethod fun isDataAvailableOffline(call: PluginCall) {
-        init()
-        scope.launch { try { val ts = db.syncStateDao().getLastSyncedAt("full-sync"); resolve(call, JSObject().apply { put("available", ts != null); if (ts != null) put("lastSyncedAt", ts) }) } catch (e: Exception) { reject(call, e.message ?: "error") } }
-    }
-
-    @PluginMethod fun storeCoverImage(call: PluginCall) {
-        init(); val id = call.getString("coverArtId") ?: run { reject(call, "no id"); return }; val b = call.getString("dataBase64") ?: run { reject(call, "no data"); return }
-        val ct = call.getString("contentType") ?: "image/jpeg"; val cs = call.getString("coverSize") ?: "700"
-        scope.launch { try { val data = Base64.decode(b, Base64.DEFAULT); val f = imgCache.storeCoverImage(id, data, ct, cs); resolve(call, JSObject().apply { put("file", JSObject().apply { put("coverArtId", id); put("uri", f.toURI().toString()); put("contentType", ct); put("sizeBytes", data.size); put("coverSize", cs) }) }) } catch (e: Exception) { reject(call, e.message ?: "error") } }
-    }
-
-    @PluginMethod fun resolveCoverImage(call: PluginCall) {
-        val id = call.getString("coverArtId") ?: run { reject(call, "no id"); return }; init()
-        scope.launch { try { val f = imgCache.resolveCoverImage(id); if (f != null) resolve(call, JSObject().apply { put("file", JSObject().apply { put("coverArtId", id); put("uri", f.toURI().toString()); put("sizeBytes", f.length()) }) }) else resolve(call, JSObject().apply { put("file", JSONObject.NULL) }) } catch (e: Exception) { reject(call, e.message ?: "error") } }
-    }
-
-    @PluginMethod fun getCoverImageSize(call: PluginCall) {
-        val id = call.getString("coverArtId") ?: run { reject(call, "no id"); return }; init()
-        scope.launch { try { val r = imgCache.getCoverImageSize(id); resolve(call, JSObject().apply { if (r != null) { put("sizeBytes", r.first); put("coverSize", r.second ?: JSONObject.NULL) } else { put("sizeBytes", JSONObject.NULL); put("coverSize", JSONObject.NULL) } }) } catch (e: Exception) { reject(call, e.message ?: "error") } }
-    }
-
-    @PluginMethod fun deleteCoverImage(call: PluginCall) {
-        val id = call.getString("coverArtId") ?: run { reject(call, "no id"); return }; init()
-        scope.launch { try { resolve(call, JSObject().apply { put("deleted", imgCache.deleteCoverImage(id)) }) } catch (e: Exception) { reject(call, e.message ?: "error") } }
-    }
-
-    @PluginMethod fun clearCoverImages(call: PluginCall) {
-        init()
-        scope.launch { try { resolve(call, JSObject().apply { put("deletedCount", imgCache.clearCoverImages()) }) } catch (e: Exception) { reject(call, e.message ?: "error") } }
-    }
-
-    @PluginMethod fun downloadCoverImage(call: PluginCall) {
-        init(); val id = call.getString("coverArtId") ?: run { reject(call, "no id"); return }; val size = call.getString("size") ?: "700"
-        scope.launch { try { val c = credStore.retrieve() ?: run { reject(call, "no creds"); return@launch }; val f = imgCache.downloadCoverImage(id, size, c); resolve(call, JSObject().apply { put("file", JSObject().apply { put("coverArtId", id); put("uri", f.toURI().toString()); put("sizeBytes", f.length()); put("coverSize", size) }) }) } catch (e: Exception) { reject(call, e.message ?: "error") } }
-    }
-
-    @PluginMethod fun downloadAvatar(call: PluginCall) {
-        init(); val username = call.getString("username") ?: run { reject(call, "no username"); return }; val size = call.getString("size") ?: "150"
-        scope.launch { try { val c = credStore.retrieve() ?: run { reject(call, "no creds"); return@launch }; val f = imgCache.downloadAvatar(username, size, c); resolve(call, JSObject().apply { put("file", JSObject().apply { put("coverArtId", username); put("uri", f.toURI().toString()); put("sizeBytes", f.length()); put("coverSize", size) }) }) } catch (e: Exception) { reject(call, e.message ?: "error") } }
-    }
-
-    private fun resolve(call: PluginCall) { mainHandler.post { call.resolve() } }
-    private fun resolve(call: PluginCall, d: JSObject) { mainHandler.post { call.resolve(d) } }
-    private fun reject(call: PluginCall, m: String) { mainHandler.post { call.reject(m) } }
 }
