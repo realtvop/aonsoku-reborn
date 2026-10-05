@@ -147,8 +147,6 @@ class AudioPlugin : Plugin() {
     private val pluginName = "AudioPlugin"
     private val mainHandler = Handler(Looper.getMainLooper())
     private var playbackService: PlaybackService? = null
-    private val handoffEpoch = java.util.concurrent.atomic.AtomicInteger(0)
-    private var preparedHandoffBefore: Pair<PlaybackPersistState, Boolean>? = null
     private var isBound = false
     private var isWebViewActive = true
     private var currentRequestId: String? = null
@@ -165,10 +163,6 @@ class AudioPlugin : Plugin() {
     private val credentialStore: AndroidCredentialStore by lazy {
         AndroidCredentialStore(context)
     }
-
-    private var sleepTimerHandler: Handler? = null
-    private var sleepTimerEndTime: Long = 0
-    private var sleepTimerMode: String = "duration"
 
     private val db by lazy { AonsokuDatabase.getInstance(context) }
 
@@ -259,8 +253,11 @@ class AudioPlugin : Plugin() {
             emitPlaybackState("ended", currentRequestId)
         }
 
-        override fun onSleepTimerEndOfTrack() {
-            fireSleepTimerEvent("endOfTrack")
+        override fun onSleepTimerFired(reason: String) {
+            emitPlaybackState("paused", currentRequestId)
+            notifyListeners("sleepTimerFired", JSObject().apply {
+                put("reason", reason)
+            })
         }
 
         override fun onError(code: String, message: String) {
@@ -384,21 +381,33 @@ class AudioPlugin : Plugin() {
         if (type == "play_song") {
             val id = command.optString("song_id", "")
             if (id.isEmpty()) return false
-            playSongById(id)
+            submitAudioCommand(AudioCommand.PlaySongById(id))
             return true
         }
 
         if (type == "play_album") {
             val id = command.optString("album_id", "")
             if (id.isEmpty()) return false
-            playAlbumById(id, command.optInt("index", 0), command.optBoolean("shuffle", false))
+            submitAudioCommand(
+                AudioCommand.PlayAlbumById(
+                    id,
+                    command.optInt("index", 0),
+                    command.optBoolean("shuffle", false),
+                ),
+            )
             return true
         }
 
         if (type == "play_playlist") {
             val id = command.optString("playlist_id", "")
             if (id.isEmpty()) return false
-            playPlaylistById(id, command.optInt("index", 0), command.optBoolean("shuffle", false))
+            submitAudioCommand(
+                AudioCommand.PlayPlaylistById(
+                    id,
+                    command.optInt("index", 0),
+                    command.optBoolean("shuffle", false),
+                ),
+            )
             return true
         }
 
@@ -406,105 +415,82 @@ class AudioPlugin : Plugin() {
             val ids = command.optStringArray("song_ids")
             if (ids.isEmpty()) return false
             if (type == "add_to_queue_next" || type == "add_to_queue_last") {
-                addSongIdsToQueue(ids, if (type == "add_to_queue_next") "next" else "last")
+                submitAudioCommand(
+                    AudioCommand.AddSongsById(
+                        ids,
+                        if (type == "add_to_queue_next") "next" else "last",
+                    ),
+                )
                 return true
             }
-            playSongIdsAtIndex(ids, command.optInt("index", 0))
+            submitAudioCommand(AudioCommand.PlaySongsById(ids, command.optInt("index", 0)))
             return true
         }
 
+        val audioCommand = when (type) {
+            "play" -> AudioCommand.Play
+            "pause" -> AudioCommand.Pause
+            "toggle_play_pause" -> AudioCommand.TogglePlayPause
+            "previous" -> AudioCommand.Previous
+            "next" -> AudioCommand.Next
+            "seek" -> if (seekPosition.isNaN()) null else AudioCommand.Seek(seekPosition)
+            "set_shuffle" -> AudioCommand.SetShuffle(command.optBoolean("enabled", false))
+            "set_repeat" -> AudioCommand.SetRepeat(command.optString("mode", "off"))
+            "set_volume" -> if (volume.isNaN()) null else AudioCommand.SetVolume(volume)
+            "clear_queue" -> AudioCommand.ClearUserQueue
+            "remove_from_queue" -> AudioCommand.RemoveSongsById(command.optStringArray("song_ids"))
+            "reorder_queue" -> AudioCommand.ReorderContextQueue(
+                command.optInt("from", -1),
+                command.optInt("to", -1),
+            )
+            else -> null
+        }
+        if (audioCommand != null) submitAudioCommand(audioCommand)
+        if (type == "toggle_like") {
+            pluginScope.launch {
+                val service = try { awaitService() } catch (_: TimeoutCancellationException) { return@launch }
+                val currentId = service.queueEngine.currentSong?.id ?: return@launch
+                toggleLikeForSong(currentId)
+            }
+        }
+        return true
+    }
+
+    private fun submitAudioCommand(command: AudioCommand) {
         pluginScope.launch {
             try {
-                val service = awaitService()
-                mainHandler.post {
-                    val player = service.getPlayer()
-                    when (type) {
-                        "play" -> {
-                            service.savedRestoreTime = null
-                            service.queueEngine.clearRestoredFlag()
-                            requestAudioFocus()
-                            player?.play()
-                        }
-                        "pause" -> {
-                            player?.pause()
-                            service.persistence.flushNow()
-                        }
-                        "toggle_play_pause" -> {
-                            if (player?.isPlaying == true) {
-                                player.pause()
-                                service.persistence.flushNow()
-                            } else {
-                                service.savedRestoreTime = null
-                                service.queueEngine.clearRestoredFlag()
-                                requestAudioFocus()
-                                player?.play()
-                            }
-                        }
-                        "previous" -> {
-                            if (service.isQueueEngineActive) {
-                                val currentTime =
-                                    player?.currentPosition?.div(1000.0) ?: 0.0
-                                service.queueEngine.skipToPrevious(currentTime)
-                            }
-                        }
-                        "next" -> {
-                            if (service.isQueueEngineActive) {
-                                service.queueEngine.skipToNext()
-                            }
-                        }
-                        "seek" -> {
-                            if (!seekPosition.isNaN()) {
-                                val position = seekPosition.coerceAtLeast(0.0)
-                                player?.seekTo((position * 1000).toLong())
-                                service.persistence.updateProgress(position)
-                                service.persistence.flushNow()
-                            }
-                        }
-                        "set_shuffle" -> {
-                            service.setShuffle(command.optBoolean("enabled", false))
-                        }
-                        "set_repeat" -> {
-                            val mode = command.optString("mode", "off")
-                            service.setRepeatMode(mode)
-                        }
-                        "set_volume" -> {
-                            if (!volume.isNaN()) {
-                                setSystemVolumeValue(volume.coerceIn(0.0, 1.0))
-                            }
-                        }
-                        "clear_queue" -> {
-                            service.clearUserQueue()
-                        }
-                        "remove_from_queue" -> {
-                            val ids = command.optStringArray("song_ids").toSet()
-                            if (ids.isNotEmpty()) {
-                                val indices = service.queueEngine.userQueue
-                                    .mapIndexedNotNull { index, song ->
-                                        if (song.id in ids) index else null
-                                    }
-                                service.queueEngine.removeFromUserQueue(indices)
-                            }
-                        }
-                        "reorder_queue" -> {
-                            service.queueEngine.reorderContextQueue(
-                                command.optInt("from", -1),
-                                command.optInt("to", -1),
-                            )
-                        }
-                        "toggle_like" -> {
-                            val currentId = service.queueEngine.currentSong?.id
-                            if (currentId != null) toggleLikeForSong(currentId)
-                        }
-                    }
+                when (val result = awaitService().execute(command)) {
+                    AudioCommandResult.Success -> Unit
+                    is AudioCommandResult.Failure -> NativeLogger.warn(
+                        "Native audio command failed: ${result.code}: ${result.message}",
+                        "audio-plugin",
+                    )
                 }
             } catch (error: Throwable) {
                 NativeLogger.warn(
-                    "Failed to execute native remote command: ${error.message}",
+                    "Failed to execute native audio command: ${error.message}",
                     "audio-plugin",
                 )
             }
         }
-        return true
+    }
+
+    private fun executeAudioCommand(call: PluginCall, command: AudioCommand) {
+        pluginScope.launch {
+            try {
+                val result = awaitService().execute(command)
+                mainHandler.post {
+                    when (result) {
+                        AudioCommandResult.Success -> call.resolve()
+                        is AudioCommandResult.Failure -> call.reject(
+                            "${result.code}: ${result.message}",
+                        )
+                    }
+                }
+            } catch (_: TimeoutCancellationException) {
+                mainHandler.post { call.reject("Playback service is not ready (timeout)") }
+            }
+        }
     }
 
     private fun getCurrentFullState(): JSONObject? {
@@ -555,46 +541,12 @@ class AudioPlugin : Plugin() {
         autoplay: Boolean,
         completion: (Boolean) -> Unit,
     ) {
-        val epoch = handoffEpoch.incrementAndGet()
         pluginScope.launch {
             try {
-                val songId = snapshot.optString("songId", "")
-                if (songId.isEmpty()) {
-                    completion(false)
-                    return@launch
-                }
-
-                val ids = snapshot.optStringArray("contextQueue") +
-                    snapshot.optStringArray("userQueue") +
-                    snapshot.optStringArray("restorePrevious") + listOf(songId)
-                val state = handoffPlaybackState(snapshot, loadQueueSongs(ids.distinct()))
-
                 val service = awaitService()
+                val result = service.execute(AudioCommand.PrepareHandoff(snapshot, autoplay))
                 mainHandler.post {
-                    try {
-                        if (epoch != handoffEpoch.get()) {
-                            completion(false)
-                            return@post
-                        }
-                        if (!autoplay && preparedHandoffBefore == null) {
-                            val player = service.getPlayer()
-                            preparedHandoffBefore = Pair(
-                                PlaybackPersistState.from(service.queueEngine, player?.currentPosition?.div(1000.0) ?: 0.0),
-                                player?.isPlaying ?: false,
-                            )
-                        }
-                        service.restoreHandoffState(state, autoplay)
-                        val volume = snapshot.optDouble("volume", Double.NaN)
-                        if (autoplay && !volume.isNaN()) setSystemVolumeValue(volume)
-                        if (autoplay) preparedHandoffBefore = null
-                        completion(true)
-                    } catch (error: Throwable) {
-                        NativeLogger.warn(
-                            "Failed to apply native handoff snapshot: ${error.message}",
-                            "audio-plugin",
-                        )
-                        completion(false)
-                    }
+                    completion(result is AudioCommandResult.Success)
                 }
             } catch (error: Throwable) {
                 NativeLogger.warn(
@@ -607,20 +559,7 @@ class AudioPlugin : Plugin() {
     }
 
     private fun rollbackHandoffPlayback() {
-        handoffEpoch.incrementAndGet()
-        mainHandler.post {
-            val before = preparedHandoffBefore ?: return@post
-            preparedHandoffBefore = null
-            val service = playbackService ?: return@post
-            if (before.first.contextSongs.isNotEmpty() || before.first.userQueue.isNotEmpty()) {
-                service.restoreHandoffState(before.first, before.second)
-            } else {
-                service.getPlayer()?.stop()
-                service.getPlayer()?.clearMediaItems()
-                service.clearQueueState()
-                emitPlaybackState("idle", currentRequestId)
-            }
-        }
+        submitAudioCommand(AudioCommand.RollbackHandoff)
     }
 
     private fun toggleLikeForSong(songId: String) {
@@ -653,122 +592,6 @@ class AudioPlugin : Plugin() {
         }
     }
 
-    private fun playSongById(id: String) {
-        playSongIdsAtIndex(listOf(id), 0)
-    }
-
-    private fun playAlbumById(id: String, index: Int, shuffle: Boolean) {
-        pluginScope.launch {
-            try {
-                val songs = withContext(Dispatchers.IO) {
-                    db.songDao().getByAlbumId(id).map { it.toQueueSong() }
-                }
-                if (songs.isEmpty()) return@launch
-                playQueueSongsAtIndex(
-                    songs,
-                    index,
-                    shuffle,
-                    QueueSourceId("album", id),
-                    songs.firstOrNull()?.album,
-                )
-            } catch (error: Throwable) {
-                NativeLogger.warn(
-                    "Failed to execute native play_album: ${error.message}",
-                    "audio-plugin",
-                )
-            }
-        }
-    }
-
-    private fun playPlaylistById(id: String, index: Int, shuffle: Boolean) {
-        pluginScope.launch {
-            try {
-                val songs = withContext(Dispatchers.IO) {
-                    val detail = db.playlistDao().getDetailById(id) ?: return@withContext emptyList()
-                    val ids = parsePlaylistEntrySongIds(detail.entriesJson)
-                    loadQueueSongs(ids)
-                }
-                if (songs.isEmpty()) return@launch
-                playQueueSongsAtIndex(
-                    songs,
-                    index,
-                    shuffle,
-                    QueueSourceId("playlist", id),
-                    null,
-                )
-            } catch (error: Throwable) {
-                NativeLogger.warn(
-                    "Failed to execute native play_playlist: ${error.message}",
-                    "audio-plugin",
-                )
-            }
-        }
-    }
-
-    private fun addSongIdsToQueue(ids: List<String>, position: String) {
-        pluginScope.launch {
-            try {
-                val songs = loadQueueSongs(ids)
-                if (songs.isEmpty()) return@launch
-
-                mainHandler.post {
-                    val service = playbackService ?: return@post
-                    service.addToUserQueue(songs, position)
-                }
-            } catch (error: Throwable) {
-                NativeLogger.warn(
-                    "Failed to execute native add_to_queue: ${error.message}",
-                    "audio-plugin",
-                )
-            }
-        }
-    }
-
-    private fun playSongIdsAtIndex(ids: List<String>, index: Int) {
-        pluginScope.launch {
-            try {
-                val songs = loadQueueSongs(ids)
-                if (songs.isEmpty()) return@launch
-                playQueueSongsAtIndex(songs, index, shuffle = false, sourceId = null, sourceName = null)
-            } catch (error: Throwable) {
-                NativeLogger.warn(
-                    "Failed to execute native play_at_index: ${error.message}",
-                    "audio-plugin",
-                )
-            }
-        }
-    }
-
-    private fun playQueueSongsAtIndex(
-        songs: List<QueueSong>,
-        index: Int,
-        shuffle: Boolean,
-        sourceId: QueueSourceId?,
-        sourceName: String?,
-    ) {
-        val clampedIndex = index.coerceIn(0, songs.size - 1)
-        mainHandler.post {
-            val service = playbackService ?: return@post
-            service.setContextQueue(
-                songs,
-                clampedIndex,
-                sourceId = sourceId,
-                sourceName = sourceName,
-                autoplay = true,
-                startTime = null,
-            )
-            if (shuffle) service.setShuffle(true)
-        }
-    }
-
-    private suspend fun loadQueueSongs(ids: List<String>): List<QueueSong> {
-        val records = withContext(Dispatchers.IO) {
-            db.songDao().getByIds(ids)
-        }
-        val byId = records.associateBy { it.id }
-        return ids.mapNotNull { byId[it]?.toQueueSong() }
-    }
-
     private fun JSONObject.optStringArray(name: String): List<String> {
         val array = optJSONArray(name) ?: return emptyList()
         val values = mutableListOf<String>()
@@ -777,53 +600,6 @@ class AudioPlugin : Plugin() {
             if (id.isNotEmpty()) values.add(id)
         }
         return values
-    }
-
-    private fun parseSnapshotSourceId(raw: String): QueueSourceId? {
-        if (raw.isEmpty()) return null
-        val separator = raw.indexOf(":")
-        if (separator <= 0 || separator >= raw.length - 1) return null
-        val type = raw.substring(0, separator)
-        val id = raw.substring(separator + 1)
-        return when (type) {
-            "album", "playlist", "artist", "genre", "radio" -> QueueSourceId(type, id)
-            else -> null
-        }
-    }
-
-    private fun parsePlaylistEntrySongIds(entriesJson: String): List<String> {
-        val entries = try {
-            JSONArray(entriesJson)
-        } catch (_: Throwable) {
-            return emptyList()
-        }
-        val ids = mutableListOf<String>()
-        for (i in 0 until entries.length()) {
-            val id = entries.optJSONObject(i)?.optString("id", "") ?: ""
-            if (id.isNotEmpty()) ids.add(id)
-        }
-        return ids
-    }
-
-    private fun SongEntity.toQueueSong(): QueueSong {
-        val coverArtId = coverArt ?: albumId
-        return QueueSong(
-            id = id,
-            title = title,
-            artist = artist ?: "",
-            artistId = artistId,
-            album = album ?: "",
-            albumId = albumId,
-            duration = duration.toDouble(),
-            coverArtId = coverArtId,
-            streamUrl = Uri.Builder()
-                .scheme("aonsoku-media")
-                .authority("stream")
-                .appendQueryParameter("id", id)
-                .build()
-                .toString(),
-            cachedFileUri = null,
-        )
     }
 
     private fun SongEntity.toRemotePlaybackMetadata(): MediaMetadata {
@@ -947,75 +723,26 @@ class AudioPlugin : Plugin() {
     fun setSleepTimer(call: PluginCall) {
         val seconds = call.getDouble("seconds") ?: 0.0
         val mode = call.getString("mode") ?: "duration"
-
-        cancelSleepTimerInternal()
-
-        pluginScope.launch {
-            try {
-                val service = awaitService()
-                service.sleepTimerMode = mode
-            } catch (_: TimeoutCancellationException) {}
-        }
-
-        if (mode == "endOfTrack") {
-            sleepTimerMode = "endOfTrack"
-            sleepTimerEndTime = 0
-        } else if (seconds > 0) {
-            sleepTimerEndTime = System.currentTimeMillis() + (seconds * 1000).toLong()
-            sleepTimerMode = "duration"
-            val handler = Handler(Looper.getMainLooper())
-            sleepTimerHandler = handler
-            handler.postDelayed({
-                fireSleepTimer()
-            }, (seconds * 1000).toLong())
-        }
-        call.resolve()
+        executeAudioCommand(call, AudioCommand.SetSleepTimer(seconds, mode))
     }
 
     @PluginMethod
     fun cancelSleepTimer(call: PluginCall) {
-        cancelSleepTimerInternal()
-        pluginScope.launch {
-            try {
-                val service = awaitService()
-                service.sleepTimerMode = "duration"
-            } catch (_: TimeoutCancellationException) {}
-        }
-        call.resolve()
+        executeAudioCommand(call, AudioCommand.CancelSleepTimer)
     }
 
     @PluginMethod
     fun getSleepTimerRemaining(call: PluginCall) {
-        val remaining = if (sleepTimerEndTime > 0) {
-            maxOf(0, sleepTimerEndTime - System.currentTimeMillis()) / 1000
-        } else 0
-        call.resolve(JSObject().apply {
-            put("remainingSeconds", remaining.toDouble())
-        })
-    }
-
-    private fun cancelSleepTimerInternal() {
-        sleepTimerHandler?.removeCallbacksAndMessages(null)
-        sleepTimerHandler = null
-        sleepTimerEndTime = 0
-        sleepTimerMode = "duration"
-    }
-
-    private fun fireSleepTimer() {
-        playbackService?.getPlayer()?.let { player ->
-            player.pause()
+        pluginScope.launch {
+            try {
+                val remaining = awaitService().getSleepTimerRemaining()
+                mainHandler.post {
+                    call.resolve(JSObject().put("remainingSeconds", remaining))
+                }
+            } catch (_: TimeoutCancellationException) {
+                mainHandler.post { call.reject("Playback service is not ready (timeout)") }
+            }
         }
-        playbackService?.persistence?.flushNow()
-        cancelSleepTimerInternal()
-        playbackService?.sleepTimerMode = "duration"
-        fireSleepTimerEvent("duration")
-    }
-
-    private fun fireSleepTimerEvent(reason: String) {
-        emitPlaybackState("paused", currentRequestId)
-        notifyListeners("sleepTimerFired", JSObject().apply {
-            put("reason", reason)
-        })
     }
 
     // MARK: - Player Listener
@@ -1919,23 +1646,18 @@ class AudioPlugin : Plugin() {
 
         val repeatMode = call.getString("repeatMode")
 
-        pluginScope.launch {
-            try {
-                val service = awaitService()
-                // Set isQueueEngineActive early to prevent a concurrent load()
-                // call (triggered by Zustand → React re-render → src change →
-                // backend.load()) from also playing on the same ExoPlayer.
-                // Otherwise both loadMediaAndPlay() and loadSong() conflict.
-                service.isQueueEngineActive = true
-                mainHandler.post {
-                    repeatMode?.let { service.setRepeatMode(it) }
-                    service.setContextQueue(songs, currentIndex, autoplay, startTime, sourceId, sourceName)
-                    call.resolve()
-                }
-            } catch (_: TimeoutCancellationException) {
-                call.reject("Playback service is not ready (timeout)")
-            }
-        }
+        executeAudioCommand(
+            call,
+            AudioCommand.SetContextQueue(
+                songs,
+                currentIndex,
+                autoplay,
+                startTime,
+                sourceId,
+                sourceName,
+                repeatMode,
+            ),
+        )
     }
 
     @PluginMethod
@@ -1950,17 +1672,7 @@ class AudioPlugin : Plugin() {
         }
         val currentIndex = call.getInt("currentIndex") ?: 0
 
-        pluginScope.launch {
-            try {
-                val service = awaitService()
-                mainHandler.post {
-                    service.updateContextQueue(songs, currentIndex)
-                    call.resolve()
-                }
-            } catch (_: TimeoutCancellationException) {
-                call.reject("Playback service is not ready (timeout)")
-            }
-        }
+        executeAudioCommand(call, AudioCommand.UpdateContextQueue(songs, currentIndex))
     }
 
     @PluginMethod
@@ -1968,17 +1680,10 @@ class AudioPlugin : Plugin() {
         val fromIndex = call.getInt("fromIndex") ?: 0
         val toIndex = call.getInt("toIndex") ?: 0
 
-        pluginScope.launch {
-            try {
-                val service = awaitService()
-                mainHandler.post {
-                    service.reorderContextQueue(fromIndex, toIndex)
-                    call.resolve()
-                }
-            } catch (_: TimeoutCancellationException) {
-                call.reject("Playback service is not ready (timeout)")
-            }
-        }
+        executeAudioCommand(
+            call,
+            AudioCommand.ReorderContextQueue(fromIndex, toIndex),
+        )
     }
 
     @PluginMethod
@@ -1993,17 +1698,7 @@ class AudioPlugin : Plugin() {
         }
         val position = call.getString("position") ?: "last"
 
-        pluginScope.launch {
-            try {
-                val service = awaitService()
-                mainHandler.post {
-                    service.addToUserQueue(songs, position)
-                    call.resolve()
-                }
-            } catch (_: TimeoutCancellationException) {
-                call.reject("Playback service is not ready (timeout)")
-            }
-        }
+        executeAudioCommand(call, AudioCommand.AddToUserQueue(songs, position))
     }
 
     @PluginMethod
@@ -2017,32 +1712,12 @@ class AudioPlugin : Plugin() {
             indices.add(indicesArray.getInt(i))
         }
 
-        pluginScope.launch {
-            try {
-                val service = awaitService()
-                mainHandler.post {
-                    service.removeFromUserQueue(indices)
-                    call.resolve()
-                }
-            } catch (_: TimeoutCancellationException) {
-                call.reject("Playback service is not ready (timeout)")
-            }
-        }
+        executeAudioCommand(call, AudioCommand.RemoveFromUserQueue(indices))
     }
 
     @PluginMethod
     fun clearUserQueue(call: PluginCall) {
-        pluginScope.launch {
-            try {
-                val service = awaitService()
-                mainHandler.post {
-                    service.clearUserQueue()
-                    call.resolve()
-                }
-            } catch (_: TimeoutCancellationException) {
-                call.reject("Playback service is not ready (timeout)")
-            }
-        }
+        executeAudioCommand(call, AudioCommand.ClearUserQueue)
     }
 
     @PluginMethod
@@ -2050,17 +1725,7 @@ class AudioPlugin : Plugin() {
         val index = call.getInt("index") ?: 0
         val startTime = call.getDouble("startTime")
 
-        pluginScope.launch {
-            try {
-                val service = awaitService()
-                mainHandler.post {
-                    service.playAtIndex(index, startTime)
-                    call.resolve()
-                }
-            } catch (_: TimeoutCancellationException) {
-                call.reject("Playback service is not ready (timeout)")
-            }
-        }
+        executeAudioCommand(call, AudioCommand.PlayAtIndex(index, startTime))
     }
 
     @PluginMethod
@@ -2088,34 +1753,14 @@ class AudioPlugin : Plugin() {
     fun setRepeatMode(call: PluginCall) {
         val mode = call.getString("mode") ?: "off"
 
-        pluginScope.launch {
-            try {
-                val service = awaitService()
-                mainHandler.post {
-                    service.setRepeatMode(mode)
-                    call.resolve()
-                }
-            } catch (_: TimeoutCancellationException) {
-                call.reject("Playback service is not ready (timeout)")
-            }
-        }
+        executeAudioCommand(call, AudioCommand.SetRepeat(mode))
     }
 
     @PluginMethod
     fun setShuffle(call: PluginCall) {
         val enabled = call.getBoolean("enabled") ?: false
 
-        pluginScope.launch {
-            try {
-                val service = awaitService()
-                mainHandler.post {
-                    service.setShuffle(enabled)
-                    call.resolve()
-                }
-            } catch (_: TimeoutCancellationException) {
-                call.reject("Playback service is not ready (timeout)")
-            }
-        }
+        executeAudioCommand(call, AudioCommand.SetShuffle(enabled))
     }
 
     @PluginMethod
@@ -2129,57 +1774,17 @@ class AudioPlugin : Plugin() {
             songs.add(QueueSong.from(songsArray.getJSONObject(i)))
         }
 
-        pluginScope.launch {
-            try {
-                val service = awaitService()
-                mainHandler.post {
-                    service.markAsShuffled(songs)
-                    call.resolve()
-                }
-            } catch (_: TimeoutCancellationException) {
-                call.reject("Playback service is not ready (timeout)")
-            }
-        }
+        executeAudioCommand(call, AudioCommand.MarkAsShuffled(songs))
     }
 
     @PluginMethod
     fun skipToNext(call: PluginCall) {
-        pluginScope.launch {
-            try {
-                val service = awaitService()
-                mainHandler.post {
-                    if (service.isQueueEngineActive) {
-                        service.queueEngine.skipToNext()
-                    } else {
-                        emitRemoteCommand("next")
-                    }
-                    call.resolve()
-                }
-            } catch (_: TimeoutCancellationException) {
-                call.reject("Playback service is not ready (timeout)")
-            }
-        }
+        executeAudioCommand(call, AudioCommand.Next)
     }
 
     @PluginMethod
     fun skipToPrevious(call: PluginCall) {
-        pluginScope.launch {
-            try {
-                val service = awaitService()
-                mainHandler.post {
-                    if (service.isQueueEngineActive) {
-                        val player = service.getPlayer()
-                        val currentTime = if (player != null) player.currentPosition / 1000.0 else 0.0
-                        service.queueEngine.skipToPrevious(currentTime)
-                    } else {
-                        emitRemoteCommand("previous")
-                    }
-                    call.resolve()
-                }
-            } catch (_: TimeoutCancellationException) {
-                call.reject("Playback service is not ready (timeout)")
-            }
-        }
+        executeAudioCommand(call, AudioCommand.Previous)
     }
 
     @PluginMethod

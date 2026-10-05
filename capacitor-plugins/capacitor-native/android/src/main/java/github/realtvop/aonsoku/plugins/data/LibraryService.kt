@@ -273,6 +273,10 @@ class LibraryService private constructor(context: Context) {
         LibraryPage(items, total, offset + limit < total)
     }
 
+    suspend fun getSongsByIds(ids: List<String>): List<SongEntity> = withContext(Dispatchers.IO) {
+        if (ids.isEmpty()) emptyList() else database.songDao().getByIds(ids)
+    }
+
     suspend fun getPlaylists(pagination: LibraryPagination): LibraryPage<PlaylistEntity> =
         withContext(Dispatchers.IO) {
             val limit = pagination.safeLimit

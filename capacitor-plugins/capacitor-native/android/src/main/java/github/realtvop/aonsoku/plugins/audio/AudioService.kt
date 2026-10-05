@@ -2,6 +2,7 @@ package github.realtvop.aonsoku.plugins.audio
 
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import org.json.JSONObject
 
 data class AudioPlaybackSnapshot(
     val state: String = "idle",
@@ -39,6 +40,32 @@ sealed interface AudioCommand {
     data class SetVolume(val value: Double) : AudioCommand
     data class SetShuffle(val enabled: Boolean) : AudioCommand
     data class SetRepeat(val mode: String) : AudioCommand
+    data class SetSleepTimer(val seconds: Double, val mode: String) : AudioCommand
+    data object CancelSleepTimer : AudioCommand
+    data class PlaySongById(val songId: String) : AudioCommand
+    data class PlayAlbumById(val albumId: String, val index: Int, val shuffle: Boolean) : AudioCommand
+    data class PlayPlaylistById(val playlistId: String, val index: Int, val shuffle: Boolean) : AudioCommand
+    data class PlaySongsById(val songIds: List<String>, val index: Int) : AudioCommand
+    data class AddSongsById(val songIds: List<String>, val position: String) : AudioCommand
+    data class SetContextQueue(
+        val songs: List<QueueSong>,
+        val currentIndex: Int,
+        val autoplay: Boolean,
+        val startTime: Double?,
+        val sourceId: QueueSourceId?,
+        val sourceName: String?,
+        val repeatMode: String?,
+    ) : AudioCommand
+    data class UpdateContextQueue(val songs: List<QueueSong>, val currentIndex: Int) : AudioCommand
+    data class ReorderContextQueue(val fromIndex: Int, val toIndex: Int) : AudioCommand
+    data class AddToUserQueue(val songs: List<QueueSong>, val position: String) : AudioCommand
+    data class RemoveFromUserQueue(val indices: List<Int>) : AudioCommand
+    data class RemoveSongsById(val songIds: List<String>) : AudioCommand
+    data object ClearUserQueue : AudioCommand
+    data class PlayAtIndex(val index: Int, val startTime: Double?) : AudioCommand
+    data class MarkAsShuffled(val originalSongs: List<QueueSong>) : AudioCommand
+    data class PrepareHandoff(val snapshot: JSONObject, val autoplay: Boolean) : AudioCommand
+    data object RollbackHandoff : AudioCommand
 }
 
 sealed interface AudioCommandResult {
@@ -66,7 +93,7 @@ sealed interface AudioEvent {
         val targetDeviceId: String?,
         val expectedGeneration: Int?,
     ) : AudioEvent
-    data class SleepTimerEndOfTrack(val snapshot: AudioPlaybackSnapshot) : AudioEvent
+    data class SleepTimerFired(val reason: String, val snapshot: AudioPlaybackSnapshot) : AudioEvent
     data class Error(val code: String, val message: String, val snapshot: AudioPlaybackSnapshot) : AudioEvent
     data class SystemVolumeChanged(val volume: Double) : AudioEvent
     data class RouteChanged(val reason: String) : AudioEvent
@@ -86,5 +113,6 @@ interface AudioService {
     fun requestAudioFocus(): Boolean
     fun getSystemVolume(): Double
     fun setSystemVolume(value: Double): Double
+    fun getSleepTimerRemaining(): Double
     fun setRequestId(requestId: String?)
 }

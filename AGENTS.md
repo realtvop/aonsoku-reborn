@@ -128,6 +128,14 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   foreground-service, audio-route, and system-volume resources remain owned by
   `PlaybackService`. `AudioPlugin` adapts the existing JS method/event
   contract and may be destroyed without releasing those service resources.
+- Android queue resolution by song/album/playlist ID, queue edits, handoff
+  preparation/rollback, and sleep timers are `AudioService` commands executed
+  by `PlaybackService`. Queue commands resolve local songs through
+  `LibraryService`, preserve the existing context/user/shuffle/history order,
+  and return `AudioCommandResult` errors for missing local data or failed
+  handoffs. Download manager, playback persistence, and scrobble buffering are
+  also owned by `PlaybackService`; `AudioPlugin` retains only JSON parsing and
+  JS result/event adaptation.
 - The iOS host owns long-lived native services through
   `AonsokuNativePlugin.AppServices`. `AudioService` owns AVPlayer, queue,
   downloads, scrobbling, playback persistence, and system media controls;

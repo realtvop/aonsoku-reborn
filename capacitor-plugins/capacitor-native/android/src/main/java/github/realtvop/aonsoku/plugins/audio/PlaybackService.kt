@@ -46,7 +46,9 @@ import github.realtvop.aonsoku.plugins.preferences.NativePreferencesStore
 import github.realtvop.aonsoku.plugins.bridge.AndroidCredentialStore
 import github.realtvop.aonsoku.plugins.bridge.SubsonicHttpClient
 import github.realtvop.aonsoku.plugins.data.db.AonsokuDatabase
+import github.realtvop.aonsoku.plugins.data.db.entity.SongEntity
 import github.realtvop.aonsoku.plugins.data.image.ImageCacheManager
+import github.realtvop.aonsoku.plugins.data.LibraryService
 import github.realtvop.aonsoku.plugins.coordination.AonsokuNativeCoordinationPlugin
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -145,6 +147,11 @@ class PlaybackService : MediaSessionService(), AudioService {
     private var volumeReceiver: BroadcastReceiver? = null
     private var headphoneReceiver: BroadcastReceiver? = null
     private var audioDeviceCallback: android.media.AudioDeviceCallback? = null
+    private val libraryService by lazy { LibraryService.getInstance(applicationContext) }
+    private val handoffEpoch = java.util.concurrent.atomic.AtomicInteger(0)
+    private var preparedHandoffBefore: Pair<PlaybackPersistState, Boolean>? = null
+    private var sleepTimerHandler: Handler? = null
+    private var sleepTimerEndTime: Long = 0L
 
     private val httpClient = SubsonicHttpClient()
     private val credentialStore by lazy {
@@ -269,7 +276,7 @@ class PlaybackService : MediaSessionService(), AudioService {
         fun onQueueContentsChanged(reason: String)
         fun onPlaybackStateChanged(state: String)
         fun onEnded(reason: String)
-        fun onSleepTimerEndOfTrack()
+        fun onSleepTimerFired(reason: String)
         fun onError(code: String, message: String)
     }
 
@@ -400,9 +407,9 @@ class PlaybackService : MediaSessionService(), AudioService {
         listeners.forEach { it.onEnded(reason) }
     }
 
-    private fun emitSleepTimerEndOfTrack() {
-        emitStateEvent(AudioEvent.SleepTimerEndOfTrack(currentPlaybackSnapshot()))
-        listeners.forEach { it.onSleepTimerEndOfTrack() }
+    private fun emitSleepTimerFired(reason: String) {
+        emitStateEvent(AudioEvent.SleepTimerFired(reason, currentPlaybackSnapshot()))
+        listeners.forEach { it.onSleepTimerFired(reason) }
     }
 
     private fun emitError(code: String, message: String) {
@@ -476,6 +483,11 @@ class PlaybackService : MediaSessionService(), AudioService {
         return getSystemVolume()
     }
 
+    override fun getSleepTimerRemaining(): Double {
+        if (sleepTimerEndTime <= 0L) return 0.0
+        return (sleepTimerEndTime - System.currentTimeMillis()).coerceAtLeast(0L) / 1000.0
+    }
+
     override suspend fun execute(command: AudioCommand): AudioCommandResult =
         withContext(Dispatchers.Main.immediate) {
             val currentPlayer = player
@@ -536,6 +548,68 @@ class PlaybackService : MediaSessionService(), AudioService {
                     is AudioCommand.SetVolume -> setSystemVolumeValue(command.value)
                     is AudioCommand.SetShuffle -> setShuffle(command.enabled)
                     is AudioCommand.SetRepeat -> setRepeatMode(command.mode)
+                    is AudioCommand.SetSleepTimer -> setSleepTimer(command.seconds, command.mode)
+                    AudioCommand.CancelSleepTimer -> cancelSleepTimer()
+                    is AudioCommand.PlaySongById -> return@withContext playSongById(command.songId)
+                    is AudioCommand.PlayAlbumById -> return@withContext playAlbumById(
+                        command.albumId,
+                        command.index,
+                        command.shuffle,
+                    )
+                    is AudioCommand.PlayPlaylistById -> return@withContext playPlaylistById(
+                        command.playlistId,
+                        command.index,
+                        command.shuffle,
+                    )
+                    is AudioCommand.PlaySongsById -> return@withContext playSongIdsById(
+                        command.songIds,
+                        command.index,
+                    )
+                    is AudioCommand.AddSongsById -> return@withContext addSongIdsToQueue(
+                        command.songIds,
+                        command.position,
+                    )
+                    is AudioCommand.SetContextQueue -> {
+                        command.repeatMode?.let { setRepeatMode(it) }
+                        isQueueEngineActive = true
+                        setContextQueue(
+                            command.songs,
+                            command.currentIndex,
+                            command.autoplay,
+                            command.startTime,
+                            command.sourceId,
+                            command.sourceName,
+                        )
+                    }
+                    is AudioCommand.UpdateContextQueue -> updateContextQueue(
+                        command.songs,
+                        command.currentIndex,
+                    )
+                    is AudioCommand.ReorderContextQueue -> reorderContextQueue(
+                        command.fromIndex,
+                        command.toIndex,
+                    )
+                    is AudioCommand.AddToUserQueue -> addToUserQueue(
+                        command.songs,
+                        command.position,
+                    )
+                    is AudioCommand.RemoveFromUserQueue -> removeFromUserQueue(command.indices)
+                    is AudioCommand.RemoveSongsById -> removeFromUserQueue(
+                        queueEngine.userQueue.mapIndexedNotNull { index, song ->
+                            index.takeIf { song.id in command.songIds }
+                        },
+                    )
+                    AudioCommand.ClearUserQueue -> clearUserQueue()
+                    is AudioCommand.PlayAtIndex -> playAtIndex(command.index, command.startTime)
+                    is AudioCommand.MarkAsShuffled -> markAsShuffled(command.originalSongs)
+                    is AudioCommand.PrepareHandoff -> return@withContext prepareHandoff(
+                        command.snapshot,
+                        command.autoplay,
+                    )
+                    AudioCommand.RollbackHandoff -> {
+                        rollbackHandoff()
+                        return@withContext AudioCommandResult.Success
+                    }
                 }
                 AudioCommandResult.Success
             } catch (error: Throwable) {
@@ -586,6 +660,198 @@ class PlaybackService : MediaSessionService(), AudioService {
 
     private fun emitStateEvent(event: AudioEvent) {
         _events.tryEmit(event)
+    }
+
+    private suspend fun playSongById(songId: String): AudioCommandResult {
+        val song = libraryService.getSongsByIds(listOf(songId)).firstOrNull()
+            ?: return AudioCommandResult.Failure("not_found", "Song not found: $songId")
+        return playQueueSongsAtIndex(listOf(song.toQueueSong()), 0, false, null, null)
+    }
+
+    private suspend fun playAlbumById(
+        albumId: String,
+        index: Int,
+        shuffle: Boolean,
+    ): AudioCommandResult {
+        val songs = libraryService.getSongsByIds(
+            libraryService.getAlbum(albumId)?.second?.map { it.id }.orEmpty(),
+        ).map { it.toQueueSong() }
+        if (songs.isEmpty()) {
+            return AudioCommandResult.Failure("not_found", "Album has no local songs: $albumId")
+        }
+        return playQueueSongsAtIndex(
+            songs,
+            index,
+            shuffle,
+            QueueSourceId("album", albumId),
+            songs.firstOrNull()?.album,
+        )
+    }
+
+    private suspend fun playPlaylistById(
+        playlistId: String,
+        index: Int,
+        shuffle: Boolean,
+    ): AudioCommandResult {
+        val detail = libraryService.getPlaylist(playlistId)
+            ?: return AudioCommandResult.Failure("not_found", "Playlist not found: $playlistId")
+        val ids = parsePlaylistEntrySongIds(detail.entriesJson)
+        val songs = resolveQueueSongs(ids)
+        if (songs.isEmpty()) {
+            return AudioCommandResult.Failure(
+                "not_found",
+                "Playlist has no local songs: $playlistId",
+            )
+        }
+        return playQueueSongsAtIndex(
+            songs,
+            index,
+            shuffle,
+            QueueSourceId("playlist", playlistId),
+            null,
+        )
+    }
+
+    private suspend fun playSongIdsById(
+        ids: List<String>,
+        index: Int,
+    ): AudioCommandResult {
+        val songs = resolveQueueSongs(ids)
+        if (songs.isEmpty()) return AudioCommandResult.Failure("not_found", "Songs not found")
+        return playQueueSongsAtIndex(songs, index, false, null, null)
+    }
+
+    private suspend fun addSongIdsToQueue(
+        ids: List<String>,
+        position: String,
+    ): AudioCommandResult {
+        val songs = resolveQueueSongs(ids)
+        if (songs.isEmpty()) return AudioCommandResult.Failure("not_found", "Songs not found")
+        addToUserQueue(songs, position)
+        return AudioCommandResult.Success
+    }
+
+    private suspend fun resolveQueueSongs(ids: List<String>): List<QueueSong> {
+        val byId = libraryService.getSongsByIds(ids).associateBy { it.id }
+        return ids.mapNotNull { byId[it]?.toQueueSong() }
+    }
+
+    private fun playQueueSongsAtIndex(
+        songs: List<QueueSong>,
+        index: Int,
+        shuffle: Boolean,
+        sourceId: QueueSourceId?,
+        sourceName: String?,
+    ): AudioCommandResult {
+        if (songs.isEmpty()) return AudioCommandResult.Failure("not_found", "No songs to play")
+        val clampedIndex = index.coerceIn(0, songs.size - 1)
+        isQueueEngineActive = true
+        setContextQueue(
+            songs,
+            clampedIndex,
+            autoplay = true,
+            startTime = null,
+            sourceId = sourceId,
+            sourceName = sourceName,
+        )
+        if (shuffle) setShuffle(true)
+        return AudioCommandResult.Success
+    }
+
+    private suspend fun prepareHandoff(
+        snapshot: JSONObject,
+        autoplay: Boolean,
+    ): AudioCommandResult {
+        val epoch = handoffEpoch.incrementAndGet()
+        return try {
+            val songId = snapshot.optString("songId", "")
+            if (songId.isEmpty()) {
+                return AudioCommandResult.Failure("invalid_handoff", "Handoff has no songId")
+            }
+            val ids = snapshot.optStringArray("contextQueue") +
+                snapshot.optStringArray("userQueue") +
+                snapshot.optStringArray("restorePrevious") + listOf(songId)
+            val state = handoffPlaybackState(snapshot, resolveQueueSongs(ids.distinct()))
+            if (epoch != handoffEpoch.get()) {
+                return AudioCommandResult.Failure("cancelled", "Handoff was superseded")
+            }
+            if (!autoplay && preparedHandoffBefore == null) {
+                preparedHandoffBefore = Pair(
+                    PlaybackPersistState.from(
+                        queueEngine,
+                        player?.currentPosition?.div(1000.0) ?: 0.0,
+                    ),
+                    player?.isPlaying ?: false,
+                )
+            }
+            restoreHandoffState(state, autoplay)
+            val volume = snapshot.optDouble("volume", Double.NaN)
+            if (autoplay && !volume.isNaN()) setSystemVolumeValue(volume)
+            if (autoplay) preparedHandoffBefore = null
+            AudioCommandResult.Success
+        } catch (error: Throwable) {
+            NativeLogger.warn(
+                "Failed to apply native handoff snapshot: ${error.message}",
+                "playback-service",
+            )
+            AudioCommandResult.Failure(
+                "handoff_failed",
+                error.message ?: "Failed to apply handoff",
+            )
+        }
+    }
+
+    private fun rollbackHandoff() {
+        handoffEpoch.incrementAndGet()
+        val before = preparedHandoffBefore ?: return
+        preparedHandoffBefore = null
+        if (before.first.contextSongs.isNotEmpty() || before.first.userQueue.isNotEmpty()) {
+            restoreHandoffState(before.first, before.second)
+        } else {
+            player?.stop()
+            player?.clearMediaItems()
+            clearQueueState()
+            emitPlaybackState("idle")
+        }
+    }
+
+    private fun JSONObject.optStringArray(name: String): List<String> {
+        val array = optJSONArray(name) ?: return emptyList()
+        return (0 until array.length()).mapNotNull { index ->
+            array.optString(index, "").takeIf { it.isNotEmpty() }
+        }
+    }
+
+    private fun parsePlaylistEntrySongIds(entriesJson: String): List<String> {
+        val entries = try {
+            org.json.JSONArray(entriesJson)
+        } catch (_: Throwable) {
+            return emptyList()
+        }
+        return (0 until entries.length()).mapNotNull { index ->
+            entries.optJSONObject(index)?.optString("id", "")?.takeIf { it.isNotEmpty() }
+        }
+    }
+
+    private fun SongEntity.toQueueSong(): QueueSong {
+        val coverArtId = coverArt ?: albumId
+        return QueueSong(
+            id = id,
+            title = title,
+            artist = artist ?: "",
+            artistId = artistId,
+            album = album ?: "",
+            albumId = albumId,
+            duration = duration.toDouble(),
+            coverArtId = coverArtId,
+            streamUrl = Uri.Builder()
+                .scheme("aonsoku-media")
+                .authority("stream")
+                .appendQueryParameter("id", id)
+                .build()
+                .toString(),
+            cachedFileUri = null,
+        )
     }
 
     @OptIn(UnstableApi::class)
@@ -821,7 +1087,7 @@ class PlaybackService : MediaSessionService(), AudioService {
                         sleepTimerMode = "duration"
                         player?.pause()
                         emitPlaybackState("paused")
-                        emitSleepTimerEndOfTrack()
+                        emitSleepTimerFired("endOfTrack")
                         return
                     }
                     if (isQueueEngineActive) {
@@ -1134,6 +1400,32 @@ class PlaybackService : MediaSessionService(), AudioService {
             0,
         )
         emitSystemVolumeChanged()
+    }
+
+    private fun setSleepTimer(seconds: Double, mode: String) {
+        cancelSleepTimer()
+        sleepTimerMode = mode
+        if (mode == "endOfTrack") return
+        if (seconds <= 0.0) return
+        sleepTimerEndTime = System.currentTimeMillis() + (seconds * 1000).toLong()
+        sleepTimerHandler = Handler(Looper.getMainLooper()).also { handler ->
+            handler.postDelayed({
+                sleepTimerHandler = null
+                sleepTimerEndTime = 0L
+                sleepTimerMode = "duration"
+                player?.pause()
+                persistence.flushNow()
+                emitPlaybackState("paused")
+                emitSleepTimerFired("duration")
+            }, (seconds * 1000).toLong())
+        }
+    }
+
+    private fun cancelSleepTimer() {
+        sleepTimerHandler?.removeCallbacksAndMessages(null)
+        sleepTimerHandler = null
+        sleepTimerEndTime = 0L
+        sleepTimerMode = "duration"
     }
 
     private fun createNotificationChannel() {
@@ -1471,6 +1763,7 @@ class PlaybackService : MediaSessionService(), AudioService {
         NativeLogger.info("PlaybackService destroyed", "playback-service")
         stopStateProgressUpdates()
         stateHandler.removeCallbacksAndMessages(null)
+        cancelSleepTimer()
         unregisterSystemReceivers()
         // §2.1.8: release the foreground-service association before teardown.
         AonsokuNativeCoordinationPlugin.detachActiveForegroundService()
