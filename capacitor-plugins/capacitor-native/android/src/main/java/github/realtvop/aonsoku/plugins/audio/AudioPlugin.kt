@@ -61,6 +61,28 @@ class AudioPlugin : Plugin() {
         @JvmStatic
         var isVolumeHUDDisabled: Boolean = false
 
+        internal fun isSupportedRemoteControlCommand(type: String): Boolean = type in setOf(
+            "play",
+            "pause",
+            "toggle_play_pause",
+            "previous",
+            "next",
+            "seek",
+            "set_shuffle",
+            "set_repeat",
+            "set_volume",
+            "play_song",
+            "play_album",
+            "play_playlist",
+            "play_at_index",
+            "add_to_queue_next",
+            "add_to_queue_last",
+            "remove_from_queue",
+            "reorder_queue",
+            "clear_queue",
+            "toggle_like",
+        )
+
     }
 
     private val pluginName = "AudioPlugin"

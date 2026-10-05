@@ -13,4 +13,7 @@ export const AonsokuNativePreferences =
 
 export { NATIVE_PREFERENCES_PLUGIN_NAME };
 export { AonsokuNativePreferencesWeb } from "./web";
-export type { AonsokuNativePreferencesPlugin } from "./definitions";
+export type {
+  AonsokuNativePreferencesPlugin,
+  NativePreferencesChangedEvent,
+} from "./definitions";

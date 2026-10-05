@@ -161,6 +161,9 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   coordination plugin instance lookup. The WebSocket plugin remains the
   protocol/Capacitor adapter, while playback resources and queue state remain
   in `PlaybackService`.
+- Native UI service boundaries, binding/lifecycle rules, adapter duties, and
+  the remaining TypeScript/WebView responsibilities are documented in
+  `docs/android-native-services.md`.
 - The iOS host owns long-lived native services through
   `AonsokuNativePlugin.AppServices`. `AudioService` owns AVPlayer, queue,
   downloads, scrobbling, playback persistence, and system media controls;

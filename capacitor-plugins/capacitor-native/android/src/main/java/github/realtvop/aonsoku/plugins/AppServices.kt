@@ -13,12 +13,16 @@ import java.util.concurrent.atomic.AtomicReference
  * Android foreground services. Registrations are replace-safe so service
  * recreation cannot leave a stale consumer in the graph.
  */
-class AppServices private constructor(context: Context) {
-    val authentication: AuthenticationService =
-        AuthenticationService.getInstance(context.applicationContext)
-    val preferences: PreferencesService =
-        PreferencesService.getInstance(context.applicationContext)
-    val library: LibraryService = LibraryService.getInstance(context.applicationContext)
+class AppServices internal constructor(
+    val authentication: AuthenticationService,
+    val preferences: PreferencesService,
+    val library: LibraryService,
+) {
+    private constructor(context: Context) : this(
+        authentication = AuthenticationService.getInstance(context.applicationContext),
+        preferences = PreferencesService.getInstance(context.applicationContext),
+        library = LibraryService.getInstance(context.applicationContext),
+    )
 
     private val audio = AtomicReference<AudioService?>(null)
     private val coordination = AtomicReference<CoordinationService?>(null)

@@ -2,6 +2,12 @@ import type { Plugin } from "@capacitor/core";
 
 export const NATIVE_PREFERENCES_PLUGIN_NAME = "AonsokuNativePreferences";
 
+export interface NativePreferencesChangedEvent {
+  key?: string;
+  value?: string;
+  preferences: Record<string, string>;
+}
+
 export interface AonsokuNativePreferencesPlugin extends Plugin {
   getAllPreferences(): Promise<{ preferences: Record<string, string> }>;
   setPreferences(options: {
