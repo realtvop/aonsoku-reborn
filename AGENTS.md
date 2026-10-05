@@ -151,6 +151,16 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   Capacitor `PreferencesPlugin` can subscribe independently. The plugin only
   converts values and forwards a `preferencesChanged` event; destroying it
   does not close or reset the service.
+- Android `AppServices` is the application-scoped service graph for
+  authentication, preferences, library, audio, and coordination ports.
+  `PlaybackService` registers its `AudioService` when created and unregisters
+  only itself on destruction; `AonsokuNativeCoordinationPlugin` registers a
+  `CoordinationService` port for the WebSocket lifecycle. Remote commands,
+  native snapshots, projection, handoff preparation, fencing, and rollback
+  now use these ports rather than `AudioPlugin.activeInstance` or a
+  coordination plugin instance lookup. The WebSocket plugin remains the
+  protocol/Capacitor adapter, while playback resources and queue state remain
+  in `PlaybackService`.
 - The iOS host owns long-lived native services through
   `AonsokuNativePlugin.AppServices`. `AudioService` owns AVPlayer, queue,
   downloads, scrobbling, playback persistence, and system media controls;

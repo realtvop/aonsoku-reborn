@@ -29,6 +29,19 @@ data class AudioQueueSnapshot(
     val currentSong: QueueSong? = null,
 )
 
+data class AudioRemotePlaybackSnapshot(
+    val songId: String?,
+    val sourceName: String?,
+    val isPlaying: Boolean,
+    val progressSeconds: Double,
+    val durationSeconds: Double,
+    val isShuffleActive: Boolean,
+    val repeatMode: String,
+    val volume: Double?,
+    val targetDeviceId: String,
+    val expectedGeneration: Int,
+)
+
 sealed interface AudioCommand {
     data object Play : AudioCommand
     data object Pause : AudioCommand
@@ -115,4 +128,15 @@ interface AudioService {
     fun setSystemVolume(value: Double): Double
     fun getSleepTimerRemaining(): Double
     fun setRequestId(requestId: String?)
+    fun getFullState(): JSONObject?
+    fun pauseAndGetFullState(): JSONObject?
+    fun executeRemoteControlCommand(command: JSONObject): Boolean
+    fun applyRemotePlaybackSnapshot(snapshot: AudioRemotePlaybackSnapshot)
+    fun clearRemotePlaybackProjection()
+    fun prepareHandoff(
+        snapshot: JSONObject,
+        autoplay: Boolean,
+        completion: (Boolean) -> Unit,
+    )
+    fun rollbackHandoff()
 }

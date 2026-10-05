@@ -16,8 +16,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 class NativeDownloadManager(
     private val context: Context,
-    private val authenticationService: AuthenticationService =
-        AuthenticationService.getInstance(context),
+    private val authenticationService: AuthenticationService? = null,
 ) {
     interface Listener {
         fun onDownloadProgress(songId: String, loaded: Long, total: Long)
@@ -94,7 +93,8 @@ class NativeDownloadManager(
     }
 
     private suspend fun executeDownload(songId: String, maxBitRate: Int?, format: String?) {
-        val credentials = authenticationService.getCredentials()
+        val credentials = (authenticationService ?: AuthenticationService.getInstance(context))
+            .getCredentials()
             ?: throw IOException("No credentials found")
 
         val baseString = "${credentials.serverUrl.trimEnd('/')}/rest/stream"

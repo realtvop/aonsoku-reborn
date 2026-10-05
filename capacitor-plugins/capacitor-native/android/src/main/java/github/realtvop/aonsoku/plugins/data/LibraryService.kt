@@ -276,6 +276,28 @@ class LibraryService private constructor(context: Context) {
         if (ids.isEmpty()) emptyList() else database.songDao().getByIds(ids)
     }
 
+    suspend fun getSong(id: String): SongEntity? = withContext(Dispatchers.IO) {
+        database.songDao().getById(id)
+    }
+
+    suspend fun upsertSong(song: SongEntity) = withContext(Dispatchers.IO) {
+        database.songDao().upsert(song)
+        _dataChanges.tryEmit(LibraryDataChange(listOf("songs"), "remote"))
+    }
+
+    suspend fun toggleSongStarred(id: String): Boolean = withContext(Dispatchers.IO) {
+        val song = database.songDao().getById(id) ?: return@withContext false
+        val nextStarred = song.starredAt == null
+        val timestamp = if (nextStarred) System.currentTimeMillis() / 1000 else null
+        database.songDao().updateStarred(
+            listOf(id),
+            if (nextStarred) timestamp.toString() else null,
+            timestamp,
+        )
+        _dataChanges.tryEmit(LibraryDataChange(listOf("songs"), "local"))
+        nextStarred
+    }
+
     suspend fun getPlaylists(pagination: LibraryPagination): LibraryPage<PlaylistEntity> =
         withContext(Dispatchers.IO) {
             val limit = pagination.safeLimit

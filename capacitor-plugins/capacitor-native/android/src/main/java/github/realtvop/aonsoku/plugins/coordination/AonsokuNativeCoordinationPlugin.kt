@@ -8,7 +8,8 @@ import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
-import github.realtvop.aonsoku.plugins.audio.AudioPlugin
+import github.realtvop.aonsoku.plugins.AppServices
+import github.realtvop.aonsoku.plugins.audio.AudioRemotePlaybackSnapshot
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -49,7 +50,7 @@ import javax.net.ssl.X509TrustManager
 /// plugin's queue engine. The WebView-side CoordinationManager delegates to
 /// this plugin when running on capacitor-android.
 @CapacitorPlugin(name = "AonsokuNativeCoordination")
-class AonsokuNativeCoordinationPlugin : Plugin() {
+class AonsokuNativeCoordinationPlugin : Plugin(), CoordinationService {
 
     companion object {
         private const val TAG = "CoordPlugin"
@@ -263,27 +264,16 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             return if (t is String) t else null
         }
 
-        /// Holds the currently-loaded plugin instance so the PlaybackService
-        /// (which does not have access to the Capacitor Bridge) can reach the
-        /// coordination plugin to attach/detach the socket for background
-        /// survival (design §2.1.8). Set in `load()`, cleared in
-        /// `handleOnDestroy()`.
-        @Volatile
-        internal var activeInstance: AonsokuNativeCoordinationPlugin? = null
-            private set
-
-        /// Called by PlaybackService.onStartCommand when the foreground service
-        /// is (re)started. Idempotent. No-op if the plugin is not loaded.
+        /// Called by PlaybackService.onStartCommand through AppServices when
+        /// the foreground service is (re)started.
         @JvmStatic
         fun attachToActiveForegroundService(): Boolean =
-            activeInstance?.attachToForegroundService() ?: false
+            AppServices.current()?.coordinationService()?.attachToForegroundService() ?: false
 
-        /// Called by PlaybackService when the service is torn down
-        /// (onTaskRemoved that stops playback, or onDestroy). No-op if the
-        /// plugin is not loaded or nothing is attached.
+        /// Called by PlaybackService when the service is torn down.
         @JvmStatic
         fun detachActiveForegroundService() {
-            activeInstance?.detachFromForegroundService()
+            AppServices.current()?.coordinationService()?.detachFromForegroundService()
         }
 
         @JvmStatic
@@ -292,14 +282,17 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             expectedGeneration: Int?,
             command: JSONObject
         ): Boolean {
-            return activeInstance
-                ?.sendCommandFromNative(targetDeviceId, expectedGeneration, command)
-                ?: false
+            return AppServices.current()?.coordinationService()?.sendCommand(
+                targetDeviceId,
+                expectedGeneration,
+                command,
+            ) ?: false
         }
 
         @JvmStatic
         fun publishSnapshotFromActiveAudioState(): Boolean {
-            return activeInstance?.publishNativePlaybackSnapshot() ?: false
+            return AppServices.current()?.coordinationService()
+                ?.publishNativePlaybackSnapshot() ?: false
         }
     }
 
@@ -382,7 +375,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     }
     private val snapshotHeartbeatRunnable = object : Runnable {
         override fun run() {
-            publishNativePlaybackSnapshot(onlyWhenPlaying = true)
+            publishNativePlaybackSnapshotIfPlaying()
             mainHandler?.postDelayed(this, SNAPSHOT_HEARTBEAT_MS)
         }
     }
@@ -407,7 +400,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
 
     override fun load() {
         super.load()
-        activeInstance = this
+        AppServices.getInstance(context).registerCoordinationService(this)
     }
 
     override fun handleOnDestroy() {
@@ -417,9 +410,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         detachFromForegroundService()
         manualDisconnect = true
         disconnectInternal()
-        if (activeInstance === this) {
-            activeInstance = null
-        }
+        AppServices.current()?.unregisterCoordinationService(this)
         super.handleOnDestroy()
     }
 
@@ -617,7 +608,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
                 isConnecting = false
                 if (handoffPreparing) {
                     handoffPreparing = false
-                    AudioPlugin.rollbackHandoffPlaybackFromActive()
+                    audioService()?.rollbackHandoff()
                 }
                 stopHeartbeat()
                 stopSnapshotHeartbeat()
@@ -634,7 +625,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
                 isConnecting = false
                 if (handoffPreparing) {
                     handoffPreparing = false
-                    AudioPlugin.rollbackHandoffPlaybackFromActive()
+                    audioService()?.rollbackHandoff()
                 }
                 stopHeartbeat()
                 stopSnapshotHeartbeat()
@@ -737,7 +728,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     @PluginMethod
     fun sendControlSessionEnd(call: PluginCall) {
         activeRemoteControlTargetDeviceId = null
-        AudioPlugin.clearRemotePlaybackProjectionFromActive()
+        audioService()?.clearRemotePlaybackProjection()
         val env = JSONObject()
         env.put("version", protocolVersion)
         env.put("messageId", java.util.UUID.randomUUID().toString())
@@ -835,7 +826,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     private fun disconnectInternal() {
         if (handoffPreparing) {
             handoffPreparing = false
-            AudioPlugin.rollbackHandoffPlaybackFromActive()
+            audioService()?.rollbackHandoff()
         }
         stopHeartbeat()
         stopSnapshotHeartbeat()
@@ -869,7 +860,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     /// `attachIfActive`. Returns true if a connection was attached (or was
     /// already attached), false if no connection is active.
     @Synchronized
-    fun attachToForegroundService(): Boolean {
+    override fun attachToForegroundService(): Boolean {
         foregroundServiceActive = true
         val ws = webSocket
         val okClient = client
@@ -902,7 +893,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
     /// reference so its own teardown does not yank the socket. The socket is
     /// closed by `disconnectInternal()` / WebSocket callbacks as usual.
     @Synchronized
-    fun detachFromForegroundService() {
+    override fun detachFromForegroundService() {
         foregroundServiceActive = false
         if (foregroundServiceConnection == null) return
         foregroundServiceConnection = null
@@ -961,9 +952,33 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         webSocket?.send(env.toString())
     }
 
-    private fun publishNativePlaybackSnapshot(onlyWhenPlaying: Boolean = false): Boolean {
+    private fun audioService() = AppServices.current()?.audioService()
+
+    private fun JSONObject.toAudioRemotePlaybackSnapshot(
+        targetDeviceId: String,
+        expectedGeneration: Int,
+    ): AudioRemotePlaybackSnapshot = AudioRemotePlaybackSnapshot(
+        songId = optString("songId", "").takeIf { it.isNotEmpty() },
+        sourceName = optString("sourceName", "").takeIf { it.isNotEmpty() },
+        isPlaying = optBoolean("isPlaying", false),
+        progressSeconds = optDouble("progressSeconds", 0.0),
+        durationSeconds = optDouble("durationSeconds", 0.0),
+        isShuffleActive = optBoolean("shuffle", false),
+        repeatMode = optString("repeat", "off"),
+        volume = if (has("volume") && !isNull("volume")) optDouble("volume") else null,
+        targetDeviceId = targetDeviceId,
+        expectedGeneration = expectedGeneration,
+    )
+
+    override fun publishNativePlaybackSnapshot(): Boolean =
+        publishNativePlaybackSnapshotInternal()
+
+    private fun publishNativePlaybackSnapshotIfPlaying(): Boolean =
+        publishNativePlaybackSnapshotInternal(onlyWhenPlaying = true)
+
+    private fun publishNativePlaybackSnapshotInternal(onlyWhenPlaying: Boolean = false): Boolean {
         if (webSocket == null || handoffPreparing) return false
-        val audioState = AudioPlugin.getFullStateFromActive() ?: return false
+        val audioState = AppServices.current()?.audioService()?.getFullState() ?: return false
         if (onlyWhenPlaying && !audioState.optBoolean("isPlaying", false)) {
             return false
         }
@@ -1003,6 +1018,12 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
         sendCommandEnvelope(messageId, targetDeviceId, generation, command)
         return true
     }
+
+    override fun sendCommand(
+        targetDeviceId: String,
+        expectedGeneration: Int?,
+        command: JSONObject,
+    ): Boolean = sendCommandFromNative(targetDeviceId, expectedGeneration, command)
 
     private fun sendCommandEnvelope(
         messageId: String,
@@ -1077,13 +1098,12 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
                 if (snapshotDeviceId == activeRemoteControlTargetDeviceId) {
                     val snapshot = parsed.optJSONObject("snapshot")
                     if (snapshot == null || !parsed.optBoolean("isOnline", true)) {
-                        AudioPlugin.clearRemotePlaybackProjectionFromActive()
+                        audioService()?.clearRemotePlaybackProjection()
                     } else {
-                        AudioPlugin.updateRemotePlaybackProjectionFromActive(
-                            snapshot,
+                        snapshot.toAudioRemotePlaybackSnapshot(
                             snapshotDeviceId,
                             generation,
-                        )
+                        )?.let { audioService()?.applyRemotePlaybackSnapshot(it) }
                     }
                 }
             }
@@ -1116,7 +1136,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
                 val messageId = extractMessageId(parsed)
                 if (
                     command != null &&
-                    AudioPlugin.executeRemoteControlCommandFromActive(command)
+                    audioService()?.executeRemoteControlCommand(command) == true
                 ) {
                     if (messageId != null) {
                         sendEnvelope(buildCommandAckEnvelope(protocolVersion, messageId))
@@ -1137,7 +1157,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
             }
             if (type == "prepare_relinquish") {
                 val transactionId = parsed.optString("transactionId", "")
-                val audioState = AudioPlugin.pauseAndGetFullStateFromActive()
+                val audioState = audioService()?.pauseAndGetFullState()
                 logDebug("coordination: relinquish captured=${audioState != null}")
                 val snapshot = if (audioState != null) {
                     buildPlaybackSnapshot(
@@ -1182,33 +1202,40 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
                     sourceDeviceId.isNotEmpty() &&
                     sessionId.isNotEmpty()
                 ) {
-                    AudioPlugin.prepareHandoffPlaybackFromActive(
-                        snapshot,
-                        autoplay = false,
-                    ) { prepared ->
-                        if (webSocket !== connection || !handoffPreparing) return@prepareHandoffPlaybackFromActive
-                        if (prepared) {
-                            sendEnvelope(
-                                buildTargetReadyEnvelope(
-                                    protocolVersion,
-                                    transactionId,
-                                    parsed.optInt("generation", 0),
-                                    parsed.optInt("snapshotRevision", 0),
-                                    sourceDeviceId,
-                                    sessionId,
-                                ),
-                            )
-                        } else {
-                            handoffPreparing = false
-                            AudioPlugin.rollbackHandoffPlaybackFromActive()
-                            sendEnvelope(
-                                buildHandoffFailedEnvelope(
-                                    protocolVersion,
-                                    transactionId,
-                                    "unsupported_media",
-                                ),
-                            )
+                    val service = audioService()
+                    if (service == null) {
+                        false
+                    } else {
+                        service.prepareHandoff(
+                            snapshot,
+                            autoplay = false,
+                        ) { prepared ->
+                            if (webSocket === connection && handoffPreparing) {
+                                if (prepared) {
+                                    sendEnvelope(
+                                        buildTargetReadyEnvelope(
+                                            protocolVersion,
+                                            transactionId,
+                                            parsed.optInt("generation", 0),
+                                            parsed.optInt("snapshotRevision", 0),
+                                            sourceDeviceId,
+                                            sessionId,
+                                        ),
+                                    )
+                                } else {
+                                    handoffPreparing = false
+                                    audioService()?.rollbackHandoff()
+                                    sendEnvelope(
+                                        buildHandoffFailedEnvelope(
+                                            protocolVersion,
+                                            transactionId,
+                                            "unsupported_media",
+                                        ),
+                                    )
+                                }
+                            }
                         }
+                        true
                     }
                 } else {
                     false
@@ -1235,27 +1262,36 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
                     nativeGeneration = parsed.optInt("newGeneration", nativeGeneration)
                     nativeSnapshotRevision = 0
                 }
-                val accepted = snapshot != null &&
-                    AudioPlugin.prepareHandoffPlaybackFromActive(
-                        snapshot,
-                        autoplay = true,
-                    ) { prepared ->
-                        handoffPreparing = false
-                        if (prepared) {
-                            publishNativePlaybackSnapshot()
-                            notifyListeners("coordinationEvent", JSObject().put("envelopeJson", json))
-                        } else {
-                            AudioPlugin.rollbackHandoffPlaybackFromActive()
-                            notifyListeners("coordinationEvent", JSObject().put("envelopeJson", buildHandoffFailedEnvelope(protocolVersion, parsed.optString("transactionId"), "unsupported_media").toString()))
+                val accepted = if (snapshot == null) {
+                    false
+                } else {
+                    val service = audioService()
+                    if (service == null) {
+                        false
+                    } else {
+                        service.prepareHandoff(
+                            snapshot,
+                            autoplay = true,
+                        ) { prepared ->
+                            handoffPreparing = false
+                            if (prepared) {
+                                publishNativePlaybackSnapshot()
+                                notifyListeners("coordinationEvent", JSObject().put("envelopeJson", json))
+                            } else {
+                                audioService()?.rollbackHandoff()
+                                notifyListeners("coordinationEvent", JSObject().put("envelopeJson", buildHandoffFailedEnvelope(protocolVersion, parsed.optString("transactionId"), "unsupported_media").toString()))
+                            }
                         }
+                        true
                     }
+                }
                 if (accepted) {
                     return
                 }
             }
             if (type == "handoff_failed") {
                 handoffPreparing = false
-                AudioPlugin.rollbackHandoffPlaybackFromActive()
+                audioService()?.rollbackHandoff()
                 pendingNativeHandoffSourceDeviceId = null
                 pendingNativeHandoffRetryWaitingForSnapshot = false
                 pendingNativeHandoffRetryCount = 0
@@ -1264,7 +1300,7 @@ class AonsokuNativeCoordinationPlugin : Plugin() {
                 nativeSessionId = java.util.UUID.randomUUID().toString()
                 nativeGeneration = 1
                 nativeSnapshotRevision = 0
-                AudioPlugin.executeRemoteControlCommandFromActive(
+                audioService()?.executeRemoteControlCommand(
                     JSONObject().put("type", "pause"),
                 )
                 return

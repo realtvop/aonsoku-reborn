@@ -42,13 +42,13 @@ import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import github.realtvop.aonsoku.plugins.debug.NativeLogger
+import github.realtvop.aonsoku.plugins.AppServices
 import github.realtvop.aonsoku.plugins.preferences.PreferencesService
 import github.realtvop.aonsoku.plugins.bridge.AuthenticationService
 import github.realtvop.aonsoku.plugins.data.db.AonsokuDatabase
 import github.realtvop.aonsoku.plugins.data.db.entity.SongEntity
 import github.realtvop.aonsoku.plugins.data.image.ImageCacheManager
 import github.realtvop.aonsoku.plugins.data.LibraryService
-import github.realtvop.aonsoku.plugins.coordination.AonsokuNativeCoordinationPlugin
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -61,6 +61,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class PlaybackService : MediaSessionService(), AudioService {
     companion object {
@@ -221,7 +223,7 @@ class PlaybackService : MediaSessionService(), AudioService {
     }
     lateinit var persistence: PlaybackStatePersistence
 
-    val downloadManager by lazy { NativeDownloadManager(this) }
+    val downloadManager by lazy { NativeDownloadManager(this, authenticationService) }
     private val backgroundCacheSongIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
     private val downloadListeners = mutableListOf<DownloadListener>()
 
@@ -465,6 +467,285 @@ class PlaybackService : MediaSessionService(), AudioService {
         publishPlaybackSnapshot()
     }
 
+    override fun getFullState(): JSONObject? = runOnMainBlocking {
+        getFullStateOnMain()
+    }
+
+    override fun pauseAndGetFullState(): JSONObject? = runOnMainBlocking {
+        player?.pause()
+        if (::persistence.isInitialized) persistence.flushNow()
+        getFullStateOnMain()
+    }
+
+    override fun executeRemoteControlCommand(command: JSONObject): Boolean {
+        val type = command.optString("type", "")
+        if (!isSupportedRemoteControlCommand(type)) return false
+
+        val audioCommand = when (type) {
+            "play_song" -> command.optString("song_id", "")
+                .takeIf(String::isNotEmpty)
+                ?.let(AudioCommand::PlaySongById)
+            "play_album" -> command.optString("album_id", "")
+                .takeIf(String::isNotEmpty)
+                ?.let {
+                    AudioCommand.PlayAlbumById(
+                        it,
+                        command.optInt("index", 0),
+                        command.optBoolean("shuffle", false),
+                    )
+                }
+            "play_playlist" -> command.optString("playlist_id", "")
+                .takeIf(String::isNotEmpty)
+                ?.let {
+                    AudioCommand.PlayPlaylistById(
+                        it,
+                        command.optInt("index", 0),
+                        command.optBoolean("shuffle", false),
+                    )
+                }
+            "play_at_index" -> command.optStringArray("song_ids")
+                .takeIf { it.isNotEmpty() }
+                ?.let { AudioCommand.PlaySongsById(it, command.optInt("index", 0)) }
+            "add_to_queue_next", "add_to_queue_last" -> command
+                .optStringArray("song_ids")
+                .takeIf { it.isNotEmpty() }
+                ?.let {
+                    AudioCommand.AddSongsById(
+                        it,
+                        if (type == "add_to_queue_next") "next" else "last",
+                    )
+                }
+            "play" -> AudioCommand.Play
+            "pause" -> AudioCommand.Pause
+            "toggle_play_pause" -> AudioCommand.TogglePlayPause
+            "previous" -> AudioCommand.Previous
+            "next" -> AudioCommand.Next
+            "seek" -> command.optDouble("seconds", Double.NaN)
+                .takeUnless { it.isNaN() }
+                ?.let(AudioCommand::Seek)
+            "set_shuffle" -> AudioCommand.SetShuffle(command.optBoolean("enabled", false))
+            "set_repeat" -> AudioCommand.SetRepeat(command.optString("mode", "off"))
+            "set_volume" -> command.optDouble("volume", Double.NaN)
+                .takeUnless { it.isNaN() }
+                ?.let(AudioCommand::SetVolume)
+            "clear_queue" -> AudioCommand.ClearUserQueue
+            "remove_from_queue" -> AudioCommand.RemoveSongsById(
+                command.optStringArray("song_ids"),
+            )
+            "reorder_queue" -> AudioCommand.ReorderContextQueue(
+                command.optInt("from", -1),
+                command.optInt("to", -1),
+            )
+            else -> null
+        }
+
+        if (audioCommand != null) {
+            serviceScope.launch {
+                when (val result = execute(audioCommand)) {
+                    AudioCommandResult.Success -> Unit
+                    is AudioCommandResult.Failure -> NativeLogger.warn(
+                        "Remote audio command failed: ${result.code}: ${result.message}",
+                        "playback-service",
+                    )
+                }
+            }
+        }
+        if (type == "toggle_like") {
+            val songId = queueEngine.currentSong?.id ?: return true
+            serviceScope.launch {
+                val nextActive = libraryService.toggleSongStarred(songId)
+                withContext(Dispatchers.Main.immediate) {
+                    isLikeActive = nextActive
+                }
+            }
+        }
+        return true
+    }
+
+    override fun applyRemotePlaybackSnapshot(snapshot: AudioRemotePlaybackSnapshot) {
+        serviceScope.launch(Dispatchers.IO) {
+            val songId = snapshot.songId.orEmpty()
+            val song = songId.takeIf(String::isNotEmpty)?.let { loadRemotePlaybackSong(it) }
+            val duration = snapshot.durationSeconds
+            val metadata = song?.toRemotePlaybackMetadata()
+                ?: MediaMetadata.Builder()
+                    .setTitle(songId.ifEmpty { "Remote playback" })
+                    .setArtist(snapshot.sourceName.orEmpty())
+                    .setDurationMs((duration.coerceAtLeast(0.0) * 1000).toLong())
+                    .build()
+            val artworkUrl = song?.remotePlaybackArtworkUrl()
+            val coverArtId = song?.remotePlaybackCoverArtId()
+            withContext(Dispatchers.Main.immediate) {
+                updateRemotePlaybackProjection(
+                    metadata,
+                    snapshot.isPlaying,
+                    snapshot.progressSeconds,
+                    duration,
+                    snapshot.isShuffleActive,
+                    snapshot.repeatMode,
+                    snapshot.volume,
+                    artworkUrl,
+                    coverArtId,
+                    songId,
+                    snapshot.targetDeviceId,
+                    snapshot.expectedGeneration,
+                )
+            }
+        }
+    }
+
+    override fun prepareHandoff(
+        snapshot: JSONObject,
+        autoplay: Boolean,
+        completion: (Boolean) -> Unit,
+    ) {
+        serviceScope.launch {
+            val result = execute(AudioCommand.PrepareHandoff(snapshot, autoplay))
+            withContext(Dispatchers.Main.immediate) {
+                completion(result is AudioCommandResult.Success)
+            }
+        }
+    }
+
+    override fun rollbackHandoff() {
+        serviceScope.launch {
+            execute(AudioCommand.RollbackHandoff)
+        }
+    }
+
+    private fun getFullStateOnMain(): JSONObject {
+        val currentPlayer = player
+        val currentTime = snapshotProgressSeconds(
+            queueEngine.currentSong?.id,
+            currentPlayer?.currentPosition?.div(1000.0) ?: 0.0,
+        )
+        val duration = if (currentPlayer != null && currentPlayer.duration != C.TIME_UNSET) {
+            currentPlayer.duration / 1000.0
+        } else {
+            0.0
+        }
+        return queueEngine.getFullState(currentTime, duration, currentPlayer?.isPlaying == true)
+    }
+
+    private fun <T> runOnMainBlocking(block: () -> T): T? {
+        if (Looper.myLooper() == Looper.getMainLooper()) return block()
+        var result: T? = null
+        val latch = CountDownLatch(1)
+        stateHandler.post {
+            try {
+                result = block()
+            } finally {
+                latch.countDown()
+            }
+        }
+        latch.await(500, TimeUnit.MILLISECONDS)
+        return result
+    }
+
+    private fun isSupportedRemoteControlCommand(type: String): Boolean = type in setOf(
+        "play",
+        "pause",
+        "toggle_play_pause",
+        "previous",
+        "next",
+        "seek",
+        "set_shuffle",
+        "set_repeat",
+        "set_volume",
+        "play_song",
+        "play_album",
+        "play_playlist",
+        "play_at_index",
+        "add_to_queue_next",
+        "add_to_queue_last",
+        "remove_from_queue",
+        "reorder_queue",
+        "clear_queue",
+        "toggle_like",
+    )
+
+    private suspend fun loadRemotePlaybackSong(songId: String): SongEntity? =
+        libraryService.getSong(songId) ?: fetchRemotePlaybackSong(songId)
+
+    private suspend fun fetchRemotePlaybackSong(songId: String): SongEntity? {
+        val credentials = authenticationService.getCredentials() ?: return null
+        return try {
+            val response = authenticationService.request(
+                credentials = credentials,
+                path = "getSong.view",
+                extraQuery = mapOf("id" to songId),
+            )
+            val song = parseRemotePlaybackSong(response.data.optJSONObject("song"))
+                ?: return null
+            libraryService.upsertSong(song)
+            song
+        } catch (error: Throwable) {
+            NativeLogger.warn(
+                "Failed to fetch remote playback song metadata: ${error.message}",
+                "playback-service",
+            )
+            null
+        }
+    }
+
+    private fun SongEntity.toRemotePlaybackMetadata(): MediaMetadata {
+        val builder = MediaMetadata.Builder()
+            .setTitle(title)
+            .setArtist(artist)
+            .setAlbumTitle(album)
+        if (duration > 0) builder.setDurationMs(duration * 1000L)
+        remotePlaybackArtworkUrl()?.let { builder.setArtworkUri(Uri.parse(it)) }
+        return builder.build()
+    }
+
+    private fun SongEntity.remotePlaybackCoverArtId(): String? = coverArt ?: albumId
+
+    private fun SongEntity.remotePlaybackArtworkUrl(): String? {
+        val coverArtId = remotePlaybackCoverArtId() ?: return null
+        return NativeSourceResolver(this@PlaybackService)
+            .resolveCoverArtUrl(coverArtId, 800)
+    }
+
+    private fun parseRemotePlaybackSong(item: JSONObject?): SongEntity? {
+        if (item == null) return null
+        val id = item.optNullableString("id") ?: return null
+        val title = item.optNullableString("title") ?: return null
+        return SongEntity(
+            id = id,
+            parent = item.optNullableString("parent"),
+            title = title,
+            album = item.optNullableString("album"),
+            artist = item.optNullableString("artist"),
+            track = if (item.has("track")) item.optInt("track") else null,
+            year = if (item.has("year")) item.optInt("year") else null,
+            genre = item.optNullableString("genre"),
+            coverArt = item.optNullableString("coverArt"),
+            size = if (item.has("size")) item.optLong("size") else null,
+            contentType = item.optNullableString("contentType"),
+            suffix = item.optNullableString("suffix"),
+            duration = item.optInt("duration", 0),
+            bitRate = if (item.has("bitRate")) item.optInt("bitRate") else null,
+            path = item.optNullableString("path"),
+            playCount = if (item.has("playCount")) item.optInt("playCount") else null,
+            discNumber = if (item.has("discNumber")) item.optInt("discNumber") else null,
+            created = item.optNullableString("created"),
+            albumId = item.optNullableString("albumId"),
+            artistId = item.optNullableString("artistId"),
+            played = item.optNullableString("played"),
+            starred = item.optNullableString("starred"),
+            bpm = if (item.has("bpm")) item.optInt("bpm") else null,
+            comment = item.optNullableString("comment"),
+            sortName = item.optNullableString("sortName"),
+            mediaType = item.optNullableString("type"),
+            musicBrainzId = item.optNullableString("musicBrainzId"),
+            genresJson = item.optJSONArray("genres")?.toString(),
+            replayGainJson = item.optJSONObject("replayGain")?.toString(),
+        )
+    }
+
+    private fun JSONObject.optNullableString(name: String): String? =
+        if (has(name) && !isNull(name)) optString(name).takeIf { it.isNotBlank() } else null
+
     override fun requestAudioFocus(): Boolean {
         // ExoPlayer owns the AudioFocusRequest configured in onCreate().
         // Calling play() is the actual request; this method is the typed
@@ -608,7 +889,7 @@ class PlaybackService : MediaSessionService(), AudioService {
                         command.autoplay,
                     )
                     AudioCommand.RollbackHandoff -> {
-                        rollbackHandoff()
+                        applyRollbackHandoff()
                         return@withContext AudioCommandResult.Success
                     }
                 }
@@ -802,7 +1083,7 @@ class PlaybackService : MediaSessionService(), AudioService {
         }
     }
 
-    private fun rollbackHandoff() {
+    private fun applyRollbackHandoff() {
         handoffEpoch.incrementAndGet()
         val before = preparedHandoffBefore ?: return
         preparedHandoffBefore = null
@@ -859,6 +1140,7 @@ class PlaybackService : MediaSessionService(), AudioService {
     override fun onCreate() {
         super.onCreate()
         NativeLogger.info("PlaybackService created", "playback-service")
+        AppServices.getInstance(applicationContext).registerAudioService(this)
 
         createNotificationChannel()
 
@@ -1687,7 +1969,7 @@ class PlaybackService : MediaSessionService(), AudioService {
             // socket from the foreground service. The plugin keeps the socket
             // in plugin-owned mode; it degrades gracefully and resumes on the
             // next foreground entry.
-            AonsokuNativeCoordinationPlugin.detachActiveForegroundService()
+            AppServices.current()?.coordinationService()?.detachFromForegroundService()
             persistence.stopProgressTracking()
             persistence.flushNow()
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -1702,7 +1984,7 @@ class PlaybackService : MediaSessionService(), AudioService {
         // §2.1.8: while the foreground service is (re)starting, attach the
         // coordination WebSocket so the OS keeps the socket alive in the
         // background. No-op if the plugin is not loaded or no socket is open.
-        AonsokuNativeCoordinationPlugin.attachToActiveForegroundService()
+        AppServices.current()?.coordinationService()?.attachToForegroundService()
         when (intent?.action) {
             ACTION_PLAY_PAUSE -> {
                 if (isRemotePlaybackProjectionActive) {
@@ -1767,7 +2049,8 @@ class PlaybackService : MediaSessionService(), AudioService {
         cancelSleepTimer()
         unregisterSystemReceivers()
         // §2.1.8: release the foreground-service association before teardown.
-        AonsokuNativeCoordinationPlugin.detachActiveForegroundService()
+        AppServices.current()?.coordinationService()?.detachFromForegroundService()
+        AppServices.current()?.unregisterAudioService(this)
         handleScrobbleSongEnded()
         CoroutineScope(Dispatchers.IO).launch {
             val credentials = authenticationService.getCredentials()
@@ -2154,7 +2437,7 @@ class PlaybackService : MediaSessionService(), AudioService {
         }
     }
 
-    fun clearRemotePlaybackProjection() {
+    override fun clearRemotePlaybackProjection() {
         if (!isRemotePlaybackProjectionActive) return
         isRemotePlaybackProjectionActive = false
         remotePlaybackMetadata = null
