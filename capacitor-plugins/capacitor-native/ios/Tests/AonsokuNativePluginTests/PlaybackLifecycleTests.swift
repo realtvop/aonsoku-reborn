@@ -51,6 +51,41 @@ final class PlaybackLifecycleTests: XCTestCase {
         ))
     }
 
+    func testQueueEndOfStreamFallbackWaitsThreeSecondsPastFiveSeconds() {
+        var tracker = QueueEndOfStreamTracker()
+        let start = Date(timeIntervalSince1970: 100)
+
+        XCTAssertFalse(tracker.shouldAdvanceQueue(
+            now: start,
+            isQueueActive: true,
+            isWaiting: true,
+            bufferIsEmpty: true,
+            position: 10
+        ))
+        XCTAssertFalse(tracker.shouldAdvanceQueue(
+            now: start.addingTimeInterval(2.9),
+            isQueueActive: true,
+            isWaiting: true,
+            bufferIsEmpty: true,
+            position: 10
+        ))
+        XCTAssertTrue(tracker.shouldAdvanceQueue(
+            now: start.addingTimeInterval(3),
+            isQueueActive: true,
+            isWaiting: true,
+            bufferIsEmpty: true,
+            position: 10
+        ))
+
+        XCTAssertFalse(tracker.shouldAdvanceQueue(
+            now: start.addingTimeInterval(4),
+            isQueueActive: true,
+            isWaiting: false,
+            bufferIsEmpty: true,
+            position: 10
+        ))
+    }
+
     func testStopDoesNotPublishNaturalEndedEvent() throws {
         let database = try TemporaryDatabase()
         let service = AudioService(databaseManager: database.manager)

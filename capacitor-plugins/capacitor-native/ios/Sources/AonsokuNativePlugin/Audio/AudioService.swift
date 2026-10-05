@@ -43,6 +43,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private var coverImageCachedObserver: NSObjectProtocol?
     private var interruptionResumePolicy = AudioInterruptionResumePolicy()
     private var bufferMismatchFirstSeen: Date?
+    private var endOfStreamTracker = QueueEndOfStreamTracker()
     private var isSeeking = false
     private var remoteTargets: [(MPRemoteCommand, Any)] = []
     private var volumeObservation: NSKeyValueObservation?
@@ -69,6 +70,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private var sleepTimer: Timer?
     private var sleepTimerEndDate: Date?
     private var sleepTimerMode = "duration"
+    private var isInForeground = true
     private var started = false
 
     public override convenience init() {
@@ -151,12 +153,14 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     public func applicationDidEnterBackground() {
+        isInForeground = false
         persistence.flushNow()
         recoveryController.setBackground(true)
         scrobbleSubmitter.submitPending(buffer: scrobbleBuffer)
     }
 
     public func applicationWillEnterForeground() {
+        isInForeground = true
         recoveryController.setBackground(false)
         start(volumeHostView: volumeHostView)
         dispatchMain { [weak self] in
@@ -954,6 +958,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
             DispatchQueue.main.async {
                 switch player.timeControlStatus {
                 case .playing:
+                    self.endOfStreamTracker.reset()
                     self.recoveryController.reportPlaybackResumed(
                         generation: generation
                     )
@@ -987,14 +992,19 @@ public final class AudioService: NSObject, @unchecked Sendable {
                       let player,
                       item === self.playerItem,
                       player === self.player,
-                      generation == self.playbackGeneration,
-                      player.timeControlStatus == .waitingToPlayAtSpecifiedRate
-                else { return }
-                self.recoveryController.triggerRecovery(
-                    currentTime: player.currentTime(),
-                    generation: generation,
-                    sourceKind: self.recoverySourceKind()
-                )
+                      generation == self.playbackGeneration else { return }
+                switch player.timeControlStatus {
+                case .waitingToPlayAtSpecifiedRate:
+                    self.handleStall(player: player, generation: generation)
+                case .playing:
+                    self.handleGhostPlayback(
+                        player: player,
+                        item: item,
+                        generation: generation
+                    )
+                default:
+                    break
+                }
             }
         }
         likelyToKeepUpObservation = item.observe(
@@ -1014,12 +1024,37 @@ public final class AudioService: NSObject, @unchecked Sendable {
         ) { [weak self] _ in
             guard let self else { return }
             guard generation == self.playbackGeneration else { return }
+            guard !self.isSeeking else { return }
             self.persistence.updateProgress(self.currentTime)
-            if !item.isPlaybackBufferEmpty {
+            let bufferEmpty = item.isPlaybackBufferEmpty
+            if !bufferEmpty {
+                self.endOfStreamTracker.reset()
                 self.recoveryController.reportProgress(
                     at: player.currentTime(),
                     generation: generation
                 )
+                self.checkBufferPositionCoherence(
+                    player: player,
+                    item: item,
+                    generation: generation
+                )
+            } else {
+                if player.timeControlStatus == .playing {
+                    self.handleGhostPlayback(
+                        player: player,
+                        item: item,
+                        generation: generation
+                    )
+                }
+                if player.timeControlStatus == .waitingToPlayAtSpecifiedRate,
+                   self.isQueueActive,
+                   let song = self.queueEngine.currentSong,
+                   self.backgroundCacheCompletedSongIds.remove(song.id) != nil {
+                    self.endOfStreamTracker.reset()
+                    self.handleEnded()
+                    return
+                }
+                self.checkEndOfStreamFallback(player: player)
             }
             self.emitProgress()
         }
@@ -1054,24 +1089,14 @@ public final class AudioService: NSObject, @unchecked Sendable {
             guard let self,
                   let player,
                   generation == self.playbackGeneration else { return }
-            if let songId = self.queueEngine.currentSong?.id,
-               self.backgroundCacheCompletedSongIds.contains(songId),
-               self.isAtEnd {
-                self.backgroundCacheCompletedSongIds.remove(songId)
-                self.handleEnded()
-                return
-            }
-            self.recoveryController.triggerRecovery(
-                currentTime: player.currentTime(),
-                generation: generation,
-                sourceKind: self.recoverySourceKind()
-            )
+            self.handleStall(player: player, generation: generation)
         }
     }
 
     private func clearPlayer(deactivateSession: Bool) {
         playbackGeneration += 1
         bufferMismatchFirstSeen = nil
+        endOfStreamTracker.reset()
         isSeeking = false
         removePlayerObservers()
         player?.pause()
@@ -1106,6 +1131,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     private func handleEnded() {
+        endOfStreamTracker.reset()
         if sleepTimerMode == "endOfTrack" {
             fireSleepTimer(reason: "endOfTrack")
             return
@@ -1113,6 +1139,14 @@ public final class AudioService: NSObject, @unchecked Sendable {
         if isQueueActive {
             stateQueue.async { [weak self] in self?.queueEngine.handleEnded() }
         } else {
+            player?.pause()
+            player?.seek(to: .zero) { [weak self] _ in
+                guard let self else { return }
+                self.persistence.updateProgress(0)
+                self.persistence.flushNow()
+                self.emitProgress()
+                self.updateNowPlayingPlaybackInfo()
+            }
             emitPlaybackState(.ended, force: true)
             emit(.ended(reason: "finished", requestId: currentRequestId))
         }
@@ -1218,13 +1252,101 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     private func restorePlaybackState() {
-        guard let state = persistence.repository.load(),
-              !state.contextSongs.isEmpty else { return }
+        if let state = persistence.repository.load() {
+            guard !state.contextSongs.isEmpty else { return }
+            restorePlaybackState(state)
+            return
+        }
+
+        guard let migrated = migrateFromLegacyQueueState(),
+              !migrated.contextSongs.isEmpty else { return }
+        do {
+            try persistence.repository.save(migrated)
+        } catch {
+            NativeLogger.shared.warn(
+                "Failed to persist migrated queue state: \(error.localizedDescription)",
+                source: "AudioService"
+            )
+            return
+        }
+        try? databaseManager.dbPool.write { db in
+            try db.execute(sql: "DELETE FROM queueState WHERE key = 'current'")
+        }
+        restorePlaybackState(migrated)
+    }
+
+    private func restorePlaybackState(_ state: PlaybackPersistState) {
         stateQueue.sync {
             queueEngine.restoreState(from: state)
             isQueueActive = true
             savedRestoreTime = state.currentTime > 0 ? state.currentTime : nil
         }
+    }
+
+    private func migrateFromLegacyQueueState() -> PlaybackPersistState? {
+        guard let json = try? databaseManager.dbPool.read({ db in
+            try String.fetchOne(
+                db,
+                sql: "SELECT stateJson FROM queueState WHERE key = 'current'"
+            )
+        }),
+              let data = json.data(using: .utf8),
+              let raw = try? JSONSerialization.jsonObject(with: data)
+                as? [String: Any],
+              let contextQueue = raw["contextQueue"] as? [String: Any],
+              let songsArray = contextQueue["songs"] as? [[String: Any]],
+              !songsArray.isEmpty else {
+            return nil
+        }
+
+        let songs = songsArray.map(legacySongToQueueSong)
+        let currentIndex = contextQueue["currentIndex"] as? Int ?? 0
+        let userQueue = raw["userQueue"] as? [String: Any]
+        let userSongs = (userQueue?["songs"] as? [[String: Any]] ?? [])
+            .map(legacySongToQueueSong)
+        let originalContextSongs = (
+            raw["originalContextSongs"] as? [[String: Any]] ?? []
+        ).map(legacySongToQueueSong)
+        let originalUserSongs = (
+            raw["originalUserSongs"] as? [[String: Any]] ?? []
+        ).map(legacySongToQueueSong)
+        let playedHistory = (
+            raw["playedUserQueueHistory"] as? [[String: Any]] ?? []
+        ).map(legacySongToQueueSong)
+
+        var sourceId: QueueSourceId?
+        if let source = contextQueue["sourceId"] as? [String: Any],
+           let type = source["type"] as? String,
+           let id = source["id"] as? String {
+            sourceId = QueueSourceId(type: type, id: id)
+        }
+
+        var state = PlaybackPersistState(from: queueEngine, currentTime: 0)
+        state.contextSongs = songs
+        state.currentIndex = currentIndex
+        state.userQueue = userSongs
+        state.originalContextSongs = originalContextSongs
+        state.originalUserSongs = originalUserSongs
+        state.isShuffleActive = raw["isShuffleActive"] as? Bool ?? false
+        state.isInUserQueue = raw["isInUserQueue"] as? Bool ?? false
+        state.shuffleHistory = raw["shuffleHistory"] as? [String] ?? []
+        state.shuffleStartHistory = raw["shuffleStartHistory"] as? [String] ?? []
+        state.playedUserQueueHistory = playedHistory
+        state.sourceId = sourceId
+        state.sourceName = contextQueue["sourceName"] as? String
+        state.loopState = "off"
+        state.currentTime = 0
+        return state
+    }
+
+    private func legacySongToQueueSong(_ dictionary: [String: Any]) -> QueueSong {
+        let id = dictionary["id"] as? String ?? ""
+        var song = dictionary
+        song["streamUrl"] = sourceResolver.buildStreamUrl(songId: id) ?? ""
+        if song["coverArtId"] == nil, let coverArt = song["coverArt"] as? String {
+            song["coverArtId"] = coverArt
+        }
+        return QueueSong(from: song)
     }
 
     private func setupPersistence() {
@@ -1336,10 +1458,10 @@ public final class AudioService: NSObject, @unchecked Sendable {
             object: audioSession,
             queue: .main
         ) { [weak self] note in
-            let raw = note.userInfo?[AVAudioSessionRouteChangeReasonKey]
-                as? UInt
-            let reason = raw.flatMap(AVAudioSession.RouteChangeReason.init(rawValue:))
-            self?.emit(.routeChanged(reason: String(describing: reason)))
+            guard let self, self.isInForeground else { return }
+            self.emit(.routeChanged(reason: self.routeChangeReason(from: note)))
+            self.emitCurrentPlaybackState()
+            self.emitProgress()
         }
         coverImageCachedObserver = NotificationCenter.default.addObserver(
             forName: .aonsokuCoverImageCached,
@@ -1385,6 +1507,46 @@ public final class AudioService: NSObject, @unchecked Sendable {
             ) {
                 play()
             }
+        }
+    }
+
+    private func routeChangeReason(from notification: Notification) -> String {
+        guard let raw = notification.userInfo?[AVAudioSessionRouteChangeReasonKey]
+            as? UInt,
+              let reason = AVAudioSession.RouteChangeReason(rawValue: raw) else {
+            return "unknown"
+        }
+        switch reason {
+        case .unknown: return "unknown"
+        case .newDeviceAvailable: return "newDeviceAvailable"
+        case .oldDeviceUnavailable: return "oldDeviceUnavailable"
+        case .categoryChange: return "categoryChange"
+        case .override: return "override"
+        case .wakeFromSleep: return "wakeFromSleep"
+        case .noSuitableRouteForCategory: return "noSuitableRouteForCategory"
+        case .routeConfigurationChange: return "routeConfigurationChange"
+        @unknown default: return "unknown"
+        }
+    }
+
+    private func emitCurrentPlaybackState() {
+        guard let player else {
+            emit(.bufferingChanged(false, requestId: currentRequestId))
+            emitPlaybackState(.idle, force: true)
+            return
+        }
+        switch player.timeControlStatus {
+        case .playing:
+            emit(.bufferingChanged(false, requestId: currentRequestId))
+            emitPlaybackState(.playing, force: true)
+        case .paused:
+            emit(.bufferingChanged(false, requestId: currentRequestId))
+            emitPlaybackState(.paused, force: true)
+        case .waitingToPlayAtSpecifiedRate:
+            emit(.bufferingChanged(true, requestId: currentRequestId))
+            emitPlaybackState(.loading, force: true)
+        @unknown default:
+            emit(.bufferingChanged(false, requestId: currentRequestId))
         }
     }
 
@@ -1718,6 +1880,162 @@ public final class AudioService: NSObject, @unchecked Sendable {
         duration > 0 && currentTime >= duration - 0.25
     }
 
+    private var isPlayerAtEnd: Bool {
+        guard let item = playerItem,
+              item.duration.isValid,
+              !item.duration.isIndefinite,
+              item.duration.seconds > 0 else { return false }
+        let current = player?.currentTime().seconds ?? 0
+        return item.duration.seconds - current < 1.0
+    }
+
+    private func isPositionWithinLoadedRanges(_ positionSeconds: Double) -> Bool {
+        guard let item = playerItem, !item.loadedTimeRanges.isEmpty else { return true }
+        return item.loadedTimeRanges.contains { range in
+            let timeRange = range.timeRangeValue
+            let start = timeRange.start.seconds
+            let end = start + timeRange.duration.seconds
+            return positionSeconds >= start && positionSeconds < end + 1.0
+        }
+    }
+
+    private func isAtEndOfLoadedRanges(item: AVPlayerItem, position: Double) -> Bool {
+        guard let range = item.loadedTimeRanges.last?.timeRangeValue else { return true }
+        let end = range.start.seconds + range.duration.seconds
+        return position >= end - 1
+    }
+
+    private func handleStall(player: AVPlayer, generation: Int) {
+        guard generation == playbackGeneration,
+              player === self.player,
+              player.timeControlStatus == .waitingToPlayAtSpecifiedRate else { return }
+
+        if isQueueActive,
+           let song = queueEngine.currentSong,
+           backgroundCacheCompletedSongIds.contains(song.id) {
+            return
+        }
+
+        if let item = playerItem, item.isPlaybackBufferEmpty {
+            let position = player.currentTime().seconds
+            if position > 5, isAtEndOfLoadedRanges(item: item, position: position) {
+                return
+            }
+        }
+
+        recoveryController.triggerRecovery(
+            currentTime: player.currentTime(),
+            generation: generation,
+            sourceKind: recoverySourceKind()
+        )
+    }
+
+    private func handleGhostPlayback(
+        player: AVPlayer,
+        item: AVPlayerItem,
+        generation: Int
+    ) {
+        guard generation == playbackGeneration,
+              player === self.player,
+              item === playerItem,
+              !isPlayerAtEnd,
+              currentSourceKind != "radio",
+              item.isPlaybackBufferEmpty else { return }
+
+        let position = player.currentTime().seconds
+        guard position.isFinite else { return }
+        if position > 5, isAtEndOfLoadedRanges(item: item, position: position) {
+            return
+        }
+        let positionIsBuffered = item.loadedTimeRanges.contains { range in
+            let timeRange = range.timeRangeValue
+            let start = timeRange.start.seconds
+            let end = start + timeRange.duration.seconds
+            return position >= start && position < end
+        }
+        guard !positionIsBuffered else { return }
+
+        player.pause()
+        handleEnded()
+    }
+
+    private func checkEndOfStreamFallback(player: AVPlayer) {
+        let shouldEnd = endOfStreamTracker.shouldAdvanceQueue(
+            now: Date(),
+            isQueueActive: isQueueActive,
+            isWaiting: player.timeControlStatus == .waitingToPlayAtSpecifiedRate,
+            bufferIsEmpty: playerItem?.isPlaybackBufferEmpty ?? false,
+            position: player.currentTime().seconds
+        )
+        guard shouldEnd else { return }
+        NativeLogger.shared.info(
+            "End of stream detected after prolonged empty-buffer stall.",
+            source: "AudioService"
+        )
+        handleEnded()
+    }
+
+    private func checkBufferPositionCoherence(
+        player: AVPlayer,
+        item: AVPlayerItem,
+        generation: Int
+    ) {
+        guard !isSeeking, !isRecoveryReload else {
+            bufferMismatchFirstSeen = nil
+            return
+        }
+        guard currentSourceKind != "radio" else { return }
+        guard !isPlayerAtEnd else {
+            bufferMismatchFirstSeen = nil
+            return
+        }
+        guard player.timeControlStatus == .playing, !item.isPlaybackBufferEmpty else {
+            bufferMismatchFirstSeen = nil
+            return
+        }
+
+        let position = player.currentTime().seconds
+        guard position.isFinite, position > 5 else {
+            bufferMismatchFirstSeen = nil
+            return
+        }
+        guard !isPositionWithinLoadedRanges(position) else {
+            bufferMismatchFirstSeen = nil
+            return
+        }
+
+        if let firstSeen = bufferMismatchFirstSeen {
+            guard Date().timeIntervalSince(firstSeen) >= 1.5 else { return }
+            bufferMismatchFirstSeen = nil
+            handleBufferPositionMismatch(player: player, generation: generation)
+        } else {
+            bufferMismatchFirstSeen = Date()
+        }
+    }
+
+    private func handleBufferPositionMismatch(player: AVPlayer, generation: Int) {
+        guard generation == playbackGeneration, player === self.player else { return }
+
+        let position = player.currentTime().seconds
+        let isNearEnd = position > 0 && duration > 0 && duration - position < 10
+        if isNearEnd, isQueueActive {
+            handleEnded()
+            return
+        }
+
+        isSeeking = true
+        player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero) {
+            [weak self, weak player] _ in
+            guard let self,
+                  let player,
+                  generation == self.playbackGeneration else { return }
+            self.isSeeking = false
+            player.play()
+            self.emitProgress()
+            self.updateNowPlayingPlaybackInfo()
+        }
+    }
+
     private func resolve(_ source: AudioSource) throws -> (url: URL, kind: String) {
         switch source {
         case .nativeFile(let uri, _):
@@ -1935,10 +2253,23 @@ extension AudioService: NativeQueueEngineDelegate {
 
     func queueEngineDidExhaustQueue(_ engine: NativeQueueEngine) {
         dispatchMain { [weak self] in
-            self?.player?.pause()
-            self?.player?.seek(to: .zero)
-            self?.emitPlaybackState(.ended, force: true)
-            self?.emit(.ended(reason: "finished", requestId: self?.currentRequestId))
+            guard let self else { return }
+            if let entry = self.scrobbleBuffer.stopTracking() {
+                self.scrobbleSubmitter.submitIfEligible(
+                    entry: entry,
+                    songDurationSeconds: self.scrobbleBuffer.lastEntryDuration ?? 0
+                )
+            }
+            self.player?.pause()
+            self.player?.seek(to: .zero) { [weak self] _ in
+                guard let self else { return }
+                self.persistence.updateProgress(0)
+                self.persistence.flushNow()
+                self.emitProgress()
+                self.updateNowPlayingPlaybackInfo()
+            }
+            self.emitPlaybackState(.ended, force: true)
+            self.emit(.ended(reason: "finished", requestId: self.currentRequestId))
         }
     }
 
@@ -2038,13 +2369,69 @@ extension AudioService: PlaybackRecoveryDelegate {
                         return
                     }
                     self.isRecoveryReload = false
-                    if finished {
+                    let rawSavedSeconds = savedPosition.seconds
+                    let savedSeconds = rawSavedSeconds.isFinite
+                        ? max(0, rawSavedSeconds)
+                        : 0
+                    let actualSeconds = player.currentTime().seconds
+                    let itemDuration = item.duration.seconds
+                    let metadataDuration = self.metadata.duration ?? 0
+                    let savedPositionIsValid =
+                        PlaybackRecoverySeekValidation.acceptsSavedPosition(
+                            seekFinished: finished,
+                            savedPosition: savedSeconds,
+                            actualPosition: actualSeconds,
+                            loadedRangeContainsPosition: self
+                                .isPositionWithinLoadedRanges(savedSeconds),
+                            itemDuration: itemDuration,
+                            metadataDuration: metadataDuration
+                        )
+
+                    if savedPositionIsValid {
                         player.play()
+                        controller.reloadDidComplete(
+                            success: true,
+                            generation: generation
+                        )
+                        return
                     }
-                    controller.reloadDidComplete(
-                        success: finished,
-                        generation: generation
-                    )
+
+                    let isNearEnd = savedSeconds > 0 &&
+                        self.duration > 0 && self.duration - savedSeconds < 10
+                    if isNearEnd, self.isQueueActive {
+                        controller.reloadDidComplete(
+                            success: true,
+                            generation: generation
+                        )
+                        self.handleEnded()
+                        return
+                    }
+
+                    self.isSeeking = true
+                    player.seek(
+                        to: .zero,
+                        toleranceBefore: .zero,
+                        toleranceAfter: .zero
+                    ) { [weak self, weak player] restarted in
+                        guard let self,
+                              let player,
+                              generation == self.playbackGeneration else {
+                            controller.reloadDidComplete(
+                                success: false,
+                                generation: generation
+                            )
+                            return
+                        }
+                        self.isSeeking = false
+                        self.loadedDuration = self.metadata.duration
+                        if restarted { player.play() }
+                        controller.reloadDidComplete(
+                            success: restarted,
+                            generation: generation
+                        )
+                        self.emitProgress()
+                        self.updateNowPlayingPlaybackInfo()
+                    }
                 }
             }
         }

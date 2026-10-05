@@ -223,10 +223,41 @@ enum PlaybackRecoverySeekValidation {
         guard savedPosition <= 2 ||
             (actualPosition.isFinite && abs(actualPosition - savedPosition) <= 2)
         else { return false }
-        guard metadataDuration <= 0 || itemDuration <= 0 else {
-            return abs(itemDuration - metadataDuration) / metadataDuration <= 0.1
+        guard metadataDuration.isFinite,
+              metadataDuration > 0,
+              itemDuration.isFinite,
+              itemDuration > 0 else { return true }
+        return abs(itemDuration - metadataDuration) / metadataDuration <= 0.1
+    }
+}
+
+struct QueueEndOfStreamTracker {
+    private var stalledSince: Date?
+
+    mutating func shouldAdvanceQueue(
+        now: Date,
+        isQueueActive: Bool,
+        isWaiting: Bool,
+        bufferIsEmpty: Bool,
+        position: Double
+    ) -> Bool {
+        guard isQueueActive, isWaiting, bufferIsEmpty else {
+            stalledSince = nil
+            return false
         }
+        guard let stalledSince else {
+            self.stalledSince = now
+            return false
+        }
+        guard now.timeIntervalSince(stalledSince) >= 3,
+              position.isFinite,
+              position > 5 else { return false }
+        self.stalledSince = nil
         return true
+    }
+
+    mutating func reset() {
+        stalledSince = nil
     }
 }
 

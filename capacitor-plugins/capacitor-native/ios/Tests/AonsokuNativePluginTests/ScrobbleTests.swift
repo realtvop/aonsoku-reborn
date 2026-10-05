@@ -98,6 +98,34 @@ final class ScrobbleTests: XCTestCase {
         XCTAssertTrue(submitter.isEligible(entry: long, songDurationSeconds: 1_000))
         XCTAssertFalse(submitter.isEligible(entry: long, songDurationSeconds: 0))
     }
+
+    func testQueueExhaustionFlushesTheCurrentScrobbleSegment() throws {
+        let database = try TemporaryDatabase()
+        let clock = ManualClock()
+        let buffer = NativeScrobbleBuffer(
+            store: InMemoryScrobbleEntryStore(),
+            now: clock.now
+        )
+        let service = AudioService(
+            databaseManager: database.manager,
+            scrobbleBuffer: buffer
+        )
+        let ended = expectation(description: "queue exhaustion published")
+        let token = service.subscribe { event in
+            if case .playbackStateChanged(.ended, _) = event { ended.fulfill() }
+        }
+
+        buffer.startTracking(songId: "last-queue-song", duration: 200)
+        clock.advance(milliseconds: 1_000)
+        service.queueEngineDidExhaustQueue(NativeQueueEngine())
+        wait(for: [ended], timeout: 1)
+
+        let entry = try XCTUnwrap(buffer.getEntries().first)
+        XCTAssertEqual(entry.songId, "last-queue-song")
+        XCTAssertEqual(entry.playedDurationMs, 1_000)
+        service.unsubscribe(token)
+        service.shutdown()
+    }
 }
 
 private final class ManualClock {
