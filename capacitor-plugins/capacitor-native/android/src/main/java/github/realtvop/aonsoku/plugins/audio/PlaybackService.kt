@@ -4,9 +4,13 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.AudioManager
 import android.net.Uri
 import android.os.Binder
 import android.content.pm.PackageManager
@@ -48,12 +52,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
 
-class PlaybackService : MediaSessionService() {
+class PlaybackService : MediaSessionService(), AudioService {
     companion object {
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "aonsoku_playback"
@@ -102,6 +110,41 @@ class PlaybackService : MediaSessionService() {
     private var remotePlaybackArtworkKey: String? = null
     private var remoteControlTargetDeviceId: String? = null
     private var remoteControlExpectedGeneration: Int? = null
+    private var currentRequestId: String? = null
+    private var lastPlaybackState = "idle"
+    private var isBuffering = false
+    private val stateHandler = Handler(Looper.getMainLooper())
+    private val _playbackState = MutableStateFlow(AudioPlaybackSnapshot())
+    private val _queueState = MutableStateFlow(AudioQueueSnapshot())
+    private val _events = MutableSharedFlow<AudioEvent>(extraBufferCapacity = 128)
+
+    override val playbackState: StateFlow<AudioPlaybackSnapshot> = _playbackState
+    override val queueState: StateFlow<AudioQueueSnapshot> = _queueState
+    override val events: SharedFlow<AudioEvent> = _events
+
+    private val stateProgressRunnable = object : Runnable {
+        override fun run() {
+            if (player?.isPlaying == true || isRemotePlaybackProjectionActive) {
+                val snapshot = currentPlaybackSnapshot()
+                _playbackState.value = snapshot
+                emitStateEvent(AudioEvent.Progress(snapshot))
+                stateHandler.postDelayed(this, 250L)
+            }
+        }
+    }
+
+    private fun startStateProgressUpdates() {
+        stateHandler.removeCallbacks(stateProgressRunnable)
+        stateHandler.post(stateProgressRunnable)
+    }
+
+    private fun stopStateProgressUpdates() {
+        stateHandler.removeCallbacks(stateProgressRunnable)
+    }
+
+    private var volumeReceiver: BroadcastReceiver? = null
+    private var headphoneReceiver: BroadcastReceiver? = null
+    private var audioDeviceCallback: android.media.AudioDeviceCallback? = null
 
     private val httpClient = SubsonicHttpClient()
     private val credentialStore by lazy {
@@ -243,7 +286,15 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun emitRemoteCommand(command: String, position: Double? = null) {
+        emitStateEvent(AudioEvent.RemoteCommand(command, position))
         buildRemoteControlCommand(command, position)?.let { remoteCommand ->
+            emitStateEvent(
+                AudioEvent.RemoteControlCommand(
+                    remoteCommand.toString(),
+                    remoteControlTargetDeviceId,
+                    remoteControlExpectedGeneration,
+                ),
+            )
             listeners.forEach {
                 it.onRemoteControlCommand(
                     remoteCommand,
@@ -284,14 +335,22 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun emitQueueStateChanged(currentIndex: Int, songId: String, reason: String, isInUserQueue: Boolean) {
+        publishQueueSnapshot()
+        emitStateEvent(AudioEvent.QueueStateChanged(currentQueueSnapshot(), reason))
         listeners.forEach { it.onQueueStateChanged(currentIndex, songId, reason, isInUserQueue) }
     }
 
     private fun emitQueueContentsChanged(reason: String) {
+        publishQueueSnapshot()
+        emitStateEvent(AudioEvent.QueueContentsChanged(currentQueueSnapshot(), reason))
         listeners.forEach { it.onQueueContentsChanged(reason) }
     }
 
     private fun emitPlaybackState(state: String) {
+        lastPlaybackState = state
+        isBuffering = state == "loading"
+        publishPlaybackSnapshot()
+        emitStateEvent(AudioEvent.PlaybackStateChanged(currentPlaybackSnapshot()))
         listeners.forEach { it.onPlaybackStateChanged(state) }
     }
 
@@ -336,14 +395,18 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun emitEnded(reason: String) {
+        publishPlaybackSnapshot()
+        emitStateEvent(AudioEvent.Ended(reason, currentPlaybackSnapshot()))
         listeners.forEach { it.onEnded(reason) }
     }
 
     private fun emitSleepTimerEndOfTrack() {
+        emitStateEvent(AudioEvent.SleepTimerEndOfTrack(currentPlaybackSnapshot()))
         listeners.forEach { it.onSleepTimerEndOfTrack() }
     }
 
     private fun emitError(code: String, message: String) {
+        emitStateEvent(AudioEvent.Error(code, message, currentPlaybackSnapshot()))
         listeners.forEach { it.onError(code, message) }
     }
 
@@ -381,12 +444,149 @@ class PlaybackService : MediaSessionService() {
 
     inner class LocalBinder : Binder() {
         fun getService(): PlaybackService = this@PlaybackService
+        fun getAudioService(): AudioService = this@PlaybackService
     }
 
     private val binder = LocalBinder()
 
     fun getPlayer(): Player? = player
     fun getSession(): MediaSession? = mediaSession
+
+    override fun setRequestId(requestId: String?) {
+        currentRequestId = requestId
+        publishPlaybackSnapshot()
+    }
+
+    override fun requestAudioFocus(): Boolean {
+        // ExoPlayer owns the AudioFocusRequest configured in onCreate().
+        // Calling play() is the actual request; this method is the typed
+        // boundary used by native clients before issuing that command.
+        return true
+    }
+
+    override fun getSystemVolume(): Double {
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        return if (max > 0) current.toDouble() / max.toDouble() else 0.0
+    }
+
+    override fun setSystemVolume(value: Double): Double {
+        setSystemVolumeValue(value)
+        return getSystemVolume()
+    }
+
+    override suspend fun execute(command: AudioCommand): AudioCommandResult =
+        withContext(Dispatchers.Main.immediate) {
+            val currentPlayer = player
+            if (currentPlayer == null && command !is AudioCommand.SetVolume) {
+                return@withContext AudioCommandResult.Failure(
+                    "not_ready",
+                    "Playback service is not ready",
+                )
+            }
+            try {
+                when (command) {
+                    AudioCommand.Play -> {
+                        savedRestoreTime = null
+                        queueEngine.clearRestoredFlag()
+                        requestAudioFocus()
+                        currentPlayer?.play()
+                    }
+                    AudioCommand.Pause -> {
+                        currentPlayer?.pause()
+                        persistence.flushNow()
+                    }
+                    AudioCommand.TogglePlayPause -> {
+                        if (currentPlayer?.isPlaying == true) {
+                            currentPlayer.pause()
+                            persistence.flushNow()
+                        } else {
+                            savedRestoreTime = null
+                            queueEngine.clearRestoredFlag()
+                            requestAudioFocus()
+                            currentPlayer?.play()
+                        }
+                    }
+                    AudioCommand.Stop -> {
+                        currentPlayer?.pause()
+                        currentPlayer?.seekTo(0)
+                        emitPlaybackState("stopped")
+                    }
+                    AudioCommand.Next -> {
+                        if (isRemotePlaybackProjectionActive) emitRemoteCommand("next")
+                        else if (isQueueEngineActive) queueEngine.skipToNext()
+                        else emitRemoteCommand("next")
+                    }
+                    AudioCommand.Previous -> {
+                        if (isRemotePlaybackProjectionActive) emitRemoteCommand("previous")
+                        else if (isQueueEngineActive) {
+                            queueEngine.skipToPrevious((currentPlayer?.currentPosition ?: 0L) / 1000.0)
+                        } else emitRemoteCommand("previous")
+                    }
+                    is AudioCommand.Seek -> {
+                        val position = command.positionSeconds.coerceAtLeast(0.0)
+                        if (isRemotePlaybackProjectionActive) emitRemoteCommand("seek", position)
+                        else {
+                            currentPlayer?.seekTo((position * 1000).toLong())
+                            persistence.updateProgress(position)
+                            persistence.flushNow()
+                        }
+                    }
+                    is AudioCommand.SetVolume -> setSystemVolumeValue(command.value)
+                    is AudioCommand.SetShuffle -> setShuffle(command.enabled)
+                    is AudioCommand.SetRepeat -> setRepeatMode(command.mode)
+                }
+                AudioCommandResult.Success
+            } catch (error: Throwable) {
+                AudioCommandResult.Failure(
+                    "command_failed",
+                    error.message ?: "Audio command failed",
+                )
+            }
+        }
+
+    private fun currentPlaybackSnapshot(): AudioPlaybackSnapshot {
+        val currentPlayer = player
+        val duration = currentPlayer?.duration?.takeUnless { it == C.TIME_UNSET } ?: 0L
+        return AudioPlaybackSnapshot(
+            state = lastPlaybackState,
+            requestId = currentRequestId,
+            songId = queueEngine.currentSong?.id ?: remotePlaybackSongId,
+            currentTimeSeconds = (currentPlayer?.currentPosition ?: 0L) / 1000.0,
+            durationSeconds = duration / 1000.0,
+            bufferedTimeSeconds = (currentPlayer?.bufferedPosition ?: 0L) / 1000.0,
+            isPlaying = currentPlayer?.isPlaying == true,
+            isBuffering = isBuffering,
+            volume = getSystemVolume(),
+        )
+    }
+
+    private fun currentQueueSnapshot(): AudioQueueSnapshot = AudioQueueSnapshot(
+        contextSongs = queueEngine.contextSongs,
+        currentIndex = queueEngine.currentIndex,
+        sourceId = queueEngine.sourceId,
+        sourceName = queueEngine.sourceName,
+        userQueue = queueEngine.userQueue,
+        isInUserQueue = queueEngine.isInUserQueue,
+        playedUserQueueHistory = queueEngine.playedUserQueueHistory,
+        isShuffleActive = queueEngine.isShuffleActive,
+        repeatMode = queueEngine.loopState.value,
+        currentSong = queueEngine.currentSong,
+    )
+
+    private fun publishPlaybackSnapshot() {
+        val snapshot = currentPlaybackSnapshot()
+        _playbackState.value = snapshot
+    }
+
+    private fun publishQueueSnapshot() {
+        _queueState.value = currentQueueSnapshot()
+    }
+
+    private fun emitStateEvent(event: AudioEvent) {
+        _events.tryEmit(event)
+    }
 
     @OptIn(UnstableApi::class)
     override fun onCreate() {
@@ -593,6 +793,29 @@ class PlaybackService : MediaSessionService() {
 
         player?.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
+                when (playbackState) {
+                    Player.STATE_BUFFERING -> {
+                        isBuffering = true
+                        lastPlaybackState = "loading"
+                        publishPlaybackSnapshot()
+                        emitStateEvent(AudioEvent.BufferingChanged(currentPlaybackSnapshot()))
+                    }
+                    Player.STATE_READY -> {
+                        isBuffering = false
+                        lastPlaybackState = if (player?.isPlaying == true) "playing" else "paused"
+                        publishPlaybackSnapshot()
+                        emitStateEvent(AudioEvent.BufferingChanged(currentPlaybackSnapshot()))
+                        if (player?.duration?.let { it != C.TIME_UNSET } == true) {
+                            emitStateEvent(AudioEvent.DurationChanged(currentPlaybackSnapshot()))
+                        }
+                    }
+                    Player.STATE_IDLE -> {
+                        isBuffering = false
+                        lastPlaybackState = "idle"
+                        publishPlaybackSnapshot()
+                    }
+                    else -> Unit
+                }
                 if (playbackState == Player.STATE_ENDED) {
                     if (sleepTimerMode == "endOfTrack") {
                         sleepTimerMode = "duration"
@@ -628,14 +851,19 @@ class PlaybackService : MediaSessionService() {
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
+                lastPlaybackState = if (isPlaying) "playing" else "paused"
+                publishPlaybackSnapshot()
+                emitStateEvent(AudioEvent.PlaybackStateChanged(currentPlaybackSnapshot()))
                 updateNotification()
                 if (isPlaying) {
                     isTransitioning = false
+                    startStateProgressUpdates()
                     persistence.startProgressTracking()
                     if (currentScrobbleSongId != null) {
                         scrobbleBuffer.resumeTracking()
                     }
                 } else {
+                    stopStateProgressUpdates()
                     persistence.stopProgressTracking()
                     persistence.flushNow()
                     if (currentScrobbleSongId != null) {
@@ -802,7 +1030,110 @@ class PlaybackService : MediaSessionService() {
             }
         })
 
+        registerSystemReceivers()
         restorePlaybackState()
+    }
+
+    private fun registerSystemReceivers() {
+        val volume = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == "android.media.VOLUME_CHANGED_ACTION") {
+                    val streamType = intent.getIntExtra(
+                        "android.media.EXTRA_VOLUME_STREAM_TYPE",
+                        -1,
+                    )
+                    if (streamType == AudioManager.STREAM_MUSIC) {
+                        emitSystemVolumeChanged()
+                    }
+                }
+            }
+        }
+        val headphone = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
+                    emitStateEvent(AudioEvent.RouteChanged("headphone_unplugged"))
+                }
+            }
+        }
+        volumeReceiver = volume
+        headphoneReceiver = headphone
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(
+                volume,
+                IntentFilter("android.media.VOLUME_CHANGED_ACTION"),
+                Context.RECEIVER_EXPORTED,
+            )
+            registerReceiver(
+                headphone,
+                IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY),
+                Context.RECEIVER_EXPORTED,
+            )
+        } else {
+            registerReceiver(volume, IntentFilter("android.media.VOLUME_CHANGED_ACTION"))
+            registerReceiver(headphone, IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY))
+        }
+        emitSystemVolumeChanged()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val callback = object : android.media.AudioDeviceCallback() {
+                override fun onAudioDevicesAdded(addedDevices: Array<out android.media.AudioDeviceInfo>?) {
+                    scheduleVolumeRefresh()
+                }
+
+                override fun onAudioDevicesRemoved(removedDevices: Array<out android.media.AudioDeviceInfo>?) {
+                    scheduleVolumeRefresh()
+                }
+            }
+            audioManager.registerAudioDeviceCallback(callback, stateHandler)
+            audioDeviceCallback = callback
+        }
+    }
+
+    private fun unregisterSystemReceivers() {
+        volumeReceiver?.let { receiver ->
+            try {
+                unregisterReceiver(receiver)
+            } catch (_: Exception) {
+            }
+        }
+        headphoneReceiver?.let { receiver ->
+            try {
+                unregisterReceiver(receiver)
+            } catch (_: Exception) {
+            }
+        }
+        volumeReceiver = null
+        headphoneReceiver = null
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            audioDeviceCallback?.let { callback ->
+                val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                audioManager.unregisterAudioDeviceCallback(callback)
+            }
+            audioDeviceCallback = null
+        }
+    }
+
+    private fun scheduleVolumeRefresh() {
+        emitSystemVolumeChanged()
+        stateHandler.postDelayed({ emitSystemVolumeChanged() }, 300L)
+        stateHandler.postDelayed({ emitSystemVolumeChanged() }, 800L)
+    }
+
+    private fun emitSystemVolumeChanged() {
+        val volume = getSystemVolume()
+        publishPlaybackSnapshot()
+        emitStateEvent(AudioEvent.SystemVolumeChanged(volume))
+    }
+
+    private fun setSystemVolumeValue(value: Double) {
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        audioManager.setStreamVolume(
+            AudioManager.STREAM_MUSIC,
+            (value.coerceIn(0.0, 1.0) * max).toInt(),
+            0,
+        )
+        emitSystemVolumeChanged()
     }
 
     private fun createNotificationChannel() {
@@ -1138,6 +1469,9 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         NativeLogger.info("PlaybackService destroyed", "playback-service")
+        stopStateProgressUpdates()
+        stateHandler.removeCallbacksAndMessages(null)
+        unregisterSystemReceivers()
         // §2.1.8: release the foreground-service association before teardown.
         AonsokuNativeCoordinationPlugin.detachActiveForegroundService()
         handleScrobbleSongEnded()

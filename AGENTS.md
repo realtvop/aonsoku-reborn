@@ -121,6 +121,13 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   and forwards service events through `notifyListeners`. Android native UI
   should call `LibraryService.getInstance(context)` directly rather than
   locating a Capacitor plugin instance.
+- `PlaybackService` implements the typed Android `AudioService` contract in
+  `audio/AudioService.kt`. Its `StateFlow` playback/queue snapshots and
+  independent `SharedFlow` event stream are available from
+  `PlaybackService.LocalBinder.getAudioService()`; player, MediaSession,
+  foreground-service, audio-route, and system-volume resources remain owned by
+  `PlaybackService`. `AudioPlugin` adapts the existing JS method/event
+  contract and may be destroyed without releasing those service resources.
 - The iOS host owns long-lived native services through
   `AonsokuNativePlugin.AppServices`. `AudioService` owns AVPlayer, queue,
   downloads, scrobbling, playback persistence, and system media controls;

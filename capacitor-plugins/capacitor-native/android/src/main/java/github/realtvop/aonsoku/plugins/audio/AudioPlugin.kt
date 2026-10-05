@@ -43,6 +43,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collect
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -170,34 +172,7 @@ class AudioPlugin : Plugin() {
 
     private val db by lazy { AonsokuDatabase.getInstance(context) }
 
-    private var headphoneReceiver: HeadphoneUnplugReceiver? = null
-    private var volumeReceiver: VolumeChangeReceiver? = null
-    private var audioDeviceCallback: android.media.AudioDeviceCallback? = null
-
-    private inner class VolumeChangeReceiver : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action == "android.media.VOLUME_CHANGED_ACTION") {
-                val streamType = intent.getIntExtra("android.media.EXTRA_VOLUME_STREAM_TYPE", -1)
-                if (streamType == AudioManager.STREAM_MUSIC) {
-                    val volume = getSystemVolumePercentage()
-                    notifyListeners("systemVolumeChanged", JSObject().apply {
-                        put("volume", volume)
-                    })
-                }
-            }
-        }
-    }
-
-    private inner class HeadphoneUnplugReceiver : android.content.BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
-                notifyListeners("routeChanged", JSObject().apply {
-                    put("requestId", currentRequestId ?: JSONObject.NULL)
-                    put("reason", "headphone_unplugged")
-                })
-            }
-        }
-    }
+    private var audioEventJob: Job? = null
 
     private val downloadListener = object : PlaybackService.DownloadListener {
         override fun onDownloadProgress(songId: String, loaded: Long, total: Long) {
@@ -307,6 +282,27 @@ class AudioPlugin : Plugin() {
 
             currentService?.addListener(serviceListener)
             currentService?.addDownloadListener(downloadListener)
+            audioEventJob?.cancel()
+            audioEventJob = currentService?.let { audioService ->
+                pluginScope.launch {
+                    audioService.events.collect { event ->
+                        when (event) {
+                            is AudioEvent.SystemVolumeChanged -> notifyListeners(
+                                "systemVolumeChanged",
+                                JSObject().put("volume", event.volume),
+                            )
+                            is AudioEvent.RouteChanged -> notifyListeners(
+                                "routeChanged",
+                                JSObject().apply {
+                                    put("requestId", currentRequestId ?: JSONObject.NULL)
+                                    put("reason", event.reason)
+                                },
+                            )
+                            else -> Unit
+                        }
+                    }
+                }
+            }
             setupPlayerListener()
             if (!serviceReady.isCompleted) {
                 serviceReady.complete(currentService ?: return)
@@ -317,6 +313,8 @@ class AudioPlugin : Plugin() {
             NativeLogger.warn("PlaybackService disconnected", "audio-plugin")
             playbackService?.removeListener(serviceListener)
             playbackService?.removeDownloadListener(downloadListener)
+            audioEventJob?.cancel()
+            audioEventJob = null
             playbackService = null
             isBound = false
             serviceReady.completeExceptionally(IllegalStateException("PlaybackService disconnected"))
@@ -328,10 +326,6 @@ class AudioPlugin : Plugin() {
         activeInstance = this
         NativeLogger.info("AudioPlugin loaded, binding PlaybackService", "audio-plugin")
         bindPlaybackService()
-        registerAudioFocusListener()
-        registerHeadphoneReceiver()
-        registerVolumeReceiver()
-        registerAudioDeviceCallback()
     }
 
     override fun handleOnPause() {
@@ -349,7 +343,7 @@ class AudioPlugin : Plugin() {
             startProgressUpdates()
         }
         // Emit volume on resume to ensure UI is in sync
-        val volume = getSystemVolumePercentage()
+        val volume = playbackService?.getSystemVolume() ?: 0.0
         notifyListeners("systemVolumeChanged", JSObject().apply {
             put("volume", volume)
         })
@@ -369,16 +363,14 @@ class AudioPlugin : Plugin() {
         }
         playbackService?.removeListener(serviceListener)
         playbackService?.removeDownloadListener(downloadListener)
+        audioEventJob?.cancel()
+        audioEventJob = null
         if (isBound) {
             context.unbindService(connection)
             isBound = false
         }
         mainHandler.removeCallbacks(progressRunnable)
         cancelSleepTimerInternal()
-        unregisterAudioFocusListener()
-        unregisterHeadphoneReceiver()
-        unregisterVolumeReceiver()
-        unregisterAudioDeviceCallback()
         pluginScope.cancel()
         super.handleOnDestroy()
     }
@@ -925,13 +917,7 @@ class AudioPlugin : Plugin() {
         if (has(name) && !isNull(name)) optString(name).takeIf { it.isNotBlank() } else null
 
     private fun setSystemVolumeValue(value: Double) {
-        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-        val targetVolume = (value * max).toInt()
-        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVolume, 0)
-        notifyListeners("systemVolumeChanged", JSObject().apply {
-            put("volume", getSystemVolumePercentage())
-        })
+        playbackService?.setSystemVolume(value)
     }
 
     private fun bindPlaybackService() {
@@ -943,119 +929,17 @@ class AudioPlugin : Plugin() {
         context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
     }
 
-    // MARK: - Audio Focus
-
-    private fun registerAudioFocusListener() {
-        // No-op: ExoPlayer manages audio focus automatically via setAudioAttributes(..., true)
-    }
-
-    private fun unregisterAudioFocusListener() {
-        // No-op
-    }
-
     private fun requestAudioFocus(): Int {
-        // No-op: ExoPlayer requests audio focus automatically on play()
-        return AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        return if (playbackService?.requestAudioFocus() == true) {
+            AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        } else {
+            AudioManager.AUDIOFOCUS_REQUEST_FAILED
+        }
     }
 
     private fun abandonAudioFocus() {
         // No-op
     }
-
-    // MARK: - Headphone Route Receiver
-
-    private fun registerHeadphoneReceiver() {
-        val receiver = HeadphoneUnplugReceiver()
-        headphoneReceiver = receiver
-        if (Build.VERSION.SDK_INT >= 33) {
-            context.registerReceiver(receiver, IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY), Context.RECEIVER_EXPORTED)
-        } else {
-            context.registerReceiver(receiver, IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY))
-        }
-    }
-
-    private fun unregisterHeadphoneReceiver() {
-        headphoneReceiver?.let { receiver ->
-            try {
-                context.unregisterReceiver(receiver)
-            } catch (_: Exception) {
-            }
-        }
-        headphoneReceiver = null
-    }
-
-    private fun registerVolumeReceiver() {
-        val receiver = VolumeChangeReceiver()
-        volumeReceiver = receiver
-        if (Build.VERSION.SDK_INT >= 33) {
-            context.registerReceiver(receiver, IntentFilter("android.media.VOLUME_CHANGED_ACTION"), Context.RECEIVER_EXPORTED)
-        } else {
-            context.registerReceiver(receiver, IntentFilter("android.media.VOLUME_CHANGED_ACTION"))
-        }
-    }
-
-    private fun unregisterVolumeReceiver() {
-        volumeReceiver?.let { receiver ->
-            try {
-                context.unregisterReceiver(receiver)
-            } catch (_: Exception) {
-            }
-        }
-        volumeReceiver = null
-    }
-
-    private fun getSystemVolumePercentage(): Double {
-        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        val current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-        return if (max > 0) current.toDouble() / max.toDouble() else 0.0
-    }
-
-    private fun registerAudioDeviceCallback() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            val callback = object : android.media.AudioDeviceCallback() {
-                override fun onAudioDevicesAdded(addedDevices: Array<out android.media.AudioDeviceInfo>?) {
-                    triggerVolumeUpdate()
-                }
-
-                override fun onAudioDevicesRemoved(removedDevices: Array<out android.media.AudioDeviceInfo>?) {
-                    triggerVolumeUpdate()
-                }
-            }
-            audioManager.registerAudioDeviceCallback(callback, mainHandler)
-            audioDeviceCallback = callback
-        }
-    }
-
-    private fun unregisterAudioDeviceCallback() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            audioDeviceCallback?.let { callback ->
-                val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                audioManager.unregisterAudioDeviceCallback(callback)
-            }
-            audioDeviceCallback = null
-        }
-    }
-
-    private fun triggerVolumeUpdate() {
-        notifyVolumeChanged()
-        mainHandler.postDelayed({
-            notifyVolumeChanged()
-        }, 300)
-        mainHandler.postDelayed({
-            notifyVolumeChanged()
-        }, 800)
-    }
-
-    private fun notifyVolumeChanged() {
-        val volume = getSystemVolumePercentage()
-        notifyListeners("systemVolumeChanged", JSObject().apply {
-            put("volume", volume)
-        })
-    }
-
-
 
     // MARK: - Sleep Timer
 
@@ -1411,6 +1295,7 @@ class AudioPlugin : Plugin() {
         val requestId = call.getString("requestId")
 
         currentRequestId = requestId
+        playbackService?.setRequestId(requestId)
 
         val songId = parsedSource.songId
         val songDuration = parsedMetadata?.duration ?: 0.0
@@ -1564,68 +1449,18 @@ class AudioPlugin : Plugin() {
 
     private fun executePlay(call: PluginCall) {
         NativeLogger.debug("Play requested", "audio-plugin")
-        pluginScope.launch {
-            try {
-                val service = awaitService()
-                mainHandler.post {
-                    val player = service.getPlayer() ?: run {
-                        call.reject("ExoPlayer is not ready")
-                        return@post
-                    }
-
-                    service.savedRestoreTime = null
-                    service.queueEngine.clearRestoredFlag()
-
-                    requestAudioFocus()
-                    player.play()
-                    call.resolve()
-                }
-            } catch (_: TimeoutCancellationException) {
-                call.reject("Playback service is not ready (timeout)")
-            }
-        }
+        executeAudioCommand(call, AudioCommand.Play)
     }
 
     @PluginMethod
     fun pause(call: PluginCall) {
         NativeLogger.debug("Pause requested", "audio-plugin")
-        pluginScope.launch {
-            try {
-                val service = awaitService()
-                mainHandler.post {
-                    val player = service.getPlayer() ?: run {
-                        call.reject("ExoPlayer is not ready")
-                        return@post
-                    }
-                    player.pause()
-                    service.persistence.flushNow()
-                    call.resolve()
-                }
-            } catch (_: TimeoutCancellationException) {
-                call.reject("Playback service is not ready (timeout)")
-            }
-        }
+        executeAudioCommand(call, AudioCommand.Pause)
     }
 
     @PluginMethod
     fun stop(call: PluginCall) {
-        pluginScope.launch {
-            try {
-                val service = awaitService()
-                mainHandler.post {
-                    val player = service.getPlayer() ?: run {
-                        call.reject("ExoPlayer is not ready")
-                        return@post
-                    }
-                    player.pause()
-                    player.seekTo(0)
-                    emitPlaybackState("stopped", currentRequestId)
-                    call.resolve()
-                }
-            } catch (_: TimeoutCancellationException) {
-                call.reject("Playback service is not ready (timeout)")
-            }
-        }
+        executeAudioCommand(call, AudioCommand.Stop)
     }
 
     @PluginMethod
@@ -1635,21 +1470,23 @@ class AudioPlugin : Plugin() {
             return
         }
         NativeLogger.debug("Seek to $position", "audio-plugin")
+        executeAudioCommand(call, AudioCommand.Seek(position))
+    }
+
+    private fun executeAudioCommand(call: PluginCall, command: AudioCommand) {
         pluginScope.launch {
             try {
-                val service = awaitService()
+                val result = awaitService().execute(command)
                 mainHandler.post {
-                    val player = service.getPlayer() ?: run {
-                        call.reject("ExoPlayer is not ready")
-                        return@post
+                    when (result) {
+                        AudioCommandResult.Success -> call.resolve()
+                        is AudioCommandResult.Failure -> call.reject(
+                            "${result.code}: ${result.message}",
+                        )
                     }
-                    player.seekTo((position * 1000).toLong())
-                    service.persistence.updateProgress(position)
-                    service.persistence.flushNow()
-                    call.resolve()
                 }
             } catch (_: TimeoutCancellationException) {
-                call.reject("Playback service is not ready (timeout)")
+                mainHandler.post { call.reject("Playback service is not ready (timeout)") }
             }
         }
     }
@@ -1841,6 +1678,7 @@ class AudioPlugin : Plugin() {
                     player.clearMediaItems()
                     emitPlaybackState("idle", currentRequestId)
                     currentRequestId = null
+                    service.setRequestId(null)
                     service.handleScrobbleSongEnded()
                     abandonAudioFocus()
                     service.clearQueueState()
@@ -2440,9 +2278,7 @@ class AudioPlugin : Plugin() {
             call.reject("Missing value parameter")
             return
         }
-        setSystemVolumeValue(value)
-
-        val actualVolume = getSystemVolumePercentage()
+        val actualVolume = playbackService?.setSystemVolume(value) ?: value
         call.resolve(JSObject().apply {
             put("volume", actualVolume)
         })
@@ -2450,7 +2286,7 @@ class AudioPlugin : Plugin() {
 
     @PluginMethod
     fun getSystemVolume(call: PluginCall) {
-        val actualVolume = getSystemVolumePercentage()
+        val actualVolume = playbackService?.getSystemVolume() ?: 0.0
         call.resolve(JSObject().apply {
             put("volume", actualVolume)
         })
