@@ -251,7 +251,7 @@ describe("Aonsoku native audio plugin skeleton", () => {
     expect(lifecycleSwift).toContain("public func didBecomeActive()");
   });
 
-  it("updates iOS Now Playing metadata and remote commands", () => {
+  it("updates iOS Now Playing metadata, artwork, and remote commands", () => {
     const audioServiceSwift = readText(nativeAudioServicePath);
 
     for (const command of [
@@ -286,6 +286,11 @@ describe("Aonsoku native audio plugin skeleton", () => {
       "MPNowPlayingInfoPropertyElapsedPlaybackTime",
     );
     expect(audioServiceSwift).toContain("MPNowPlayingInfoPropertyPlaybackRate");
+    expect(audioServiceSwift).toContain("MPMediaItemArtwork(boundsSize: image.size)");
+    expect(audioServiceSwift).toContain("imageCache.resolveCoverImage(coverArtId:");
+    expect(audioServiceSwift).toContain("imageCache.downloadCoverImage(");
+    expect(audioServiceSwift).toContain("forName: .aonsokuCoverImageCached");
+    expect(audioServiceSwift).toContain("cachedCoverArtId == currentNowPlayingCoverArtId()");
   });
 
   it("announces native cover images after caching", () => {

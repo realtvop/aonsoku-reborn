@@ -40,11 +40,17 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private var stalledObserver: NSObjectProtocol?
     private var interruptionObserver: NSObjectProtocol?
     private var routeObserver: NSObjectProtocol?
+    private var coverImageCachedObserver: NSObjectProtocol?
+    private var interruptionResumePolicy = AudioInterruptionResumePolicy()
+    private var bufferMismatchFirstSeen: Date?
+    private var isSeeking = false
     private var remoteTargets: [(MPRemoteCommand, Any)] = []
     private var volumeObservation: NSKeyValueObservation?
     private var volumeView: MPVolumeView?
     private weak var volumeHostView: UIView?
     private var metadata = AudioMetadata()
+    private var nowPlayingRevision = 0
+    private var artworkTask: URLSessionDataTask?
     private var playbackState: AudioPlaybackSnapshot.State = .idle
     private var currentRequestId: String?
     private var currentSource: AudioSource?
@@ -141,11 +147,13 @@ public final class AudioService: NSObject, @unchecked Sendable {
         sleepTimer?.invalidate()
         sleepTimer = nil
         clearPlayer(deactivateSession: deactivateSession)
+        if deactivateSession { clearNowPlayingInfo() }
     }
 
     public func applicationDidEnterBackground() {
         persistence.flushNow()
         recoveryController.setBackground(true)
+        scrobbleSubmitter.submitPending(buffer: scrobbleBuffer)
     }
 
     public func applicationWillEnterForeground() {
@@ -323,23 +331,38 @@ public final class AudioService: NSObject, @unchecked Sendable {
             self.player?.pause()
             self.recoveryController.reportUserPause()
             self.scrobbleBuffer.pauseTracking()
-            self.player?.seek(to: .zero)
+            if let player = self.player {
+                self.isSeeking = true
+                player.seek(to: .zero) { [weak self] _ in
+                    guard let self else { return }
+                    self.isSeeking = false
+                    self.persistence.updateProgress(0)
+                    self.emitProgress()
+                    self.updateNowPlayingPlaybackInfo()
+                }
+            }
             self.persistence.flushNow()
             self.emitPlaybackState(.stopped, force: true)
-            self.emit(.ended(reason: "stopped", requestId: self.currentRequestId))
+            try? self.audioSession.setActive(false)
         }
     }
 
     public func seek(to seconds: Double, completion: (() -> Void)? = nil) {
         dispatchMain { [weak self] in
             guard let self else { return }
+            guard let player = self.player else {
+                completion?()
+                return
+            }
             let position = max(0, seconds)
             self.recoveryController.reportUserSeek()
-            self.player?.seek(
+            self.isSeeking = true
+            player.seek(
                 to: self.makeTime(position),
                 toleranceBefore: .zero,
                 toleranceAfter: .zero
             ) { _ in
+                self.isSeeking = false
                 self.persistence.updateProgress(position)
                 self.persistence.flushNow()
                 self.emitProgress()
@@ -495,8 +518,8 @@ public final class AudioService: NSObject, @unchecked Sendable {
             self.clearPlayer(deactivateSession: true)
             try? self.persistence.repository.clear()
             self.playbackState = .idle
-            MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
             self.emitPlaybackState(.idle, force: true)
+            self.clearNowPlayingInfo()
         }
     }
 
@@ -1048,6 +1071,8 @@ public final class AudioService: NSObject, @unchecked Sendable {
 
     private func clearPlayer(deactivateSession: Bool) {
         playbackGeneration += 1
+        bufferMismatchFirstSeen = nil
+        isSeeking = false
         removePlayerObservers()
         player?.pause()
         player?.replaceCurrentItem(with: nil)
@@ -1316,6 +1341,13 @@ public final class AudioService: NSObject, @unchecked Sendable {
             let reason = raw.flatMap(AVAudioSession.RouteChangeReason.init(rawValue:))
             self?.emit(.routeChanged(reason: String(describing: reason)))
         }
+        coverImageCachedObserver = NotificationCenter.default.addObserver(
+            forName: .aonsokuCoverImageCached,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            self?.handleCoverImageCached(notification)
+        }
     }
 
     private func removeAudioSessionObservers() {
@@ -1323,8 +1355,12 @@ public final class AudioService: NSObject, @unchecked Sendable {
             NotificationCenter.default.removeObserver(interruptionObserver)
         }
         if let routeObserver { NotificationCenter.default.removeObserver(routeObserver) }
+        if let coverImageCachedObserver {
+            NotificationCenter.default.removeObserver(coverImageCachedObserver)
+        }
         interruptionObserver = nil
         routeObserver = nil
+        coverImageCachedObserver = nil
     }
 
     private func handleInterruption(_ notification: Notification) {
@@ -1332,6 +1368,9 @@ public final class AudioService: NSObject, @unchecked Sendable {
             as? UInt,
               let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
         if type == .began {
+            interruptionResumePolicy.interruptionBegan(
+                wasPlaying: player?.timeControlStatus == .playing
+            )
             emit(.interruptionChanged(type: "began", shouldResume: nil))
             pause()
         } else {
@@ -1341,7 +1380,11 @@ public final class AudioService: NSObject, @unchecked Sendable {
                 rawValue: optionsRaw
             ).contains(.shouldResume)
             emit(.interruptionChanged(type: "ended", shouldResume: shouldResume))
-            if shouldResume { play() }
+            if interruptionResumePolicy.interruptionEnded(
+                shouldResume: shouldResume
+            ) {
+                play()
+            }
         }
     }
 
@@ -1414,21 +1457,186 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     private func updateNowPlayingInfo() {
+        nowPlayingRevision += 1
+        let revision = nowPlayingRevision
+        artworkTask?.cancel()
+        artworkTask = nil
+
         let projection = remoteProjection
         let displayedMetadata = projection?.metadata ?? metadata
         var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
-        info[MPMediaItemPropertyTitle] = displayedMetadata.title
-        info[MPMediaItemPropertyArtist] = displayedMetadata.artist
-        info[MPMediaItemPropertyAlbumTitle] = displayedMetadata.album
-        info[MPMediaItemPropertyPlaybackDuration] = projection?.duration ?? duration
-        info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = projection?.position ?? currentTime
-        let isPlaying = projection?.isPlaying ?? ((player?.rate ?? 0) > 0)
-        info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1 : 0
+        apply(displayedMetadata.title, forKey: MPMediaItemPropertyTitle, to: &info)
+        apply(displayedMetadata.artist, forKey: MPMediaItemPropertyArtist, to: &info)
+        apply(displayedMetadata.album, forKey: MPMediaItemPropertyAlbumTitle, to: &info)
+        info.removeValue(forKey: MPMediaItemPropertyArtwork)
+        applyNowPlayingPlaybackFields(to: &info)
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+
+        if let artworkUrl = displayedMetadata.artworkUrl {
+            loadNowPlayingArtwork(
+                artworkUrl,
+                coverArtId: displayedMetadata.coverArtId,
+                revision: revision
+            )
+        }
     }
 
     private func updateNowPlayingPlaybackInfo() {
+        var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+        applyNowPlayingPlaybackFields(to: &info)
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+    }
+
+    private func handleCoverImageCached(_ notification: Notification) {
+        guard let cachedCoverArtId = notification.userInfo?[
+            ImageCacheNotification.coverArtIdKey
+        ] as? String,
+              cachedCoverArtId == currentNowPlayingCoverArtId(),
+              (remoteProjection?.metadata ?? metadata).artworkUrl != nil,
+              MPNowPlayingInfoCenter.default().nowPlayingInfo != nil else {
+            return
+        }
         updateNowPlayingInfo()
+    }
+
+    private func currentNowPlayingCoverArtId() -> String? {
+        let displayedMetadata = remoteProjection?.metadata ?? metadata
+        if let coverArtId = displayedMetadata.coverArtId, !coverArtId.isEmpty {
+            return coverArtId
+        }
+        guard let artworkUrl = displayedMetadata.artworkUrl,
+              let components = URLComponents(string: artworkUrl),
+              components.scheme == "aonsoku-media" else {
+            return nil
+        }
+        return components.queryItems?.first(where: { $0.name == "id" })?.value
+    }
+
+    private func loadNowPlayingArtwork(
+        _ urlString: String,
+        coverArtId explicitCoverArtId: String?,
+        revision: Int
+    ) {
+        var coverArtId = explicitCoverArtId
+        if let components = URLComponents(string: urlString),
+           components.scheme == "aonsoku-media",
+           let queryItems = components.queryItems {
+            coverArtId = coverArtId ?? queryItems.first(where: { $0.name == "id" })?.value
+        }
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+
+            if let coverArtId, !coverArtId.isEmpty {
+                let imageCache = ImageCacheManager(db: self.databaseManager.dbPool)
+                if let localURL = imageCache.resolveCoverImage(coverArtId: coverArtId),
+                   let data = try? Data(contentsOf: localURL),
+                   let image = UIImage(data: data) {
+                    self.publishNowPlayingArtwork(image, revision: revision)
+                    return
+                }
+
+                if URL(string: urlString)?.scheme == "aonsoku-media" {
+                    Task {
+                        do {
+                            _ = try await imageCache.downloadCoverImage(
+                                coverArtId: coverArtId,
+                                size: "800"
+                            )
+                        } catch {
+                            NativeLogger.shared.warn(
+                                "Now Playing artwork download failed for \(coverArtId): \(error.localizedDescription)",
+                                source: "NowPlayingArtwork"
+                            )
+                        }
+                    }
+                    return
+                }
+            }
+
+            guard let url = URL(string: urlString) else { return }
+            let task = URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
+                guard let self, error == nil, let data,
+                      let image = UIImage(data: data) else { return }
+                if let coverArtId, !coverArtId.isEmpty {
+                    let contentType = (response as? HTTPURLResponse)?
+                        .value(forHTTPHeaderField: "Content-Type") ?? "image/jpeg"
+                    _ = try? ImageCacheManager(db: self.databaseManager.dbPool)
+                        .storeCoverImage(
+                            coverArtId: coverArtId,
+                            data: data,
+                            contentType: contentType,
+                            coverSize: "800"
+                        )
+                }
+                self.publishNowPlayingArtwork(image, revision: revision)
+            }
+            DispatchQueue.main.async {
+                guard self.nowPlayingRevision == revision else {
+                    task.cancel()
+                    return
+                }
+                self.artworkTask = task
+                task.resume()
+            }
+        }
+    }
+
+    private func publishNowPlayingArtwork(_ image: UIImage, revision: Int) {
+        let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.nowPlayingRevision == revision else { return }
+            var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+            info[MPMediaItemPropertyArtwork] = artwork
+            MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        }
+    }
+
+    private func clearNowPlayingInfo() {
+        nowPlayingRevision += 1
+        artworkTask?.cancel()
+        artworkTask = nil
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+    }
+
+    private func apply(
+        _ value: String?,
+        forKey key: String,
+        to info: inout [String: Any]
+    ) {
+        guard let value, !value.isEmpty else {
+            info.removeValue(forKey: key)
+            return
+        }
+        info[key] = value
+    }
+
+    private func applyNowPlayingPlaybackFields(to info: inout [String: Any]) {
+        if let projection = remoteProjection {
+            MPNowPlayingInfoCenter.default().playbackState =
+                projection.isPlaying ? .playing : .paused
+            if projection.duration > 0 {
+                info[MPMediaItemPropertyPlaybackDuration] = projection.duration
+            } else {
+                info.removeValue(forKey: MPMediaItemPropertyPlaybackDuration)
+            }
+            info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = projection.position
+            info[MPNowPlayingInfoPropertyPlaybackRate] = projection.isPlaying ? 1.0 : 0.0
+            info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = 1.0
+            return
+        }
+
+        if duration > 0 {
+            info[MPMediaItemPropertyPlaybackDuration] = duration
+        } else {
+            info.removeValue(forKey: MPMediaItemPropertyPlaybackDuration)
+        }
+        info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
+        let isPlaying = player?.timeControlStatus == .playing ||
+            player?.timeControlStatus == .waitingToPlayAtSpecifiedRate
+        MPNowPlayingInfoCenter.default().playbackState = isPlaying ? .playing : .paused
+        info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
+        info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = 1.0
     }
 
     private func emitPlaybackState(

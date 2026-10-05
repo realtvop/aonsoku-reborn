@@ -196,6 +196,40 @@ public enum AudioServiceEvent: Sendable {
     case sleepTimerFired(reason: String)
 }
 
+struct AudioInterruptionResumePolicy {
+    private var wasPlayingBeforeInterruption = false
+
+    mutating func interruptionBegan(wasPlaying: Bool) {
+        wasPlayingBeforeInterruption = wasPlaying
+    }
+
+    mutating func interruptionEnded(shouldResume: Bool) -> Bool {
+        defer { wasPlayingBeforeInterruption = false }
+        return wasPlayingBeforeInterruption && shouldResume
+    }
+}
+
+enum PlaybackRecoverySeekValidation {
+    static func acceptsSavedPosition(
+        seekFinished: Bool,
+        savedPosition: Double,
+        actualPosition: Double,
+        loadedRangeContainsPosition: Bool,
+        itemDuration: Double,
+        metadataDuration: Double
+    ) -> Bool {
+        guard seekFinished else { return false }
+        guard savedPosition <= 5 || loadedRangeContainsPosition else { return false }
+        guard savedPosition <= 2 ||
+            (actualPosition.isFinite && abs(actualPosition - savedPosition) <= 2)
+        else { return false }
+        guard metadataDuration <= 0 || itemDuration <= 0 else {
+            return abs(itemDuration - metadataDuration) / metadataDuration <= 0.1
+        }
+        return true
+    }
+}
+
 public struct AudioServiceError: LocalizedError, Equatable, Sendable {
     public let code: String
     public let message: String
