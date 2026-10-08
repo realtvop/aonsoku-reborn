@@ -2237,6 +2237,7 @@ class PlaybackService : MediaSessionService(), AudioService {
                             savedRestoreTime = persistedState.currentTime
                             loadSong(song, autoplay = false, startTime = persistedState.currentTime)
                         }
+                        emitQueueContentsChanged("queue-edit")
                     }
                 }
             } catch (_: Exception) {
