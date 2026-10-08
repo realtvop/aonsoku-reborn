@@ -23,6 +23,10 @@ const appLifecycleServicePath = path.join(
   pluginRoot,
   "ios/Sources/AonsokuNativePlugin/AppLifecycleService.swift",
 );
+const nativeCoordinationServicePath = path.join(
+  pluginRoot,
+  "ios/Sources/AonsokuNativePlugin/Coordination/AonsokuNativeCoordinationPlugin.swift",
+);
 
 const nativeAudioMethods = [
   "load",
@@ -182,10 +186,10 @@ describe("Aonsoku native audio plugin skeleton", () => {
 
     expect(audioServiceSwift).toContain("audioSession.observe(\\.outputVolume");
     expect(setVolumeHUDEnabled).toContain(
-      "self?.volumeView?.removeFromSuperview()",
+      "self.volumeView?.removeFromSuperview()",
     );
     expect(setVolumeHUDEnabled).toContain(
-      "self?.volumeHostView?.addSubview(view)",
+      "self.volumeHostView?.addSubview(view)",
     );
     expect(setVolumeHUDEnabled).toContain("view.alpha = 0.001");
   });
@@ -267,13 +271,19 @@ describe("Aonsoku native audio plugin skeleton", () => {
     expect(audioServiceSwift).toContain("command.isEnabled = true");
 
     for (const command of [
-      'command: "togglePlayPause"',
-      'command: "next"',
-      'command: "previous"',
-      'command: "seek"',
+      '["type": "play"]',
+      '["type": "pause"]',
+      '["type": "toggle_play_pause"]',
+      '["type": "next"]',
+      '["type": "previous"]',
+      '["type": "seek", "seconds": event.positionTime]',
+      '["type": "toggle_like"]',
     ]) {
       expect(audioServiceSwift).toContain(command);
     }
+    expect(audioServiceSwift).toContain(
+      "AonsokuNativeCoordinationPlugin.sendCommandFromActive(",
+    );
 
     expect(audioServiceSwift).toContain(
       "MPNowPlayingInfoCenter.default().nowPlayingInfo",
@@ -291,6 +301,31 @@ describe("Aonsoku native audio plugin skeleton", () => {
     expect(audioServiceSwift).toContain("imageCache.downloadCoverImage(");
     expect(audioServiceSwift).toContain("forName: .aonsokuCoverImageCached");
     expect(audioServiceSwift).toContain("cachedCoverArtId == currentNowPlayingCoverArtId()");
+  });
+
+  it("bridges native audio changes into coordination snapshots", () => {
+    const audioServiceSwift = readText(nativeAudioServicePath);
+    const coordinationSwift = readText(nativeCoordinationServicePath);
+
+    expect(audioServiceSwift).toContain(
+      "NotificationCenter.default.post(name: .aonsokuAudioStateDidChange",
+    );
+    expect(coordinationSwift).toContain(
+      "forName: .aonsokuAudioStateDidChange",
+    );
+    expect(coordinationSwift).toContain(
+      "publishNativePlaybackSnapshot()",
+    );
+  });
+
+  it("refreshes native playback state and volume on foreground entry", () => {
+    const audioServiceSwift = readText(nativeAudioServicePath);
+
+    expect(audioServiceSwift).toContain("self.emitCurrentPlaybackState()");
+    expect(audioServiceSwift).toContain("self.emitProgress()");
+    expect(audioServiceSwift).toContain(
+      "self.emit(.systemVolumeChanged(self.audioSession.outputVolume))",
+    );
   });
 
   it("announces native cover images after caching", () => {
@@ -352,6 +387,8 @@ describe("Aonsoku native audio plugin skeleton", () => {
     expect(audioServiceSwift).toContain(
       "AudioCacheUtils.cacheDirectoryURL(createIfNeeded: true)",
     );
+    expect(audioServiceSwift).toContain("let prefix = \"\\(cacheId).\"");
+    expect(audioServiceSwift).toContain("applicationSupportDirectory");
     expect(audioServiceSwift).toContain("NativeCachedAudioFileMetadata(");
     expect(audioServiceSwift).toContain("Data(contentsOf: metadataURL)");
     expect(audioServiceSwift).toContain("options: .atomic");

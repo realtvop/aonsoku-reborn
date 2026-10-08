@@ -49,6 +49,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private var volumeObservation: NSKeyValueObservation?
     private var volumeView: MPVolumeView?
     private weak var volumeHostView: UIView?
+    private var isVolumeHUDEnabled = true
     private var metadata = AudioMetadata()
     private var nowPlayingRevision = 0
     private var artworkTask: URLSessionDataTask?
@@ -146,6 +147,8 @@ public final class AudioService: NSObject, @unchecked Sendable {
         removeAudioSessionObservers()
         volumeObservation?.invalidate()
         volumeObservation = nil
+        volumeView?.removeFromSuperview()
+        volumeView = nil
         sleepTimer?.invalidate()
         sleepTimer = nil
         clearPlayer(deactivateSession: deactivateSession)
@@ -173,6 +176,9 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     message: error.localizedDescription
                 )
             }
+            self.emitCurrentPlaybackState()
+            self.emitProgress()
+            self.emit(.systemVolumeChanged(self.audioSession.outputVolume))
             self.scrobbleSubmitter.submitPending(buffer: self.scrobbleBuffer)
         }
     }
@@ -769,47 +775,78 @@ public final class AudioService: NSObject, @unchecked Sendable {
         )
     }
 
+    private func audioCacheDirectories() throws -> [URL] {
+        let current = try AudioCacheUtils.cacheDirectoryURL(createIfNeeded: false)
+        var directories = [current]
+        if let applicationSupport = FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first {
+            let legacy = applicationSupport
+                .appendingPathComponent("Aonsoku", isDirectory: true)
+                .appendingPathComponent("AudioCache", isDirectory: true)
+            if legacy != current { directories.append(legacy) }
+        }
+        return directories
+    }
+
     public func resolveAudioFile(songId: String) throws -> CachedAudioFile? {
-        let directory = try AudioCacheUtils.cacheDirectoryURL(createIfNeeded: false)
         let cacheId = AudioCacheUtils.cacheId(for: songId)
-        let metadataURL = directory.appendingPathComponent("\(cacheId).json")
-        guard let data = try? Data(contentsOf: metadataURL),
-              let stored = try? JSONDecoder().decode(
-                  NativeCachedAudioFileMetadata.self,
-                  from: data
-              ),
-              stored.songId == songId else { return nil }
-        let fileURL = directory.appendingPathComponent(stored.fileName)
-        guard FileManager.default.fileExists(atPath: fileURL.path) else { return nil }
-        return cachedFile(
-            songId: songId,
-            fileURL: fileURL,
-            contentType: stored.contentType,
-            lastModifiedAt: stored.lastModifiedAt
-        )
+        for directory in try audioCacheDirectories() {
+            let metadataURL = directory.appendingPathComponent("\(cacheId).json")
+            guard let data = try? Data(contentsOf: metadataURL),
+                  let stored = try? JSONDecoder().decode(
+                      NativeCachedAudioFileMetadata.self,
+                      from: data
+                  ),
+                  stored.songId == songId else { continue }
+            let fileURL = directory.appendingPathComponent(stored.fileName)
+            guard FileManager.default.fileExists(atPath: fileURL.path) else {
+                continue
+            }
+            return cachedFile(
+                songId: songId,
+                fileURL: fileURL,
+                contentType: stored.contentType,
+                lastModifiedAt: stored.lastModifiedAt
+            )
+        }
+        return nil
     }
 
     public func deleteAudioFile(songId: String) throws -> Bool {
-        guard let file = try resolveAudioFile(songId: songId),
-              let fileURL = URL(string: file.uri) else { return false }
-        let directory = fileURL.deletingLastPathComponent()
-        let metadataURL = directory.appendingPathComponent(
-            "\(AudioCacheUtils.cacheId(for: songId)).json"
-        )
-        try? FileManager.default.removeItem(at: fileURL)
-        try? FileManager.default.removeItem(at: metadataURL)
-        return true
+        let cacheId = AudioCacheUtils.cacheId(for: songId)
+        let prefix = "\(cacheId)."
+        var deleted = false
+        for directory in try audioCacheDirectories() {
+            guard FileManager.default.fileExists(atPath: directory.path) else {
+                continue
+            }
+            let files = try FileManager.default.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: nil
+            )
+            for file in files where file.lastPathComponent.hasPrefix(prefix) {
+                try FileManager.default.removeItem(at: file)
+                deleted = true
+            }
+        }
+        return deleted
     }
 
     public func clearAudioFiles() throws -> Int {
-        let directory = try AudioCacheUtils.cacheDirectoryURL(createIfNeeded: false)
-        guard FileManager.default.fileExists(atPath: directory.path) else { return 0 }
-        let files = try FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: nil
-        )
-        let count = files.filter { $0.pathExtension.lowercased() != "json" }.count
-        for file in files { try FileManager.default.removeItem(at: file) }
+        var count = 0
+        for directory in try audioCacheDirectories() {
+            guard FileManager.default.fileExists(atPath: directory.path) else {
+                continue
+            }
+            let files = try FileManager.default.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: nil
+            )
+            count += files.filter { $0.pathExtension.lowercased() != "json" }.count
+            for file in files { try FileManager.default.removeItem(at: file) }
+        }
         return count
     }
 
@@ -820,16 +857,21 @@ public final class AudioService: NSObject, @unchecked Sendable {
         dispatchMain { [weak self] in
             guard let self else { return }
             let clamped = Float(max(0, min(1, value)))
-            let volumeView = self.volumeView ?? MPVolumeView(
-                frame: CGRect(x: -2000, y: -2000, width: 120, height: 40)
-            )
-            if self.volumeView == nil {
+            let usesPersistentView = !self.isVolumeHUDEnabled
+            let volumeView: MPVolumeView
+            if usesPersistentView, let existing = self.volumeView {
+                volumeView = existing
+            } else {
+                volumeView = MPVolumeView(
+                    frame: CGRect(x: -2000, y: -2000, width: 120, height: 40)
+                )
                 volumeView.alpha = 0.001
                 self.volumeHostView?.addSubview(volumeView)
-                self.volumeView = volumeView
+                if usesPersistentView { self.volumeView = volumeView }
             }
             volumeView.layoutIfNeeded()
             guard let slider = Self.findSlider(in: volumeView) else {
+                if !usesPersistentView { volumeView.removeFromSuperview() }
                 completion(.failure(AudioServiceError(
                     code: "volume_control_unavailable",
                     message: "System volume control is unavailable."
@@ -839,6 +881,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
             slider.value = clamped
             slider.sendActions(for: .valueChanged)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                if !usesPersistentView { volumeView.removeFromSuperview() }
                 let actual = self.audioSession.outputVolume
                 self.emit(.systemVolumeChanged(actual))
                 completion(.success(actual))
@@ -850,16 +893,18 @@ public final class AudioService: NSObject, @unchecked Sendable {
 
     public func setVolumeHUDEnabled(_ enabled: Bool) {
         dispatchMain { [weak self] in
+            guard let self else { return }
+            self.isVolumeHUDEnabled = enabled
             if enabled {
-                self?.volumeView?.removeFromSuperview()
-                self?.volumeView = nil
-            } else if self?.volumeView == nil {
+                self.volumeView?.removeFromSuperview()
+                self.volumeView = nil
+            } else if self.volumeView == nil {
                 let view = MPVolumeView(
                     frame: CGRect(x: -2000, y: -2000, width: 120, height: 40)
                 )
                 view.alpha = 0.001
-                self?.volumeHostView?.addSubview(view)
-                self?.volumeView = view
+                self.volumeHostView?.addSubview(view)
+                self.volumeView = view
             }
         }
     }
@@ -1552,39 +1597,57 @@ public final class AudioService: NSObject, @unchecked Sendable {
 
     private func registerRemoteCommands() {
         let center = MPRemoteCommandCenter.shared()
-        addTarget(center.playCommand) { [weak self] _ in self?.play(); return .success }
-        addTarget(center.pauseCommand) { [weak self] _ in self?.pause(); return .success }
+        addTarget(center.playCommand) { [weak self] _ in
+            guard let self else { return .commandFailed }
+            return self.routeRemoteOrLocal(
+                command: ["type": "play"],
+                local: .play
+            )
+        }
+        addTarget(center.pauseCommand) { [weak self] _ in
+            guard let self else { return .commandFailed }
+            return self.routeRemoteOrLocal(
+                command: ["type": "pause"],
+                local: .pause
+            )
+        }
         addTarget(center.togglePlayPauseCommand) { [weak self] _ in
             guard let self else { return .commandFailed }
-            if self.remoteProjection != nil {
-                self.emit(.remoteCommand(command: "togglePlayPause", position: nil))
-            } else {
-                _ = self.execute(.togglePlayPause)
-            }
-            return .success
+            return self.routeRemoteOrLocal(
+                command: ["type": "toggle_play_pause"],
+                local: .togglePlayPause
+            )
         }
         addTarget(center.nextTrackCommand) { [weak self] _ in
-            self?.routeRemoteOrLocal(command: "next", local: .next)
-            return .success
+            guard let self else { return .commandFailed }
+            return self.routeRemoteOrLocal(
+                command: ["type": "next"],
+                local: .next
+            )
         }
         addTarget(center.previousTrackCommand) { [weak self] _ in
-            self?.routeRemoteOrLocal(command: "previous", local: .previous)
-            return .success
+            guard let self else { return .commandFailed }
+            return self.routeRemoteOrLocal(
+                command: ["type": "previous"],
+                local: .previous
+            )
         }
         addTarget(center.changePlaybackPositionCommand) { [weak self] event in
             guard let event = event as? MPChangePlaybackPositionCommandEvent else {
                 return .commandFailed
             }
-            if self?.remoteProjection != nil {
-                self?.emit(.remoteCommand(command: "seek", position: event.positionTime))
-            } else {
-                self?.seek(to: event.positionTime)
-            }
-            return .success
+            guard let self else { return .commandFailed }
+            return self.routeRemoteOrLocal(
+                command: ["type": "seek", "seconds": event.positionTime],
+                local: .seek(event.positionTime)
+            )
         }
         addTarget(center.likeCommand) { [weak self] _ in
-            self?.routeRemoteOrLocal(command: "like", local: .toggleLike)
-            return .success
+            guard let self else { return .commandFailed }
+            return self.routeRemoteOrLocal(
+                command: ["type": "toggle_like"],
+                local: .toggleLike
+            )
         }
     }
 
@@ -1602,12 +1665,23 @@ public final class AudioService: NSObject, @unchecked Sendable {
         remoteTargets.removeAll()
     }
 
-    private func routeRemoteOrLocal(command: String, local: AudioCommand) {
-        if remoteProjection != nil {
-            emit(.remoteCommand(command: command, position: nil))
-        } else {
-            _ = execute(local)
+    private func routeRemoteOrLocal(
+        command: [String: Any],
+        local: AudioCommand
+    ) -> MPRemoteCommandHandlerStatus {
+        if let projection = remoteProjection {
+            guard let targetDeviceId = projection.targetDeviceId,
+                  AonsokuNativeCoordinationPlugin.sendCommandFromActive(
+                      targetDeviceId: targetDeviceId,
+                      expectedGeneration: projection.expectedGeneration,
+                      command: command
+                  ) else {
+                return .commandFailed
+            }
+            return .success
         }
+        _ = execute(local)
+        return .success
     }
 
     private func observeSystemVolume() {

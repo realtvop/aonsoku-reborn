@@ -303,6 +303,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     /// degrades gracefully.
     private var interruptionObserver: NSObjectProtocol?
     private var routeChangeObserver: NSObjectProtocol?
+    private var audioStateDidChangeObserver: NSObjectProtocol?
     private var isAppInBackground = false
 
     // MARK: - Plugin Lifecycle
@@ -780,15 +781,31 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
             }
         }
 
+        if audioStateDidChangeObserver == nil {
+            audioStateDidChangeObserver = center.addObserver(
+                forName: .aonsokuAudioStateDidChange,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                guard notification.object is AudioService else { return }
+                _ = self?.publishNativePlaybackSnapshot()
+            }
+        }
+
     }
 
     private func removeAudioSessionObservers() {
         let center = NotificationCenter.default
-        for observer in [interruptionObserver, routeChangeObserver] {
+        for observer in [
+            interruptionObserver,
+            routeChangeObserver,
+            audioStateDidChangeObserver,
+        ] {
             if let observer { center.removeObserver(observer) }
         }
         interruptionObserver = nil
         routeChangeObserver = nil
+        audioStateDidChangeObserver = nil
     }
 
     private func handleAudioSessionInterruption(_ notification: Notification) {
