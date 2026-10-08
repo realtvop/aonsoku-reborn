@@ -157,11 +157,11 @@ class PlaybackService : MediaSessionService(), AudioService {
     private val authenticationService by lazy {
         AuthenticationService.getInstance(applicationContext)
     }
-    private val httpClient = authenticationService.httpClient
+    private val httpClient by lazy { authenticationService.httpClient }
     val scrobbleBuffer by lazy {
         NativeScrobbleBuffer(ScrobbleFileStore(this))
     }
-    private val scrobbleSubmitter = NativeScrobbleSubmitter(httpClient)
+    private val scrobbleSubmitter by lazy { NativeScrobbleSubmitter(httpClient) }
 
     var currentScrobbleSongId: String? = null
         private set
