@@ -1,5 +1,15 @@
 apply plugin: 'com.android.application'
 
+def releaseSigning = [
+    storeFile: project.findProperty('aonsokuReleaseStoreFile'),
+    storePassword: project.findProperty('aonsokuReleaseStorePassword'),
+    keyAlias: project.findProperty('aonsokuReleaseKeyAlias'),
+    keyPassword: project.findProperty('aonsokuReleaseKeyPassword'),
+]
+def releaseSigningConfigured = releaseSigning.values().every { value ->
+    value != null && !value.toString().trim().isEmpty()
+}
+
 android {
     namespace = "github.realtvop.aonsoku"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,12 +26,45 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (releaseSigningConfigured) {
+            release {
+                storeFile file(releaseSigning.storeFile)
+                storePassword releaseSigning.storePassword
+                keyAlias releaseSigning.keyAlias
+                keyPassword releaseSigning.keyPassword
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (releaseSigningConfigured) {
+                signingConfig signingConfigs.release
+            }
         }
     }
+}
+
+def verifyReleaseSigning = tasks.register('verifyReleaseSigning') {
+    doLast {
+        if (!releaseSigningConfigured) {
+            throw new GradleException(
+                'Release signing is not configured. Set the aonsokuRelease* Gradle properties.'
+            )
+        }
+        def keystore = file(releaseSigning.storeFile)
+        if (!keystore.isFile()) {
+            throw new GradleException("Release keystore does not exist: ${keystore}")
+        }
+    }
+}
+
+tasks.matching { task ->
+    task.name in ['assembleRelease', 'bundleRelease']
+}.configureEach {
+    dependsOn(verifyReleaseSigning)
 }
 
 repositories {

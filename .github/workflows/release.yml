@@ -140,9 +140,29 @@ jobs:
       - name: Sync Capacitor Android
         run: pnpm exec cap sync android
 
-      - name: Build Release APK (Unsigned)
+      - name: Restore Android release keystore
+        env:
+          ANDROID_RELEASE_KEYSTORE_B64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_B64 }}
+        run: |
+          test -n "$ANDROID_RELEASE_KEYSTORE_B64"
+          printf '%s' "$ANDROID_RELEASE_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/aonsoku-release.jks"
+          test -s "$RUNNER_TEMP/aonsoku-release.jks"
+          chmod 600 "$RUNNER_TEMP/aonsoku-release.jks"
+
+      - name: Build Release APK
         working-directory: android
+        env:
+          ORG_GRADLE_PROJECT_aonsokuReleaseStoreFile: ${{ runner.temp }}/aonsoku-release.jks
+          ORG_GRADLE_PROJECT_aonsokuReleaseStorePassword: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_aonsokuReleaseKeyAlias: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          ORG_GRADLE_PROJECT_aonsokuReleaseKeyPassword: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
         run: ./gradlew assembleRelease
+
+      - name: Verify Android release signature
+        run: |
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs android/app/build/outputs/apk/release/app-release.apk
 
       - name: Get version from package.json
         id: app_version
@@ -152,11 +172,15 @@ jobs:
 
       - name: Rename APK
         run: |
-          mv android/app/build/outputs/apk/release/app-release-unsigned.apk Aonsoku-v${{ steps.app_version.outputs.version }}-android-unsigned.apk
+          mv android/app/build/outputs/apk/release/app-release.apk Aonsoku-v${{ steps.app_version.outputs.version }}-android.apk
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
-          files: Aonsoku-v${{ steps.app_version.outputs.version }}-android-unsigned.apk
+          files: Aonsoku-v${{ steps.app_version.outputs.version }}-android.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Remove Android release keystore
+        if: ${{ always() }}
+        run: rm -f "$RUNNER_TEMP/aonsoku-release.jks"

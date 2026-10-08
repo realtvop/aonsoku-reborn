@@ -62,6 +62,11 @@ pnpm --filter @aonsoku/coordination-worker deploy:raw # Direct Wrangler deployme
 cd android && ./gradlew :aonsoku-capacitor-native:compileDebugKotlin
 cd android && ./gradlew :aonsoku-capacitor-native:testDebugUnitTest
 
+# Android release signing
+# Local release builds read aonsokuRelease* from ~/.gradle/gradle.properties.
+# Nightly/tag release workflows restore the same keystore from GitHub Secrets.
+cd android && ./gradlew assembleRelease
+
 # iOS native plugin. Selects the first available iPhone Simulator; override
 # with IOS_SIMULATOR_ID=<uuid>. Fails when no simulator is available, when no
 # XCTest executes, or when any test fails. The optional result path must not
