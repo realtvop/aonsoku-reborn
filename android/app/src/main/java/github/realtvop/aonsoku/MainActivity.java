@@ -35,6 +35,7 @@ public class MainActivity extends BridgeActivity implements SensorEventListener 
         registerPlugin(DataPlugin.class);
         registerPlugin(PreferencesPlugin.class);
 
+        setTheme(R.style.AppTheme_NoActionBar);
         WindowCompat.enableEdgeToEdge(getWindow());
         super.onCreate(savedInstanceState);
 
