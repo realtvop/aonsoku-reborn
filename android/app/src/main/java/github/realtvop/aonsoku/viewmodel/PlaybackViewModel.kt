@@ -15,6 +15,7 @@ import github.realtvop.aonsoku.plugins.audio.AudioQueueSnapshot
 import github.realtvop.aonsoku.plugins.audio.AudioService
 import github.realtvop.aonsoku.plugins.audio.PlaybackService
 import github.realtvop.aonsoku.plugins.audio.QueueSong
+import github.realtvop.aonsoku.plugins.audio.toQueueSong
 import github.realtvop.aonsoku.plugins.data.db.entity.LyricsEntity
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -61,34 +62,10 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             val binder = service as? PlaybackService.LocalBinder
             val boundAudio = binder?.getAudioService() ?: appServices.audioService()
-            audioService = boundAudio
-            isBound = true
-
-            boundAudio?.let { svc ->
-                playbackStateJob?.cancel()
-                playbackStateJob = viewModelScope.launch {
-                    svc.playbackState.collectLatest { snapshot ->
-                        _playbackState.value = snapshot
-                    }
-                }
-
-                queueStateJob?.cancel()
-                queueStateJob = viewModelScope.launch {
-                    svc.queueState.collectLatest { snapshot ->
-                        _queueState.value = snapshot
-                        val song = snapshot.currentSong
-                        if (song?.id != _currentSong.value?.id) {
-                            _currentSong.value = song
-                            if (song != null) {
-                                loadSongDetails(song.id)
-                            } else {
-                                _lyrics.value = null
-                                _isCurrentSongFavorite.value = false
-                            }
-                        }
-                    }
-                }
+            if (boundAudio != null) {
+                attachToAudioService(boundAudio)
             }
+            isBound = true
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -100,7 +77,57 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
     }
 
     init {
+        appServices.audioService()?.let { attachToAudioService(it) }
         bindService()
+    }
+
+    private fun attachToAudioService(svc: AudioService) {
+        audioService = svc
+        playbackStateJob?.cancel()
+        playbackStateJob = viewModelScope.launch {
+            svc.playbackState.collectLatest { snapshot ->
+                _playbackState.value = snapshot
+                val songId = snapshot.songId
+                if (_currentSong.value == null && songId != null) {
+                    val candidate = _queueState.value.currentSong
+                    if (candidate != null && candidate.id == songId) {
+                        _currentSong.value = candidate
+                        loadSongDetails(candidate.id)
+                    } else {
+                        viewModelScope.launch {
+                            val entity = libraryService.getSong(songId)
+                            if (entity != null && _currentSong.value == null) {
+                                _currentSong.value = entity.toQueueSong()
+                                loadSongDetails(entity.id)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        queueStateJob?.cancel()
+        queueStateJob = viewModelScope.launch {
+            svc.queueState.collectLatest { snapshot ->
+                _queueState.value = snapshot
+                val song = snapshot.currentSong
+                if (song != null) {
+                    if (song.id != _currentSong.value?.id) {
+                        _currentSong.value = song
+                        loadSongDetails(song.id)
+                    }
+                } else if (_currentSong.value == null && _playbackState.value.songId != null) {
+                    val sId = _playbackState.value.songId ?: return@collectLatest
+                    viewModelScope.launch {
+                        val entity = libraryService.getSong(sId)
+                        if (entity != null && _currentSong.value == null) {
+                            _currentSong.value = entity.toQueueSong()
+                            loadSongDetails(entity.id)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private fun bindService() {

@@ -10,6 +10,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import github.realtvop.aonsoku.plugins.debug.DebugActivity
 import github.realtvop.aonsoku.ui.AonsokuApp
 
@@ -19,6 +20,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var debugShakeDetector: DebugShakeDetector? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         if (!resources.getBoolean(R.bool.is_tablet)) {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         }

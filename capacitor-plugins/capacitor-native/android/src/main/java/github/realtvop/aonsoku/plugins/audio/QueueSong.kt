@@ -1,6 +1,29 @@
 package github.realtvop.aonsoku.plugins.audio
 
+import android.net.Uri
+import github.realtvop.aonsoku.plugins.data.db.entity.SongEntity
 import org.json.JSONObject
+
+fun SongEntity.toQueueSong(): QueueSong {
+    val coverArtId = coverArt ?: albumId
+    return QueueSong(
+        id = id,
+        title = title,
+        artist = artist ?: "",
+        artistId = artistId,
+        album = album ?: "",
+        albumId = albumId,
+        duration = duration.toDouble(),
+        coverArtId = coverArtId,
+        streamUrl = Uri.Builder()
+            .scheme("aonsoku-media")
+            .authority("stream")
+            .appendQueryParameter("id", id)
+            .build()
+            .toString(),
+        cachedFileUri = null,
+    )
+}
 
 data class QueueSong(
     val id: String,

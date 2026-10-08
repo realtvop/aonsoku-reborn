@@ -2,7 +2,9 @@ package github.realtvop.aonsoku.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
@@ -105,64 +107,64 @@ fun AonsokuApp(
             Box(modifier = Modifier.fillMaxSize()) {
                 Scaffold(
                     bottomBar = {
-                        if (showBottomNav) {
-                            NavigationBar {
-                                NavigationBarItem(
-                                    icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
-                                    label = { Text("Home") },
-                                    selected = currentRoute == Screen.Home.route,
-                                    onClick = {
-                                        navController.navigate(Screen.Home.route) {
-                                            popUpTo(navController.graph.findStartDestination().id) {
-                                                saveState = true
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            MiniPlayerBar(viewModel = playbackViewModel)
+                            if (showBottomNav) {
+                                NavigationBar {
+                                    NavigationBarItem(
+                                        icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
+                                        label = { Text("Home") },
+                                        selected = currentRoute == Screen.Home.route,
+                                        onClick = {
+                                            navController.navigate(Screen.Home.route) {
+                                                popUpTo(navController.graph.findStartDestination().id) {
+                                                    saveState = true
+                                                }
+                                                launchSingleTop = true
+                                                restoreState = true
                                             }
-                                            launchSingleTop = true
-                                            restoreState = true
-                                        }
-                                    },
-                                )
-                                NavigationBarItem(
-                                    icon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = "Library") },
-                                    label = { Text("Library") },
-                                    selected = currentRoute == Screen.Library.route,
-                                    onClick = {
-                                        navController.navigate(Screen.Library.route) {
-                                            popUpTo(navController.graph.findStartDestination().id) {
-                                                saveState = true
+                                        },
+                                    )
+                                    NavigationBarItem(
+                                        icon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = "Library") },
+                                        label = { Text("Library") },
+                                        selected = currentRoute == Screen.Library.route,
+                                        onClick = {
+                                            navController.navigate(Screen.Library.route) {
+                                                popUpTo(navController.graph.findStartDestination().id) {
+                                                    saveState = true
+                                                }
+                                                launchSingleTop = true
+                                                restoreState = true
                                             }
-                                            launchSingleTop = true
-                                            restoreState = true
-                                        }
-                                    },
-                                )
-                                NavigationBarItem(
-                                    icon = { Icon(Icons.Default.Search, contentDescription = "Search") },
-                                    label = { Text("Search") },
-                                    selected = currentRoute == Screen.Search.route,
-                                    onClick = {
-                                        navController.navigate(Screen.Search.route) {
-                                            popUpTo(navController.graph.findStartDestination().id) {
-                                                saveState = true
+                                        },
+                                    )
+                                    NavigationBarItem(
+                                        icon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                                        label = { Text("Search") },
+                                        selected = currentRoute == Screen.Search.route,
+                                        onClick = {
+                                            navController.navigate(Screen.Search.route) {
+                                                popUpTo(navController.graph.findStartDestination().id) {
+                                                    saveState = true
+                                                }
+                                                launchSingleTop = true
+                                                restoreState = true
                                             }
-                                            launchSingleTop = true
-                                            restoreState = true
-                                        }
-                                    },
-                                )
+                                        },
+                                    )
+                                }
                             }
                         }
                     },
                 ) { innerPadding ->
-                    Box(
+                    NavHost(
+                        navController = navController,
+                        startDestination = Screen.Home.route,
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(innerPadding),
                     ) {
-                        NavHost(
-                            navController = navController,
-                            startDestination = Screen.Home.route,
-                            modifier = Modifier.fillMaxSize(),
-                        ) {
                             composable(Screen.Home.route) {
                                 HomeScreen(
                                     homeViewModel = homeViewModel,
@@ -313,12 +315,6 @@ fun AonsokuApp(
                             }
                         }
 
-                        // Mini Player placed above bottom navigation
-                        MiniPlayerBar(
-                            viewModel = playbackViewModel,
-                            modifier = Modifier.align(Alignment.BottomCenter),
-                        )
-                    }
                 }
 
                 // Fullscreen Player Overlay

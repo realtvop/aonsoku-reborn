@@ -1115,26 +1115,6 @@ class PlaybackService : MediaSessionService(), AudioService {
         }
     }
 
-    private fun SongEntity.toQueueSong(): QueueSong {
-        val coverArtId = coverArt ?: albumId
-        return QueueSong(
-            id = id,
-            title = title,
-            artist = artist ?: "",
-            artistId = artistId,
-            album = album ?: "",
-            albumId = albumId,
-            duration = duration.toDouble(),
-            coverArtId = coverArtId,
-            streamUrl = Uri.Builder()
-                .scheme("aonsoku-media")
-                .authority("stream")
-                .appendQueryParameter("id", id)
-                .build()
-                .toString(),
-            cachedFileUri = null,
-        )
-    }
 
     @OptIn(UnstableApi::class)
     override fun onCreate() {
@@ -2274,6 +2254,7 @@ class PlaybackService : MediaSessionService(), AudioService {
         if (song != null) {
             handleScrobbleSongStarted(song.id, song.duration)
         }
+        emitQueueContentsChanged("queue-edit")
     }
 
     internal fun restoreHandoffState(state: PlaybackPersistState, autoplay: Boolean) {
