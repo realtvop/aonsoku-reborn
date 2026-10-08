@@ -15,6 +15,7 @@ import github.realtvop.aonsoku.plugins.preferences.PreferencesPlugin;
 import github.realtvop.aonsoku.plugins.debug.DebugActivity;
 import android.view.View;
 import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 public class MainActivity extends BridgeActivity implements SensorEventListener {
@@ -34,6 +35,7 @@ public class MainActivity extends BridgeActivity implements SensorEventListener 
         registerPlugin(DataPlugin.class);
         registerPlugin(PreferencesPlugin.class);
 
+        WindowCompat.enableEdgeToEdge(getWindow());
         super.onCreate(savedInstanceState);
 
         int startupBackground = androidx.core.content.ContextCompat.getColor(
