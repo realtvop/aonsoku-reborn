@@ -1,9 +1,3 @@
-<a id="readme-top"></a>
-
-协调服务支持 [完全在线部署与自动更新](coordination-worker/ONLINE-DEPLOY.md)，
-无需 clone 或本地终端。
-
-<br />
 <div align="center">
   <a href="https://github.com/realtvop/aonsoku-reborn">
     <img src="./build/icon.png" alt="Aonsoku" width="80" height="80">
