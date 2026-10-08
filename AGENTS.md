@@ -58,7 +58,9 @@ pnpm coordination:deploy # Guided login/configuration/key creation/deployment; r
 pnpm --filter @aonsoku/coordination-worker test:deploy # Deployment wizard regression tests
 pnpm --filter @aonsoku/coordination-worker deploy:raw # Direct Wrangler deployment for operators/CI
 
-# Android native plugin
+# Android native app & plugin
+cd android && ./gradlew assembleDebug
+cd android && ./gradlew :app:compileDebugKotlin
 cd android && ./gradlew :aonsoku-capacitor-native:compileDebugKotlin
 cd android && ./gradlew :aonsoku-capacitor-native:testDebugUnitTest
 
@@ -112,6 +114,17 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   is not part of the shared `src/` SPA, so web/Capacitor builds never bundle
   it. `tailwind.config.js` scans `electron/renderer/**` for its utility
   classes, and `tsconfig.electron-renderer.json` type-checks it.
+- **Android App**: `android/app` is a fully native Jetpack Compose application
+  built with Material 3 Expressive, targeting modern Android devices without
+  requiring the Capacitor WebView runtime. It directly consumes the application-scoped
+  native services (`AppServices`, `LibraryService`, `PlaybackService`,
+  `AuthenticationService`, `PreferencesService`) via typed Jetpack ViewModels
+  (`SessionViewModel`, `PlaybackViewModel`, `HomeViewModel`, `LibraryViewModel`,
+  `SearchViewModel`). The app shell (`AonsokuApp`) provides tab navigation (Home,
+  Library, Search), an edge-to-edge layout, a persistent docked `MiniPlayerBar`,
+  an expandable `FullscreenPlayer` with synchronized lyrics (`LyricsView`) and
+  modal queue sheet (`QueueSheet`), and full detail screens for albums, artists,
+  playlists, songs, favorites, and settings.
 - **Capacitor iOS/Android**: `capacitor.config.ts` points native hosts at
   `dist`. The custom native plugin lives in
   `capacitor-plugins/capacitor-native` and is included through pnpm workspace

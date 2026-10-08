@@ -54,19 +54,33 @@ screen lifecycle. The service itself is not released when the screen or
 Capacitor WebView goes away. Each caller must collect and cancel its own flow
 job; subscribing or cancelling one client does not replace other clients.
 
+## Jetpack Compose architecture
+
+The Android application in `android/app` provides a pure Jetpack Compose UI with
+Material 3 Expressive theming. It replaces the Capacitor WebView interface for
+Android and interacts directly with `AppServices` through standard Android
+ViewModels (`SessionViewModel`, `PlaybackViewModel`, `HomeViewModel`,
+`LibraryViewModel`, `SearchViewModel`):
+
+- **Playback & Queue**: `PlaybackViewModel` binds to `PlaybackService.LocalBinder`
+  and observes `audioService.playbackState` and `audioService.queueState`. It exposes
+  flows for currently playing song details, synchronized lyrics (`LrcParser`),
+  playback progress, repeat/shuffle controls, and queue modifications.
+- **UI Shell**: `AonsokuApp` orchestrates Compose `NavHost` routing, edge-to-edge
+  insets, docked `MiniPlayerBar`, expandable `FullscreenPlayer`, and `QueueSheet`
+  bottom sheets.
+- **Library & Data**: `LibraryViewModel`, `HomeViewModel`, and `SearchViewModel`
+  query `LibraryService` Room entities and paging helpers, delivering instant
+  offline-first responses and reactive updates.
+
 ## Capacitor adapters
 
 `DataPlugin`, `AudioPlugin`, `BridgePlugin`, `PreferencesPlugin`, and
-`AonsokuNativeCoordinationPlugin` remain compatibility adapters. They parse
-Capacitor arguments, preserve existing JS method names/fields/units, convert
-typed results to JS objects, and forward events with `notifyListeners`.
+`AonsokuNativeCoordinationPlugin` remain compatibility adapters for the legacy
+Capacitor WebView. They parse Capacitor arguments, preserve existing JS method
+names/fields/units, convert typed results to JS objects, and forward events with
+`notifyListeners`.
+
 Coordination protocol JSON is parsed at the coordination adapter boundary and
 is passed to the typed audio port for remote commands, projection, snapshots,
 and handoff fencing.
-
-The following behavior remains in the TypeScript/WebView layer: route and
-screen state, Zustand stores, React Query orchestration, Web Audio playback
-when native playback is unavailable, queue replacement confirmation, Web
-coordination observation, and UI-specific media-session projection. The
-native services provide the long-lived Android state and primitives; they do
-not replace those shared cross-runtime UI policies.
