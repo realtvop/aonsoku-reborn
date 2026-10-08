@@ -1,4 +1,6 @@
 apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android'
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
 
 def releaseSigning = [
     storeFile: project.findProperty('aonsokuReleaseStoreFile'),
@@ -45,6 +47,16 @@ android {
             }
         }
     }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+    kotlinOptions {
+        jvmTarget = "21"
+    }
+    buildFeatures {
+        compose true
+    }
 }
 
 def verifyReleaseSigning = tasks.register('verifyReleaseSigning') {
@@ -80,6 +92,33 @@ dependencies {
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation "com.google.android.material:material:1.12.0"
     implementation project(':capacitor-android')
+    implementation project(':aonsoku-capacitor-native')
+
+    // Compose BOM
+    def composeBom = platform('androidx.compose:compose-bom:2024.10.00')
+    implementation composeBom
+    androidTestImplementation composeBom
+
+    // Compose UI & Material 3
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-graphics'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material:material-icons-extended'
+
+    // Activity, Navigation & Lifecycle
+    implementation 'androidx.activity:activity-compose:1.10.0'
+    implementation 'androidx.navigation:navigation-compose:2.8.5'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7'
+    implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.8.7'
+
+    // Coil for Compose
+    implementation 'io.coil-kt:coil-compose:2.7.0'
+
+    // Kotlin Coroutines
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
+
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
