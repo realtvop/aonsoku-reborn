@@ -698,17 +698,20 @@ expand it to empty before the linker records it.
   paths. Build deps: `build-essential git meson ninja-build pkg-config
   patchelf libavcodec-dev libavformat-dev libavutil-dev libavfilter-dev
   libswresample-dev libswscale-dev libass-dev libpulse-dev libasound2-dev
-  libdbus-1-dev squashfs-tools`. All three Linux makers (`.deb`, `.rpm`, AppImage) bundle
+  libdbus-1-dev dbus-daemon squashfs-tools`. All three Linux makers (`.deb`, `.rpm`, AppImage) bundle
   the audio-only libmpv runtime closure and declare **no** libmpv-related
   package dependency. They do declare a **glibc baseline dependency**
   (`depends: ["libc6 (>= 2.35)"]` / `requires: ["glibc >= 2.35"]` in
   `forge.config.ts`) because CI builds on Ubuntu 22.04 (glibc 2.35). The
   resulting packages require glibc >= 2.35 at runtime.
   Linux CI uses strict `--require-runtime-libs` verification, same as macOS
-  and Windows. The `build:linux`, `make`, and `publish` npm scripts also run
-  `scripts/native-audio/run-packaged-smoke.mjs --only linux`, so Linux
-  local/release paths cover `native-audio:smoke:packaged` (it is a no-op on
-  macOS/Windows). On a Linux host targeting Linux,
+  and Windows. Linux installs `dbus-daemon` and runs the packaged smoke check
+  inside an isolated `dbus-run-session` because GitHub-hosted Linux runners
+  are headless. The addon immediately skips optional MPRIS registration when
+  `DBUS_SESSION_BUS_ADDRESS` is absent, so missing desktop integration cannot
+  block playback. The `build:linux`, `make`, and `publish` npm scripts also run
+  `scripts/native-audio/run-packaged-smoke.mjs --only linux`, which starts the
+  same isolated session bus (it is a no-op on macOS/Windows). On a Linux host,
   `verify-libmpv-package.mjs` additionally invokes
   `scripts/native-audio/linux-runtime-linkage.mjs`, which runs `ldd` and
   `readelf -d` on the addon and every bundled `.so`: no dependency may be

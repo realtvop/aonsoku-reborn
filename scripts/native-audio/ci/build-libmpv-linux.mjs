@@ -64,6 +64,13 @@ export const RELEASE_MPV_VERSIONS = {
 export const DEFAULT_MPV_VERSION = "v0.35.0";
 export const MPV_GIT_URL = "https://github.com/mpv-player/mpv.git";
 
+export const COMMAND_TIMEOUTS_MS = {
+  git: 5 * 60 * 1000,
+  meson: 10 * 60 * 1000,
+  ninja: 20 * 60 * 1000,
+};
+export const DEFAULT_COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
+
 const isMain =
   process.argv[1] &&
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
@@ -421,12 +428,33 @@ function findLibmpv(directory) {
 
 function run(command, params) {
   console.log(`native-audio: $ ${command} ${params.join(" ")}`);
-  const result = spawnSync(command, params, { stdio: "inherit" });
-  if (result.status !== 0) {
+  const timeoutMs = COMMAND_TIMEOUTS_MS[command] ?? DEFAULT_COMMAND_TIMEOUT_MS;
+  const result = spawnSync(command, params, {
+    stdio: "inherit",
+    timeout: timeoutMs,
+    killSignal: "SIGTERM",
+  });
+  if (result.error?.code === "ETIMEDOUT") {
     fail(
-      `Command failed (exit ${result.status}): ${command} ${params.join(" ")}`,
+      `Command timed out after ${formatDuration(timeoutMs)}: ${command} ${params.join(" ")}`,
     );
   }
+  if (result.error) {
+    fail(
+      `Command failed to start: ${command} ${params.join(" ")}: ${result.error.message}`,
+    );
+  }
+  if (result.status !== 0 || result.signal) {
+    fail(
+      `Command failed (exit ${result.status ?? "signal " + result.signal}): ${command} ${params.join(" ")}`,
+    );
+  }
+}
+
+function formatDuration(milliseconds) {
+  const minutes = Math.floor(milliseconds / 60_000);
+  const seconds = Math.floor((milliseconds % 60_000) / 1_000);
+  return `${minutes}m${String(seconds).padStart(2, "0")}s`;
 }
 
 export function parseArgs(argv) {

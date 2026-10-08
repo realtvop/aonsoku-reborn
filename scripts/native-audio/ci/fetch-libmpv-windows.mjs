@@ -55,6 +55,9 @@ const workDir = path.join(repoRoot, ".native-audio-win");
 const devExtract = path.join(workDir, "mpv-dev");
 const fullExtract = path.join(workDir, "mpv");
 const stageDir = path.join(workDir, "stage");
+const HTTP_TIMEOUT_MS = 30 * 1000;
+const MAX_HTTP_ATTEMPTS = 4;
+const RETRY_DELAYS_MS = [1_000, 3_000, 10_000];
 
 rmSync(workDir, { recursive: true, force: true });
 mkdirSync(workDir, { recursive: true });
@@ -250,76 +253,153 @@ async function fetchRelease(repository, releaseTag) {
   return json;
 }
 
-function fetchJson(url) {
+function fetchJson(url, attempt = 1) {
   return new Promise((resolve, reject) => {
-    https
-      .get(
-        url,
-        {
-          headers: {
-            Accept: "application/vnd.github+json",
-            "User-Agent": "aonsoku-native-audio-ci",
-            ...(process.env.GITHUB_TOKEN
-              ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` }
-              : {}),
-          },
+    const request = https.get(
+      url,
+      {
+        headers: {
+          Accept: "application/vnd.github+json",
+          "User-Agent": "aonsoku-native-audio-ci",
+          ...(process.env.GITHUB_TOKEN
+            ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` }
+            : {}),
         },
-        (response) => {
-          if (response.statusCode === 301 || response.statusCode === 302) {
-            fetchJson(response.headers.location).then(resolve, reject);
-            response.resume();
+      },
+      (response) => {
+        if (response.statusCode === 301 || response.statusCode === 302) {
+          fetchJson(response.headers.location, attempt).then(resolve, reject);
+          response.resume();
+          return;
+        }
+        if (response.statusCode !== 200) {
+          const retryable =
+            response.statusCode === 403 ||
+            response.statusCode === 429 ||
+            response.statusCode >= 500;
+          response.resume();
+          if (retryable && attempt < MAX_HTTP_ATTEMPTS) {
+            const delay = RETRY_DELAYS_MS[attempt - 1] ?? 10_000;
+            console.warn(
+              `native-audio: GitHub API ${response.statusCode}; retrying in ${delay}ms (${attempt}/${MAX_HTTP_ATTEMPTS})`,
+            );
+            setTimeout(
+              () => fetchJson(url, attempt + 1).then(resolve, reject),
+              delay,
+            );
             return;
           }
-          if (response.statusCode !== 200) {
-            reject(new Error(`GET ${url} -> ${response.statusCode}`));
-            response.resume();
-            return;
+          reject(new Error(`GET ${url} -> ${response.statusCode}`));
+          return;
+        }
+        let body = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => {
+          body += chunk;
+        });
+        response.on("end", () => {
+          try {
+            resolve(JSON.parse(body));
+          } catch (error) {
+            reject(error);
           }
-          let body = "";
-          response.setEncoding("utf8");
-          response.on("data", (chunk) => {
-            body += chunk;
-          });
-          response.on("end", () => {
-            try {
-              resolve(JSON.parse(body));
-            } catch (error) {
-              reject(error);
-            }
-          });
-        },
-      )
-      .on("error", reject);
+        });
+      },
+    );
+    request.setTimeout(HTTP_TIMEOUT_MS, () => {
+      request.destroy(
+        new Error(`GET ${url} timed out after ${HTTP_TIMEOUT_MS}ms`),
+      );
+    });
+    request.on("error", (error) => {
+      if (attempt < MAX_HTTP_ATTEMPTS) {
+        const delay = RETRY_DELAYS_MS[attempt - 1] ?? 10_000;
+        console.warn(
+          `native-audio: GitHub API request failed (${error.message}); retrying in ${delay}ms (${attempt}/${MAX_HTTP_ATTEMPTS})`,
+        );
+        setTimeout(
+          () => fetchJson(url, attempt + 1).then(resolve, reject),
+          delay,
+        );
+        return;
+      }
+      reject(error);
+    });
   });
 }
 
-function download(url, dest) {
+function download(url, dest, attempt = 1) {
   return new Promise((resolve, reject) => {
     const getter = (current) => {
-      https
-        .get(
-          current,
-          {
-            headers: { "User-Agent": "aonsoku-native-audio-ci" },
-          },
-          (response) => {
-            if (response.statusCode === 301 || response.statusCode === 302) {
-              response.resume();
-              getter(response.headers.location);
+      const request = https.get(
+        current,
+        {
+          headers: { "User-Agent": "aonsoku-native-audio-ci" },
+        },
+        (response) => {
+          if (response.statusCode === 301 || response.statusCode === 302) {
+            response.resume();
+            getter(response.headers.location);
+            return;
+          }
+          if (response.statusCode !== 200) {
+            const retryable =
+              response.statusCode === 403 ||
+              response.statusCode === 429 ||
+              response.statusCode >= 500;
+            response.resume();
+            if (retryable && attempt < MAX_HTTP_ATTEMPTS) {
+              const delay = RETRY_DELAYS_MS[attempt - 1] ?? 10_000;
+              console.warn(
+                `native-audio: download ${response.statusCode}; retrying in ${delay}ms (${attempt}/${MAX_HTTP_ATTEMPTS})`,
+              );
+              setTimeout(
+                () => download(url, dest, attempt + 1).then(resolve, reject),
+                delay,
+              );
               return;
             }
-            if (response.statusCode !== 200) {
-              reject(new Error(`GET ${current} -> ${response.statusCode}`));
-              response.resume();
+            reject(new Error(`GET ${current} -> ${response.statusCode}`));
+            return;
+          }
+          const stream = createWriteStream(dest);
+          response.pipe(stream);
+          stream.on("finish", resolve);
+          stream.on("error", (error) => {
+            if (attempt < MAX_HTTP_ATTEMPTS) {
+              const delay = RETRY_DELAYS_MS[attempt - 1] ?? 10_000;
+              console.warn(
+                `native-audio: download failed (${error.message}); retrying in ${delay}ms (${attempt}/${MAX_HTTP_ATTEMPTS})`,
+              );
+              setTimeout(
+                () => download(url, dest, attempt + 1).then(resolve, reject),
+                delay,
+              );
               return;
             }
-            const stream = createWriteStream(dest);
-            response.pipe(stream);
-            stream.on("finish", resolve);
-            stream.on("error", reject);
-          },
-        )
-        .on("error", reject);
+            reject(error);
+          });
+        },
+      );
+      request.setTimeout(HTTP_TIMEOUT_MS, () => {
+        request.destroy(
+          new Error(`GET ${current} timed out after ${HTTP_TIMEOUT_MS}ms`),
+        );
+      });
+      request.on("error", (error) => {
+        if (attempt < MAX_HTTP_ATTEMPTS) {
+          const delay = RETRY_DELAYS_MS[attempt - 1] ?? 10_000;
+          console.warn(
+            `native-audio: download request failed (${error.message}); retrying in ${delay}ms (${attempt}/${MAX_HTTP_ATTEMPTS})`,
+          );
+          setTimeout(
+            () => download(url, dest, attempt + 1).then(resolve, reject),
+            delay,
+          );
+          return;
+        }
+        reject(error);
+      });
     };
     getter(url);
   });
@@ -329,7 +409,12 @@ async function extract(archive, dest) {
   const sevenZip = findSevenZip();
   const result = spawnSync(sevenZip, ["x", archive, `-o${dest}`, "-y", "-bd"], {
     stdio: "inherit",
+    timeout: 5 * 60 * 1000,
+    killSignal: "SIGTERM",
   });
+  if (result.error?.code === "ETIMEDOUT") {
+    fail(`7z extraction timed out after 5m for ${archive}.`);
+  }
   if (result.status !== 0) {
     fail(`7z extraction failed for ${archive}.`);
   }

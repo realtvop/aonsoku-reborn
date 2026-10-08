@@ -35,12 +35,18 @@ const smokeScript = path.resolve(
   "../../electron/main/native/audio/libmpv/smoke-check.mjs",
 );
 
-const result = spawnSync(process.execPath, [smokeScript, "--packaged-like"], {
+const command =
+  hostPlatform === "linux" ? "dbus-run-session" : process.execPath;
+const commandArgs =
+  hostPlatform === "linux"
+    ? ["--", process.execPath, smokeScript, "--packaged-like"]
+    : [smokeScript, "--packaged-like"];
+const result = spawnSync(command, commandArgs, {
   stdio: "inherit",
 });
 
 if (result.error) {
-  console.error("native-audio: failed to spawn packaged smoke check");
+  console.error(`native-audio: failed to spawn ${command}`);
   console.error(result.error);
   process.exit(1);
 }

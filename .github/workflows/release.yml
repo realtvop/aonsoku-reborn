@@ -35,6 +35,9 @@ jobs:
             target: "win32"
             arch: "arm64"
     runs-on: ${{ matrix.platform }}
+    timeout-minutes: 60
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

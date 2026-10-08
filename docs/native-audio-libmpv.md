@@ -150,7 +150,7 @@ sudo apt install -y build-essential git meson ninja-build pkg-config patchelf \
   libavcodec-dev libavformat-dev libavutil-dev \
   libavfilter-dev libswresample-dev libswscale-dev \
   libass-dev libpulse-dev libasound2-dev \
-  libdbus-1-dev squashfs-tools
+  libdbus-1-dev dbus-daemon squashfs-tools
 
 # The default --mpv-version is a pinned release: the script verifies the
 # cloned mpv HEAD commit against the pinned SHA in RELEASE_MPV_VERSIONS and
@@ -168,8 +168,13 @@ LIBMPV=$(ls .native-audio-build/install/lib/libmpv.so.* | grep -E 'libmpv\.so\.[
 node scripts/native-audio/ci/collect-runtime-linux.mjs \
   --root "$LIBMPV" --staging ./.native-audio-staging
 pnpm native-audio:prepare -- --runtime-dir ./.native-audio-staging --require-runtime-libs
-pnpm native-audio:smoke:packaged
+dbus-run-session -- pnpm native-audio:smoke:packaged
 ```
+
+Linux CI and the local packaged-smoke wrapper run this check inside an
+isolated session bus. Without `DBUS_SESSION_BUS_ADDRESS`, the addon skips
+optional MPRIS registration immediately instead of allowing libdbus to
+autolaunch and block on a headless machine.
 
 Windows builds need `mpv.lib`, libmpv headers, and matching runtime DLLs:
 

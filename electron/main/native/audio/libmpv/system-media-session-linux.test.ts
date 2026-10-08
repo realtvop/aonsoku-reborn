@@ -21,6 +21,13 @@ describe("Linux MPRIS implementation", () => {
     expect(source).toContain("DBUS_REQUEST_NAME_REPLY_ALREADY_OWNER");
   });
 
+  it("does not autolaunch a session bus on headless systems", () => {
+    expect(source).toContain('std::getenv("DBUS_SESSION_BUS_ADDRESS")');
+    expect(source).toContain(
+      "if (session_bus_address == nullptr || session_bus_address[0] == '\\0')",
+    );
+  });
+
   it("validates SetPosition and delays Seeked until the state update", () => {
     expect(source).toContain("track_id == g_state.track_id");
     expect(source).toContain("target <= g_state.metadata.duration");

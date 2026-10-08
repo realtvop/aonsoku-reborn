@@ -137,6 +137,11 @@ jobs:
             target: "win"
             arch: "arm64"
     runs-on: ${{ matrix.platform }}
+    permissions:
+      contents: read
+    timeout-minutes: 45
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout main branch
         uses: actions/checkout@v4

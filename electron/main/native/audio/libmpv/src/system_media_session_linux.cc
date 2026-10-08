@@ -5,6 +5,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -834,6 +835,15 @@ bool EnsureConnection() {
   if (g_state.initialized && g_state.connection != nullptr &&
       dbus_connection_get_is_connected(g_state.connection))
     return true;
+
+  // dbus_bus_get() may try to autolaunch a session bus through X11 when the
+  // process has no session-bus address. That is a blocking path on headless
+  // systems (including CI), while MPRIS is optional for playback. Do not
+  // turn an unavailable desktop integration into a startup/playback hang.
+  const char* session_bus_address = std::getenv("DBUS_SESSION_BUS_ADDRESS");
+  if (session_bus_address == nullptr || session_bus_address[0] == '\0')
+    return false;
+
   if (g_state.initialized) {
     // The dispatch thread invokes message handlers that also take this mutex.
     // Never join it here until it has reported that dispatch returned; the

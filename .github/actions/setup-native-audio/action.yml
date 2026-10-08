@@ -45,7 +45,7 @@ runs:
           libavcodec-dev libavformat-dev libavutil-dev \
           libavfilter-dev libswresample-dev libswscale-dev \
           libass-dev libpulse-dev libasound2-dev \
-          libdbus-1-dev squashfs-tools
+          libdbus-1-dev dbus-daemon squashfs-tools
 
     - name: Record Linux build environment glibc baseline
       if: runner.os == 'Linux'
@@ -157,4 +157,12 @@ runs:
 
     - name: Smoke check packaged layout
       shell: bash
-      run: pnpm native-audio:smoke:packaged
+      run: |
+        if [ "$RUNNER_OS" = "Linux" ]; then
+          # GitHub-hosted Linux runners are headless and do not provide a
+          # session bus. Run the MPRIS smoke check inside an isolated bus so
+          # libdbus does not try to autolaunch one and block for minutes.
+          dbus-run-session -- pnpm native-audio:smoke:packaged
+        else
+          pnpm native-audio:smoke:packaged
+        fi
