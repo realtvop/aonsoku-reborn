@@ -895,7 +895,12 @@ private fun SearchScreen(
             if (state.searchSongs.isNotEmpty()) {
                 item { SectionTitle("Songs") }
                 items(state.searchSongs, key = { it.id }) { song ->
-                    SongRow(song, onClick = { onSong(song.id) }, onFavorite = { viewModel.toggleFavorite(song.id) })
+                    SongRow(
+                        song,
+                        onClick = { onSong(song.id) },
+                        onFavorite = { viewModel.toggleFavorite(song.id) },
+                        onQueue = { viewModel.addSongToQueue(song.id) },
+                    )
                 }
             }
             if (query.isNotBlank() && state.searchArtists.isEmpty() && state.searchAlbums.isEmpty() && state.searchSongs.isEmpty()) {
@@ -961,7 +966,12 @@ private fun SongCollectionScreen(
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         itemsIndexed(songs, key = { _, song -> song.id }) { _, song ->
-            SongRow(song, onClick = { viewModel.playSong(song.id) }, onFavorite = { viewModel.toggleFavorite(song.id) })
+            SongRow(
+                song,
+                onClick = { viewModel.playSong(song.id) },
+                onFavorite = { viewModel.toggleFavorite(song.id) },
+                onQueue = { viewModel.addSongToQueue(song.id) },
+            )
         }
         if (songs.isEmpty()) {
             item { EmptyState(Icons.Outlined.MusicNote, "No $title yet", "Sync your server library to populate this list.") }
@@ -1040,7 +1050,13 @@ private fun AlbumDetailScreen(
             }
         }
         itemsIndexed(songs, key = { _, song -> song.id }) { index, song ->
-            SongRow(song, number = index + 1, onClick = { viewModel.playSong(song.id) }, onFavorite = { viewModel.toggleFavorite(song.id) })
+            SongRow(
+                song,
+                number = index + 1,
+                onClick = { viewModel.playSong(song.id) },
+                onFavorite = { viewModel.toggleFavorite(song.id) },
+                onQueue = { viewModel.addSongToQueue(song.id) },
+            )
         }
     }
 }
@@ -1162,6 +1178,7 @@ private fun SongRow(
     song: SongEntity,
     onClick: () -> Unit,
     onFavorite: () -> Unit,
+    onQueue: (() -> Unit)? = null,
     number: Int? = null,
 ) {
     Row(
@@ -1186,6 +1203,11 @@ private fun SongRow(
             )
         }
         Text(formatDuration(song.duration), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        onQueue?.let {
+            IconButton(onClick = it) {
+                Icon(Icons.AutoMirrored.Outlined.QueueMusic, "Add to queue")
+            }
+        }
         IconButton(onClick = onFavorite) {
             Icon(
                 if (song.starredAt != null) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,

@@ -315,6 +315,10 @@ class AonsokuViewModel(application: Application) : AndroidViewModel(application)
         executeAudio(AudioCommand.PlayAtIndex(index, null))
     }
 
+    fun addSongToQueue(songId: String, position: String = "last") {
+        executeAudio(AudioCommand.AddSongsById(listOf(songId), position))
+    }
+
     fun removeFromQueue(songId: String) {
         executeAudio(AudioCommand.RemoveSongsById(listOf(songId)))
     }
