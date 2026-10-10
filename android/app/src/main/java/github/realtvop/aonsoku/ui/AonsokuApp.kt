@@ -100,6 +100,7 @@ import github.realtvop.aonsoku.plugins.audio.AudioQueueSnapshot
 import github.realtvop.aonsoku.plugins.audio.QueueSong
 import github.realtvop.aonsoku.plugins.data.db.entity.AlbumEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.ArtistEntity
+import github.realtvop.aonsoku.plugins.data.db.entity.LyricsEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.PlaylistEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.SongEntity
 
@@ -389,6 +390,7 @@ private fun NativeShell(state: NativeAppState, viewModel: AonsokuViewModel) {
             PlayerSheet(
                 queue = state.queue,
                 playback = state.playback,
+                lyrics = state.lyrics,
                 viewModel = viewModel,
                 onDismiss = { playerExpanded = false },
             )
@@ -659,6 +661,7 @@ private fun MiniPlayer(
 private fun PlayerSheet(
     queue: AudioQueueSnapshot,
     playback: AudioPlaybackSnapshot,
+    lyrics: LyricsEntity?,
     viewModel: AonsokuViewModel,
     onDismiss: () -> Unit,
 ) {
@@ -668,6 +671,7 @@ private fun PlayerSheet(
         mutableStateOf(playback.currentTimeSeconds.toFloat())
     }
     var isSeeking by remember { mutableStateOf(false) }
+    var lyricsVisible by remember(currentSong.id) { mutableStateOf(false) }
     LaunchedEffect(playback.songId, playback.currentTimeSeconds) {
         if (!isSeeking) seekValue = playback.currentTimeSeconds.toFloat()
     }
@@ -732,6 +736,26 @@ private fun PlayerSheet(
                     Spacer(Modifier.width(4.dp))
                     Text("Repeat ${queue.repeatMode}")
                 }
+                TextButton(onClick = {
+                    val shouldShow = !lyricsVisible
+                    lyricsVisible = shouldShow
+                    if (shouldShow) viewModel.loadLyrics(currentSong.id)
+                }) {
+                    Text("Lyrics")
+                }
+            }
+            if (lyricsVisible) {
+                Card(
+                    modifier = Modifier.fillMaxWidth().height(180.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                ) {
+                    Text(
+                        lyrics?.content ?: "No cached lyrics for this song.",
+                        modifier = Modifier.padding(16.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),

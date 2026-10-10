@@ -21,6 +21,7 @@ import github.realtvop.aonsoku.plugins.data.db.entity.AlbumEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.ArtistEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.PlaylistEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.SongEntity
+import github.realtvop.aonsoku.plugins.data.db.entity.LyricsEntity
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -56,6 +57,7 @@ data class NativeAppState(
     val selectedAlbumSongs: List<SongEntity> = emptyList(),
     val selectedArtist: ArtistEntity? = null,
     val selectedArtistAlbums: List<AlbumEntity> = emptyList(),
+    val lyrics: LyricsEntity? = null,
     val playback: AudioPlaybackSnapshot = AudioPlaybackSnapshot(),
     val queue: AudioQueueSnapshot = AudioQueueSnapshot(),
 )
@@ -317,6 +319,12 @@ class AonsokuViewModel(application: Application) : AndroidViewModel(application)
 
     fun addSongToQueue(songId: String, position: String = "last") {
         executeAudio(AudioCommand.AddSongsById(listOf(songId), position))
+    }
+
+    fun loadLyrics(songId: String) {
+        viewModelScope.launch {
+            _state.update { it.copy(lyrics = library.getLyrics(songId)) }
+        }
     }
 
     fun removeFromQueue(songId: String) {
