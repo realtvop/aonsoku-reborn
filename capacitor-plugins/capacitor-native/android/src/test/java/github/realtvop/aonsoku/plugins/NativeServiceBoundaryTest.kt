@@ -2,6 +2,7 @@ package github.realtvop.aonsoku.plugins
 
 import github.realtvop.aonsoku.plugins.audio.AudioCommand
 import github.realtvop.aonsoku.plugins.audio.AudioCommandResult
+import github.realtvop.aonsoku.plugins.audio.AudioDownloadSnapshot
 import github.realtvop.aonsoku.plugins.audio.AudioEvent
 import github.realtvop.aonsoku.plugins.audio.AudioPlaybackSnapshot
 import github.realtvop.aonsoku.plugins.audio.AudioQueueSnapshot
@@ -104,11 +105,13 @@ class NativeServiceBoundaryTest {
     private class FakeAudioService : AudioService {
         private val playback = MutableStateFlow(AudioPlaybackSnapshot())
         private val queue = MutableStateFlow(AudioQueueSnapshot())
+        private val downloadState = MutableStateFlow<Map<String, AudioDownloadSnapshot>>(emptyMap())
         private val eventFlow = MutableSharedFlow<AudioEvent>(extraBufferCapacity = 16)
         val commands = mutableListOf<AudioCommand>()
 
         override val playbackState = playback
         override val queueState = queue
+        override val downloads = downloadState
         override val events = eventFlow
 
         fun emit(event: AudioEvent) {
@@ -139,6 +142,9 @@ class NativeServiceBoundaryTest {
             commands += command
             return AudioCommandResult.Failure("not_ready", "fake service rejected command")
         }
+
+        override fun downloadAudio(songId: String) = Unit
+        override fun cancelDownload(songId: String) = Unit
 
         override fun requestAudioFocus() = true
         override fun getSystemVolume() = 0.5

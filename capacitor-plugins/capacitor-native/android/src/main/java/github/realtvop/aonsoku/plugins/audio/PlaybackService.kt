@@ -57,6 +57,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -119,10 +120,12 @@ class PlaybackService : MediaSessionService(), AudioService {
     private val stateHandler = Handler(Looper.getMainLooper())
     private val _playbackState = MutableStateFlow(AudioPlaybackSnapshot())
     private val _queueState = MutableStateFlow(AudioQueueSnapshot())
+    private val _downloads = MutableStateFlow<Map<String, AudioDownloadSnapshot>>(emptyMap())
     private val _events = MutableSharedFlow<AudioEvent>(extraBufferCapacity = 128)
 
     override val playbackState: StateFlow<AudioPlaybackSnapshot> = _playbackState
     override val queueState: StateFlow<AudioQueueSnapshot> = _queueState
+    override val downloads: StateFlow<Map<String, AudioDownloadSnapshot>> = _downloads
     override val events: SharedFlow<AudioEvent> = _events
 
     private val stateProgressRunnable = object : Runnable {
@@ -249,6 +252,18 @@ class PlaybackService : MediaSessionService(), AudioService {
 
     fun isBackgroundCache(songId: String): Boolean = backgroundCacheSongIds.contains(songId)
     fun removeBackgroundCache(songId: String): Boolean = backgroundCacheSongIds.remove(songId)
+
+    override fun downloadAudio(songId: String) {
+        _downloads.update { current ->
+            current + (songId to AudioDownloadSnapshot(songId, state = "downloading"))
+        }
+        downloadManager.download(songId)
+    }
+
+    override fun cancelDownload(songId: String) {
+        downloadManager.cancel(songId)
+        _downloads.update { current -> current - songId }
+    }
 
     private fun startBackgroundCache(songId: String) {
         val cacheId = AudioCacheUtils.cacheId(songId)
@@ -1561,18 +1576,42 @@ class PlaybackService : MediaSessionService(), AudioService {
 
         downloadManager.addListener(object : NativeDownloadManager.Listener {
             override fun onDownloadProgress(songId: String, loaded: Long, total: Long) {
+                _downloads.update { current ->
+                    current + (songId to AudioDownloadSnapshot(
+                        songId = songId,
+                        state = "downloading",
+                        loadedBytes = loaded,
+                        totalBytes = total,
+                    ))
+                }
                 synchronized(downloadListeners) {
                     downloadListeners.forEach { it.onDownloadProgress(songId, loaded, total) }
                 }
             }
 
             override fun onDownloadCompleted(songId: String, fileUri: String, contentType: String, sizeBytes: Long) {
+                _downloads.update { current ->
+                    current + (songId to AudioDownloadSnapshot(
+                        songId = songId,
+                        state = "completed",
+                        loadedBytes = sizeBytes,
+                        totalBytes = sizeBytes,
+                        fileUri = fileUri,
+                    ))
+                }
                 synchronized(downloadListeners) {
                     downloadListeners.forEach { it.onDownloadCompleted(songId, fileUri, contentType, sizeBytes) }
                 }
             }
 
             override fun onDownloadFailed(songId: String, errorMessage: String) {
+                _downloads.update { current ->
+                    current + (songId to AudioDownloadSnapshot(
+                        songId = songId,
+                        state = "failed",
+                        error = errorMessage,
+                    ))
+                }
                 synchronized(downloadListeners) {
                     downloadListeners.forEach { it.onDownloadFailed(songId, errorMessage) }
                 }

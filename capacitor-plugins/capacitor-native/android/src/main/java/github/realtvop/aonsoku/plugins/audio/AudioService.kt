@@ -42,6 +42,15 @@ data class AudioRemotePlaybackSnapshot(
     val expectedGeneration: Int,
 )
 
+data class AudioDownloadSnapshot(
+    val songId: String,
+    val state: String = "idle",
+    val loadedBytes: Long = 0,
+    val totalBytes: Long = 0,
+    val fileUri: String? = null,
+    val error: String? = null,
+)
+
 sealed interface AudioCommand {
     data object Play : AudioCommand
     data object Pause : AudioCommand
@@ -120,9 +129,12 @@ sealed interface AudioEvent {
 interface AudioService {
     val playbackState: StateFlow<AudioPlaybackSnapshot>
     val queueState: StateFlow<AudioQueueSnapshot>
+    val downloads: StateFlow<Map<String, AudioDownloadSnapshot>>
     val events: SharedFlow<AudioEvent>
 
     suspend fun execute(command: AudioCommand): AudioCommandResult
+    fun downloadAudio(songId: String)
+    fun cancelDownload(songId: String)
     fun requestAudioFocus(): Boolean
     fun getSystemVolume(): Double
     fun setSystemVolume(value: Double): Double

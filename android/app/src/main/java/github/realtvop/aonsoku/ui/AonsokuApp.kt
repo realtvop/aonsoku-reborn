@@ -38,6 +38,8 @@ import androidx.compose.material.icons.outlined.Album
 import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.CloudSync
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Home
@@ -97,6 +99,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import github.realtvop.aonsoku.plugins.audio.AudioPlaybackSnapshot
 import github.realtvop.aonsoku.plugins.audio.AudioQueueSnapshot
+import github.realtvop.aonsoku.plugins.audio.AudioDownloadSnapshot
 import github.realtvop.aonsoku.plugins.audio.QueueSong
 import github.realtvop.aonsoku.plugins.data.db.entity.AlbumEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.ArtistEntity
@@ -939,6 +942,9 @@ private fun SearchScreen(
                         onClick = { onSong(song.id) },
                         onFavorite = { viewModel.toggleFavorite(song.id) },
                         onQueue = { viewModel.addSongToQueue(song.id) },
+                        onDownload = { viewModel.downloadSong(song.id) },
+                        onCancelDownload = { viewModel.cancelDownload(song.id) },
+                        downloadState = viewModel.downloadState(song.id),
                     )
                 }
             }
@@ -1010,6 +1016,9 @@ private fun SongCollectionScreen(
                 onClick = { viewModel.playSong(song.id) },
                 onFavorite = { viewModel.toggleFavorite(song.id) },
                 onQueue = { viewModel.addSongToQueue(song.id) },
+                onDownload = { viewModel.downloadSong(song.id) },
+                onCancelDownload = { viewModel.cancelDownload(song.id) },
+                downloadState = viewModel.downloadState(song.id),
             )
         }
         if (songs.isEmpty()) {
@@ -1091,6 +1100,9 @@ private fun PlaylistDetailScreen(
                 onClick = { viewModel.playSong(song.id) },
                 onFavorite = { viewModel.toggleFavorite(song.id) },
                 onQueue = { viewModel.addSongToQueue(song.id) },
+                onDownload = { viewModel.downloadSong(song.id) },
+                onCancelDownload = { viewModel.cancelDownload(song.id) },
+                downloadState = viewModel.downloadState(song.id),
             )
         }
         if (songs.isEmpty()) {
@@ -1150,6 +1162,9 @@ private fun AlbumDetailScreen(
                 onClick = { viewModel.playSong(song.id) },
                 onFavorite = { viewModel.toggleFavorite(song.id) },
                 onQueue = { viewModel.addSongToQueue(song.id) },
+                onDownload = { viewModel.downloadSong(song.id) },
+                onCancelDownload = { viewModel.cancelDownload(song.id) },
+                downloadState = viewModel.downloadState(song.id),
             )
         }
     }
@@ -1290,6 +1305,9 @@ private fun SongRow(
     onClick: () -> Unit,
     onFavorite: () -> Unit,
     onQueue: (() -> Unit)? = null,
+    onDownload: (() -> Unit)? = null,
+    onCancelDownload: (() -> Unit)? = null,
+    downloadState: AudioDownloadSnapshot? = null,
     number: Int? = null,
 ) {
     Row(
@@ -1314,6 +1332,22 @@ private fun SongRow(
             )
         }
         Text(formatDuration(song.duration), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        onDownload?.let { download ->
+            when (downloadState?.state) {
+                "downloading" -> IconButton(onClick = { onCancelDownload?.invoke() }) {
+                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                }
+                "completed" -> Icon(
+                    Icons.Outlined.Check,
+                    "Downloaded",
+                    Modifier.padding(12.dp).size(24.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                else -> IconButton(onClick = download) {
+                    Icon(Icons.Outlined.Download, "Download")
+                }
+            }
+        }
         onQueue?.let {
             IconButton(onClick = it) {
                 Icon(Icons.AutoMirrored.Outlined.QueueMusic, "Add to queue")

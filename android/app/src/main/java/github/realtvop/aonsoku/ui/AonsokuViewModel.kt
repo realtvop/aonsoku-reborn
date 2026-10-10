@@ -8,6 +8,7 @@ import github.realtvop.aonsoku.plugins.audio.AudioPlaybackSnapshot
 import github.realtvop.aonsoku.plugins.audio.AudioQueueSnapshot
 import github.realtvop.aonsoku.plugins.audio.AudioService
 import github.realtvop.aonsoku.plugins.audio.AudioCommand
+import github.realtvop.aonsoku.plugins.audio.AudioDownloadSnapshot
 import github.realtvop.aonsoku.plugins.audio.AudioEvent
 import github.realtvop.aonsoku.plugins.bridge.AuthenticationResult
 import github.realtvop.aonsoku.plugins.bridge.ServerCredentials
@@ -66,6 +67,7 @@ data class NativeAppState(
     val lyrics: LyricsEntity? = null,
     val playback: AudioPlaybackSnapshot = AudioPlaybackSnapshot(),
     val queue: AudioQueueSnapshot = AudioQueueSnapshot(),
+    val downloads: Map<String, AudioDownloadSnapshot> = emptyMap(),
 )
 
 class AonsokuViewModel(application: Application) : AndroidViewModel(application) {
@@ -75,6 +77,7 @@ class AonsokuViewModel(application: Application) : AndroidViewModel(application)
     private var audioService: AudioService? = null
     private var playbackJob: Job? = null
     private var queueJob: Job? = null
+    private var downloadJob: Job? = null
     private var eventJob: Job? = null
 
     val state: StateFlow<NativeAppState> = _state.asStateFlow()
@@ -113,6 +116,7 @@ class AonsokuViewModel(application: Application) : AndroidViewModel(application)
         if (audioService === service) return
         playbackJob?.cancel()
         queueJob?.cancel()
+        downloadJob?.cancel()
         eventJob?.cancel()
         audioService = service
         playbackJob = viewModelScope.launch {
@@ -123,6 +127,11 @@ class AonsokuViewModel(application: Application) : AndroidViewModel(application)
         queueJob = viewModelScope.launch {
             service.queueState.collect { queue ->
                 _state.update { it.copy(queue = queue) }
+            }
+        }
+        downloadJob = viewModelScope.launch {
+            service.downloads.collect { downloads ->
+                _state.update { it.copy(downloads = downloads) }
             }
         }
         eventJob = viewModelScope.launch {
@@ -137,9 +146,11 @@ class AonsokuViewModel(application: Application) : AndroidViewModel(application)
     fun detachAudioService() {
         playbackJob?.cancel()
         queueJob?.cancel()
+        downloadJob?.cancel()
         eventJob?.cancel()
         playbackJob = null
         queueJob = null
+        downloadJob = null
         eventJob = null
         audioService = null
     }
@@ -353,6 +364,17 @@ class AonsokuViewModel(application: Application) : AndroidViewModel(application)
     fun addSongToQueue(songId: String, position: String = "last") {
         executeAudio(AudioCommand.AddSongsById(listOf(songId), position))
     }
+
+    fun downloadSong(songId: String) {
+        audioService?.downloadAudio(songId)
+            ?: _state.update { it.copy(actionError = "Playback service is not ready") }
+    }
+
+    fun cancelDownload(songId: String) {
+        audioService?.cancelDownload(songId)
+    }
+
+    fun downloadState(songId: String): AudioDownloadSnapshot? = state.value.downloads[songId]
 
     fun loadLyrics(songId: String) {
         viewModelScope.launch {
