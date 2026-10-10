@@ -1,6 +1,7 @@
 package github.realtvop.aonsoku.ui
 
 import android.graphics.BitmapFactory
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -26,6 +27,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -37,6 +39,7 @@ import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.Favorite
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.LibraryMusic
 import androidx.compose.material.icons.outlined.MusicNote
@@ -89,6 +92,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import github.realtvop.aonsoku.plugins.audio.AudioPlaybackSnapshot
@@ -240,6 +244,18 @@ private fun NativeShell(state: NativeAppState, viewModel: AonsokuViewModel) {
         screenName = next.name
     }
 
+    fun goBack() {
+        if (playerExpanded) {
+            playerExpanded = false
+            return
+        }
+        screenName = when (screen) {
+            NativeScreen.HOME -> NativeScreen.HOME
+            NativeScreen.LIBRARY, NativeScreen.SEARCH -> NativeScreen.HOME
+            else -> NativeScreen.LIBRARY
+        }.name
+    }
+
     fun openAlbum(album: AlbumEntity) {
         viewModel.loadAlbum(album.id)
         navigate(NativeScreen.ALBUM_DETAIL)
@@ -250,12 +266,18 @@ private fun NativeShell(state: NativeAppState, viewModel: AonsokuViewModel) {
         navigate(NativeScreen.ARTIST_DETAIL)
     }
 
+    BackHandler(enabled = playerExpanded || screen != NativeScreen.HOME) {
+        goBack()
+    }
+
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             NativeTopBar(
                 title = screenTitle(screen),
-                showBack = screen == NativeScreen.ALBUM_DETAIL || screen == NativeScreen.ARTIST_DETAIL,
-                onBack = { navigate(NativeScreen.LIBRARY) },
+                showBack = screen != NativeScreen.HOME &&
+                    screen != NativeScreen.LIBRARY &&
+                    screen != NativeScreen.SEARCH,
+                onBack = ::goBack,
                 onSettings = { navigate(NativeScreen.SETTINGS) },
             )
             Box(
@@ -828,6 +850,8 @@ private fun SearchScreen(
             trailingIcon = {
                 TextButton(onClick = { viewModel.search(query) }) { Text("Search") }
             },
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { viewModel.search(query) }),
             singleLine = true,
         )
         LazyColumn(
@@ -1142,7 +1166,12 @@ private fun SongRow(
         }
         Text(formatDuration(song.duration), color = MaterialTheme.colorScheme.onSurfaceVariant)
         IconButton(onClick = onFavorite) {
-            Icon(Icons.Outlined.Favorite, "Favorite")
+            Icon(
+                if (song.starredAt != null) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
+                "Favorite",
+                tint = if (song.starredAt != null) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
