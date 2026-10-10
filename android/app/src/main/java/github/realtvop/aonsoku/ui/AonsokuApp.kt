@@ -31,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.automirrored.outlined.PlaylistPlay
+import androidx.compose.material.icons.automirrored.outlined.QueueMusic
 import androidx.compose.material.icons.outlined.Album
 import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.ChevronRight
@@ -43,10 +44,12 @@ import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SkipNext
 import androidx.compose.material.icons.outlined.SkipPrevious
+import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material3.Button
@@ -59,19 +62,23 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
@@ -85,6 +92,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import github.realtvop.aonsoku.plugins.audio.AudioPlaybackSnapshot
+import github.realtvop.aonsoku.plugins.audio.AudioQueueSnapshot
+import github.realtvop.aonsoku.plugins.audio.QueueSong
 import github.realtvop.aonsoku.plugins.data.db.entity.AlbumEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.ArtistEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.PlaylistEntity
@@ -220,11 +229,11 @@ private fun LoginScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun NativeShell(state: NativeAppState, viewModel: AonsokuViewModel) {
     var screenName by rememberSaveable { mutableStateOf(NativeScreen.HOME.name) }
-    var selectedId by rememberSaveable { mutableStateOf("") }
+    var playerExpanded by rememberSaveable { mutableStateOf(false) }
     val screen = NativeScreen.valueOf(screenName)
 
     fun navigate(next: NativeScreen) {
@@ -232,13 +241,11 @@ private fun NativeShell(state: NativeAppState, viewModel: AonsokuViewModel) {
     }
 
     fun openAlbum(album: AlbumEntity) {
-        selectedId = album.id
         viewModel.loadAlbum(album.id)
         navigate(NativeScreen.ALBUM_DETAIL)
     }
 
     fun openArtist(artist: ArtistEntity) {
-        selectedId = artist.id
         viewModel.loadArtist(artist.id)
         navigate(NativeScreen.ARTIST_DETAIL)
     }
@@ -257,7 +264,13 @@ private fun NativeShell(state: NativeAppState, viewModel: AonsokuViewModel) {
                     .fillMaxWidth(),
             ) {
                 when (screen) {
-                    NativeScreen.HOME -> HomeScreen(state, viewModel, ::openAlbum, ::navigate)
+                    NativeScreen.HOME -> HomeScreen(
+                        state = state,
+                        viewModel = viewModel,
+                        onAlbum = ::openAlbum,
+                        onNavigate = ::navigate,
+                        onOpenPlayer = { playerExpanded = true },
+                    )
                     NativeScreen.LIBRARY -> LibraryScreen(
                         state = state,
                         onNavigate = ::navigate,
@@ -294,17 +307,15 @@ private fun NativeShell(state: NativeAppState, viewModel: AonsokuViewModel) {
                     NativeScreen.PLAYLISTS -> PlaylistCollectionScreen(
                         state.playlists,
                         onLoad = viewModel::loadPlaylists,
+                        onPlay = viewModel::playPlaylist,
                     )
                     NativeScreen.ALBUM_DETAIL -> AlbumDetailScreen(
                         album = state.selectedAlbum,
                         songs = state.selectedAlbumSongs,
                         viewModel = viewModel,
                         onArtist = { artistId ->
-                            state.selectedAlbum?.artist?.let {
-                                viewModel.loadArtist(artistId)
-                                selectedId = artistId
-                                navigate(NativeScreen.ARTIST_DETAIL)
-                            }
+                            viewModel.loadArtist(artistId)
+                            navigate(NativeScreen.ARTIST_DETAIL)
                         },
                     )
                     NativeScreen.ARTIST_DETAIL -> ArtistDetailScreen(
@@ -317,10 +328,32 @@ private fun NativeShell(state: NativeAppState, viewModel: AonsokuViewModel) {
         }
 
         if (screen != NativeScreen.SETTINGS) {
+            state.queue.currentSong?.let { currentSong ->
+                MiniPlayer(
+                    song = currentSong,
+                    playback = state.playback,
+                    viewModel = viewModel,
+                    onOpen = { playerExpanded = true },
+                    onToggle = viewModel::togglePlayback,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(bottom = 88.dp),
+                )
+            }
             FloatingNavigationBar(
                 screen = screen,
                 onNavigate = ::navigate,
                 modifier = Modifier.align(Alignment.BottomCenter),
+            )
+        }
+
+        if (playerExpanded) {
+            PlayerSheet(
+                queue = state.queue,
+                playback = state.playback,
+                viewModel = viewModel,
+                onDismiss = { playerExpanded = false },
             )
         }
     }
@@ -410,6 +443,7 @@ private fun HomeScreen(
     viewModel: AonsokuViewModel,
     onAlbum: (AlbumEntity) -> Unit,
     onNavigate: (NativeScreen) -> Unit,
+    onOpenPlayer: () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -435,6 +469,7 @@ private fun HomeScreen(
                     playback = state.playback,
                     onToggle = viewModel::togglePlayback,
                     onNext = viewModel::next,
+                    onOpen = onOpenPlayer,
                 )
             }
         }
@@ -504,8 +539,12 @@ private fun NowPlayingCard(
     playback: AudioPlaybackSnapshot,
     onToggle: () -> Unit,
     onNext: () -> Unit,
+    onOpen: () -> Unit,
 ) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+    Card(
+        modifier = Modifier.clickable(onClick = onOpen),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+    ) {
         Row(
             modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -525,6 +564,202 @@ private fun NowPlayingCard(
             IconButton(onClick = onNext) {
                 Icon(Icons.Outlined.SkipNext, "Next")
             }
+        }
+    }
+}
+
+@Composable
+private fun MiniPlayer(
+    song: QueueSong,
+    playback: AudioPlaybackSnapshot,
+    viewModel: AonsokuViewModel,
+    onOpen: () -> Unit,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier
+            .padding(horizontal = 16.dp)
+            .fillMaxWidth()
+            .shadow(10.dp, RoundedCornerShape(20.dp))
+            .clickable(onClick = onOpen),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 5.dp,
+    ) {
+        Column {
+            Row(
+                modifier = Modifier.padding(start = 10.dp, top = 8.dp, end = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CoverArt(viewModel, song.coverArtId, Modifier.size(44.dp))
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(song.title, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                    Text(song.artist, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                }
+                IconButton(onClick = onToggle) {
+                    Icon(
+                        if (playback.isPlaying) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
+                        "Play or pause",
+                    )
+                }
+            }
+            if (playback.durationSeconds > 0.0) {
+                LinearProgressIndicator(
+                    progress = {
+                        (playback.currentTimeSeconds / playback.durationSeconds).toFloat().coerceIn(0f, 1f)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun PlayerSheet(
+    queue: AudioQueueSnapshot,
+    playback: AudioPlaybackSnapshot,
+    viewModel: AonsokuViewModel,
+    onDismiss: () -> Unit,
+) {
+    val currentSong = queue.currentSong ?: return
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var seekValue by remember(currentSong.id) {
+        mutableStateOf(playback.currentTimeSeconds.toFloat())
+    }
+    var isSeeking by remember { mutableStateOf(false) }
+    LaunchedEffect(playback.songId, playback.currentTimeSeconds) {
+        if (!isSeeking) seekValue = playback.currentTimeSeconds.toFloat()
+    }
+
+    ModalBottomSheet(sheetState = sheetState, onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text("Now playing", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(16.dp))
+            CoverArt(viewModel, currentSong.coverArtId, Modifier.size(220.dp))
+            Spacer(Modifier.height(16.dp))
+            Text(currentSong.title, style = MaterialTheme.typography.headlineSmall, maxLines = 1)
+            Text(currentSong.artist, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            Slider(
+                value = seekValue.coerceIn(0f, playback.durationSeconds.toFloat().coerceAtLeast(1f)),
+                onValueChange = {
+                    isSeeking = true
+                    seekValue = it
+                },
+                onValueChangeFinished = {
+                    isSeeking = false
+                    viewModel.seek(seekValue.toDouble())
+                },
+                valueRange = 0f..playback.durationSeconds.toFloat().coerceAtLeast(1f),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(formatDuration(playback.currentTimeSeconds.toInt()), style = MaterialTheme.typography.labelMedium)
+                Text(formatDuration(playback.durationSeconds.toInt()), style = MaterialTheme.typography.labelMedium)
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(22.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = viewModel::previous) {
+                    Icon(Icons.Outlined.SkipPrevious, "Previous")
+                }
+                IconButton(onClick = viewModel::togglePlayback) {
+                    Icon(
+                        if (playback.isPlaying) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
+                        "Play or pause",
+                        Modifier.size(42.dp),
+                    )
+                }
+                IconButton(onClick = viewModel::next) {
+                    Icon(Icons.Outlined.SkipNext, "Next")
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = viewModel::toggleShuffle) {
+                    Icon(Icons.Outlined.Shuffle, null)
+                    Spacer(Modifier.width(4.dp))
+                    Text(if (queue.isShuffleActive) "Shuffle on" else "Shuffle")
+                }
+                TextButton(onClick = viewModel::cycleRepeat) {
+                    Icon(Icons.Outlined.Repeat, null)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Repeat ${queue.repeatMode}")
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.AutoMirrored.Outlined.QueueMusic, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Queue", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                if (queue.userQueue.isNotEmpty()) {
+                    TextButton(onClick = viewModel::clearUserQueue) { Text("Clear added") }
+                }
+            }
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().height(260.dp),
+                contentPadding = PaddingValues(bottom = 20.dp),
+            ) {
+                itemsIndexed(queue.contextSongs, key = { index, song -> "context-$index-${song.id}" }) { index, song ->
+                    QueueRow(
+                        song = song,
+                        isCurrent = !queue.isInUserQueue && queue.currentIndex == index,
+                        onClick = { viewModel.playAtIndex(index) },
+                    )
+                }
+                if (queue.userQueue.isNotEmpty()) {
+                    item { Text("Added next", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(vertical = 8.dp)) }
+                    items(queue.userQueue, key = { "user-${it.id}" }) { song ->
+                        QueueRow(
+                            song = song,
+                            isCurrent = queue.isInUserQueue && queue.currentSong?.id == song.id,
+                            onClick = {},
+                            onRemove = { viewModel.removeFromQueue(song.id) },
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
+@Composable
+private fun QueueRow(
+    song: QueueSong,
+    isCurrent: Boolean,
+    onClick: () -> Unit,
+    onRemove: (() -> Unit)? = null,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(
+                if (isCurrent) MaterialTheme.colorScheme.secondaryContainer
+                else MaterialTheme.colorScheme.surface,
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(song.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+            Text(song.artist, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        }
+        onRemove?.let {
+            TextButton(onClick = it) { Text("Remove") }
         }
     }
 }
@@ -690,7 +925,11 @@ private fun SongCollectionScreen(
 }
 
 @Composable
-private fun PlaylistCollectionScreen(playlists: List<PlaylistEntity>, onLoad: () -> Unit) {
+private fun PlaylistCollectionScreen(
+    playlists: List<PlaylistEntity>,
+    onLoad: () -> Unit,
+    onPlay: (String) -> Unit,
+) {
     LaunchedEffect(Unit) { onLoad() }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -698,7 +937,12 @@ private fun PlaylistCollectionScreen(playlists: List<PlaylistEntity>, onLoad: ()
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(playlists, key = { it.id }) { playlist ->
-            SearchRow(playlist.name, "${playlist.songCount} songs", Icons.AutoMirrored.Outlined.PlaylistPlay) { }
+            SearchRow(
+                playlist.name,
+                "${playlist.songCount} songs",
+                Icons.AutoMirrored.Outlined.PlaylistPlay,
+                onClick = { onPlay(playlist.id) },
+            )
         }
         if (playlists.isEmpty()) {
             item {

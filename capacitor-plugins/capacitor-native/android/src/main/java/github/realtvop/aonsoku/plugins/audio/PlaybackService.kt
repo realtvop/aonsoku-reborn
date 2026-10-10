@@ -2274,6 +2274,8 @@ class PlaybackService : MediaSessionService(), AudioService {
         if (song != null) {
             handleScrobbleSongStarted(song.id, song.duration)
         }
+        publishQueueSnapshot()
+        publishPlaybackSnapshot()
     }
 
     internal fun restoreHandoffState(state: PlaybackPersistState, autoplay: Boolean) {

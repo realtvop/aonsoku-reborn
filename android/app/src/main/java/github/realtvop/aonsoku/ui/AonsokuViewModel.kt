@@ -275,6 +275,10 @@ class AonsokuViewModel(application: Application) : AndroidViewModel(application)
         executeAudio(AudioCommand.PlayAlbumById(albumId, 0, false))
     }
 
+    fun playPlaylist(playlistId: String) {
+        executeAudio(AudioCommand.PlayPlaylistById(playlistId, 0, false))
+    }
+
     fun togglePlayback() {
         executeAudio(AudioCommand.TogglePlayPause)
     }
@@ -285,6 +289,35 @@ class AonsokuViewModel(application: Application) : AndroidViewModel(application)
 
     fun previous() {
         executeAudio(AudioCommand.Previous)
+    }
+
+    fun seek(positionSeconds: Double) {
+        executeAudio(AudioCommand.Seek(positionSeconds.coerceAtLeast(0.0)))
+    }
+
+    fun playAtIndex(index: Int) {
+        executeAudio(AudioCommand.PlayAtIndex(index, null))
+    }
+
+    fun removeFromQueue(songId: String) {
+        executeAudio(AudioCommand.RemoveSongsById(listOf(songId)))
+    }
+
+    fun clearUserQueue() {
+        executeAudio(AudioCommand.ClearUserQueue)
+    }
+
+    fun toggleShuffle() {
+        executeAudio(AudioCommand.SetShuffle(!state.value.queue.isShuffleActive))
+    }
+
+    fun cycleRepeat() {
+        val nextMode = when (state.value.queue.repeatMode) {
+            "off" -> "all"
+            "all" -> "one"
+            else -> "off"
+        }
+        executeAudio(AudioCommand.SetRepeat(nextMode))
     }
 
     fun toggleFavorite(songId: String) {
