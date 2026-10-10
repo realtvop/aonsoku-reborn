@@ -14,6 +14,7 @@ import github.realtvop.aonsoku.plugins.bridge.ServerCredentials
 import github.realtvop.aonsoku.plugins.data.AlbumFilter
 import github.realtvop.aonsoku.plugins.data.ArtistFilter
 import github.realtvop.aonsoku.plugins.data.LibraryPagination
+import github.realtvop.aonsoku.plugins.data.LibraryCacheStats
 import github.realtvop.aonsoku.plugins.data.LibrarySyncOptions
 import github.realtvop.aonsoku.plugins.data.LibrarySyncState
 import github.realtvop.aonsoku.plugins.data.SongFilter
@@ -45,6 +46,8 @@ data class NativeAppState(
         processedItems = 0,
         totalItems = 0,
     ),
+    val cacheStats: LibraryCacheStats? = null,
+    val lastSyncedAt: Long? = null,
     val homeAlbums: List<AlbumEntity> = emptyList(),
     val albums: List<AlbumEntity> = emptyList(),
     val artists: List<ArtistEntity> = emptyList(),
@@ -89,6 +92,7 @@ class AonsokuViewModel(application: Application) : AndroidViewModel(application)
             }
             if (credentials != null) {
                 refreshHome()
+                refreshOfflineState()
             }
         }
         viewModelScope.launch {
@@ -97,7 +101,10 @@ class AonsokuViewModel(application: Application) : AndroidViewModel(application)
                 val completed = wasSyncing && !sync.isSyncing
                 wasSyncing = sync.isSyncing
                 _state.update { it.copy(sync = sync) }
-                if (completed && _state.value.credentials != null) refreshHome()
+                if (completed && _state.value.credentials != null) {
+                    refreshHome()
+                    refreshOfflineState()
+                }
             }
         }
     }
@@ -172,6 +179,7 @@ class AonsokuViewModel(application: Application) : AndroidViewModel(application)
             }
             library.syncAll(LibrarySyncOptions("full"))
             refreshHome()
+            refreshOfflineState()
         }
     }
 
@@ -186,6 +194,18 @@ class AonsokuViewModel(application: Application) : AndroidViewModel(application)
             library.refreshCredentials()
             library.syncIncremental()
             refreshHome()
+            refreshOfflineState()
+        }
+    }
+
+    fun refreshOfflineState() {
+        viewModelScope.launch {
+            _state.update {
+                it.copy(
+                    cacheStats = library.getCacheStats(),
+                    lastSyncedAt = library.isDataAvailableOffline(),
+                )
+            }
         }
     }
 

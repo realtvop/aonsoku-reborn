@@ -104,6 +104,9 @@ import github.realtvop.aonsoku.plugins.data.db.entity.LyricsEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.PlaylistEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.PlaylistDetailEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.SongEntity
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 private enum class NativeScreen {
     HOME,
@@ -1179,6 +1182,7 @@ private fun ArtistDetailScreen(
 
 @Composable
 private fun SettingsScreen(state: NativeAppState, viewModel: AonsokuViewModel) {
+    LaunchedEffect(Unit) { viewModel.refreshOfflineState() }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 32.dp),
@@ -1197,6 +1201,22 @@ private fun SettingsScreen(state: NativeAppState, viewModel: AonsokuViewModel) {
                 title = "Native library",
                 body = if (state.sync.isSyncing) "Syncing ${state.sync.progress}%" else "Room database and image cache",
             )
+        }
+        state.cacheStats?.let { stats ->
+            item {
+                SettingsCard(
+                    icon = Icons.Outlined.CloudSync,
+                    title = "Offline cache",
+                    body = buildString {
+                        append("${stats.audioCount} tracks • ${stats.coverCount} covers • ")
+                        append(formatByteCount(stats.totalSizeBytes))
+                        state.lastSyncedAt?.let { timestamp ->
+                            append("\nLast sync ")
+                            append(formatLastSync(timestamp))
+                        }
+                    },
+                )
+            }
         }
         item {
             OutlinedButton(
@@ -1397,3 +1417,13 @@ private fun formatDuration(seconds: Int): String {
     val remainder = seconds % 60
     return "%d:%02d".format(minutes, remainder)
 }
+
+private fun formatByteCount(bytes: Long): String = when {
+    bytes >= 1024 * 1024 * 1024 -> "%.1f GB".format(Locale.getDefault(), bytes / 1024.0 / 1024.0 / 1024.0)
+    bytes >= 1024 * 1024 -> "%.1f MB".format(Locale.getDefault(), bytes / 1024.0 / 1024.0)
+    bytes >= 1024 -> "%.1f KB".format(Locale.getDefault(), bytes / 1024.0)
+    else -> "$bytes B"
+}
+
+private fun formatLastSync(timestamp: Long): String =
+    SimpleDateFormat("MMM d, HH:mm", Locale.getDefault()).format(Date(timestamp))
