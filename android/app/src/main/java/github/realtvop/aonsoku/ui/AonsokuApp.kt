@@ -102,6 +102,7 @@ import github.realtvop.aonsoku.plugins.data.db.entity.AlbumEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.ArtistEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.LyricsEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.PlaylistEntity
+import github.realtvop.aonsoku.plugins.data.db.entity.PlaylistDetailEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.SongEntity
 
 private enum class NativeScreen {
@@ -116,6 +117,7 @@ private enum class NativeScreen {
     PLAYLISTS,
     ALBUM_DETAIL,
     ARTIST_DETAIL,
+    PLAYLIST_DETAIL,
 }
 
 @Composable
@@ -267,6 +269,11 @@ private fun NativeShell(state: NativeAppState, viewModel: AonsokuViewModel) {
         navigate(NativeScreen.ARTIST_DETAIL)
     }
 
+    fun openPlaylist(playlist: PlaylistEntity) {
+        viewModel.loadPlaylist(playlist.id)
+        navigate(NativeScreen.PLAYLIST_DETAIL)
+    }
+
     BackHandler(enabled = playerExpanded || screen != NativeScreen.HOME) {
         goBack()
     }
@@ -345,7 +352,7 @@ private fun NativeShell(state: NativeAppState, viewModel: AonsokuViewModel) {
                     NativeScreen.PLAYLISTS -> PlaylistCollectionScreen(
                         state.playlists,
                         onLoad = viewModel::loadPlaylists,
-                        onPlay = viewModel::playPlaylist,
+                        onOpen = ::openPlaylist,
                     )
                     NativeScreen.ALBUM_DETAIL -> AlbumDetailScreen(
                         album = state.selectedAlbum,
@@ -360,6 +367,11 @@ private fun NativeShell(state: NativeAppState, viewModel: AonsokuViewModel) {
                         artist = state.selectedArtist,
                         albums = state.selectedArtistAlbums,
                         onAlbum = ::openAlbum,
+                    )
+                    NativeScreen.PLAYLIST_DETAIL -> PlaylistDetailScreen(
+                        playlist = state.selectedPlaylist,
+                        songs = state.selectedPlaylistSongs,
+                        viewModel = viewModel,
                     )
                 }
             }
@@ -1007,7 +1019,7 @@ private fun SongCollectionScreen(
 private fun PlaylistCollectionScreen(
     playlists: List<PlaylistEntity>,
     onLoad: () -> Unit,
-    onPlay: (String) -> Unit,
+    onOpen: (PlaylistEntity) -> Unit,
 ) {
     LaunchedEffect(Unit) { onLoad() }
     LazyColumn(
@@ -1020,7 +1032,7 @@ private fun PlaylistCollectionScreen(
                 playlist.name,
                 "${playlist.songCount} songs",
                 Icons.AutoMirrored.Outlined.PlaylistPlay,
-                onClick = { onPlay(playlist.id) },
+                onClick = { onOpen(playlist) },
             )
         }
         if (playlists.isEmpty()) {
@@ -1029,6 +1041,61 @@ private fun PlaylistCollectionScreen(
                     Icons.AutoMirrored.Outlined.PlaylistPlay,
                     "No playlists yet",
                     "Playlists from the server will appear here.",
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaylistDetailScreen(
+    playlist: PlaylistDetailEntity?,
+    songs: List<SongEntity>,
+    viewModel: AonsokuViewModel,
+) {
+    if (playlist == null) {
+        LoadingScreen()
+        return
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 132.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(playlist.name, style = MaterialTheme.typography.headlineSmall)
+                Text(
+                    "${playlist.songCount} songs • ${formatDuration(playlist.duration)}",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                playlist.comment?.takeIf { it.isNotBlank() }?.let {
+                    Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        item {
+            Button(onClick = { viewModel.playPlaylist(playlist.id) }, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Outlined.PlayArrow, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Play playlist")
+            }
+        }
+        itemsIndexed(songs, key = { _, song -> song.id }) { index, song ->
+            SongRow(
+                song,
+                number = index + 1,
+                onClick = { viewModel.playSong(song.id) },
+                onFavorite = { viewModel.toggleFavorite(song.id) },
+                onQueue = { viewModel.addSongToQueue(song.id) },
+            )
+        }
+        if (songs.isEmpty()) {
+            item {
+                EmptyState(
+                    Icons.AutoMirrored.Outlined.PlaylistPlay,
+                    "Playlist is not available offline",
+                    "Sync the library to load its songs.",
                 )
             }
         }
@@ -1322,6 +1389,7 @@ private fun screenTitle(screen: NativeScreen): String = when (screen) {
     NativeScreen.PLAYLISTS -> "Playlists"
     NativeScreen.ALBUM_DETAIL -> "Album"
     NativeScreen.ARTIST_DETAIL -> "Artist"
+    NativeScreen.PLAYLIST_DETAIL -> "Playlist"
 }
 
 private fun formatDuration(seconds: Int): String {

@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
@@ -309,6 +310,21 @@ class LibraryService private constructor(context: Context) {
 
     suspend fun getPlaylist(id: String): PlaylistDetailEntity? = withContext(Dispatchers.IO) {
         database.playlistDao().getDetailById(id)
+    }
+
+    suspend fun getPlaylistSongs(id: String): List<SongEntity> = withContext(Dispatchers.IO) {
+        val detail = database.playlistDao().getDetailById(id) ?: return@withContext emptyList()
+        val songIds = runCatching {
+            val entries = JSONArray(detail.entriesJson)
+            buildList(entries.length()) {
+                for (index in 0 until entries.length()) {
+                    entries.optJSONObject(index)?.optString("id")?.takeIf { it.isNotBlank() }?.let(::add)
+                }
+            }
+        }.getOrDefault(emptyList())
+        if (songIds.isEmpty()) return@withContext emptyList()
+        val songsById = database.songDao().getByIds(songIds).associateBy { it.id }
+        songIds.mapNotNull(songsById::get)
     }
 
     suspend fun getGenres(): List<GenreEntity> = withContext(Dispatchers.IO) {

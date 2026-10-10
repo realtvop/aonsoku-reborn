@@ -20,6 +20,7 @@ import github.realtvop.aonsoku.plugins.data.SongFilter
 import github.realtvop.aonsoku.plugins.data.db.entity.AlbumEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.ArtistEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.PlaylistEntity
+import github.realtvop.aonsoku.plugins.data.db.entity.PlaylistDetailEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.SongEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.LyricsEntity
 import kotlinx.coroutines.Job
@@ -57,6 +58,8 @@ data class NativeAppState(
     val selectedAlbumSongs: List<SongEntity> = emptyList(),
     val selectedArtist: ArtistEntity? = null,
     val selectedArtistAlbums: List<AlbumEntity> = emptyList(),
+    val selectedPlaylist: PlaylistDetailEntity? = null,
+    val selectedPlaylistSongs: List<SongEntity> = emptyList(),
     val lyrics: LyricsEntity? = null,
     val playback: AudioPlaybackSnapshot = AudioPlaybackSnapshot(),
     val queue: AudioQueueSnapshot = AudioQueueSnapshot(),
@@ -238,6 +241,16 @@ class AonsokuViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             val result = library.getPlaylists(LibraryPagination(100, 0))
             _state.update { it.copy(playlists = result.items) }
+        }
+    }
+
+    fun loadPlaylist(id: String) {
+        viewModelScope.launch {
+            val detail = library.getPlaylist(id)
+            val songs = library.getPlaylistSongs(id)
+            _state.update {
+                it.copy(selectedPlaylist = detail, selectedPlaylistSongs = songs)
+            }
         }
     }
 
