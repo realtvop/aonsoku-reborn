@@ -280,6 +280,20 @@ private fun NativeShell(state: NativeAppState, viewModel: AonsokuViewModel) {
                 onBack = ::goBack,
                 onSettings = { navigate(NativeScreen.SETTINGS) },
             )
+            state.actionError?.let { message ->
+                Card(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(start = 14.dp, end = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(message, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer)
+                        TextButton(onClick = viewModel::clearActionError) { Text("Dismiss") }
+                    }
+                }
+            }
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -301,6 +315,7 @@ private fun NativeShell(state: NativeAppState, viewModel: AonsokuViewModel) {
                         state = state,
                         viewModel = viewModel,
                         onAlbum = ::openAlbum,
+                        onArtist = ::openArtist,
                         onSong = viewModel::playSong,
                     )
                     NativeScreen.SETTINGS -> SettingsScreen(state, viewModel)
@@ -837,6 +852,7 @@ private fun SearchScreen(
     state: NativeAppState,
     viewModel: AonsokuViewModel,
     onAlbum: (AlbumEntity) -> Unit,
+    onArtist: (ArtistEntity) -> Unit,
     onSong: (String) -> Unit,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
@@ -862,7 +878,12 @@ private fun SearchScreen(
             if (state.searchArtists.isNotEmpty()) {
                 item { SectionTitle("Artists") }
                 items(state.searchArtists, key = { it.id }) { artist ->
-                    SearchRow(artist.name, "${artist.albumCount} albums", Icons.Outlined.People) { }
+                    SearchRow(
+                        artist.name,
+                        "${artist.albumCount} albums",
+                        Icons.Outlined.People,
+                        onClick = { onArtist(artist) },
+                    )
                 }
             }
             if (state.searchAlbums.isNotEmpty()) {

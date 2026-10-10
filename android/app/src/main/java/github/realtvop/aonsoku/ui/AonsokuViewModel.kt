@@ -8,6 +8,7 @@ import github.realtvop.aonsoku.plugins.audio.AudioPlaybackSnapshot
 import github.realtvop.aonsoku.plugins.audio.AudioQueueSnapshot
 import github.realtvop.aonsoku.plugins.audio.AudioService
 import github.realtvop.aonsoku.plugins.audio.AudioCommand
+import github.realtvop.aonsoku.plugins.audio.AudioEvent
 import github.realtvop.aonsoku.plugins.bridge.AuthenticationResult
 import github.realtvop.aonsoku.plugins.bridge.ServerCredentials
 import github.realtvop.aonsoku.plugins.data.AlbumFilter
@@ -66,6 +67,7 @@ class AonsokuViewModel(application: Application) : AndroidViewModel(application)
     private var audioService: AudioService? = null
     private var playbackJob: Job? = null
     private var queueJob: Job? = null
+    private var eventJob: Job? = null
 
     val state: StateFlow<NativeAppState> = _state.asStateFlow()
 
@@ -85,8 +87,12 @@ class AonsokuViewModel(application: Application) : AndroidViewModel(application)
             }
         }
         viewModelScope.launch {
+            var wasSyncing = false
             library.syncState.collect { sync ->
+                val completed = wasSyncing && !sync.isSyncing
+                wasSyncing = sync.isSyncing
                 _state.update { it.copy(sync = sync) }
+                if (completed && _state.value.credentials != null) refreshHome()
             }
         }
     }
@@ -95,6 +101,7 @@ class AonsokuViewModel(application: Application) : AndroidViewModel(application)
         if (audioService === service) return
         playbackJob?.cancel()
         queueJob?.cancel()
+        eventJob?.cancel()
         audioService = service
         playbackJob = viewModelScope.launch {
             service.playbackState.collect { playback ->
@@ -106,13 +113,22 @@ class AonsokuViewModel(application: Application) : AndroidViewModel(application)
                 _state.update { it.copy(queue = queue) }
             }
         }
+        eventJob = viewModelScope.launch {
+            service.events.collect { event ->
+                if (event is AudioEvent.Error) {
+                    _state.update { it.copy(actionError = event.message) }
+                }
+            }
+        }
     }
 
     fun detachAudioService() {
         playbackJob?.cancel()
         queueJob?.cancel()
+        eventJob?.cancel()
         playbackJob = null
         queueJob = null
+        eventJob = null
         audioService = null
     }
 
