@@ -155,7 +155,14 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   and return `AudioCommandResult` errors for missing local data or failed
   handoffs. Download manager, playback persistence, and scrobble buffering are
   also owned by `PlaybackService`; `AudioPlugin` retains only JSON parsing and
-  JS result/event adaptation.
+  JS result/event adaptation. The typed service additionally exposes per-song
+  download controls and a `StateFlow` of `AudioDownloadSnapshot` values, so
+  Compose pages do not call `NativeDownloadManager` directly.
+- `LibraryService.getPlaylist()` and `getPlaylistSongs()` are the native
+  playlist-detail boundary. The latter parses the synced playlist entry order
+  and resolves the entries against the local Room song table, allowing native
+  playlist detail screens to play, favorite, queue, and download individual
+  songs offline.
 - Android authentication and Subsonic HTTP access are owned by the
   application-scoped `bridge/AuthenticationService`. It owns the encrypted
   credential store, login/fallback probing, server discovery, and typed
@@ -180,7 +187,10 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   now use these ports rather than `AudioPlugin.activeInstance` or a
   coordination plugin instance lookup. The WebSocket plugin remains the
   protocol/Capacitor adapter, while playback resources and queue state remain
-  in `PlaybackService`.
+  in `PlaybackService`. The fully native launcher does not yet instantiate
+  `AonsokuNativeCoordinationPlugin`; remote-device coordination and handoff
+  therefore remain on the Capacitor adapter path until an app-owned
+  coordination runtime is extracted.
 - Native UI service boundaries, binding/lifecycle rules, adapter duties, and
   the remaining TypeScript/WebView responsibilities are documented in
   `docs/android-native-services.md`.
