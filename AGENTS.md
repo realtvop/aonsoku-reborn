@@ -62,6 +62,11 @@ pnpm --filter @aonsoku/coordination-worker deploy:raw # Direct Wrangler deployme
 cd android && ./gradlew :aonsoku-capacitor-native:compileDebugKotlin
 cd android && ./gradlew :aonsoku-capacitor-native:testDebugUnitTest
 
+# Fully native Android app
+cd android && ./gradlew :app:assembleDebug
+cd android && ./gradlew :app:testDebugUnitTest
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+
 # Android release signing
 # Local release builds read aonsokuRelease* from ~/.gradle/gradle.properties.
 # Nightly/tag release workflows restore the same keystore from GitHub Secrets.
@@ -116,6 +121,16 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   `dist`. The custom native plugin lives in
   `capacitor-plugins/capacitor-native` and is included through pnpm workspace
   package `@aonsoku/capacitor-native`.
+- **Fully native Android**: `android/app` now uses a Kotlin
+  `ComponentActivity` and Jetpack Compose Material 3 Expressive for the
+  Android replacement UI. `MainActivity` starts and binds the existing
+  `PlaybackService`; Compose screens call `AppServices.authentication`,
+  `AppServices.library`, and the typed `AudioService` directly. The
+  Capacitor Android plugin remains in the build as a compatibility adapter for
+  the web runtime, but the native Android launcher does not create a WebView
+  or a Capacitor `BridgeActivity`. The native UI uses the same Room library,
+  image cache, authentication, Media3 playback, queue persistence, and
+  foreground media-session service as the Capacitor runtime.
 - Android native pages use the application-scoped
   `github.realtvop.aonsoku.plugins.data.LibraryService` for Room queries,
   metadata sync, lyrics, and image-cache ownership. It is created with the

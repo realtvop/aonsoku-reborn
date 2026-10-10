@@ -1,4 +1,6 @@
 apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android'
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
 
 def releaseSigning = [
     storeFile: project.findProperty('aonsokuReleaseStoreFile'),
@@ -45,6 +47,16 @@ android {
             }
         }
     }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+    kotlinOptions {
+        jvmTarget = "21"
+    }
+    buildFeatures {
+        compose true
+    }
 }
 
 def verifyReleaseSigning = tasks.register('verifyReleaseSigning') {
@@ -76,8 +88,15 @@ repositories {
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.activity:activity-compose:$androidxActivityVersion"
+    implementation "androidx.activity:activity-ktx:$androidxActivityVersion"
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7"
+    implementation "androidx.compose.ui:ui:1.8.2"
+    implementation "androidx.compose.foundation:foundation:1.8.1"
+    implementation "androidx.compose.material:material-icons-extended:1.7.4"
+    implementation "androidx.compose.material3:material3:1.5.0-alpha01"
     implementation "com.google.android.material:material:1.12.0"
     implementation project(':capacitor-android')
     testImplementation "junit:junit:$junitVersion"
