@@ -1,5 +1,6 @@
 package github.realtvop.aonsoku.plugins.audio
 
+import kotlinx.coroutines.sync.withLock
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -442,6 +443,18 @@ class PlaybackService : MediaSessionService(), AudioService {
     fun handleScrobbleSongEnded() {
         val entry = scrobbleBuffer.stopTracking()
         if (entry != null) {
+            if (entry.playedDurationMs >= 10000) {
+                CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+                    val eventId = java.util.UUID.randomUUID().toString()
+                    val prefs = preferencesService.getAllPreferences()
+                    val historyState = runCatching { JSONObject(prefs["player_history"] ?: "{}").getJSONObject("state") }.getOrDefault(JSONObject())
+                    val maxSize = historyState.optInt("maxSize", 100).coerceIn(1, 10000)
+                    (LibraryService.getInstance(applicationContext).getSong(entry.songId) ?: downloadManager.cachedSong(entry.songId))?.let { song ->
+                        github.realtvop.aonsoku.plugins.coordination.CoordinationController.getInstance(applicationContext).recordHistory(song, eventId)
+                        preferencesService.addToPlayHistory(JSONObject().put("eventId", eventId).put("id", song.id).put("title", song.title).put("artist", song.artist).toString(), maxSize)
+                    }
+                }
+            }
             val credentials = authenticationService.getCredentials()
             if (credentials != null) {
                 scrobbleSubmitter.submitIfEligible(entry, currentScrobbleSongDuration, credentials, scrobbleBuffer)
@@ -452,18 +465,10 @@ class PlaybackService : MediaSessionService(), AudioService {
 
     fun handleScrobbleSongStarted(songId: String, duration: Double) {
         if (songId.startsWith("radio:")) return
-        serviceScope.launch {
-            val prefs = preferencesService.getAllPreferences()
-            val historyState = runCatching { JSONObject(prefs["player_history"] ?: "{}").getJSONObject("state") }.getOrDefault(JSONObject())
-            val maxSize = historyState.optInt("maxSize", 100).coerceIn(1, 10000)
-            LibraryService.getInstance(applicationContext).getSong(songId)?.let { song ->
-                github.realtvop.aonsoku.plugins.coordination.CoordinationController.getInstance(applicationContext).recordHistory(song)
-                preferencesService.addToPlayHistory(JSONObject().put("id", song.id).put("title", song.title).put("artist", song.artist).toString(), maxSize)
-            }
-        }
         currentScrobbleSongId = songId
         currentScrobbleSongDuration = duration
         scrobbleBuffer.startTracking(songId, duration)
+        if (player?.isPlaying != true) scrobbleBuffer.pauseTracking()
         val credentials = authenticationService.getCredentials()
         if (credentials != null) {
             serviceScope.launch {
@@ -506,9 +511,9 @@ class PlaybackService : MediaSessionService(), AudioService {
         getFullStateOnMain()
     }
 
-    override fun executeRemoteControlCommand(command: JSONObject): Boolean {
+    override suspend fun executeRemoteCommand(command: JSONObject): AudioCommandResult {
         val type = command.optString("type", "")
-        if (!isSupportedRemoteControlCommand(type)) return false
+        if (!isSupportedRemoteControlCommand(type)) return AudioCommandResult.Failure("unsupported_command", "Unsupported command")
 
         val audioCommand = when (type) {
             "play_song" -> command.optString("song_id", "")
@@ -561,33 +566,33 @@ class PlaybackService : MediaSessionService(), AudioService {
             "remove_from_queue" -> AudioCommand.RemoveSongsById(
                 command.optStringArray("song_ids"),
             )
-            "reorder_queue" -> AudioCommand.ReorderContextQueue(
-                command.optInt("from", -1),
-                command.optInt("to", -1),
-            )
+            "reorder_queue" -> {
+                val from = command.optInt("from", -1)
+                val to = command.optInt("to", -1)
+                val contextSize = queueState.value.contextSongs.size
+                if (from >= contextSize && to >= contextSize) AudioCommand.ReorderUserQueue(from - contextSize, to - contextSize)
+                else if (from in 0 until contextSize && to in 0 until contextSize) AudioCommand.ReorderContextQueue(from, to)
+                else return AudioCommandResult.Failure("bad_message", "Cannot reorder across queue tiers")
+            }
             else -> null
         }
 
-        if (audioCommand != null) {
-            serviceScope.launch {
-                when (val result = execute(audioCommand)) {
-                    AudioCommandResult.Success -> Unit
-                    is AudioCommandResult.Failure -> NativeLogger.warn(
-                        "Remote audio command failed: ${result.code}: ${result.message}",
-                        "playback-service",
-                    )
-                }
-            }
-        }
+        if (audioCommand != null) return execute(audioCommand)
         if (type == "toggle_like") {
-            val songId = queueEngine.currentSong?.id ?: return true
-            serviceScope.launch {
-                val nextActive = libraryService.toggleSongStarred(songId)
-                withContext(Dispatchers.Main.immediate) {
-                    isLikeActive = nextActive
-                }
-            }
+            return try {
+                val songId = queueEngine.currentSong?.id ?: return AudioCommandResult.Failure("not_ready", "No current song")
+                val song = libraryService.getSong(songId) ?: return AudioCommandResult.Failure("not_found", "Song not found")
+                libraryService.setStarred(songId, "song", song.starred == null)
+                withContext(Dispatchers.Main.immediate) { isLikeActive = song.starred == null; updateNotification() }
+                AudioCommandResult.Success
+            } catch (e: Exception) { AudioCommandResult.Failure("command_failed", e.message ?: "Favorite failed") }
         }
+        return AudioCommandResult.Failure("bad_message", "Invalid remote command arguments")
+    }
+
+    override fun executeRemoteControlCommand(command: JSONObject): Boolean {
+        if (!isSupportedRemoteControlCommand(command.optString("type"))) return false
+        serviceScope.launch { executeRemoteCommand(command) }
         return true
     }
 
@@ -799,7 +804,9 @@ class PlaybackService : MediaSessionService(), AudioService {
         return (sleepTimerEndTime - System.currentTimeMillis()).coerceAtLeast(0L) / 1000.0
     }
 
-    override suspend fun execute(command: AudioCommand): AudioCommandResult =
+    private val commandMutex = kotlinx.coroutines.sync.Mutex()
+
+    override suspend fun execute(command: AudioCommand): AudioCommandResult = commandMutex.withLock {
         withContext(Dispatchers.Main.immediate) {
             val currentPlayer = player
             if (currentPlayer == null && command !is AudioCommand.SetVolume) {
@@ -932,6 +939,8 @@ class PlaybackService : MediaSessionService(), AudioService {
                 )
             }
         }
+
+    }
 
     private fun currentPlaybackSnapshot(): AudioPlaybackSnapshot {
         val currentPlayer = player

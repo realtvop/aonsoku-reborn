@@ -108,7 +108,7 @@ private fun NativeShell(model: AonsokuViewModel) {
                 if (queue.currentSong != null) {
                     Surface(onClick = { model.playerExpanded.value = true }, shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
                         Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Cover(model, queue.currentSong?.coverArtId, Modifier.size(48.dp))
+                            Cover(model, if (model.booleanPreference("player_store.settings.coverArt.useAlbumCoverForSongs", false)) queue.currentSong?.albumId ?: queue.currentSong?.coverArtId else queue.currentSong?.coverArtId, Modifier.size(48.dp))
                             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) { Text(queue.currentSong?.title.orEmpty(), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold); Text(queue.currentSong?.artist.orEmpty(), maxLines = 1, style = MaterialTheme.typography.bodySmall) }
                             IconButton({ model.command(AudioCommand.TogglePlayPause) }) { Icon(if (playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, if (playback.isPlaying) "Pause" else "Play") }
                             IconButton({ model.command(AudioCommand.Next) }) { Icon(Icons.Default.SkipNext, "Next") }
@@ -169,14 +169,11 @@ fun Cover(model: AonsokuViewModel, id: String?, modifier: Modifier = Modifier) {
 private fun HomeScreen(model: AonsokuViewModel) {
     val sections by model.home.collectAsStateWithLifecycle()
     LazyColumn(contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        item {
-            Card(Modifier.padding(horizontal = 20.dp).fillMaxWidth(), shape = RoundedCornerShape(32.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-                Column(Modifier.padding(24.dp)) { Text(L("Made for your listening"), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold); Text(L("Rediscover your library"), Modifier.padding(top = 8.dp)); Button({ model.navigate("albums", "Explore"); model.filter(sort = "random") }, Modifier.padding(top = 16.dp)) { Icon(Icons.Default.Shuffle, null); Spacer(Modifier.width(8.dp)); Text(L("Explore albums")) } }
-            }
-        }
+        item { NativeHomeHero(model, sections) }
+        item { ActionRow("Devices", Icons.Default.Devices) { model.navigate("settings/cross-device", "Cross-device") } }
         sections.forEach { section ->
             item {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { Text(L(section.title), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); TextButton({ model.navigate("albums", section.title); model.filter(sort = section.sort) }) { Text(L("See all")) } }
+                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { Text(L(section.title), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); TextButton({ if (section.sort == "pinned") model.dialog.value = NativeDialog.Choose("Pinned", section.items.map { entry -> entry.title to { model.open(entry); Unit } }) else { model.navigate("albums", section.title); model.filter(sort = section.sort) } }) { Text(L("See all")) } }
                 LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     items(section.items, key = { it.id }) { item -> Column(Modifier.width(144.dp).clickable { model.open(item) }) { Cover(model, item.cover, Modifier.size(144.dp)); Text(item.title, Modifier.padding(top = 8.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold); Text(item.subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
                 }
@@ -200,7 +197,7 @@ private fun LibraryScreen(model: AonsokuViewModel) {
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
 fun ItemRow(model: AonsokuViewModel, item: LibraryItem, click: () -> Unit, menu: () -> Unit, selected: Boolean? = null, longClick: (() -> Unit)? = null) {
-    ListItem(headlineContent = { Text(item.title, maxLines = 1, overflow = TextOverflow.Ellipsis) }, supportingContent = { Text(item.subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis) }, leadingContent = { Cover(model, item.cover, Modifier.size(52.dp)) }, trailingContent = { if (selected != null) Checkbox(selected, { click() }) else IconButton(menu) { Icon(Icons.Default.MoreVert, "More options for ${item.title}") } }, modifier = Modifier.combinedClickable(onClick = click, onLongClick = longClick))
+    ListItem(headlineContent = { Text(item.title, maxLines = 1, overflow = TextOverflow.Ellipsis) }, supportingContent = { Text(item.subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis) }, leadingContent = { Cover(model, if (model.booleanPreference("player_store.settings.coverArt.useAlbumCoverForSongs", false)) item.song?.albumId ?: item.cover else item.cover, Modifier.size(52.dp)) }, trailingContent = { if (selected != null) Checkbox(selected, { click() }) else IconButton(menu) { Icon(Icons.Default.MoreVert, "More options for ${item.title}") } }, modifier = Modifier.combinedClickable(onClick = click, onLongClick = longClick))
 }
 @Composable
 private fun CollectionScreen(model: AonsokuViewModel, page: NativePage, menu: (LibraryItem) -> Unit) {

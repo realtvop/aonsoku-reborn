@@ -35,7 +35,7 @@ fun NativePlayer(model: AonsokuViewModel, close: () -> Unit) {
                 PrimaryTabRow(tab) { listOf("Playing", "Queue", "Lyrics").forEachIndexed { index, label -> Tab(tab == index, { tab = index }, text = { Text(L(label)) }) } }
                 when (tab) {
                     0 -> LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        item { Cover(model, queue.currentSong?.coverArtId, Modifier.widthIn(max = 440.dp).fillMaxWidth().aspectRatio(1f)) }
+                        item { Cover(model, if (model.booleanPreference("player_store.settings.coverArt.useAlbumCoverForSongs", false)) queue.currentSong?.albumId ?: queue.currentSong?.coverArtId else queue.currentSong?.coverArtId, Modifier.widthIn(max = 440.dp).fillMaxWidth().aspectRatio(1f)) }
                         item { Text(queue.currentSong?.title.orEmpty(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); Text(queue.currentSong?.artist.orEmpty(), Modifier.clickable { song?.artistId?.let { model.navigate("artist", song?.artist.orEmpty(), it); close() } }, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         item {
                             var scrub by remember { mutableStateOf<Float?>(null) }

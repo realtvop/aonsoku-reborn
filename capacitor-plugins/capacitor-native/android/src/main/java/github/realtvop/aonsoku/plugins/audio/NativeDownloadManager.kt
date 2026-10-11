@@ -125,7 +125,7 @@ class NativeDownloadManager(
         _states.update { it + (songId to NativeDownloadState(songId, "queued", source = effectiveSource)) }
         val job = downloadScope.launch(start = CoroutineStart.LAZY) {
             try { slots.withPermit { executeDownload(songId, maxBitRate, format) }; pending.remove(songId); persistPending(); enforceQuota(songId) }
-            catch (e: CancellationException) { _states.update { it + (songId to NativeDownloadState(songId, "cancelled", source = source)) } }
+            catch (e: CancellationException) { _states.update { if (songId in it) it + (songId to NativeDownloadState(songId, "cancelled", source = source)) else it } }
             catch (e: Exception) { emitFailed(songId, e.localizedMessage ?: "Download failed") }
             finally { activeJobs.remove(songId, coroutineContext[Job]) }
         }
@@ -175,7 +175,7 @@ class NativeDownloadManager(
     }
 
     fun cancel(songId: String) {
-        pending.remove(songId); persistPending()
+        if (pending.remove(songId) != null) persistPending()
         connections.remove(songId)?.disconnect()
         activeJobs.remove(songId)?.cancel()
     }
@@ -230,7 +230,7 @@ class NativeDownloadManager(
 
         val responseCode = connection.responseCode
         if (responseCode !in 200..299) {
-            throw IOException("Server returned HTTP $responseCode")
+            connection.disconnect(); connections.remove(songId, connection); throw IOException("Server returned HTTP $responseCode")
         }
 
         val contentType = connection.contentType ?: "audio/mpeg"

@@ -83,3 +83,19 @@ records its actual verified range below; unresolved entries must remain visible.
   image/LRU quotas retain explicit audio. Network changes probe primary/fallback.
   Custom lyric auth/metadata, source changes and romanization are native. Android
   CI now builds Compose directly with reproducible shared theme/locale resources.
+
+- Device closure: Pixel 5 streams native Media3 audio, registers an Android
+  MediaSession with advancing PLAYING position, and restores a paused queue and
+  progress across data-preserving APK updates. Device acceptance exposed a missing
+  initial queue notification; queue replace/restore/repeat now publish typed state,
+  with a regression assertion. Fullscreen player and lyric options render natively.
+  Native history retains the existing ten-second listening threshold. Song-ID
+  queries are chunked for SQLite's parameter limit; random paging is stable.
+- Packaging inspection caught stale ignored SPA assets being included despite a
+  source-set exclude. The app now declares only src/main/nativeAssets as its
+  assets source; builds are checked for zero assets/public entries.
+- Remote commands now acknowledge the typed service result after application,
+  surface failures/timeouts, and execute typed playback mutations serially. Radio
+  is excluded from the song-only handoff protocol. Cached songs removed upstream
+  retain native metadata/playback access; image management and per-entry history
+  deletion are exposed alongside the audio cache UI.

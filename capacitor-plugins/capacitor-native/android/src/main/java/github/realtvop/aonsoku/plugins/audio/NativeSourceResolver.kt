@@ -57,6 +57,7 @@ class NativeSourceResolver(
                 for (ext in extensions) {
                     val file = File(directory, "$cacheId.$ext")
                     if (file.exists()) {
+                        File(directory, "$cacheId.json").setLastModified(System.currentTimeMillis())
                         return Pair("file://${file.absolutePath}", "native-file")
                     }
                 }

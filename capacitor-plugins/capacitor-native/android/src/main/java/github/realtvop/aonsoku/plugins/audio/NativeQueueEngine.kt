@@ -105,6 +105,7 @@ class NativeQueueEngine {
         currentSong?.let {
             delegate?.queueEngineLoadSong(this, it, autoplay, startTime)
         }
+        delegate?.queueEngineDidChangeContents(this, "queue-replaced")
     }
 
     fun updateContextQueue(songs: List<QueueSong>, currentIndex: Int) {
@@ -358,6 +359,7 @@ class NativeQueueEngine {
 
     fun setLoopState(state: LoopState) {
         this.loopState = state
+        delegate?.queueEngineDidChangeContents(this, "repeat")
     }
 
     private fun applyShuffle() {
@@ -458,6 +460,7 @@ class NativeQueueEngine {
         sourceId = persisted.sourceId
         sourceName = persisted.sourceName
         isRestored = true
+        delegate?.queueEngineDidChangeContents(this, "restored")
     }
 
     fun clearRestoredFlag() {

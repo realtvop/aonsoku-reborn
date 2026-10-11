@@ -6,17 +6,22 @@ import org.junit.Test
 import org.mockito.Mockito
 
 class NativeDownloadManagerTest {
+    @org.junit.Rule @JvmField val temporary = org.junit.rules.TemporaryFolder()
+    private fun context(): Context = Mockito.mock(Context::class.java).also {
+        Mockito.`when`(it.filesDir).thenReturn(temporary.newFolder())
+        Mockito.`when`(it.cacheDir).thenReturn(temporary.newFolder())
+    }
 
     @Test
     fun testDownloadManagerInitialization() {
-        val context = Mockito.mock(Context::class.java)
+        val context = context()
         val downloadManager = NativeDownloadManager(context)
         assertNotNull(downloadManager)
     }
 
     @Test
     fun testDownloadManagerListenerHandling() {
-        val context = Mockito.mock(Context::class.java)
+        val context = context()
         val downloadManager = NativeDownloadManager(context)
         val listener = object : NativeDownloadManager.Listener {
             override fun onDownloadProgress(songId: String, loaded: Long, total: Long) {}
@@ -31,7 +36,7 @@ class NativeDownloadManagerTest {
 
     @Test
     fun testCancelInactiveDownload() {
-        val context = Mockito.mock(Context::class.java)
+        val context = context()
         val downloadManager = NativeDownloadManager(context)
         
         // Canceling a non-existent download should fail gracefully / do nothing

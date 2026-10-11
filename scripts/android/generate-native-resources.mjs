@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
-const target = path.join(root, "android/app/src/main/assets/native");
+const target = path.join(root, "android/app/src/main/nativeAssets/native");
 const locales = path.join(root, "src/i18n/locales");
 function flatten(value, prefix = "", result = {}) {
   for (const [key, entry] of Object.entries(value)) {

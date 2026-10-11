@@ -189,7 +189,9 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   Capacitor adapter, while playback resources and queue state remain
   in `PlaybackService`.
 - Compose settings preserve the existing native preference keys and use checked-in
-  translations/theme palettes. ReplayGain is applied by a Media3 PCM processor.
+  translations/theme palettes under android/app/src/main/nativeAssets/native.
+  The Android assets source set includes only nativeAssets; ignored Capacitor
+  assets/public output must never be packaged in the native APK. ReplayGain is applied by a Media3 PCM processor.
 - `NativeCacheMaintenance` runs with PlaybackService, derives smart downloads
   from Room/preferences, syncs cover art and enforces cache quotas. Download jobs
   are bounded and journaled in native-downloads.json; active transfers keep the

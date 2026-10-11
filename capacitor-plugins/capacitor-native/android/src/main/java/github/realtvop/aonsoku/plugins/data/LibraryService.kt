@@ -138,6 +138,7 @@ class LibraryService private constructor(context: Context) {
     )
     private var initialized = false
     private var initializationJob: Job? = null
+    private var schedulerJob: Job? = null
 
     val syncState: StateFlow<LibrarySyncState> = _syncState.asStateFlow()
     val dataChanges: SharedFlow<LibraryDataChange> = _dataChanges.asSharedFlow()
@@ -167,6 +168,13 @@ class LibraryService private constructor(context: Context) {
                 initialized = true
             }
             initializationJob?.join()
+        }
+        if (schedulerJob == null) schedulerJob = serviceScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(60000)
+                val network = github.realtvop.aonsoku.plugins.network.NativeNetworkMonitor.getInstance(appContext)
+                if (network.online.value && !network.metered.value && authenticationService.hasCredentials() && !_syncState.value.isSyncing) syncIncremental()
+            }
         }
         val hasFullSync = withContext(Dispatchers.IO) {
             database.syncStateDao().get("full-sync") != null
@@ -276,7 +284,7 @@ class LibraryService private constructor(context: Context) {
     }
 
     suspend fun getSongsByIds(ids: List<String>): List<SongEntity> = withContext(Dispatchers.IO) {
-        if (ids.isEmpty()) emptyList() else database.songDao().getByIds(ids)
+        ids.distinct().chunked(500).flatMap { database.songDao().getByIds(it) }
     }
 
     suspend fun getSong(id: String): SongEntity? = withContext(Dispatchers.IO) {
@@ -435,6 +443,8 @@ class LibraryService private constructor(context: Context) {
             CachedImageFile(coverArtId, file, sizeBytes = file.length(), coverSize = size)
         }
     }
+
+    suspend fun cachedImages() = withContext(Dispatchers.IO) { database.cacheMetaDao().coversByLastAccess() }
 
     suspend fun enforceImageQuota(bytes: Long) = withContext(Dispatchers.IO) { imageCache.enforceQuota(bytes) }
 

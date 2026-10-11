@@ -27,12 +27,13 @@ class NativeQueueEngineTest {
     fun testSetContextQueue() {
         val engine = NativeQueueEngine()
         var loadedSong: QueueSong? = null
+        var observedQueue: List<String> = emptyList()
         engine.delegate = object : NativeQueueEngineDelegate {
             override fun queueEngineLoadSong(engine: NativeQueueEngine, song: QueueSong, autoplay: Boolean, startTime: Double?) {
                 loadedSong = song
             }
             override fun queueEngineDidAdvanceTo(engine: NativeQueueEngine, index: Int, songId: String, reason: QueueAdvanceReason) {}
-            override fun queueEngineDidChangeContents(engine: NativeQueueEngine, reason: String) {}
+            override fun queueEngineDidChangeContents(engine: NativeQueueEngine, reason: String) { observedQueue = engine.contextSongs.map { it.id } }
             override fun queueEngineDidExhaustQueue(engine: NativeQueueEngine) {}
             override fun queueEngineSeekToStart(engine: NativeQueueEngine, song: QueueSong) {}
         }
@@ -45,6 +46,7 @@ class NativeQueueEngineTest {
         assertEquals("1", engine.currentSong?.id)
         assertNotNull(loadedSong)
         assertEquals("1", loadedSong?.id)
+        assertEquals(listOf("1", "2"), observedQueue)
     }
 
     @Test

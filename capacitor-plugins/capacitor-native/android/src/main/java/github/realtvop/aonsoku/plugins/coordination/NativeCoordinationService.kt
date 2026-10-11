@@ -21,6 +21,10 @@ import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
 
 import android.content.Context
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import github.realtvop.aonsoku.plugins.audio.AudioCommandResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -33,6 +37,7 @@ data class CoordinationHttpResponse(val status: Int, val statusText: String, val
 
 /** Application-owned protocol engine. Capacitor is an independent adapter. */
 class NativeCoordinationService(private val context: Context) : CoordinationService {
+    private val commandScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val _events = MutableSharedFlow<NativeCoordinationEvent>(extraBufferCapacity = 128)
     val events = _events.asSharedFlow()
     private val _state = MutableStateFlow("disconnected")
@@ -162,7 +167,7 @@ class NativeCoordinationService(private val context: Context) : CoordinationServ
             volume: Double? = null,
         ): JSONObject? {
             val songId = audioState.optString("currentSongId", "")
-            if (songId.isEmpty()) return null
+            if (songId.isEmpty() || songId.startsWith("radio:")) return null
 
             val contextQueue = audioState.optJSONObject("contextQueue") ?: JSONObject()
             val snapshot = JSONObject()
@@ -869,25 +874,14 @@ class NativeCoordinationService(private val context: Context) : CoordinationServ
             if (type == "command") {
                 val command = parsed.optJSONObject("command")
                 val messageId = extractMessageId(parsed)
-                if (
-                    command != null &&
-                    audioService()?.executeRemoteControlCommand(command) == true
-                ) {
-                    if (messageId != null) {
-                        sendEnvelope(buildCommandAckEnvelope(protocolVersion, messageId))
+                commandScope.launch {
+                    val result = if (command == null) AudioCommandResult.Failure("bad_message", "Missing command") else audioService()?.executeRemoteCommand(command) ?: AudioCommandResult.Failure("not_ready", "Playback service unavailable")
+                    val ack = when (result) {
+                        AudioCommandResult.Success -> JSONObject().put("status", "ok")
+                        is AudioCommandResult.Failure -> JSONObject().put("status", "error").put("code", result.code).put("reason", result.message)
                     }
-                    return
+                    if (messageId != null) sendEnvelope(buildCommandAckEnvelope(protocolVersion, messageId, ack))
                 }
-            }
-            if (
-                type == "error" &&
-                parsed.optString("code", "") == "source_changed" &&
-                pendingNativeHandoffSourceDeviceId != null &&
-                pendingNativeHandoffRetryCount < 2
-            ) {
-                pendingNativeHandoffRetryCount += 1
-                pendingNativeHandoffRetryWaitingForSnapshot = true
-                requestSnapshots()
                 return
             }
             if (type == "prepare_relinquish") {

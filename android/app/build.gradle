@@ -35,7 +35,7 @@ android {
     compileOptions { coreLibraryDesugaringEnabled true }
     kotlinOptions { jvmTarget = "21" }
     // The native launcher never loads a bundled SPA.
-    sourceSets.main.assets.exclude 'public/**'
+    sourceSets.main.assets.setSrcDirs(['src/main/nativeAssets'])
     signingConfigs {
         if (releaseSigningConfigured) {
             release {

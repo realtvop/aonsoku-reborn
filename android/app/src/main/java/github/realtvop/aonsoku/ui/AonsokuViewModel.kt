@@ -34,7 +34,7 @@ data class NativePage(
     val items: List<LibraryItem> = emptyList(), val total: Int = 0,
     val loading: Boolean = true, val error: String? = null,
     val query: String = "", val sort: String = "name", val genre: String? = null,
-    val fromYear: Int? = null, val toYear: Int? = null,
+    val fromYear: Int? = null, val toYear: Int? = null, val randomSeed: Long = System.currentTimeMillis(),
 )
 data class HomeSection(val title: String, val sort: String, val items: List<LibraryItem>)
 
@@ -100,7 +100,7 @@ class AonsokuViewModel(application: Application, private val saved: SavedStateHa
         viewModelScope.launch {
             services.library.initialize()
             if (_signedIn.value) {
-                if (services.library.isDataAvailableOffline() == null) services.library.syncAll()
+                if (services.library.isDataAvailableOffline() == null) services.library.syncAll() else if (!network.metered.value) services.library.syncIncremental()
                 navigate(saved["route"] ?: "home", saved["title"] ?: "Home", saved["id"], false)
             }
         }
@@ -179,9 +179,10 @@ class AonsokuViewModel(application: Application, private val saved: SavedStateHa
                     "favorites-albums" -> l.getAlbums(paging, AlbumFilter(starredOnly = true, sortBy = "starredAt")).let { total = it.total; it.items.map { row -> row.item() } }
                     "favorites-artists" -> l.getArtists(paging, ArtistFilter(starredOnly = true)).let { total = it.total; it.items.map { row -> row.item() } }
                     "favorites-songs" -> l.getSongs(paging, SongFilter(starredOnly = true, sortBy = "starredAt")).let { total = it.total; it.items.map { row -> row.item() } }
+                    "images" -> l.cachedImages().map { LibraryItem(it.id, it.id, "${formatBytes(it.sizeBytes)} · ${it.coverSize.orEmpty()} px", it.id, "cover") }.also { total = it.size }
                     "downloads" -> withContext(Dispatchers.IO) { audio?.downloadService()?.cachedAudio().orEmpty().map { it.songId } }.let { ids -> (ids + downloads.value.keys).distinct().let { all -> val songs = l.getSongsByIds(all).associateBy { it.id }; all.mapNotNull { id -> (songs[id] ?: audio?.downloadService()?.cachedSong(id))?.item()?.let { if (songs[id] == null) it.copy(subtitle = "${it.subtitle} · Removed from server (still playable offline)") else it } } } }.also { total = it.size }
                     "radios" -> l.getRadios().map { LibraryItem(it.id, it.name, it.streamUrl, kind = "radio", radio = it) }.also { total = it.size }
-                    "history" -> services.preferences.getPlayHistory(10000).mapNotNull { runCatching { JSONObject(it).optString("id") }.getOrNull() }.let { ids -> val songs = l.getSongsByIds(ids).associateBy { it.id }; ids.mapNotNull { songs[it]?.item() } }.also { total = it.size }
+                    "history" -> services.preferences.getPlayHistory(10000).mapNotNull { runCatching { JSONObject(it) }.getOrNull() }.let { rows -> val songs = l.getSongsByIds(rows.map { it.optString("id") }).associateBy { it.id }; rows.map { row -> (songs[row.optString("id")] ?: SongEntity(id = row.optString("id"), title = row.optString("title"), artist = row.optString("artist"))).item() } }.also { total = it.size }
                     "home" -> {
                         home.value = listOf("Recently played" to "played", "Most played" to "playCount", "Recently added" to "created", "Explore" to "random").map { (title, sort) ->
                             HomeSection(title, sort, l.getAlbums(LibraryPagination(12, 0), AlbumFilter(sortBy = sort)).items.map { it.item() })
@@ -196,9 +197,9 @@ class AonsokuViewModel(application: Application, private val saved: SavedStateHa
                         emptyList()
                     }
                     "library", "playlists" -> l.getPlaylists(paging).let { total = it.total; it.items.map { row -> row.item() } }
-                    "albums" -> l.getAlbums(paging, AlbumFilter(search = p.query.takeIf(String::isNotBlank), genre = p.genre, fromYear = p.fromYear, toYear = p.toYear, sortBy = p.sort)).let { total = it.total; it.items.map { row -> row.item() } }
-                    "artists" -> l.getArtists(paging, ArtistFilter(search = p.query.takeIf(String::isNotBlank), sortBy = p.sort)).let { total = it.total; it.items.map { row -> row.item() } }
-                    "artist" -> l.getAlbums(paging, AlbumFilter(artistId = p.id, sortBy = p.sort)).let { total = it.total; it.items.map { row -> row.item() } }
+                    "albums" -> l.getAlbums(paging, AlbumFilter(search = p.query.takeIf(String::isNotBlank), genre = p.genre, fromYear = p.fromYear, toYear = p.toYear, sortBy = if (p.sort == "random") "random:${p.randomSeed}" else p.sort)).let { total = it.total; it.items.map { row -> row.item() } }
+                    "artists" -> l.getArtists(paging, ArtistFilter(search = p.query.takeIf(String::isNotBlank), sortBy = if (p.sort == "random") "random:${p.randomSeed}" else p.sort)).let { total = it.total; it.items.map { row -> row.item() } }
+                    "artist" -> l.getAlbums(paging, AlbumFilter(artistId = p.id, sortBy = if (p.sort == "random") "random:${p.randomSeed}" else p.sort)).let { total = it.total; it.items.map { row -> row.item() } }
                     "album" -> l.getAlbum(p.id!!)?.second.orEmpty().map { it.item() }.also { total = it.size }
                     "playlist" -> {
                         val entries = JSONArray(l.getPlaylist(p.id!!)?.entriesJson ?: "[]")
@@ -207,7 +208,7 @@ class AonsokuViewModel(application: Application, private val saved: SavedStateHa
                         ids.mapNotNull { songs[it]?.item() }.also { total = it.size }
                     }
                     "search" -> l.search(p.query, 20, 30, 80).let { result -> (result.artists.map { it.item() } + result.albums.map { it.item() } + result.songs.map { it.item() }).also { total = it.size } }
-                    "favorites", "songs" -> l.getSongs(paging, SongFilter(search = p.query.takeIf(String::isNotBlank), starredOnly = p.route == "favorites", artistId = p.id, sortBy = if (p.sort == "name") "title" else p.sort)).let { total = it.total; it.items.map { row -> row.item() } }
+                    "favorites", "songs" -> l.getSongs(paging, SongFilter(search = p.query.takeIf(String::isNotBlank), starredOnly = p.route == "favorites", artistId = p.id, sortBy = if (p.sort == "name") "title" else if (p.sort == "random") "random:${p.randomSeed}" else p.sort)).let { total = it.total; it.items.map { row -> row.item() } }
                     else -> emptyList()
                 }
                 _page.value = p.copy(items = if (more) p.items + items else items, total = total, loading = false)
@@ -240,7 +241,7 @@ class AonsokuViewModel(application: Application, private val saved: SavedStateHa
                     val result = mutableListOf<LibraryItem>()
                     var offset = 0
                     do {
-                        val batch = services.library.getSongs(LibraryPagination(500, offset), SongFilter(search = p.query.takeIf(String::isNotBlank), starredOnly = p.route != "songs", artistId = p.id, sortBy = if (p.sort == "name") "title" else p.sort))
+                        val batch = services.library.getSongs(LibraryPagination(500, offset), SongFilter(search = p.query.takeIf(String::isNotBlank), starredOnly = p.route != "songs", artistId = p.id, sortBy = if (p.sort == "name") "title" else if (p.sort == "random") "random:${p.randomSeed}" else p.sort))
                         result += batch.items.map { it.item() }; offset += batch.items.size
                     } while (batch.hasMore)
                     result

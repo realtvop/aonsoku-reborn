@@ -264,4 +264,9 @@ class AonsokuNativeCoordinationPluginTest {
     private fun assertNotEqualsUuid(a: String, b: String) {
         assertTrue("messageId should be unique: $a == $b", a != b)
     }
+    @org.junit.Test
+    fun liveRadioDoesNotAdvertiseASongHandoff() {
+        val state = org.json.JSONObject().put("currentSongId", "radio:station")
+        org.junit.Assert.assertNull(NativeCoordinationService.buildPlaybackSnapshot("session", state, 0.0))
+    }
 }

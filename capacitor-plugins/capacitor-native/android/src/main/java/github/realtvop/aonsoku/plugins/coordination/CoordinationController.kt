@@ -168,7 +168,7 @@ class CoordinationController private constructor(context: Context) {
         check(transport.sendCommand(id, target.generation, command)) { "Coordination is disconnected" }
     }
     fun handoff(id: String) { check(transport.handoffFromCache(id)) { "No fresh snapshot. Refresh devices and try again." } }
-    fun recordHistory(song: SongEntity) { scope.launch { enqueueHistory(JSONObject().put("kind", "add").put("eventId", UUID.randomUUID().toString()).put("logicalPlaybackSessionId", UUID.randomUUID().toString()).put("songId", song.id).put("songTitle", song.title).put("songArtist", song.artist).put("songAlbum", song.album).put("songDuration", song.duration).put("clientEnteredAt", Instant.now().toString())) } }
+    fun recordHistory(song: SongEntity, eventId: String = UUID.randomUUID().toString()) { scope.launch { enqueueHistory(JSONObject().put("kind", "add").put("eventId", eventId).put("logicalPlaybackSessionId", UUID.randomUUID().toString()).put("songId", song.id).put("songTitle", song.title).put("songArtist", song.artist).put("songAlbum", song.album).put("songDuration", song.duration).put("clientEnteredAt", Instant.now().toString())) } }
     suspend fun enqueueHistory(operation: JSONObject) {
         if (!enabled.value) return
         historyMutex.withLock {

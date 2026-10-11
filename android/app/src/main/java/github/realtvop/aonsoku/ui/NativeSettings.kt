@@ -86,7 +86,7 @@ fun SettingsScreen(model: AonsokuViewModel, category: String?) {
                     }
                 }
                 Choice(model, "Listening history size", "player_history.maxSize", "100", listOf("25", "50", "100", "250", "500", "1000"), numeric = true)
-                ActionRow("Clear listening history", Icons.Default.Delete) { model.dialog.value = NativeDialog.Confirm("Clear history?", "This removes local listening history.") { model.launch { model.coordinator.enqueueHistory(JSONObject().put("kind", "clear")); model.services.preferences.clearPlayHistory(); model.setPreference("player_history.history", JSONArray()) } } }
+                ActionRow("Clear listening history", Icons.Default.Delete) { model.dialog.value = NativeDialog.Confirm("Clear history?", "This removes listening history and synchronizes the deletion when cross-device playback is enabled.") { model.launch { model.coordinator.enqueueHistory(JSONObject().put("kind", "clear")); model.services.preferences.clearPlayHistory(); model.setPreference("player_history.history", JSONArray()) } } }
             }
             "content" -> Toggle(model, "Hide radio section", "app_store.pages.hideRadiosSection", true)
             "privacy" -> Toggle(model, "LRCLIB", "player_store.settings.privacy.lrcLibEnabled", true)
@@ -103,6 +103,13 @@ fun SettingsScreen(model: AonsokuViewModel, category: String?) {
                 Toggle(model, "Favorite playlists", "cache_store.settings.smartRules.favoritePlaylists", true)
                 Choice(model, "Playback cache limit", "cache_store.settings.lruQuota", "1073741824", listOf("0", "268435456", "536870912", "1073741824", "2147483648", "5368709120", "10737418240"), numeric = true, bytes = true)
                 Choice(model, "Image cache limit", "cache_store.settings.assetsQuota", "536870912", listOf("0", "134217728", "268435456", "536870912", "1073741824"), numeric = true, bytes = true)
+                val stats by produceState("", preferences, model.downloads.collectAsState().value) {
+                    val audio = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { model.audio?.downloadService()?.cachedAudio().orEmpty() }
+                    val images = model.services.library.cachedImages()
+                    value = "${audio.size} songs · ${formatBytes(audio.sumOf { it.sizeBytes })} / ${images.size} images · ${formatBytes(images.sumOf { it.sizeBytes })}"
+                }
+                Text(stats, Modifier.padding(20.dp), style = MaterialTheme.typography.bodySmall)
+                ActionRow("Manage cached images", Icons.Default.Image) { model.navigate("images", "Cached images") }
                 ActionRow("Manage downloads", Icons.Default.Download) { model.navigate("downloads", "Downloads") }
                 listOf("explicit" to "Clear downloaded songs", "smart" to "Clear smart downloads", "lru" to "Clear playback cache", "assets" to "Clear image cache", "all" to "Clear all caches").forEach { (source, title) -> ActionRow(title, Icons.Default.Delete) { model.dialog.value = NativeDialog.Confirm(title, "Cached files will be removed from this device.") { model.launch { val manager = model.audio?.downloadService(); if (source in listOf("assets", "all")) model.services.library.clearCoverImages(); if (source == "all") manager?.cachedAudio()?.forEach { manager.deleteCachedAudio(it.songId) } else manager?.clearSource(source); model.messages.emit("Cache cleared") } } } }
             }

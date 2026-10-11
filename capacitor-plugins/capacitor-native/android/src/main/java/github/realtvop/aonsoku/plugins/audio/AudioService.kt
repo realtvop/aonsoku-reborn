@@ -133,6 +133,7 @@ interface AudioService {
     fun setRequestId(requestId: String?)
     fun getFullState(): JSONObject?
     fun pauseAndGetFullState(): JSONObject?
+    suspend fun executeRemoteCommand(command: JSONObject): AudioCommandResult = if (executeRemoteControlCommand(command)) AudioCommandResult.Success else AudioCommandResult.Failure("unsupported_command", "Unsupported remote command")
     fun executeRemoteControlCommand(command: JSONObject): Boolean
     fun applyRemotePlaybackSnapshot(snapshot: AudioRemotePlaybackSnapshot)
     fun clearRemotePlaybackProjection()

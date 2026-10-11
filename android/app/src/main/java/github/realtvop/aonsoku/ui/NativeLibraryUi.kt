@@ -23,7 +23,7 @@ fun NativeItemMenu(model: AonsokuViewModel, item: LibraryItem, dismiss: () -> Un
     ModalBottomSheet(dismiss) {
         LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
             item { Text(item.title, Modifier.padding(24.dp), style = MaterialTheme.typography.headlineSmall) }
-            item { ActionRow("Play", Icons.Default.PlayArrow) { model.playItem(item); dismiss() } }
+            if (item.kind != "cover") item { ActionRow("Play", Icons.Default.PlayArrow) { model.playItem(item); dismiss() } }
             if (item.kind in listOf("album", "playlist")) item { ActionRow("Shuffle", Icons.Default.Shuffle) { model.playItem(item, true); dismiss() } }
             if (item.kind in listOf("song", "album", "playlist")) {
                 item { ActionRow("Play next", Icons.AutoMirrored.Filled.PlaylistPlay) { model.launch { model.command(AudioCommand.AddSongsById(model.songIds(item), "next")) }; dismiss() } }
@@ -33,6 +33,8 @@ fun NativeItemMenu(model: AonsokuViewModel, item: LibraryItem, dismiss: () -> Un
             }
             if (item.kind in listOf("song", "album", "artist")) item { ActionRow(if (item.starred) "Remove from favorites" else "Add to favorites", Icons.Default.Favorite) { model.favorite(item); dismiss() } }
             if (item.kind in listOf("album", "playlist")) item { ActionRow("Pin or unpin on Home", Icons.Default.PushPin) { model.pin(item); dismiss() } }
+            if (item.kind == "cover") item { ActionRow("Delete cached image", Icons.Default.Delete) { model.launch { model.services.library.deleteCoverImage(item.id); model.reload() }; dismiss() } }
+            if (model.page.value.route == "history") item { ActionRow("Remove from history", Icons.Default.History) { model.launch { val rows = model.services.preferences.getPlayHistory(10000).toMutableList(); val index = item.position ?: return@launch; val removed = org.json.JSONObject(rows.removeAt(index)); removed.optString("eventId").takeIf(String::isNotBlank)?.let { model.coordinator.enqueueHistory(org.json.JSONObject().put("kind", "delete_one").put("eventId", it)) }; model.services.preferences.replacePlayHistory(rows); model.reload() }; dismiss() } }
             if (item.kind == "song") {
                 item { ActionRow("Song information", Icons.Default.Info) { val s = item.song; model.dialog.value = NativeDialog.Info(item.title, listOf("Artist: ${s?.artist.orEmpty()}", "Album: ${s?.album.orEmpty()}", "Duration: ${formatTime(s?.duration?.toDouble() ?: 0.0)}", "Track: ${s?.track ?: 0}", "Disc: ${s?.discNumber ?: 0}", "Year: ${s?.year ?: 0}", "Genre: ${s?.genre.orEmpty()}", "Format: ${s?.suffix.orEmpty()} · ${s?.bitRate ?: 0} kbps", "Path: ${s?.path.orEmpty()}", s?.comment.orEmpty()).joinToString("\n")); dismiss() } }
                 item { ActionRow("Rating", Icons.Default.Star) { model.dialog.value = NativeDialog.Choose("Rating", (0..5).map { value -> (if (value == 0) "Clear rating" else "★".repeat(value)) to { model.launch { model.services.library.rateSong(item.id, value); model.messages.emit("Rating saved") }; Unit } }); dismiss() } }
