@@ -134,6 +134,12 @@ class NativeQueueEngine {
         val mutableSongs = contextSongs.toMutableList()
         val song = mutableSongs.removeAt(fromIndex)
         mutableSongs.add(toIndex, song)
+        currentIndex = when {
+            currentIndex == fromIndex -> toIndex
+            fromIndex < currentIndex && toIndex >= currentIndex -> currentIndex - 1
+            fromIndex > currentIndex && toIndex <= currentIndex -> currentIndex + 1
+            else -> currentIndex
+        }
         contextSongs = mutableSongs
         delegate?.queueEngineDidChangeContents(this, "queue-edit")
     }
@@ -172,6 +178,25 @@ class NativeQueueEngine {
         if (isInUserQueue) {
             isInUserQueue = false
         }
+        delegate?.queueEngineDidChangeContents(this, "queue-edit")
+    }
+
+    fun playUserQueueAtIndex(index: Int) {
+        if (index !in userQueue.indices) return
+        playedUserQueueHistory = playedUserQueueHistory + userQueue.take(index)
+        userQueue = userQueue.drop(index)
+        isInUserQueue = true
+        currentSong?.let { song ->
+            delegate?.queueEngineLoadSong(this, song, autoplay = true, startTime = null)
+            delegate?.queueEngineDidAdvanceTo(this, currentIndex, song.id, QueueAdvanceReason.SKIP)
+        }
+        delegate?.queueEngineDidChangeContents(this, "queue-edit")
+    }
+    fun reorderUserQueue(fromIndex: Int, toIndex: Int) {
+        if (fromIndex !in userQueue.indices || toIndex !in userQueue.indices) return
+        // The current user song remains pinned while it is playing.
+        if (isInUserQueue && (fromIndex == 0 || toIndex == 0)) return
+        userQueue = userQueue.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
         delegate?.queueEngineDidChangeContents(this, "queue-edit")
     }
 

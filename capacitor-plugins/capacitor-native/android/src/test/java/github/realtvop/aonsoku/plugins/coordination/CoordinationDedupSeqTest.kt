@@ -93,42 +93,42 @@ class CoordinationDedupSeqTest {
     @Test
     fun extractSeqReturnsLongForNumber() {
         val env = JSONObject().put("seq", 7)
-        assertEquals(7L, AonsokuNativeCoordinationPlugin.extractSeq(env))
+        assertEquals(7L, NativeCoordinationService.extractSeq(env))
     }
 
     @Test
     fun extractSeqReturnsNullWhenAbsent() {
         val env = JSONObject()
-        assertNull(AonsokuNativeCoordinationPlugin.extractSeq(env))
+        assertNull(NativeCoordinationService.extractSeq(env))
     }
 
     @Test
     fun extractSeqParsesStringNumber() {
         val env = JSONObject().put("seq", "12")
-        assertEquals(12L, AonsokuNativeCoordinationPlugin.extractSeq(env))
+        assertEquals(12L, NativeCoordinationService.extractSeq(env))
     }
 
     @Test
     fun extractMessageIdReturnsString() {
         val env = JSONObject().put("messageId", "abc-123")
-        assertEquals("abc-123", AonsokuNativeCoordinationPlugin.extractMessageId(env))
+        assertEquals("abc-123", NativeCoordinationService.extractMessageId(env))
     }
 
     @Test
     fun extractMessageIdReturnsNullWhenAbsent() {
         val env = JSONObject()
-        assertNull(AonsokuNativeCoordinationPlugin.extractMessageId(env))
+        assertNull(NativeCoordinationService.extractMessageId(env))
     }
 
     @Test
     fun extractTypeReturnsString() {
         val env = JSONObject().put("type", "command_ack")
-        assertEquals("command_ack", AonsokuNativeCoordinationPlugin.extractType(env))
+        assertEquals("command_ack", NativeCoordinationService.extractType(env))
     }
 
     @Test
     fun extractTypeReturnsNullWhenAbsent() {
         val env = JSONObject()
-        assertNull(AonsokuNativeCoordinationPlugin.extractType(env))
+        assertNull(NativeCoordinationService.extractType(env))
     }
 }

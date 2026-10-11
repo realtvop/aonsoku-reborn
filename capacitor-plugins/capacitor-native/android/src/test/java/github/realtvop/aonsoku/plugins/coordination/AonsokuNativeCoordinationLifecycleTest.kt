@@ -17,13 +17,13 @@ import org.junit.Test
 /// package-visible test hooks.
 class AonsokuNativeCoordinationLifecycleTest {
 
-    private lateinit var plugin: AonsokuNativeCoordinationPlugin
+    private lateinit var plugin: NativeCoordinationService
     private lateinit var fakeClient: OkHttpClient
     private lateinit var fakeSocket: WebSocket
 
     @Before
     fun setUp() {
-        plugin = AonsokuNativeCoordinationPlugin()
+        plugin = NativeCoordinationService(org.mockito.Mockito.mock(android.content.Context::class.java))
         fakeClient = OkHttpClient()
         // WebSocket is an interface; a no-op anonymous impl is sufficient
         // because attach only stores the reference.
@@ -36,7 +36,7 @@ class AonsokuNativeCoordinationLifecycleTest {
             override fun cancel() {}
         }
         // Ensure no stale active instance leaks across tests.
-        AonsokuNativeCoordinationPlugin.detachActiveForegroundService()
+        NativeCoordinationService.detachActiveForegroundService()
     }
 
     @After
@@ -120,13 +120,12 @@ class AonsokuNativeCoordinationLifecycleTest {
 
     @Test
     fun explicitDisconnectSetsManualDisconnectFlag() {
-        // We cannot call the PluginCall-based disconnect() in a unit test
-        // (no Bridge), but we can verify the flag the WebSocket callbacks
-        // check is reset by connect() and not flipped by detach.
         plugin.setConnectionForTesting(fakeClient, fakeSocket)
         plugin.attachToForegroundService()
-        plugin.detachFromForegroundService()
-        assertFalse(plugin.isManualDisconnectForTesting())
+        plugin.disconnect()
+        assertTrue(plugin.isManualDisconnectForTesting())
+        assertFalse(plugin.isAttachedToForegroundService())
+        assertNull(plugin.connectionForTesting().second)
     }
 
     // --- static attach/detach helpers --------------------------------------
@@ -139,7 +138,7 @@ class AonsokuNativeCoordinationLifecycleTest {
         // instance is loaded. We cannot easily null out the companion field
         // from here, so this test only asserts the type contract: the static
         // helper returns a Boolean and never throws.)
-        val result = AonsokuNativeCoordinationPlugin.attachToActiveForegroundService()
+        val result = NativeCoordinationService.attachToActiveForegroundService()
         // result is Boolean either way.
         assertTrue(result is Boolean)
     }
@@ -147,6 +146,6 @@ class AonsokuNativeCoordinationLifecycleTest {
     @Test
     fun staticDetachWithoutActiveInstanceIsNoOp() {
         // Must not throw when no plugin is loaded.
-        AonsokuNativeCoordinationPlugin.detachActiveForegroundService()
+        NativeCoordinationService.detachActiveForegroundService()
     }
 }

@@ -176,13 +176,17 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
 - Android `AppServices` is the application-scoped service graph for
   authentication, preferences, library, audio, and coordination ports.
   `PlaybackService` registers its `AudioService` when created and unregisters
-  only itself on destruction; `AonsokuNativeCoordinationPlugin` registers a
-  `CoordinationService` port for the WebSocket lifecycle. Remote commands,
+  only itself on destruction; `NativeCoordinationService` registers a
+  `CoordinationService` port for the WebSocket lifecycle. The application-scoped
+  `CoordinationController` owns registration, encrypted tokens, fresh tickets,
+  reconnects, device management and persistent history/outbox synchronization. Remote commands,
   native snapshots, projection, handoff preparation, fencing, and rollback
   now use these ports rather than `AudioPlugin.activeInstance` or a
-  coordination plugin instance lookup. The WebSocket plugin remains the
-  protocol/Capacitor adapter, while playback resources and queue state remain
+  coordination plugin instance lookup. The WebSocket protocol engine is native; the plugin remains only the
+  Capacitor adapter, while playback resources and queue state remain
   in `PlaybackService`.
+- Compose settings preserve the existing native preference keys and use checked-in
+  translations/theme palettes. ReplayGain is applied by a Media3 PCM processor.
 - Native UI service boundaries, binding/lifecycle rules, adapter duties, and
   the remaining TypeScript/WebView responsibilities are documented in
   `docs/android-native-services.md`.

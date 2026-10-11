@@ -67,3 +67,11 @@ records its actual verified range below; unresolved entries must remain visible.
   custom-server candidates/romanization, source ordering, prefer-synced fallback,
   explicit selection and offline cache. Regression tests cover multiple LRC
   timestamps, fractions, offset, plain text and same-time translations.
+
+- Stage 3: Compose settings, themes/locales, fullscreen timed lyrics, editable
+  queue, playlist/radio actions and download UI compile. The socket/protocol
+  engine now lives in NativeCoordinationService; native CoordinationController
+  owns registration/refresh/tickets/retry, device management, remote projection,
+  handoff and persisted history outbox/cursor/tombstones. ReplayGain has a native
+  PCM processor. Device home/library rendering and data-preserving upgrade pass.
+  Background download maintenance, UI acceptance and packaging closure remain.

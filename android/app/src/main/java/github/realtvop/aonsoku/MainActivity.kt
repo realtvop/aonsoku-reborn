@@ -29,6 +29,8 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= 33) notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
+    override fun onResume() { super.onResume(); model.coordinator.resume() }
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (model.booleanPreference("native.hideVolumeHud", false) &&
             event.keyCode in listOf(KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_DOWN)) {

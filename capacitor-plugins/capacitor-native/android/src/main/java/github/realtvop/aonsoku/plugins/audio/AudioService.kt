@@ -75,6 +75,8 @@ sealed interface AudioCommand {
     data class RemoveFromUserQueue(val indices: List<Int>) : AudioCommand
     data class RemoveSongsById(val songIds: List<String>) : AudioCommand
     data object ClearUserQueue : AudioCommand
+    data class PlayUserQueueAtIndex(val index: Int) : AudioCommand
+    data class ReorderUserQueue(val fromIndex: Int, val toIndex: Int) : AudioCommand
     data class PlayAtIndex(val index: Int, val startTime: Double?) : AudioCommand
     data class MarkAsShuffled(val originalSongs: List<QueueSong>) : AudioCommand
     data class PrepareHandoff(val snapshot: JSONObject, val autoplay: Boolean) : AudioCommand
@@ -122,6 +124,7 @@ interface AudioService {
     val queueState: StateFlow<AudioQueueSnapshot>
     val events: SharedFlow<AudioEvent>
 
+    fun downloadService(): NativeDownloadManager? = null
     suspend fun execute(command: AudioCommand): AudioCommandResult
     fun requestAudioFocus(): Boolean
     fun getSystemVolume(): Double

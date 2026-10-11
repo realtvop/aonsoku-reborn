@@ -51,6 +51,8 @@ class PreferencesService private constructor(context: Context) {
         emitChange("play_history", null)
     }
 
+    suspend fun replacePlayHistory(history: List<String>) { store.replacePlayHistory(history); emitChange("play_history", null) }
+
     suspend fun clearPlayHistory() {
         store.clearPlayHistory()
         emitChange("play_history", null)

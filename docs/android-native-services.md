@@ -60,13 +60,20 @@ job; subscribing or cancelling one client does not replace other clients.
 `AonsokuNativeCoordinationPlugin` remain compatibility adapters. They parse
 Capacitor arguments, preserve existing JS method names/fields/units, convert
 typed results to JS objects, and forward events with `notifyListeners`.
-Coordination protocol JSON is parsed at the coordination adapter boundary and
-is passed to the typed audio port for remote commands, projection, snapshots,
-and handoff fencing.
+`NativeCoordinationService` owns the protocol/socket engine. Its typed native
+controller owns registration, refresh/recovery, ticket retries, devices, control,
+handoff and persistent history synchronization. The Capacitor coordination plugin
+only adapts JS calls/events; native screens never instantiate it.
 
-The following behavior remains in the TypeScript/WebView layer: route and
-screen state, Zustand stores, React Query orchestration, Web Audio playback
-when native playback is unavailable, queue replacement confirmation, Web
-coordination observation, and UI-specific media-session projection. The
-native services provide the long-lived Android state and primitives; they do
-not replace those shared cross-runtime UI policies.
+## Native Android UI
+
+`android/app` launches Compose with `MaterialExpressiveTheme`; no BridgeActivity
+or WebView is created. ViewModel state binds to `AudioService`, queries
+`LibraryService`, and subscribes independently to preferences and coordination.
+Native UI handles playlist/radio mutations, queue confirmation, timed lyrics,
+search, library filters, downloads, device control and settings. Existing encrypted
+credentials, native Room data and preference keys survive data-preserving updates.
+
+The shared React application continues to serve Web, Electron and Capacitor iOS.
+Android compatibility adapters remain available for contract tests, but do not own
+the native application's lifecycle or UI.

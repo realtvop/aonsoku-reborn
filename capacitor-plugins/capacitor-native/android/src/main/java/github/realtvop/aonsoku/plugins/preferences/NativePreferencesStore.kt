@@ -66,6 +66,8 @@ class NativePreferencesStore(context: Context) {
         }
     }
 
+    suspend fun replacePlayHistory(history: List<String>) { dataStore.edit { it[PLAY_HISTORY_KEY] = PlayHistoryCodec.encode(history) } }
+
     suspend fun clearPlayHistory() {
         dataStore.edit { mutablePreferences ->
             mutablePreferences.remove(PLAY_HISTORY_KEY)

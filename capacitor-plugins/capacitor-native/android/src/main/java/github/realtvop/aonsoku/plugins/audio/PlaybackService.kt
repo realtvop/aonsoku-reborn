@@ -223,6 +223,10 @@ class PlaybackService : MediaSessionService(), AudioService {
     }
     lateinit var persistence: PlaybackStatePersistence
 
+    private val replayGainProcessor = ReplayGainProcessor()
+    private var replayGainSettings = JSONObject()
+
+    override fun downloadService(): NativeDownloadManager = downloadManager
     val downloadManager by lazy { NativeDownloadManager(this, authenticationService) }
     private val backgroundCacheSongIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
     private val downloadListeners = mutableListOf<DownloadListener>()
@@ -296,6 +300,19 @@ class PlaybackService : MediaSessionService(), AudioService {
     }
 
     private fun emitRemoteCommand(command: String, position: Double? = null) {
+        if (isRemotePlaybackProjectionActive) {
+            val controller = github.realtvop.aonsoku.plugins.coordination.CoordinationController.getInstance(applicationContext)
+            if (buildRemoteControlCommand(command, position)?.let { controller.transport.sendActiveCommand(it) } == true) return
+        } else if (command == "shuffle") {
+            setShuffle(!queueState.value.isShuffleActive)
+            return
+        } else if (command == "like") {
+            serviceScope.launch {
+                val library = LibraryService.getInstance(applicationContext)
+                queueState.value.currentSong?.id?.let { id -> library.getSong(id)?.let { library.setStarred(id, "song", it.starred == null); isLikeActive = it.starred == null; updateNotification() } }
+            }
+            return
+        }
         emitStateEvent(AudioEvent.RemoteCommand(command, position))
         buildRemoteControlCommand(command, position)?.let { remoteCommand ->
             emitStateEvent(
@@ -438,6 +455,7 @@ class PlaybackService : MediaSessionService(), AudioService {
             val historyState = runCatching { JSONObject(prefs["player_history"] ?: "{}").getJSONObject("state") }.getOrDefault(JSONObject())
             val maxSize = historyState.optInt("maxSize", 100).coerceIn(1, 10000)
             LibraryService.getInstance(applicationContext).getSong(songId)?.let { song ->
+                github.realtvop.aonsoku.plugins.coordination.CoordinationController.getInstance(applicationContext).recordHistory(song)
                 preferencesService.addToPlayHistory(JSONObject().put("id", song.id).put("title", song.title).put("artist", song.artist).toString(), maxSize)
             }
         }
@@ -891,6 +909,8 @@ class PlaybackService : MediaSessionService(), AudioService {
                         },
                     )
                     AudioCommand.ClearUserQueue -> clearUserQueue()
+                    is AudioCommand.PlayUserQueueAtIndex -> queueEngine.playUserQueueAtIndex(command.index)
+                    is AudioCommand.ReorderUserQueue -> queueEngine.reorderUserQueue(command.fromIndex, command.toIndex)
                     is AudioCommand.PlayAtIndex -> playAtIndex(command.index, command.startTime)
                     is AudioCommand.MarkAsShuffled -> markAsShuffled(command.originalSongs)
                     is AudioCommand.PrepareHandoff -> return@withContext prepareHandoff(
@@ -951,6 +971,9 @@ class PlaybackService : MediaSessionService(), AudioService {
 
     private fun emitStateEvent(event: AudioEvent) {
         _events.tryEmit(event)
+        if (event is AudioEvent.PlaybackStateChanged || event is AudioEvent.QueueStateChanged || event is AudioEvent.QueueContentsChanged) {
+            AppServices.current()?.coordinationService()?.publishNativePlaybackSnapshot()
+        }
     }
 
     private suspend fun playSongById(songId: String): AudioCommandResult {
@@ -1158,7 +1181,12 @@ class PlaybackService : MediaSessionService(), AudioService {
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .build()
 
-        val renderersFactory = DefaultRenderersFactory(this)
+        val renderersFactory = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(context: android.content.Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): androidx.media3.exoplayer.audio.AudioSink =
+                androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
+                    .setAudioProcessors(arrayOf(replayGainProcessor))
+                    .build()
+        }
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
 
         val basePlayer = ExoPlayer.Builder(this)
@@ -1168,6 +1196,14 @@ class PlaybackService : MediaSessionService(), AudioService {
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
         this.basePlayer = basePlayer
+        serviceScope.launch {
+            fun applyPreferences(prefs: Map<String, String>) {
+                replayGainSettings = runCatching { JSONObject(prefs["player_store"] ?: "{}").getJSONObject("state").getJSONObject("settings").getJSONObject("replayGain").getJSONObject("values") }.getOrDefault(JSONObject())
+                refreshReplayGain()
+            }
+            applyPreferences(preferencesService.getAllPreferences())
+            preferencesService.changes.collect { applyPreferences(it.preferences) }
+        }
 
         // Force skip commands so notification action buttons are always visible.
         // ExoPlayer only advertises COMMAND_SEEK_TO_NEXT / _PREVIOUS when the
@@ -2081,7 +2117,15 @@ class PlaybackService : MediaSessionService(), AudioService {
         super.onDestroy()
     }
 
+    private fun refreshReplayGain(songId: String? = currentScrobbleSongId) {
+        serviceScope.launch {
+            val metadata = songId?.let { LibraryService.getInstance(applicationContext).getSong(it)?.replayGainJson }?.let { runCatching { JSONObject(it) }.getOrNull() }
+            replayGainProcessor.gain = ReplayGainProcessor.gain(replayGainSettings, metadata)
+        }
+    }
+
     fun loadSong(song: QueueSong, autoplay: Boolean, startTime: Double?) {
+        refreshReplayGain(song.id)
         isTransitioning = true
         NativeLogger.debug("Loading song: ${song.title} - ${song.artist} (autoplay=$autoplay)", "playback-service")
         val resolver = NativeSourceResolver(this)

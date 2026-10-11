@@ -132,4 +132,28 @@ class NativeQueueEngineTest {
         assertEquals("1", fullState.getString("currentSongId"))
         assertEquals(10.5, fullState.getDouble("currentTime"), 0.001)
     }
+    @Test
+    fun reorderingContextPreservesThePlayingSong() {
+        val engine = NativeQueueEngine()
+        engine.setContextQueue(listOf(createSong("a"), createSong("b"), createSong("c")), 1, false, null)
+        engine.reorderContextQueue(0, 2)
+        assertEquals("b", engine.currentSong?.id)
+        assertEquals(0, engine.currentIndex)
+        assertEquals(listOf("b", "c", "a"), engine.contextSongs.map { it.id })
+    }
+
+    @Test
+    fun jumpingIntoManualQueuePreservesSkippedSongsForPrevious() {
+        val engine = NativeQueueEngine()
+        engine.setContextQueue(listOf(createSong("a"), createSong("b")), 0, false, null)
+        engine.addToUserQueue(listOf(createSong("x"), createSong("y"), createSong("z")), "last")
+        engine.playUserQueueAtIndex(1)
+        assertEquals("y", engine.currentSong?.id)
+        assertEquals(listOf("x"), engine.playedUserQueueHistory.map { it.id })
+        assertEquals(listOf("y", "z"), engine.userQueue.map { it.id })
+        engine.reorderUserQueue(1, 0)
+        assertEquals("y", engine.currentSong?.id)
+        engine.skipToPrevious(0.0)
+        assertEquals("x", engine.currentSong?.id)
+    }
 }

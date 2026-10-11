@@ -19,7 +19,7 @@ class AonsokuNativeCoordinationPluginTest {
 
     @Test
     fun heartbeatEnvelopeHasProtocolVersionTypeAndMessageId() {
-        val env = AonsokuNativeCoordinationPlugin.buildHeartbeatEnvelope(protocolVersion = 1)
+        val env = NativeCoordinationService.buildHeartbeatEnvelope(protocolVersion = 1)
         assertEquals(1, env.getInt("version"))
         assertEquals("heartbeat", env.getString("type"))
         assertFalse(env.getString("messageId").isBlank())
@@ -27,14 +27,14 @@ class AonsokuNativeCoordinationPluginTest {
 
     @Test
     fun heartbeatEnvelopeUsesGivenProtocolVersion() {
-        val env = AonsokuNativeCoordinationPlugin.buildHeartbeatEnvelope(protocolVersion = 2)
+        val env = NativeCoordinationService.buildHeartbeatEnvelope(protocolVersion = 2)
         assertEquals(2, env.getInt("version"))
     }
 
     @Test
     fun heartbeatEnvelopeMessageIdIsUniquePerCall() {
-        val a = AonsokuNativeCoordinationPlugin.buildHeartbeatEnvelope(1).getString("messageId")
-        val b = AonsokuNativeCoordinationPlugin.buildHeartbeatEnvelope(1).getString("messageId")
+        val a = NativeCoordinationService.buildHeartbeatEnvelope(1).getString("messageId")
+        val b = NativeCoordinationService.buildHeartbeatEnvelope(1).getString("messageId")
         assertNotEqualsUuid(a, b)
     }
 
@@ -42,7 +42,7 @@ class AonsokuNativeCoordinationPluginTest {
 
     @Test
     fun helloEnvelopeIncludesHandshakeFields() {
-        val env = AonsokuNativeCoordinationPlugin.buildHelloEnvelope(
+        val env = NativeCoordinationService.buildHelloEnvelope(
             protocolVersion = 1,
             capabilities = 15,
             deviceId = "dev-1",
@@ -64,7 +64,7 @@ class AonsokuNativeCoordinationPluginTest {
 
     @Test
     fun targetReadyEnvelopeIncludesSourceDeviceAndSession() {
-        val env = AonsokuNativeCoordinationPlugin.buildTargetReadyEnvelope(
+        val env = NativeCoordinationService.buildTargetReadyEnvelope(
             protocolVersion = 1,
             transactionId = "tx-1",
             generation = 2,
@@ -87,7 +87,7 @@ class AonsokuNativeCoordinationPluginTest {
 
     @Test
     fun commandAckEnvelopeUsesOriginalMessageIdAndOkResult() {
-        val env = AonsokuNativeCoordinationPlugin.buildCommandAckEnvelope(
+        val env = NativeCoordinationService.buildCommandAckEnvelope(
             protocolVersion = 1,
             messageId = "msg-1",
         )
@@ -103,7 +103,7 @@ class AonsokuNativeCoordinationPluginTest {
     @Test
     fun relinquishAckEnvelopeIncludesTransactionAndSnapshot() {
         val snapshot = JSONObject().put("songId", "song-1")
-        val env = AonsokuNativeCoordinationPlugin.buildRelinquishAckEnvelope(
+        val env = NativeCoordinationService.buildRelinquishAckEnvelope(
             protocolVersion = 1,
             transactionId = "tx-1",
             snapshot = snapshot,
@@ -118,7 +118,7 @@ class AonsokuNativeCoordinationPluginTest {
 
     @Test
     fun handoffFailedEnvelopeIncludesTransactionAndCode() {
-        val env = AonsokuNativeCoordinationPlugin.buildHandoffFailedEnvelope(
+        val env = NativeCoordinationService.buildHandoffFailedEnvelope(
             protocolVersion = 1,
             transactionId = "tx-1",
             code = "source_pause_timeout",
@@ -157,7 +157,7 @@ class AonsokuNativeCoordinationPluginTest {
             """.trimIndent(),
         )
 
-        val snapshot = AonsokuNativeCoordinationPlugin.buildPlaybackSnapshot(
+        val snapshot = NativeCoordinationService.buildPlaybackSnapshot(
             sessionId = "session-1",
             audioState = audioState,
             sampledAtSeconds = 123.0,
@@ -190,7 +190,7 @@ class AonsokuNativeCoordinationPluginTest {
 
     @Test
     fun playbackSnapshotReturnsNullWhenThereIsNoCurrentSong() {
-        val snapshot = AonsokuNativeCoordinationPlugin.buildPlaybackSnapshot(
+        val snapshot = NativeCoordinationService.buildPlaybackSnapshot(
             sessionId = "session-1",
             audioState = JSONObject("""{"isPlaying":false}"""),
             sampledAtSeconds = 123.0,
@@ -203,46 +203,46 @@ class AonsokuNativeCoordinationPluginTest {
 
     @Test
     fun parseJsonObjectReturnsObjectForValidJson() {
-        val parsed = AonsokuNativeCoordinationPlugin.parseJsonObject("""{"a":1}""")
+        val parsed = NativeCoordinationService.parseJsonObject("""{"a":1}""")
         assertNotNull(parsed)
         assertEquals(1, parsed!!.getInt("a"))
     }
 
     @Test
     fun parseJsonObjectReturnsNullForMalformedJson() {
-        assertNull(AonsokuNativeCoordinationPlugin.parseJsonObject("not json"))
+        assertNull(NativeCoordinationService.parseJsonObject("not json"))
     }
 
     @Test
     fun parseJsonObjectReturnsNullForArrayJson() {
         // An array is valid JSON but not a JSONObject; callers expect null
         // rather than a ClassCastException when wrapping into an envelope.
-        assertNull(AonsokuNativeCoordinationPlugin.parseJsonObject("[1,2,3]"))
+        assertNull(NativeCoordinationService.parseJsonObject("[1,2,3]"))
     }
 
     @Test
     fun parseJsonObjectReturnsNullForEmptyString() {
-        assertNull(AonsokuNativeCoordinationPlugin.parseJsonObject(""))
+        assertNull(NativeCoordinationService.parseJsonObject(""))
     }
 
     // --- buildTicketUrl --------------------------------------------------------
 
     @Test
     fun buildTicketUrlAppendsTicketAsQueryParameter() {
-        val url = AonsokuNativeCoordinationPlugin.buildTicketUrl("wss://h/v1/realtime", "abc")
+        val url = NativeCoordinationService.buildTicketUrl("wss://h/v1/realtime", "abc")
         assertEquals("wss://h/v1/realtime?ticket=abc", url)
     }
 
     @Test
     fun buildTicketUrlPreservesExistingQueryString() {
-        val url = AonsokuNativeCoordinationPlugin.buildTicketUrl("wss://h/v1/realtime?proto=1", "abc")
+        val url = NativeCoordinationService.buildTicketUrl("wss://h/v1/realtime?proto=1", "abc")
         assertEquals("wss://h/v1/realtime?proto=1&ticket=abc", url)
     }
 
     @Test
     fun buildTicketUrlEncodesSpecialCharacters() {
         // Tickets that contain &/=? would otherwise break the URL.
-        val url = AonsokuNativeCoordinationPlugin.buildTicketUrl("wss://h/v1/realtime", "a&b=c?d/e#f")
+        val url = NativeCoordinationService.buildTicketUrl("wss://h/v1/realtime", "a&b=c?d/e#f")
         assertTrue("ticket should be encoded: $url", url.endsWith("ticket=a%26b%3Dc%3Fd%2Fe%23f"))
         // The encoded form must not introduce an extra query boundary.
         assertFalse(url.contains("ticket=a&b"))
@@ -256,7 +256,7 @@ class AonsokuNativeCoordinationPluginTest {
         // ciphertext blob. If these drift apart, clearTokens/config isolation
         // breaks. Lock the shared name to catch regressions.
         assertEquals(
-            AonsokuNativeCoordinationPlugin.PREFS_NAME,
+            NativeCoordinationService.PREFS_NAME,
             CoordinationTokenStore.PREFS_NAME,
         )
     }
