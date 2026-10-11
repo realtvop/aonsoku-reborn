@@ -137,11 +137,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build mobile web assets
-        run: pnpm run build:mobile
-
-      - name: Sync Capacitor Android
-        run: pnpm exec cap sync android
+      - name: Generate native Android resources
+        run: node scripts/android/generate-native-resources.mjs
 
       - name: Restore Android release keystore
         env:

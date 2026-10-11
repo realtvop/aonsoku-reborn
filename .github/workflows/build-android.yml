@@ -41,11 +41,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build mobile web assets
-        run: pnpm run build:mobile
-
-      - name: Sync Capacitor Android
-        run: pnpm exec cap sync android
+      - name: Generate native Android resources
+        run: node scripts/android/generate-native-resources.mjs
 
       - name: Build Debug APK
         working-directory: android

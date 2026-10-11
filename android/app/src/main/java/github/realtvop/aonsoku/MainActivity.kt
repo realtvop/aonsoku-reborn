@@ -14,7 +14,12 @@ import github.realtvop.aonsoku.ui.AonsokuApp
 import github.realtvop.aonsoku.ui.AonsokuViewModel
 
 /** The production Android entry point contains only native Compose UI. */
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), android.hardware.SensorEventListener {
+    private val sensors by lazy { getSystemService(SENSOR_SERVICE) as android.hardware.SensorManager }
+    private val shake = DebugShakeDetector { startActivity(android.content.Intent(this, github.realtvop.aonsoku.plugins.debug.DebugActivity::class.java)) }
+    override fun onSensorChanged(event: android.hardware.SensorEvent) { shake.handleSensorData(event.sensor.type, event.values, event.timestamp / 1000000) }
+    override fun onAccuracyChanged(sensor: android.hardware.Sensor?, accuracy: Int) {}
+    override fun onPause() { sensors.unregisterListener(this); shake.reset(); super.onPause() }
     private val model: AonsokuViewModel by viewModels()
     private val notifications = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -29,7 +34,10 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= 33) notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
-    override fun onResume() { super.onResume(); model.coordinator.resume() }
+    override fun onResume() { super.onResume(); model.coordinator.resume(); model.network.refresh();
+        val sensor = sensors.getDefaultSensor(android.hardware.Sensor.TYPE_LINEAR_ACCELERATION) ?: sensors.getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER)
+        sensor?.let { sensors.registerListener(this, it, android.hardware.SensorManager.SENSOR_DELAY_GAME) }
+    }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (model.booleanPreference("native.hideVolumeHud", false) &&

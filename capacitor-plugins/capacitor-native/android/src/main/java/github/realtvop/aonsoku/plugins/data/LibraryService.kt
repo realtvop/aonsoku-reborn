@@ -430,9 +430,13 @@ class LibraryService private constructor(context: Context) {
             ?: throw IllegalStateException("No stored credentials")
         return withContext(Dispatchers.IO) {
             val file = imageCache.downloadCoverImage(coverArtId, size, credentials)
+            val settings = runCatching { JSONObject(github.realtvop.aonsoku.plugins.preferences.PreferencesService.getInstance(appContext).getAllPreferences()["cache_store"] ?: "{}").getJSONObject("state").getJSONObject("settings") }.getOrDefault(JSONObject())
+            imageCache.enforceQuota(settings.optLong("assetsQuota", 536870912), coverArtId)
             CachedImageFile(coverArtId, file, sizeBytes = file.length(), coverSize = size)
         }
     }
+
+    suspend fun enforceImageQuota(bytes: Long) = withContext(Dispatchers.IO) { imageCache.enforceQuota(bytes) }
 
     suspend fun downloadAvatar(username: String, size: String): CachedImageFile {
         val credentials = authenticationService.getCredentials()

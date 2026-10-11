@@ -413,7 +413,7 @@ class NativeCoordinationService(private val context: Context) : CoordinationServ
         builder.method(method, if (method in setOf("GET", "HEAD")) null else requestBody ?: ByteArray(0).toRequestBody())
         OkHttpClient.Builder().callTimeout(20, TimeUnit.SECONDS).build().newCall(builder.build()).execute().use { response -> CoordinationHttpResponse(response.code, response.message, response.body?.string().orEmpty()) }
     }
-    fun disconnect() { manualDisconnect = true; disconnectInternal() }
+    fun disconnect() { manualDisconnect = true; disconnectInternal(); notifyState("disconnected") }
     fun connectionState(): JSONObject = JSONObject().put("state", _state.value).put("deviceId", deviceId ?: JSONObject.NULL)
     fun submitEnvelope(envelope: JSONObject) {
         envelope.put("version", protocolVersion)
@@ -465,8 +465,8 @@ class NativeCoordinationService(private val context: Context) : CoordinationServ
             .build()
         val request = Request.Builder().url(urlWithTicket).build()
         this.webSocket = this.client?.newWebSocket(request, object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) {
-                if (this@NativeCoordinationService.webSocket !== webSocket) return
+            override fun onOpen(webSocket: WebSocket, response: Response) = dispatchOnMain {
+                if (this@NativeCoordinationService.webSocket !== webSocket) return@dispatchOnMain
                 isConnecting = false
                 reconnectAttempts = 0
                 sendEnvelope(
@@ -491,8 +491,8 @@ class NativeCoordinationService(private val context: Context) : CoordinationServ
                 mainHandler?.post { if (this@NativeCoordinationService.webSocket === webSocket) dispatchEnvelope(text) }
             }
 
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                if (this@NativeCoordinationService.webSocket !== webSocket) return
+            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = dispatchOnMain {
+                if (this@NativeCoordinationService.webSocket !== webSocket) return@dispatchOnMain
                 this@NativeCoordinationService.webSocket = null
                 client = null
                 isConnecting = false
@@ -507,8 +507,8 @@ class NativeCoordinationService(private val context: Context) : CoordinationServ
                 if (!manualDisconnect) scheduleReconnect()
             }
 
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                if (this@NativeCoordinationService.webSocket !== webSocket) return
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) = dispatchOnMain {
+                if (this@NativeCoordinationService.webSocket !== webSocket) return@dispatchOnMain
                 Log.e(TAG, "WS failure", t)
                 this@NativeCoordinationService.webSocket = null
                 client = null
@@ -531,6 +531,7 @@ class NativeCoordinationService(private val context: Context) : CoordinationServ
     private fun persistSession() {
         sessionPreferences?.edit()?.putString("session", nativeSessionId)?.putInt("generation", nativeGeneration)?.putInt("revision", nativeSnapshotRevision)?.apply()
     }
+    private fun dispatchOnMain(block: () -> Unit) { mainHandler?.post { block() } ?: block() }
     private fun requestSnapshots() {
         val env = JSONObject()
         env.put("version", protocolVersion)
@@ -747,6 +748,7 @@ class NativeCoordinationService(private val context: Context) : CoordinationServ
             attemptedStaleRetry = false,
         )
         sendCommandEnvelope(messageId, targetDeviceId, generation, command)
+        mainHandler?.postDelayed({ if (pendingNativeCommands.remove(messageId) != null) emit("coordinationEvent", JSONObject().put("envelopeJson", "{\"type\":\"error\",\"reason\":\"Remote command timed out\"}")) }, 15000)
         return true
     }
 
@@ -780,7 +782,10 @@ class NativeCoordinationService(private val context: Context) : CoordinationServ
             result?.optString("status") == "error" &&
                 result.optString("code") == "stale_epoch"
         pendingNativeCommands.remove(messageId)
-        if (!isStaleEpoch || pending.attemptedStaleRetry) return true
+        if (!isStaleEpoch || pending.attemptedStaleRetry) {
+            if (result?.optString("status") == "error") emit("coordinationEvent", JSONObject().put("envelopeJson", JSONObject().put("type", "error").put("reason", result.optString("reason", result.optString("code", "Command failed"))).toString()))
+            return true
+        }
 
         val generation = deviceGenerations[pending.targetDeviceId] ?: return true
         val command = parseJsonObject(pending.commandJson) ?: return true
@@ -798,8 +803,7 @@ class NativeCoordinationService(private val context: Context) : CoordinationServ
     }
 
     private fun dispatchEnvelope(json: String) {
-        // Parse once to extract routing metadata, then forward the raw JSON
-        // to the WebView so it can re-parse into the full Envelope type.
+        // Native routing is independent of the optional Capacitor event adapter.
         val parsed = parseJsonObject(json)
         if (parsed != null) {
             // §9.2: track the incoming seq on every envelope.

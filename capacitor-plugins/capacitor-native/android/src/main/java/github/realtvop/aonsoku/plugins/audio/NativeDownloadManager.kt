@@ -2,6 +2,9 @@ package github.realtvop.aonsoku.plugins.audio
 
 import android.content.Context
 import android.net.Uri
+import github.realtvop.aonsoku.plugins.data.db.entity.SongEntity
+import github.realtvop.aonsoku.plugins.data.LibraryService
+import github.realtvop.aonsoku.plugins.data.NativeLibraryCodec
 import github.realtvop.aonsoku.plugins.bridge.AuthenticationService
 import github.realtvop.aonsoku.plugins.bridge.SubsonicAuthBuilder
 import kotlinx.coroutines.*
@@ -42,6 +45,28 @@ class NativeDownloadManager(
     private val _states = MutableStateFlow<Map<String, NativeDownloadState>>(emptyMap())
     val states = _states.asStateFlow()
     private val sources = ConcurrentHashMap<String, String>()
+    private val pending = ConcurrentHashMap<String, JSONObject>()
+    private val connections = ConcurrentHashMap<String, HttpURLConnection>()
+    private val journal get() = File(context.filesDir, "native-downloads.json")
+
+    init {
+        runCatching {
+            val saved = JSONArray(journal.takeIf(File::exists)?.readText() ?: "[]")
+            (0 until saved.length()).forEach { index ->
+                val request = saved.getJSONObject(index)
+                download(request.getString("songId"), request.optInt("maxBitRate").takeIf { it > 0 }, request.optString("format").takeIf(String::isNotBlank), request.optString("source", "explicit"))
+            }
+        }
+    }
+    @Synchronized
+    private fun persistPending() {
+        val temporary = File(context.filesDir, "native-downloads.tmp")
+        temporary.writeText(JSONArray(pending.values.toList()).toString())
+        check(temporary.renameTo(journal)) { "Cannot persist download queue" }
+    }
+    fun retryPending() {
+        pending.values.toList().forEach { request -> download(request.getString("songId"), request.optInt("maxBitRate").takeIf { it > 0 }, request.optString("format").takeIf(String::isNotBlank), request.optString("source", "explicit")) }
+    }
 
     fun addListener(listener: Listener) {
         synchronized(listeners) {
@@ -82,23 +107,27 @@ class NativeDownloadManager(
     fun download(songId: String, maxBitRate: Int? = null, format: String? = null, source: String = "explicit") {
         if (songId.startsWith("radio:")) return
         require(source in setOf("explicit", "smart", "lru"))
-        if (source == "explicit" || !sources.containsKey(songId)) sources[songId] = source
-        if (activeJobs.containsKey(songId)) return
+        val previousSource = sources[songId] ?: cachedAudio().find { it.songId == songId }?.source
+        val effectiveSource = promotedSource(previousSource, source)
+        sources[songId] = effectiveSource
+        if (activeJobs.containsKey(songId)) { pending[songId]?.put("source", effectiveSource); persistPending(); return }
         val cached = cachedAudio().find { it.songId == songId }
         if (cached != null) {
-            if (source == "explicit") {
+            if (effectiveSource != cached.source) {
                 val file = AudioCacheUtils.getMetadataFile(context, songId)
-                runCatching { val json = JSONObject(file.readText()); json.put("source", source); file.writeText(json.toString()) }
+                runCatching { val json = JSONObject(file.readText()); json.put("source", effectiveSource); file.writeText(json.toString()) }
             }
-            _states.update { it + (songId to NativeDownloadState(songId, "completed", cached.sizeBytes, cached.sizeBytes, source = source)) }
+            _states.update { it + (songId to NativeDownloadState(songId, "completed", cached.sizeBytes, cached.sizeBytes, source = effectiveSource)) }
             return
         }
-        _states.update { it + (songId to NativeDownloadState(songId, "queued", source = source)) }
+        pending[songId] = JSONObject().put("songId", songId).put("source", effectiveSource).put("maxBitRate", maxBitRate).put("format", format)
+        persistPending()
+        _states.update { it + (songId to NativeDownloadState(songId, "queued", source = effectiveSource)) }
         val job = downloadScope.launch(start = CoroutineStart.LAZY) {
-            try { slots.withPermit { executeDownload(songId, maxBitRate, format) }; enforceQuota(songId) }
+            try { slots.withPermit { executeDownload(songId, maxBitRate, format) }; pending.remove(songId); persistPending(); enforceQuota(songId) }
             catch (e: CancellationException) { _states.update { it + (songId to NativeDownloadState(songId, "cancelled", source = source)) } }
             catch (e: Exception) { emitFailed(songId, e.localizedMessage ?: "Download failed") }
-            finally { activeJobs.remove(songId) }
+            finally { activeJobs.remove(songId, coroutineContext[Job]) }
         }
         activeJobs[songId] = job
         job.start()
@@ -114,6 +143,15 @@ class NativeDownloadManager(
         }.orEmpty()
     }.distinctBy { it.songId }
 
+    fun cachedSong(songId: String): SongEntity? {
+        return listOf(AudioCacheUtils.getCacheDirectory(context), AudioCacheUtils.getSecondaryCacheDirectory(context)).firstNotNullOfOrNull { dir ->
+            runCatching {
+                val raw = JSONObject(File(dir, "${AudioCacheUtils.cacheId(songId)}.json").readText())
+                if (!File(dir, raw.getString("fileName")).isFile) null
+                else raw.optJSONObject("song")?.let { NativeLibraryCodec.parseSong(it) } ?: SongEntity(id = songId, title = songId)
+            }.getOrNull()
+        }
+    }
     @Synchronized
     fun deleteCachedAudio(songId: String) {
         cancel(songId)
@@ -121,7 +159,9 @@ class NativeDownloadManager(
         listOf(AudioCacheUtils.getCacheDirectory(context), AudioCacheUtils.getSecondaryCacheDirectory(context)).forEach { dir -> dir.listFiles()?.filter { it.name.startsWith("$id.") }?.forEach(File::delete) }
         _states.update { it - songId }
     }
-    fun clearSource(source: String) { cachedAudio().filter { it.source == source }.forEach { deleteCachedAudio(it.songId) } }
+    fun clearSource(source: String) {
+        pending.values.filter { it.optString("source") == source }.map { it.getString("songId") }.forEach(::cancel)
+        cachedAudio().filter { it.source == source }.forEach { deleteCachedAudio(it.songId) } }
     suspend fun enforceQuota(protectedSongId: String? = null) {
         val prefs = PreferencesService.getInstance(context).getAllPreferences()
         val settings = runCatching { JSONObject(prefs["cache_store"] ?: "{}").getJSONObject("state").getJSONObject("settings") }.getOrDefault(JSONObject())
@@ -135,9 +175,13 @@ class NativeDownloadManager(
     }
 
     fun cancel(songId: String) {
+        pending.remove(songId); persistPending()
+        connections.remove(songId)?.disconnect()
         activeJobs.remove(songId)?.cancel()
     }
 
+    fun pauseAll() { activeJobs.values.toList().forEach(Job::cancel); connections.values.toList().forEach { it.disconnect() } }
+    fun close() { pauseAll(); downloadScope.cancel() }
     fun cancelAll() {
         val keys = activeJobs.keys()
         while (keys.hasMoreElements()) {
@@ -146,6 +190,13 @@ class NativeDownloadManager(
         }
     }
 
+    companion object {
+        /** Explicit downloads cannot be evicted by a later background-cache request. */
+        internal fun promotedSource(existing: String?, requested: String): String {
+            val priority = mapOf("lru" to 0, "smart" to 1, "explicit" to 2)
+            return if ((priority[existing] ?: -1) > (priority[requested] ?: 0)) existing!! else requested
+        }
+    }
     private suspend fun executeDownload(songId: String, maxBitRate: Int?, format: String?) {
         val credentials = (authenticationService ?: AuthenticationService.getInstance(context))
             .getCredentials()
@@ -171,6 +222,7 @@ class NativeDownloadManager(
 
         val url = URL("$baseString?$queryString")
         val connection = url.openConnection() as HttpURLConnection
+        connections[songId] = connection
         connection.connectTimeout = 30000
         connection.readTimeout = 300000
         connection.requestMethod = "GET"
@@ -182,11 +234,12 @@ class NativeDownloadManager(
         }
 
         val contentType = connection.contentType ?: "audio/mpeg"
+        if (contentType.contains("json") || contentType.contains("xml") || contentType.contains("text/html")) { connection.disconnect(); throw IOException("Server did not return audio") }
         val totalBytes = connection.contentLength.toLong()
 
         // Stream to a temp file first
         val cacheDir = AudioCacheUtils.getCacheDirectory(context, createIfNeeded = true)
-        val tempFile = File.createTempFile("download_${songId}", ".tmp", context.cacheDir)
+        val tempFile = File.createTempFile("download_${AudioCacheUtils.cacheId(songId)}", ".tmp", context.cacheDir)
 
         try {
             connection.inputStream.use { input ->
@@ -208,6 +261,7 @@ class NativeDownloadManager(
                             lastReportedTime = now
                         }
                     }
+                    if (totalBytes > 0 && totalRead < totalBytes) throw IOException("Incomplete audio download")
                     output.flush()
                 }
             }
@@ -229,6 +283,7 @@ class NativeDownloadManager(
             // Write metadata JSON file
             val metadataFile = AudioCacheUtils.getMetadataFile(context, songId)
             val metadataJson = JSONObject().apply {
+                LibraryService.getInstance(context).getSong(songId)?.let { song -> put("song", JSONObject().put("id", song.id).put("title", song.title).put("artist", song.artist).put("artistId", song.artistId).put("album", song.album).put("albumId", song.albumId).put("duration", song.duration).put("coverArt", song.coverArt)) }
                 put("songId", songId)
                 put("source", sources[songId] ?: "explicit")
                 put("fileName", destFile.name)
@@ -243,6 +298,7 @@ class NativeDownloadManager(
             if (tempFile.exists()) {
                 tempFile.delete()
             }
+            connections.remove(songId, connection)
             connection.disconnect()
         }
     }

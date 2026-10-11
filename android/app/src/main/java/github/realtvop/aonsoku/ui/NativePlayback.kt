@@ -21,7 +21,9 @@ import github.realtvop.aonsoku.plugins.lyrics.LyricsTrack
 fun NativePlayer(model: AonsokuViewModel, close: () -> Unit) {
     val queue by model.queue.collectAsState()
     val playback by model.playback.collectAsState()
-    val song by produceState<github.realtvop.aonsoku.plugins.data.db.entity.SongEntity?>(null, queue.currentSong?.id) { value = queue.currentSong?.id?.let { model.services.library.getSong(it) } }
+    val libraryRevision by model.libraryRevision.collectAsState()
+    val preferences by model.preferences.collectAsState()
+    val song by produceState<github.realtvop.aonsoku.plugins.data.db.entity.SongEntity?>(null, queue.currentSong?.id, libraryRevision) { value = queue.currentSong?.id?.let { model.services.library.getSong(it) ?: model.audio?.downloadService()?.cachedSong(it) } }
     var tab by remember { mutableIntStateOf(0) }
     Dialog(close, DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Surface(Modifier.fillMaxSize()) {
@@ -62,7 +64,7 @@ fun NativePlayer(model: AonsokuViewModel, close: () -> Unit) {
                     }
                     2 -> {
                         val revision by model.lyricsRevision.collectAsState()
-                        val track by produceState(LyricsTrack(), song?.id, revision) { value = song?.let { model.lyricsService.load(it) } ?: LyricsTrack() }
+                        val track by produceState(LyricsTrack(), song?.id, revision, preferences["native.lyrics.disabled.${song?.id}"], model.preference("player_store.settings.lyrics"), model.preference("player_store.settings.privacy")) { value = song?.let { model.lyricsService.load(it) } ?: LyricsTrack() }
                         val list = rememberLazyListState()
                         val lines = remember(track) { track.lines }
                         val offset = model.preference("native.lyrics.offset.${song?.id}")?.toDoubleOrNull()?.div(1000) ?: 0.0
@@ -72,9 +74,10 @@ fun NativePlayer(model: AonsokuViewModel, close: () -> Unit) {
                         if (lines.isEmpty()) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(L("No lyrics found")) }
                         LazyColumn(state = list, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 24.dp, vertical = 36.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                             itemsIndexed(lines) { index, line ->
-                                if (model.booleanPreference("player_store.settings.lyrics.showTranslation", true) || index == 0 || lines[index - 1].seconds != line.seconds) Text(line.text, style = MaterialTheme.typography.headlineSmall, fontWeight = if (index == active) FontWeight.Bold else FontWeight.Normal, color = if (!track.synced || index == active) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.fillMaxWidth().clickable(enabled = line.seconds != null) { model.command(AudioCommand.Seek((line.seconds!! - offset).coerceAtLeast(0.0))) })
+                                track.romaji?.let { roman -> github.realtvop.aonsoku.plugins.lyrics.LyricsParser.parse(roman).firstOrNull { it.seconds == line.seconds }?.let { Text(it.text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
+                                if (model.booleanPreference("player_store.settings.lyrics.showTranslation", true) || index == 0 || lines[index - 1].seconds != line.seconds) Text(line.text, style = MaterialTheme.typography.headlineSmall, fontWeight = if ((active >= 0 && line.seconds == lines[active].seconds)) FontWeight.Bold else FontWeight.Normal, color = if (!track.synced || (active >= 0 && line.seconds == lines[active].seconds)) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.fillMaxWidth().clickable(enabled = line.seconds != null) { model.command(AudioCommand.Seek((line.seconds!! - offset).coerceAtLeast(0.0))) })
                             }
-                            if (model.booleanPreference("player_store.settings.lyrics.showTranslation", true) && !track.romaji.isNullOrBlank()) item { Text(track.romaji.orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+
                         }
                     }
                 }

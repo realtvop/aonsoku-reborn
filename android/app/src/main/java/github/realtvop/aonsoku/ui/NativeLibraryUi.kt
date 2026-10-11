@@ -23,7 +23,8 @@ fun NativeItemMenu(model: AonsokuViewModel, item: LibraryItem, dismiss: () -> Un
     ModalBottomSheet(dismiss) {
         LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
             item { Text(item.title, Modifier.padding(24.dp), style = MaterialTheme.typography.headlineSmall) }
-            item { ActionRow("Play", Icons.Default.PlayArrow) { model.open(item); dismiss() } }
+            item { ActionRow("Play", Icons.Default.PlayArrow) { model.playItem(item); dismiss() } }
+            if (item.kind in listOf("album", "playlist")) item { ActionRow("Shuffle", Icons.Default.Shuffle) { model.playItem(item, true); dismiss() } }
             if (item.kind in listOf("song", "album", "playlist")) {
                 item { ActionRow("Play next", Icons.AutoMirrored.Filled.PlaylistPlay) { model.launch { model.command(AudioCommand.AddSongsById(model.songIds(item), "next")) }; dismiss() } }
                 item { ActionRow("Add to queue", Icons.AutoMirrored.Filled.PlaylistAdd) { model.launch { model.command(AudioCommand.AddSongsById(model.songIds(item), "last")) }; dismiss() } }

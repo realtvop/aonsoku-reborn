@@ -14,6 +14,7 @@ interface CacheMetaDao {
     @Query("SELECT COUNT(*) FROM cacheMeta WHERE type = 'cover'") suspend fun coverCount(): Int
     @Upsert suspend fun upsert(meta: CacheMetaEntity)
     @Upsert suspend fun bulkUpsert(metas: List<CacheMetaEntity>)
+    @Query("SELECT * FROM cacheMeta WHERE type = 'cover' ORDER BY lastAccessedAt ASC") suspend fun coversByLastAccess(): List<CacheMetaEntity>
     @Query("DELETE FROM cacheMeta WHERE key = :key") suspend fun delete(key: String)
     @Query("DELETE FROM cacheMeta WHERE type = :type") suspend fun deleteByType(type: String): Int
     @Query("DELETE FROM cacheMeta") suspend fun deleteAll()

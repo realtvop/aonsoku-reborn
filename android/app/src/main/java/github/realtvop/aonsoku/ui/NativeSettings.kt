@@ -78,7 +78,7 @@ fun SettingsScreen(model: AonsokuViewModel, category: String?) {
                 }
                 Toggle(model, "Custom lyrics server", "player_store.settings.lyrics.customServerEnabled", false)
                 ActionRow("Custom lyrics server settings") {
-                    model.dialog.value = NativeDialog.Form("Custom lyrics server", listOf(NativeField("url", "URL", model.preference("player_store.settings.lyrics.customServerUrl").orEmpty()), NativeField("password", "Password", model.preference("player_store.settings.lyrics.customServerPassword").orEmpty(), secret = true))) { values ->
+                    model.dialog.value = NativeDialog.Form("Custom lyrics server", listOf(NativeField("url", "URL", model.preference("player_store.settings.lyrics.customServerUrl").orEmpty()), NativeField("password", "Password", github.realtvop.aonsoku.plugins.lyrics.LyricsService.decodePassword(model.preference("player_store.settings.lyrics.customServerPassword").orEmpty()), secret = true))) { values ->
                         val url = values["url"].orEmpty().trim()
                         require(url.isEmpty() || java.net.URI(url).scheme in listOf("http", "https")) { "Invalid URL" }
                         model.setPreference("player_store.settings.lyrics.customServerUrl", url)
@@ -86,7 +86,7 @@ fun SettingsScreen(model: AonsokuViewModel, category: String?) {
                     }
                 }
                 Choice(model, "Listening history size", "player_history.maxSize", "100", listOf("25", "50", "100", "250", "500", "1000"), numeric = true)
-                ActionRow("Clear listening history", Icons.Default.Delete) { model.dialog.value = NativeDialog.Confirm("Clear history?", "This removes local listening history.") { model.launch { model.services.preferences.clearPlayHistory(); model.setPreference("player_history.history", JSONArray()) } } }
+                ActionRow("Clear listening history", Icons.Default.Delete) { model.dialog.value = NativeDialog.Confirm("Clear history?", "This removes local listening history.") { model.launch { model.coordinator.enqueueHistory(JSONObject().put("kind", "clear")); model.services.preferences.clearPlayHistory(); model.setPreference("player_history.history", JSONArray()) } } }
             }
             "content" -> Toggle(model, "Hide radio section", "app_store.pages.hideRadiosSection", true)
             "privacy" -> Toggle(model, "LRCLIB", "player_store.settings.privacy.lrcLibEnabled", true)

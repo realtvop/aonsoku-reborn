@@ -75,3 +75,11 @@ records its actual verified range below; unresolved entries must remain visible.
   handoff and persisted history outbox/cursor/tombstones. ReplayGain has a native
   PCM processor. Device home/library rendering and data-preserving upgrade pass.
   Background download maintenance, UI acceptance and packaging closure remain.
+
+- Native maintenance: download queue journals survive service/process recreation;
+  foreground data-sync keeps active transfers alive after UI unbind. Smart rules
+  derive favorites/playlist membership from Room and honor metered/offline state.
+  Image fetches are bounded/deduplicated and atomically replace successful files;
+  image/LRU quotas retain explicit audio. Network changes probe primary/fallback.
+  Custom lyric auth/metadata, source changes and romanization are native. Android
+  CI now builds Compose directly with reproducible shared theme/locale resources.

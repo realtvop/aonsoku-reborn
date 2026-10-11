@@ -12,6 +12,9 @@ def releaseSigningConfigured = releaseSigning.values().every { value ->
     value != null && !value.toString().trim().isEmpty()
 }
 
+def nativeVersion = new groovy.json.JsonSlurper().parse(file('../../package.json')).version.toString()
+def nativeVersionParts = nativeVersion.tokenize('-')[0].tokenize('.').collect { it.toInteger() }
+
 android {
     namespace = "github.realtvop.aonsoku"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -19,8 +22,8 @@ android {
         applicationId "github.realtvop.aonsoku"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode nativeVersionParts[0] * 1000000 + nativeVersionParts[1] * 1000 + nativeVersionParts[2]
+        versionName nativeVersion
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

@@ -259,11 +259,8 @@ jobs:
       - name: Inject nightly version
         run: node -e "const p=require('./package.json'); p.version='${{ needs.check-changes.outputs.nightly_version }}'; require('fs').writeFileSync('package.json', JSON.stringify(p, null, 2))"
 
-      - name: Build mobile web assets
-        run: pnpm run build:mobile
-
-      - name: Sync Capacitor Android
-        run: pnpm exec cap sync android
+      - name: Generate native Android resources
+        run: node scripts/android/generate-native-resources.mjs
 
       - name: Restore Android release keystore
         env:

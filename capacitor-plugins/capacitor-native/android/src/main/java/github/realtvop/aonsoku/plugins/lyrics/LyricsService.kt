@@ -46,7 +46,8 @@ class LyricsService(private val library: LibraryService, private val preferences
         val prefs = preferences.getAllPreferences()
         if (prefs["native.lyrics.disabled.${song.id}"] == "true") return LyricsTrack(source = "Disabled")
         val selected = prefs["native.lyrics.selected.${song.id}"] == "true"
-        if (!force || selected) library.getLyrics(song.id)?.let { return LyricsTrack(it.content, if (selected) "Selected lyrics" else "Offline cache", prefs["native.lyrics.romaji.${song.id}"]) }
+        val signature = prefs["player_store"].orEmpty().let { runCatching { JSONObject(it).getJSONObject("state").getJSONObject("settings").let { state -> state.optJSONObject("lyrics").toString() + state.optJSONObject("privacy").toString() } }.getOrDefault("") }
+        if (selected || (!force && prefs["native.lyrics.signature.${song.id}"] == signature)) library.getLyrics(song.id)?.let { return LyricsTrack(it.content, if (selected) "Selected lyrics" else "Offline cache", prefs["native.lyrics.romaji.${song.id}"]) }
         val state = runCatching { JSONObject(prefs["player_store"] ?: "{}").getJSONObject("state").getJSONObject("settings") }.getOrDefault(JSONObject())
         val settings = state.optJSONObject("lyrics") ?: JSONObject()
         val order = settings.optJSONArray("sourcePriority") ?: JSONArray(listOf("navidrome", "lrclib", "custom"))
@@ -57,7 +58,7 @@ class LyricsService(private val library: LibraryService, private val preferences
                 when (source) {
                     "navidrome" -> server(song)
                     "lrclib" -> if (state.optJSONObject("privacy")?.optBoolean("lrcLibEnabled", true) != false) lrclib(song) else null
-                    "custom" -> if (settings.optBoolean("customServerEnabled")) customCandidates(song.title, song.artist.orEmpty(), settings).firstOrNull()?.let { LyricsTrack(it.body, "Custom server", it.romaji) } else null
+                    "custom" -> if (settings.optBoolean("customServerEnabled")) customCandidates(song.title, song.artist.orEmpty(), settings, song).firstOrNull()?.let { LyricsTrack(it.body, "Custom server", it.romaji) } else null
                     else -> null
                 }
             } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
@@ -65,8 +66,8 @@ class LyricsService(private val library: LibraryService, private val preferences
             if (fallback == null) fallback = track
             if (!settings.optBoolean("preferSyncedLyrics") || track!!.synced) { fallback = track; break }
         }
-        val result = fallback ?: LyricsTrack(source = "No lyrics found")
-        if (result.body.isNotBlank()) library.storeLyrics(song.id, result.body, result.synced)
+        val result = fallback ?: library.getLyrics(song.id)?.let { LyricsTrack(it.content, "Offline cache", prefs["native.lyrics.romaji.${song.id}"]) } ?: LyricsTrack(source = "No lyrics found")
+        if (result.body.isNotBlank()) { library.storeLyrics(song.id, result.body, result.synced); preferences.setPreference("native.lyrics.signature.${song.id}", signature); if (result.romaji != null) preferences.setPreference("native.lyrics.romaji.${song.id}", result.romaji) }
         return result
     }
     private suspend fun server(song: SongEntity): LyricsTrack? {
@@ -103,10 +104,12 @@ class LyricsService(private val library: LibraryService, private val preferences
         }
         return candidates
     }
-    private suspend fun customCandidates(title: String, artist: String, settings: JSONObject): List<LyricsCandidate> {
+    private suspend fun customCandidates(title: String, artist: String, settings: JSONObject, song: SongEntity? = null): List<LyricsCandidate> {
         val url = settings.optString("customServerUrl")
         if (url.isBlank()) return emptyList()
-        val raw = getText(url, listOf("title" to title, "artist" to artist, "offset" to "0", "limit" to "30"), settings.optString("customServerPassword"))
+        val parameters = mutableListOf("title" to title, "artist" to artist, "offset" to "0", "limit" to "30")
+        song?.let { parameters += listOf("album" to it.album.orEmpty(), "duration" to it.duration.toString(), "path" to it.path.orEmpty()) }
+        val raw = getText(url, parameters, decodePassword(settings.optString("customServerPassword")))
         if (!raw.trimStart().startsWith("[")) return listOf(LyricsCandidate(title, artist, raw))
         val rows = JSONArray(raw)
         return (0 until rows.length()).mapNotNull { i -> val r = rows.optJSONObject(i) ?: return@mapNotNull null; r.optString("lyrics").takeIf(String::isNotBlank)?.let { LyricsCandidate(r.optString("title", title), r.optString("artist", artist), it, r.optString("romaji", null)) } }
@@ -115,7 +118,10 @@ class LyricsService(private val library: LibraryService, private val preferences
         library.storeLyrics(songId, body, LyricsParser.parse(body).any { it.seconds != null })
         preferences.setPreference("native.lyrics.selected.$songId", "true")
         preferences.setPreference("native.lyrics.disabled.$songId", "false")
-        romaji?.let { preferences.setPreference("native.lyrics.romaji.$songId", it) }
+        if (romaji.isNullOrBlank()) preferences.deletePreference("native.lyrics.romaji.$songId") else preferences.setPreference("native.lyrics.romaji.$songId", romaji)
+    }
+    companion object {
+        fun decodePassword(raw: String): String = if (raw.startsWith("enc:")) runCatching { raw.removePrefix("enc:").chunked(2).map { it.toInt(16).toChar() }.joinToString("") }.getOrDefault(raw) else raw
     }
     private suspend fun getText(base: String, params: List<Pair<String, String>>, password: String? = null): String = withContext(Dispatchers.IO) {
         val uri = URI(base.trim())

@@ -45,6 +45,8 @@ class AonsokuViewModel(application: Application, private val saved: SavedStateHa
     val signedIn = _signedIn.asStateFlow()
     private val _page = MutableStateFlow(NativePage())
     val page = _page.asStateFlow()
+    val network = github.realtvop.aonsoku.plugins.network.NativeNetworkMonitor.getInstance(application)
+    var hapticFeedback: () -> Unit = {}
     val coordinator = github.realtvop.aonsoku.plugins.coordination.CoordinationController.getInstance(application)
     private var localPlayback = AudioPlaybackSnapshot()
     private var localQueue = AudioQueueSnapshot()
@@ -52,6 +54,7 @@ class AonsokuViewModel(application: Application, private val saved: SavedStateHa
     val canGoBack = MutableStateFlow(false)
     val lyricsService = github.realtvop.aonsoku.plugins.lyrics.LyricsService(services.library, services.preferences)
     val lyricsRevision = MutableStateFlow(0)
+    val libraryRevision = MutableStateFlow(0)
     val downloads = MutableStateFlow<Map<String, NativeDownloadState>>(emptyMap())
     val home = MutableStateFlow<List<HomeSection>>(emptyList())
     val preferences = MutableStateFlow<Map<String, String>>(emptyMap())
@@ -87,6 +90,11 @@ class AonsokuViewModel(application: Application, private val saved: SavedStateHa
         bound = context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
         viewModelScope.launch {
             preferences.value = services.preferences.getAllPreferences()
+            if (services.preferences.getPlayHistory(1).isEmpty() && preferences.value["native.history.migrated"] != "true") {
+                val legacy = runCatching { JSONObject(preferences.value["player_history"] ?: "{}").getJSONObject("state").getJSONArray("history") }.getOrDefault(JSONArray())
+                services.preferences.replacePlayHistory((0 until legacy.length()).mapNotNull { legacy.optJSONObject(it)?.let { row -> (row.optJSONObject("song") ?: row).toString() } })
+                services.preferences.setPreference("native.history.migrated", "true")
+            }
             services.preferences.changes.collect { preferences.value = it.preferences }
         }
         viewModelScope.launch {
@@ -111,7 +119,20 @@ class AonsokuViewModel(application: Application, private val saved: SavedStateHa
                 playback.value = AudioPlaybackSnapshot(songId = snapshot.optString("songId"), isPlaying = snapshot.optBoolean("isPlaying"), currentTimeSeconds = snapshot.optDouble("progressSeconds"), durationSeconds = snapshot.optDouble("durationSeconds"), volume = snapshot.optDouble("volume", 1.0))
             }
         }
-        viewModelScope.launch { services.library.dataChanges.debounce(250).collect { reload() } }
+        viewModelScope.launch {
+            while (true) {
+                delay(500)
+                val target = coordinator.controlledDeviceId.value ?: continue
+                val device = coordinator.devices.value.find { it.id == target } ?: continue
+                val snapshot = device.snapshot ?: continue
+                if (device.online && snapshot.optBoolean("isPlaying")) {
+                    val elapsed = (System.currentTimeMillis() - device.confirmedAt).coerceAtLeast(0) / 1000.0
+                    val duration = snapshot.optDouble("durationSeconds")
+                    playback.value = playback.value.copy(currentTimeSeconds = (snapshot.optDouble("progressSeconds") + elapsed).coerceAtMost(duration.takeIf { it > 0 } ?: Double.MAX_VALUE))
+                }
+            }
+        }
+        viewModelScope.launch { services.library.dataChanges.debounce(250).collect { libraryRevision.value++; reload() } }
     }
     fun launch(block: suspend () -> Unit) = viewModelScope.launch {
         try { block() } catch (e: CancellationException) { throw e }
@@ -124,7 +145,7 @@ class AonsokuViewModel(application: Application, private val saved: SavedStateHa
         }
         val result = services.authentication.login(url.trim().trimEnd('/'), fallback.trim().takeIf(String::isNotEmpty), username.trim(), password)
         _signedIn.value = result.success
-        if (result.success) { services.library.refreshCredentials(); services.library.syncAll(); navigate("home", "Home", push = false) }
+        if (result.success) { setPreference("app_store.data.primaryUrl", url.trim().trimEnd('/')); setPreference("app_store.data.fallbackUrl", fallback.trim()); services.library.refreshCredentials(); services.library.syncAll(); navigate("home", "Home", push = false) }
         else messages.emit(result.error ?: "Unable to sign in")
         done(result.success)
     }
@@ -158,7 +179,7 @@ class AonsokuViewModel(application: Application, private val saved: SavedStateHa
                     "favorites-albums" -> l.getAlbums(paging, AlbumFilter(starredOnly = true, sortBy = "starredAt")).let { total = it.total; it.items.map { row -> row.item() } }
                     "favorites-artists" -> l.getArtists(paging, ArtistFilter(starredOnly = true)).let { total = it.total; it.items.map { row -> row.item() } }
                     "favorites-songs" -> l.getSongs(paging, SongFilter(starredOnly = true, sortBy = "starredAt")).let { total = it.total; it.items.map { row -> row.item() } }
-                    "downloads" -> withContext(Dispatchers.IO) { audio?.downloadService()?.cachedAudio().orEmpty().map { it.songId } }.let { ids -> l.getSongsByIds((ids + downloads.value.keys).distinct()).map { it.item() } }.also { total = it.size }
+                    "downloads" -> withContext(Dispatchers.IO) { audio?.downloadService()?.cachedAudio().orEmpty().map { it.songId } }.let { ids -> (ids + downloads.value.keys).distinct().let { all -> val songs = l.getSongsByIds(all).associateBy { it.id }; all.mapNotNull { id -> (songs[id] ?: audio?.downloadService()?.cachedSong(id))?.item()?.let { if (songs[id] == null) it.copy(subtitle = "${it.subtitle} · Removed from server (still playable offline)") else it } } } }.also { total = it.size }
                     "radios" -> l.getRadios().map { LibraryItem(it.id, it.name, it.streamUrl, kind = "radio", radio = it) }.also { total = it.size }
                     "history" -> services.preferences.getPlayHistory(10000).mapNotNull { runCatching { JSONObject(it).optString("id") }.getOrNull() }.let { ids -> val songs = l.getSongsByIds(ids).associateBy { it.id }; ids.mapNotNull { songs[it]?.item() } }.also { total = it.size }
                     "home" -> {
@@ -201,6 +222,7 @@ class AonsokuViewModel(application: Application, private val saved: SavedStateHa
         else navigate(item.kind, item.title, item.id)
     }
     fun command(command: AudioCommand) = launch {
+        if (booleanPreference("player_store.settings.hapticFeedback.hapticFeedbackEnabled", true)) hapticFeedback()
         if (coordinator.controlledDeviceId.value != null) { coordinator.send(remoteCommand(command)); return@launch }
         val a = audio ?: error("Playback service is connecting")
         getApplication<Application>().startService(Intent(getApplication(), PlaybackService::class.java))
@@ -208,11 +230,11 @@ class AonsokuViewModel(application: Application, private val saved: SavedStateHa
         if (result is AudioCommandResult.Failure) messages.emit(result.message)
     }
     fun playItems(items: List<LibraryItem>, index: Int) = replaceQueue(AudioCommand.PlaySongsById(items.filter { it.kind == "song" }.map { it.id }, index))
-    fun playPage(shuffle: Boolean = false) {
+    fun playPage(shuffle: Boolean = false, index: Int = 0) {
         val p = page.value
         when (p.route) {
-            "album" -> replaceQueue(AudioCommand.PlayAlbumById(p.id!!, 0, shuffle))
-            "playlist" -> replaceQueue(AudioCommand.PlayPlaylistById(p.id!!, 0, shuffle))
+            "album" -> replaceQueue(AudioCommand.PlayAlbumById(p.id!!, index, shuffle))
+            "playlist" -> replaceQueue(AudioCommand.PlayPlaylistById(p.id!!, index, shuffle))
             else -> launch {
                 val songs = if (p.route in listOf("songs", "favorites", "favorites-songs")) {
                     val result = mutableListOf<LibraryItem>()
@@ -223,7 +245,7 @@ class AonsokuViewModel(application: Application, private val saved: SavedStateHa
                     } while (batch.hasMore)
                     result
                 } else p.items.filter { it.kind == "song" }
-                playItems(if (shuffle) songs.shuffled() else songs, 0)
+                playItems(if (shuffle) songs.shuffled() else songs, index)
             }
         }
     }
@@ -255,6 +277,29 @@ class AonsokuViewModel(application: Application, private val saved: SavedStateHa
         }
         return json
     }
+    fun selectionActions(items: List<LibraryItem>, indices: List<Int>) {
+        val page = page.value
+        fun withIds(action: suspend (List<String>) -> Unit) { launch { action(items.flatMap { songIds(it) }) } }
+        val actions = mutableListOf<Pair<String, () -> Unit>>(
+            "Play" to { withIds { ids -> replaceQueue(AudioCommand.PlaySongsById(ids, 0)) }; Unit },
+            "Play next" to { withIds { command(AudioCommand.AddSongsById(it, "next")) }; Unit },
+            "Add to queue" to { withIds { command(AudioCommand.AddSongsById(it, "last")) }; Unit },
+            "Add to playlist" to { withIds { addToPlaylist(it) }; Unit },
+            "Download" to { items.forEach { download(it) }; Unit },
+            "Add to favorites" to { launch { items.filter { it.kind in listOf("song", "album", "artist") }.forEach { services.library.setStarred(it.id, it.kind, true) } }; Unit },
+            "Remove from favorites" to { launch { items.filter { it.kind in listOf("song", "album", "artist") }.forEach { services.library.setStarred(it.id, it.kind, false) } }; Unit },
+        )
+        if (page.route == "playlist") actions += "Remove from playlist" to { dialog.value = NativeDialog.Confirm("Remove songs?", "Remove ${items.size} songs from ${page.title}?") { launch { services.library.updatePlaylist(page.id!!, removeIndices = indices); reload() } }; Unit }
+        if (page.route == "downloads") actions += "Delete downloads" to { dialog.value = NativeDialog.Confirm("Delete downloads?", "Remove ${items.size} downloaded files?") { launch { withContext(Dispatchers.IO) { items.forEach { audio?.downloadService()?.deleteCachedAudio(it.id) } }; reload() } }; Unit }
+        dialog.value = NativeDialog.Choose("${items.size} selected", actions)
+    }
+    fun playItem(item: LibraryItem, shuffle: Boolean = false) {
+        when (item.kind) {
+            "album" -> replaceQueue(AudioCommand.PlayAlbumById(item.id, 0, shuffle))
+            "playlist" -> replaceQueue(AudioCommand.PlayPlaylistById(item.id, 0, shuffle))
+            else -> open(item)
+        }
+    }
     private fun replaceQueue(command: AudioCommand) {
         val q = queue.value
         val sameContext = when (command) {
@@ -262,7 +307,11 @@ class AonsokuViewModel(application: Application, private val saved: SavedStateHa
             is AudioCommand.PlayPlaylistById -> q.sourceId?.type == "playlist" && q.sourceId?.id == command.playlistId && !command.shuffle
             else -> false
         }
-        if (sameContext) { command(AudioCommand.Play); return }
+        if (sameContext) {
+            val index = when (command) { is AudioCommand.PlayAlbumById -> command.index; is AudioCommand.PlayPlaylistById -> command.index; else -> q.currentIndex }
+            command(if (index == q.currentIndex && !q.isInUserQueue) AudioCommand.Play else AudioCommand.PlayAtIndex(index, null))
+            return
+        }
         val remaining = q.userQueue.drop(if (q.isInUserQueue) 1 else 0)
         val play = { command(command); if (booleanPreference("player_store.settings.fullscreen.autoFullscreenEnabled", false)) playerExpanded.value = true; Unit }
         if (playback.value.isPlaying && remaining.isNotEmpty()) dialog.value = NativeDialog.Confirm("Replace queue?", "${remaining.size} manually added songs remain. Replace the current queue?", play)
@@ -329,6 +378,7 @@ class AonsokuViewModel(application: Application, private val saved: SavedStateHa
         return node?.takeUnless { it == JSONObject.NULL }?.toString()
     }
     fun setPreference(path: String, value: Any) = launch {
+        if (path == "player_history.maxSize") coordinator.enqueueHistory(JSONObject().put("kind", "set_limit").put("historyLimit", value.toString().toInt()))
         val split = path.split('.')
         if (split.size == 1 || split.first() == "native") services.preferences.setPreference(path, value.toString())
         else {

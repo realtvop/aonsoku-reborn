@@ -27,7 +27,7 @@ fun DeviceScreen(model: AonsokuViewModel) {
             ElevatedCard(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp)) {
                 Column(Modifier.padding(16.dp)) {
                     Row { Icon(if (device.platform == "android" || device.platform == "ios") Icons.Default.PhoneAndroid else Icons.Default.Computer, null); Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text(device.name, style = MaterialTheme.typography.titleMedium); Text(if (current) L("This device") else if (device.online) L("Online") else L("Offline"), style = MaterialTheme.typography.labelMedium) } }
-                    device.snapshot?.let { snapshot -> Text("${snapshot.optString("songId")} · ${formatTime(snapshot.optDouble("progress"))}", style = MaterialTheme.typography.bodySmall) }
+                    device.snapshot?.let { snapshot -> Text("${snapshot.optString("songId")} · ${formatTime(snapshot.optDouble("progressSeconds"))}", style = MaterialTheme.typography.bodySmall) }
                     if (!current && device.online) Row {
                         TextButton({ controller.control(device.id) }) { Text(L(if (controlled == device.id) "Controlling" else "Control")) }
                         TextButton({ model.launch { controller.handoff(device.id) } }) { Text(L("Continue here")) }

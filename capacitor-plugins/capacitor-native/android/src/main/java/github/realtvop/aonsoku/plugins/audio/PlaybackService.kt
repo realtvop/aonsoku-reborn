@@ -227,6 +227,8 @@ class PlaybackService : MediaSessionService(), AudioService {
     private var replayGainSettings = JSONObject()
 
     override fun downloadService(): NativeDownloadManager = downloadManager
+    private var cacheMaintenance: NativeCacheMaintenance? = null
+    private val hasDownloads: Boolean get() = downloadManager.states.value.values.any { it.status in setOf("queued", "downloading") }
     val downloadManager by lazy { NativeDownloadManager(this, authenticationService) }
     private val backgroundCacheSongIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
     private val downloadListeners = mutableListOf<DownloadListener>()
@@ -977,7 +979,7 @@ class PlaybackService : MediaSessionService(), AudioService {
     }
 
     private suspend fun playSongById(songId: String): AudioCommandResult {
-        val song = libraryService.getSongsByIds(listOf(songId)).firstOrNull()
+        val song = (libraryService.getSongsByIds(listOf(songId)).firstOrNull() ?: downloadManager.cachedSong(songId))
             ?: return AudioCommandResult.Failure("not_found", "Song not found: $songId")
         return playQueueSongsAtIndex(listOf(song.toQueueSong()), 0, false, null, null)
     }
@@ -1047,7 +1049,7 @@ class PlaybackService : MediaSessionService(), AudioService {
 
     private suspend fun resolveQueueSongs(ids: List<String>): List<QueueSong> {
         val byId = libraryService.getSongsByIds(ids).associateBy { it.id }
-        return ids.mapNotNull { byId[it]?.toQueueSong() }
+        return ids.mapNotNull { (byId[it] ?: downloadManager.cachedSong(it))?.toQueueSong() }
     }
 
     private fun playQueueSongsAtIndex(
@@ -1624,6 +1626,16 @@ class PlaybackService : MediaSessionService(), AudioService {
             }
         })
 
+        cacheMaintenance = NativeCacheMaintenance(applicationContext, downloadManager)
+        serviceScope.launch {
+            downloadManager.states.collect { states ->
+                if (states.values.any { it.status in setOf("queued", "downloading") }) {
+                    try { startService(Intent(this@PlaybackService, PlaybackService::class.java)); startNativeForeground(buildNotification(player?.isPlaying == true)); isForegroundStarted = true } catch (_: Exception) { }
+                } else if (player?.isPlaying != true && !isBoundToActivity) {
+                    stopForeground(STOP_FOREGROUND_REMOVE); isForegroundStarted = false; stopSelf()
+                }
+            }
+        }
         registerSystemReceivers()
         restorePlaybackState()
     }
@@ -1789,7 +1801,7 @@ class PlaybackService : MediaSessionService(), AudioService {
             subText = metadata.albumTitle?.toString()
         } else {
             title = "Aonsoku"
-            text = "Playing"
+            text = if (hasDownloads) "Downloading music" else "Ready to play"
         }
 
         val openIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
@@ -1907,7 +1919,7 @@ class PlaybackService : MediaSessionService(), AudioService {
         val notification = buildNotification(isPlaying)
         if (!isForegroundStarted) {
             try {
-                startForeground(NOTIFICATION_ID, notification)
+                startNativeForeground(notification)
                 isForegroundStarted = true
             } catch (e: Exception) {
                 NativeLogger.warn(
@@ -1925,13 +1937,24 @@ class PlaybackService : MediaSessionService(), AudioService {
         }
     }
 
+    private fun startNativeForeground(notification: Notification) {
+        if (Build.VERSION.SDK_INT >= 29) {
+            val type = android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK or if (hasDownloads) android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
+            startForeground(NOTIFICATION_ID, notification, type)
+        } else startForeground(NOTIFICATION_ID, notification)
+    }
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        downloadManager.pauseAll()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
     fun tryStartForeground(): Boolean {
         if (isForegroundStarted) return true
         if (!hasNotificationPermission()) return false
         val isPlaying = player?.isPlaying ?: false
         val notification = buildNotification(isPlaying)
         try {
-            startForeground(NOTIFICATION_ID, notification)
+            startNativeForeground(notification)
             isForegroundStarted = true
             return true
         } catch (e: Exception) {
@@ -1963,7 +1986,7 @@ class PlaybackService : MediaSessionService(), AudioService {
         val notification = buildNotification(isPlaying)
         if (startInForegroundRequired || !isForegroundStarted) {
             try {
-                startForeground(NOTIFICATION_ID, notification)
+                startNativeForeground(notification)
                 isForegroundStarted = true
             } catch (e: Exception) {
                 NativeLogger.warn(
@@ -1996,7 +2019,7 @@ class PlaybackService : MediaSessionService(), AudioService {
         if (intent?.action != SERVICE_INTERFACE && intent?.action != "android.media.browse.MediaBrowserService") {
             isBoundToActivity = false
             val currentPlayer = player
-            if (currentPlayer == null || !currentPlayer.isPlaying) {
+            if ((currentPlayer == null || !currentPlayer.isPlaying) && !hasDownloads) {
                 persistence.stopProgressTracking()
                 persistence.flushNow()
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -2009,7 +2032,7 @@ class PlaybackService : MediaSessionService(), AudioService {
     override fun onTaskRemoved(rootIntent: Intent?) {
         NativeLogger.info("PlaybackService onTaskRemoved", "playback-service")
         val currentPlayer = player
-        if (currentPlayer == null || !currentPlayer.isPlaying) {
+        if ((currentPlayer == null || !currentPlayer.isPlaying) && !hasDownloads) {
             // §2.1.8: the service is being stopped, so detach the coordination
             // socket from the foreground service. The plugin keeps the socket
             // in plugin-owned mode; it degrades gracefully and resumes on the
@@ -2103,6 +2126,8 @@ class PlaybackService : MediaSessionService(), AudioService {
                 scrobbleSubmitter.submitPending(scrobbleBuffer, credentials)
             }
         }
+        cacheMaintenance?.close()
+        downloadManager.close()
         serviceScope.cancel()
         persistence.stopProgressTracking()
         listeners.clear()

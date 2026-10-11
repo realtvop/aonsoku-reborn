@@ -8,7 +8,7 @@
     <application>
         <service
             android:name="github.realtvop.aonsoku.plugins.audio.PlaybackService"
-            android:foregroundServiceType="mediaPlayback"
+            android:foregroundServiceType="mediaPlayback|dataSync"
             android:exported="true">
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaSessionService"/>

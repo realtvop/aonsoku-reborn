@@ -30,7 +30,7 @@ pnpm run build            # Production web build (tsc + vite)
 pnpm run build:mobile     # Capacitor bundle with automatic fine-grained chunks
 pnpm run electron:build   # Electron renderer/main/preload build
 pnpm run make             # Create Electron distributable packages
-pnpm exec cap sync        # Copy the preceding build into Android/iOS
+pnpm exec cap sync ios    # Copy the preceding mobile SPA build into iOS
 
 # Lint & Format (Biome)
 pnpm run lint             # Check only
@@ -57,6 +57,9 @@ pnpm --filter @aonsoku/coordination-worker deploy:ci # Workers Builds deployment
 pnpm coordination:deploy # Guided login/configuration/key creation/deployment; reuses saved choices
 pnpm --filter @aonsoku/coordination-worker test:deploy # Deployment wizard regression tests
 pnpm --filter @aonsoku/coordination-worker deploy:raw # Direct Wrangler deployment for operators/CI
+
+# Refresh checked-in native themes/translations from shared resources
+node scripts/android/generate-native-resources.mjs
 
 # Native Android app (JDK 21; no SPA build/sync required for the launcher)
 cd android && ./gradlew :app:assembleDebug :app:testDebugUnitTest
@@ -187,6 +190,13 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   in `PlaybackService`.
 - Compose settings preserve the existing native preference keys and use checked-in
   translations/theme palettes. ReplayGain is applied by a Media3 PCM processor.
+- `NativeCacheMaintenance` runs with PlaybackService, derives smart downloads
+  from Room/preferences, syncs cover art and enforces cache quotas. Download jobs
+  are bounded and journaled in native-downloads.json; active transfers keep the
+  service in foreground data-sync mode and resume on service recreation. Explicit
+  audio is never automatically demoted/evicted. `NativeNetworkMonitor` owns
+  connectivity/metered state and primary/fallback probing. Image transfers use
+  per-ID locks, a bounded pool and atomic file replacement.
 - Native UI service boundaries, binding/lifecycle rules, adapter duties, and
   the remaining TypeScript/WebView responsibilities are documented in
   `docs/android-native-services.md`.
@@ -476,8 +486,10 @@ Normal Web (`pnpm run build`) and Electron renderer builds use
 and `heavy-vendor` bundles. Capacitor builds use `pnpm run build:mobile`
 (`vite --mode mobile`), which leaves chunk ownership to Rollup so lazy modules
 stay separate instead of collapsing every page and dependency into startup
-chunks. Android/iOS CI and release workflows must use `build:mobile` before
-`cap sync`; do not use the normal Web build for a native package.
+chunks. iOS CI and release workflows must use `build:mobile` before `cap sync ios`;
+do not use the normal Web build for an iOS package. Android workflows build
+Compose directly, generate native theme/translation resources, and do not run
+a Web build or Capacitor sync. Android version metadata comes from package.json.
 
 The HTML boot shell and its inline styles load without the application
 stylesheet; `src/main.tsx` restores native preferences before dynamically
