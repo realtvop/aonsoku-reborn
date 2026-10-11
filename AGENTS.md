@@ -6,7 +6,7 @@ repository.
 ## Project Overview
 
 Aonsoku is a multi-runtime music streaming client for Navidrome/Subsonic
-servers. It targets the web, Electron desktop, and Capacitor iOS/Android. It
+servers. It targets the web, Electron desktop, native Android (Kotlin/Compose), and Capacitor iOS. It
 supports synchronized lyrics, radio streaming, Discord RPC, offline
 library/cache features, and cross-device coordination with remote control and
 handoff.
@@ -57,6 +57,11 @@ pnpm --filter @aonsoku/coordination-worker deploy:ci # Workers Builds deployment
 pnpm coordination:deploy # Guided login/configuration/key creation/deployment; reuses saved choices
 pnpm --filter @aonsoku/coordination-worker test:deploy # Deployment wizard regression tests
 pnpm --filter @aonsoku/coordination-worker deploy:raw # Direct Wrangler deployment for operators/CI
+
+# Native Android app (JDK 21; no SPA build/sync required for the launcher)
+cd android && ./gradlew :app:assembleDebug :app:testDebugUnitTest
+# Install with adb install -r to retain credentials/library; do not run
+# connectedDebugAndroidTest against a personal installation (it clears data).
 
 # Android native plugin
 cd android && ./gradlew :aonsoku-capacitor-native:compileDebugKotlin
@@ -112,7 +117,14 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   is not part of the shared `src/` SPA, so web/Capacitor builds never bundle
   it. `tailwind.config.js` scans `electron/renderer/**` for its utility
   classes, and `tsconfig.electron-renderer.json` type-checks it.
-- **Capacitor iOS/Android**: `capacitor.config.ts` points native hosts at
+- **Native Android**: `android/app` uses a Kotlin `ComponentActivity` and
+  Jetpack Compose Material 3 Expressive. `ui/AonsokuViewModel.kt` binds the
+  existing `PlaybackService.LocalBinder` and reads the application-scoped
+  `AppServices`; UI must never instantiate repositories, a player, or Capacitor
+  plugins. The launcher does not load a WebView or bundle `assets/public`.
+  Existing encrypted credentials, Room library and native preferences are
+  reused. The migration audit is `docs/android-native-parity.md`.
+- **Capacitor iOS / Android compatibility adapters**: `capacitor.config.ts` points native hosts at
   `dist`. The custom native plugin lives in
   `capacitor-plugins/capacitor-native` and is included through pnpm workspace
   package `@aonsoku/capacitor-native`.
