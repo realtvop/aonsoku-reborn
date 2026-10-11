@@ -24,7 +24,7 @@ object NativeLogger {
         lock.write {
             val bucket = buckets.getOrPut(key) { mutableListOf() }
             if (bucket.size >= MAX_ENTRIES_PER_SOURCE) {
-                bucket.removeFirst()
+                bucket.removeAt(0)
             }
             bucket.add(entry)
         }

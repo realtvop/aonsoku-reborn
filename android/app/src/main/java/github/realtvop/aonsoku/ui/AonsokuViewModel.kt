@@ -75,7 +75,6 @@ class AonsokuViewModel(application: Application, private val saved: SavedStateHa
     init {
         val context = getApplication<Application>()
         val intent = Intent(context, PlaybackService::class.java)
-        context.startService(intent)
         bound = context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
         viewModelScope.launch {
             preferences.value = services.preferences.getAllPreferences()
@@ -162,6 +161,7 @@ class AonsokuViewModel(application: Application, private val saved: SavedStateHa
     }
     fun command(command: AudioCommand) = launch {
         val a = audio ?: error("Playback service is connecting")
+        getApplication<Application>().startService(Intent(getApplication(), PlaybackService::class.java))
         val result = a.execute(command)
         if (result is AudioCommandResult.Failure) messages.emit(result.message)
     }

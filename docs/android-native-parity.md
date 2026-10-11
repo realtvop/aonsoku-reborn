@@ -52,3 +52,8 @@ records its actual verified range below; unresolved entries must remain visible.
   repository Biome lint passes (1037 files). Home/library/search/details and
   compact/full player use typed services. Playlist editing, radio, downloads,
   lyrics, full settings and coordination are still pending at this checkpoint.
+- Device startup follow-up: a locked-device launch exposed an Android background
+  service start restriction. Bind-only initialization now defers startService
+  until a user playback command. Fixed NativeLogger's Java 21 List.removeFirst
+  linkage on Android 14. APK rebuild and all 133 unit tests pass; Pixel 5 renders
+  the native home and floating navigation after a data-preserving install.
