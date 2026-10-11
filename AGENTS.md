@@ -122,7 +122,12 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   existing `PlaybackService.LocalBinder` and reads the application-scoped
   `AppServices`; UI must never instantiate repositories, a player, or Capacitor
   plugins. The launcher does not load a WebView or bundle `assets/public`.
-  Existing encrypted credentials, Room library and native preferences are
+  `LibraryService` also owns server mutations (playlist edits, stars/rating,
+  radio CRUD) and persists playlist responses transactionally. Repeated song
+  query parameters must preserve order and duplicates. `NativeDownloadManager`
+  exposes progress StateFlow, caps active transfers at three, and distinguishes
+  explicit/smart/LRU audio cache sources. PlaybackService records listening
+  history independently of UI lifetime. Existing encrypted credentials, Room library and native preferences are
   reused. The migration audit is `docs/android-native-parity.md`.
 - **Capacitor iOS / Android compatibility adapters**: `capacitor.config.ts` points native hosts at
   `dist`. The custom native plugin lives in

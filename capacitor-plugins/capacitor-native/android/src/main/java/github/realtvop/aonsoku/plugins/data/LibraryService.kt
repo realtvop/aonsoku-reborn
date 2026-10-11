@@ -2,6 +2,9 @@ package github.realtvop.aonsoku.plugins.data
 
 import android.content.Context
 import android.util.Base64
+import androidx.room.withTransaction
+import org.json.JSONArray
+import java.time.Instant
 import github.realtvop.aonsoku.plugins.bridge.AuthenticationService
 import github.realtvop.aonsoku.plugins.bridge.ServerCredentials
 import github.realtvop.aonsoku.plugins.data.db.AonsokuDatabase
@@ -440,6 +443,116 @@ class LibraryService private constructor(context: Context) {
         }
     }
 
+    /** Repeated query keys retain exact song order and duplicate playlist entries. */
+    suspend fun serverRequest(endpoint: String, params: List<Pair<String, String>> = emptyList()): JSONObject {
+        val credentials = authenticationService.getCredentials() ?: error("Sign in first")
+        return authenticationService.request(credentials, NativeLibraryCodec.requestPath(endpoint, params)).data
+    }
+
+    suspend fun setStarred(id: String, kind: String, starred: Boolean) {
+        val key = when (kind) { "album" -> "albumId"; "artist" -> "artistId"; else -> "id" }
+        serverRequest(if (starred) "star" else "unstar", listOf(key to id))
+        val timestamp = if (starred) System.currentTimeMillis() else null
+        val date = timestamp?.let { Instant.ofEpochMilli(it).toString() }
+        withContext(Dispatchers.IO) {
+            when (kind) {
+                "album" -> database.albumDao().getById(id)?.let { database.albumDao().upsert(it.copy(starred = date, starredAt = timestamp)) }
+                "artist" -> database.artistDao().getById(id)?.let { database.artistDao().upsert(it.copy(starred = date, starredAt = timestamp)) }
+                else -> database.songDao().getById(id)?.let { database.songDao().upsert(it.copy(starred = date, starredAt = timestamp)) }
+            }
+            _dataChanges.emit(LibraryDataChange(listOf("songs", "albums", "artists"), "mutation"))
+        }
+    }
+
+    suspend fun rateSong(id: String, rating: Int) {
+        require(rating in 0..5)
+        serverRequest("setRating", listOf("id" to id, "rating" to rating.toString()))
+    }
+
+    suspend fun refreshPlaylist(id: String): PlaylistDetailEntity {
+        val item = serverRequest("getPlaylist", listOf("id" to id)).getJSONObject("playlist")
+        return persistPlaylist(item)
+    }
+
+    private suspend fun persistPlaylist(item: JSONObject): PlaylistDetailEntity = withContext(Dispatchers.IO) {
+        val detail = PlaylistDetailEntity(
+            id = item.getString("id"), name = item.getString("name"),
+            comment = item.optString("comment", null), songCount = item.optInt("songCount"),
+            duration = item.optInt("duration"), isPublic = item.optBoolean("public"),
+            owner = item.optString("owner", null), created = item.optString("created", null),
+            changed = item.optString("changed", null), coverArt = item.optString("coverArt", null),
+            entriesJson = item.optJSONArray("entry")?.toString() ?: "[]",
+        )
+        val entries = JSONArray(detail.entriesJson)
+        database.withTransaction {
+            database.playlistDao().upsertDetail(detail)
+            database.playlistDao().upsert(PlaylistEntity(
+                detail.id, detail.name, detail.comment, detail.songCount, detail.duration,
+                detail.isPublic, detail.owner, detail.created, detail.changed, detail.coverArt,
+            ))
+            database.songDao().bulkUpsert((0 until entries.length()).mapNotNull { NativeLibraryCodec.parseSong(entries.optJSONObject(it)) })
+        }
+        _dataChanges.emit(LibraryDataChange(listOf("playlists", "songs"), "mutation"))
+        detail
+    }
+
+    suspend fun createPlaylist(name: String, comment: String, public: Boolean, songIds: List<String>): PlaylistDetailEntity {
+        require(name.isNotBlank())
+        val response = serverRequest("createPlaylist", listOf("name" to name) + songIds.map { "songId" to it })
+        val detail = persistPlaylist(response.getJSONObject("playlist"))
+        return updatePlaylist(detail.id, name, comment, public)
+    }
+
+    suspend fun updatePlaylist(id: String, name: String? = null, comment: String? = null, public: Boolean? = null, add: List<String> = emptyList(), removeIndices: List<Int> = emptyList()): PlaylistDetailEntity {
+        val detail = getPlaylist(id)
+        require(detail?.owner == null || detail.owner == storedCredentials()?.username) { "Only the playlist owner can edit it" }
+        val params = mutableListOf("playlistId" to id)
+        name?.let { require(it.isNotBlank()); params += "name" to it }
+        comment?.let { params += "comment" to it }
+        public?.let { params += "public" to it.toString() }
+        params += add.map { "songIdToAdd" to it }
+        params += removeIndices.sortedDescending().map { "songIndexToRemove" to it.toString() }
+        serverRequest("updatePlaylist", params)
+        return refreshPlaylist(id)
+    }
+
+    suspend fun replacePlaylistSongs(id: String, songIds: List<String>) {
+        val detail = getPlaylist(id)
+        require(detail?.owner == null || detail.owner == storedCredentials()?.username) { "Only the playlist owner can edit it" }
+        // createPlaylist with playlistId replaces entries atomically on Subsonic.
+        serverRequest("createPlaylist", listOf("playlistId" to id) + songIds.map { "songId" to it })
+        refreshPlaylist(id)
+    }
+
+    suspend fun deletePlaylist(id: String) {
+        val detail = getPlaylist(id)
+        require(detail?.owner == null || detail.owner == storedCredentials()?.username) { "Only the playlist owner can delete it" }
+        serverRequest("deletePlaylist", listOf("id" to id))
+        withContext(Dispatchers.IO) {
+            database.withTransaction { database.playlistDao().deleteById(id); database.playlistDao().deleteDetails(listOf(id)) }
+        }
+        _dataChanges.emit(LibraryDataChange(listOf("playlists"), "mutation"))
+    }
+
+    suspend fun getRadios(): List<NativeRadio> {
+        val response = serverRequest("getInternetRadioStations").optJSONObject("internetRadioStations")?.optJSONArray("internetRadioStation") ?: JSONArray()
+        return (0 until response.length()).map { NativeRadio.from(response.getJSONObject(it)) }
+    }
+    suspend fun saveRadio(radio: NativeRadio) {
+        require(radio.name.length >= 3) { "Name must contain at least 3 characters" }
+        require(java.net.URI(radio.streamUrl).scheme in listOf("http", "https")) { "Enter an http or https stream URL" }
+        serverRequest(if (radio.id.isBlank()) "createInternetRadioStation" else "updateInternetRadioStation", listOf("name" to radio.name, "streamUrl" to radio.streamUrl, "homePageUrl" to radio.homePageUrl) + if (radio.id.isBlank()) emptyList() else listOf("id" to radio.id))
+    }
+    suspend fun deleteRadio(id: String) { serverRequest("deleteInternetRadioStation", listOf("id" to id)) }
+
+    suspend fun getArtistInfo(id: String): JSONObject = serverRequest("getArtistInfo2", listOf("id" to id)).optJSONObject("artistInfo2") ?: JSONObject()
+    suspend fun getTopSongs(artist: String): List<SongEntity> {
+        val rows = serverRequest("getTopSongs", listOf("artist" to artist, "count" to "50")).optJSONObject("topSongs")?.optJSONArray("song") ?: JSONArray()
+        val songs = (0 until rows.length()).mapNotNull { NativeLibraryCodec.parseSong(rows.optJSONObject(it)) }
+        withContext(Dispatchers.IO) { database.songDao().bulkUpsert(songs) }
+        return songs
+    }
+
     fun storedCredentials(): ServerCredentials? = authenticationService.getCredentials()
 
     companion object {
@@ -457,5 +570,12 @@ class LibraryService private constructor(context: Context) {
         fun getInstance(context: Context): LibraryService = instance ?: synchronized(this) {
             instance ?: LibraryService(context.applicationContext).also { instance = it }
         }
+    }
+}
+
+
+data class NativeRadio(val id: String, val name: String, val streamUrl: String, val homePageUrl: String = "") {
+    companion object {
+        fun from(item: JSONObject) = NativeRadio(item.optString("id"), item.optString("name"), item.optString("streamUrl"), item.optString("homePageUrl"))
     }
 }

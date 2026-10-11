@@ -17,6 +17,7 @@ interface PlaylistDao {
     @Upsert suspend fun bulkUpsertDetails(details: List<PlaylistDetailEntity>)
     @Query("SELECT id FROM playlistDetail") suspend fun getAllDetailIds(): List<String>
     @Query("DELETE FROM playlistDetail WHERE id IN (:ids)") suspend fun deleteDetails(ids: List<String>)
+    @Query("DELETE FROM playlist WHERE id = :id") suspend fun deleteById(id: String)
     @Query("DELETE FROM playlist") suspend fun deleteAll()
     @Query("DELETE FROM playlistDetail") suspend fun deleteAllDetails()
     @Query("SELECT COUNT(*) FROM playlist") suspend fun count(): Int

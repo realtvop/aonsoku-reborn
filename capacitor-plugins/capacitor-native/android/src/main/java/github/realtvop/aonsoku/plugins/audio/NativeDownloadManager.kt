@@ -5,6 +5,13 @@ import android.net.Uri
 import github.realtvop.aonsoku.plugins.bridge.AuthenticationService
 import github.realtvop.aonsoku.plugins.bridge.SubsonicAuthBuilder
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import org.json.JSONArray
+import github.realtvop.aonsoku.plugins.preferences.PreferencesService
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -13,6 +20,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.util.concurrent.ConcurrentHashMap
+
+data class NativeDownloadState(val songId: String, val status: String, val loaded: Long = 0, val total: Long = 0, val error: String? = null, val source: String = "explicit")
+data class NativeCachedAudio(val songId: String, val sizeBytes: Long, val source: String)
 
 class NativeDownloadManager(
     private val context: Context,
@@ -27,6 +37,11 @@ class NativeDownloadManager(
     private val listeners = mutableListOf<Listener>()
     private val activeJobs = ConcurrentHashMap<String, Job>()
     private val downloadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private val slots = Semaphore(3)
+    private val _states = MutableStateFlow<Map<String, NativeDownloadState>>(emptyMap())
+    val states = _states.asStateFlow()
+    private val sources = ConcurrentHashMap<String, String>()
 
     fun addListener(listener: Listener) {
         synchronized(listeners) {
@@ -43,41 +58,80 @@ class NativeDownloadManager(
     }
 
     private fun emitProgress(songId: String, loaded: Long, total: Long) {
+        _states.update { it + (songId to NativeDownloadState(songId, "downloading", loaded, total, source = sources[songId] ?: "explicit")) }
         synchronized(listeners) {
             listeners.forEach { it.onDownloadProgress(songId, loaded, total) }
         }
     }
 
     private fun emitCompleted(songId: String, fileUri: String, contentType: String, sizeBytes: Long) {
+        _states.update { it + (songId to NativeDownloadState(songId, "completed", sizeBytes, sizeBytes, source = sources[songId] ?: "explicit")) }
         synchronized(listeners) {
             listeners.forEach { it.onDownloadCompleted(songId, fileUri, contentType, sizeBytes) }
         }
     }
 
     private fun emitFailed(songId: String, errorMessage: String) {
+        _states.update { it + (songId to NativeDownloadState(songId, "failed", error = errorMessage, source = sources[songId] ?: "explicit")) }
         synchronized(listeners) {
             listeners.forEach { it.onDownloadFailed(songId, errorMessage) }
         }
     }
 
-    fun download(songId: String, maxBitRate: Int? = null, format: String? = null) {
-        // If already downloading, don't start again
-        if (activeJobs.containsKey(songId)) {
+    @Synchronized
+    fun download(songId: String, maxBitRate: Int? = null, format: String? = null, source: String = "explicit") {
+        if (songId.startsWith("radio:")) return
+        require(source in setOf("explicit", "smart", "lru"))
+        if (source == "explicit" || !sources.containsKey(songId)) sources[songId] = source
+        if (activeJobs.containsKey(songId)) return
+        val cached = cachedAudio().find { it.songId == songId }
+        if (cached != null) {
+            if (source == "explicit") {
+                val file = AudioCacheUtils.getMetadataFile(context, songId)
+                runCatching { val json = JSONObject(file.readText()); json.put("source", source); file.writeText(json.toString()) }
+            }
+            _states.update { it + (songId to NativeDownloadState(songId, "completed", cached.sizeBytes, cached.sizeBytes, source = source)) }
             return
         }
-
-        val job = downloadScope.launch {
-            try {
-                executeDownload(songId, maxBitRate, format)
-            } catch (e: CancellationException) {
-                // cancelled, do nothing or log
-            } catch (e: Exception) {
-                emitFailed(songId, e.localizedMessage ?: "Unknown download error")
-            } finally {
-                activeJobs.remove(songId)
-            }
+        _states.update { it + (songId to NativeDownloadState(songId, "queued", source = source)) }
+        val job = downloadScope.launch(start = CoroutineStart.LAZY) {
+            try { slots.withPermit { executeDownload(songId, maxBitRate, format) }; enforceQuota(songId) }
+            catch (e: CancellationException) { _states.update { it + (songId to NativeDownloadState(songId, "cancelled", source = source)) } }
+            catch (e: Exception) { emitFailed(songId, e.localizedMessage ?: "Download failed") }
+            finally { activeJobs.remove(songId) }
         }
         activeJobs[songId] = job
+        job.start()
+    }
+
+    fun cachedAudio(): List<NativeCachedAudio> = listOf(AudioCacheUtils.getCacheDirectory(context), AudioCacheUtils.getSecondaryCacheDirectory(context)).flatMap { dir ->
+        dir.listFiles()?.filter { it.extension == "json" }?.mapNotNull { file ->
+            runCatching {
+                val json = JSONObject(file.readText())
+                val audio = File(dir, json.getString("fileName"))
+                if (audio.isFile) NativeCachedAudio(json.getString("songId"), audio.length(), json.optString("source", "lru")) else null
+            }.getOrNull()
+        }.orEmpty()
+    }.distinctBy { it.songId }
+
+    @Synchronized
+    fun deleteCachedAudio(songId: String) {
+        cancel(songId)
+        val id = AudioCacheUtils.cacheId(songId)
+        listOf(AudioCacheUtils.getCacheDirectory(context), AudioCacheUtils.getSecondaryCacheDirectory(context)).forEach { dir -> dir.listFiles()?.filter { it.name.startsWith("$id.") }?.forEach(File::delete) }
+        _states.update { it - songId }
+    }
+    fun clearSource(source: String) { cachedAudio().filter { it.source == source }.forEach { deleteCachedAudio(it.songId) } }
+    suspend fun enforceQuota(protectedSongId: String? = null) {
+        val prefs = PreferencesService.getInstance(context).getAllPreferences()
+        val settings = runCatching { JSONObject(prefs["cache_store"] ?: "{}").getJSONObject("state").getJSONObject("settings") }.getOrDefault(JSONObject())
+        val quota = settings.optLong("lruQuota", 1024L * 1024 * 1024)
+        if (quota <= 0) return
+        val entries = cachedAudio().filter { it.source == "lru" }
+        var size = entries.sumOf { it.sizeBytes }
+        entries.sortedBy { AudioCacheUtils.getMetadataFile(context, it.songId).lastModified() }.forEach {
+            if (size > quota && it.songId != protectedSongId && !activeJobs.containsKey(it.songId)) { deleteCachedAudio(it.songId); size -= it.sizeBytes }
+        }
     }
 
     fun cancel(songId: String) {
@@ -176,6 +230,7 @@ class NativeDownloadManager(
             val metadataFile = AudioCacheUtils.getMetadataFile(context, songId)
             val metadataJson = JSONObject().apply {
                 put("songId", songId)
+                put("source", sources[songId] ?: "explicit")
                 put("fileName", destFile.name)
                 put("contentType", contentType)
                 put("lastModifiedAt", System.currentTimeMillis().toDouble())

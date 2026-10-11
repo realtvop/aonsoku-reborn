@@ -269,7 +269,7 @@ class PlaybackService : MediaSessionService(), AudioService {
         }
 
         backgroundCacheSongIds.add(songId)
-        downloadManager.download(songId)
+        downloadManager.download(songId, source = "lru")
     }
 
     interface Listener {
@@ -432,6 +432,15 @@ class PlaybackService : MediaSessionService(), AudioService {
     }
 
     fun handleScrobbleSongStarted(songId: String, duration: Double) {
+        if (songId.startsWith("radio:")) return
+        serviceScope.launch {
+            val prefs = preferencesService.getAllPreferences()
+            val historyState = runCatching { JSONObject(prefs["player_history"] ?: "{}").getJSONObject("state") }.getOrDefault(JSONObject())
+            val maxSize = historyState.optInt("maxSize", 100).coerceIn(1, 10000)
+            LibraryService.getInstance(applicationContext).getSong(songId)?.let { song ->
+                preferencesService.addToPlayHistory(JSONObject().put("id", song.id).put("title", song.title).put("artist", song.artist).toString(), maxSize)
+            }
+        }
         currentScrobbleSongId = songId
         currentScrobbleSongDuration = duration
         scrobbleBuffer.startTracking(songId, duration)
@@ -2101,7 +2110,7 @@ class PlaybackService : MediaSessionService(), AudioService {
         val url = resolved.first
         val kind = resolved.second
 
-        if (kind == "stream") {
+        if (kind == "stream" && !song.id.startsWith("radio:")) {
             startBackgroundCache(song.id)
         }
 

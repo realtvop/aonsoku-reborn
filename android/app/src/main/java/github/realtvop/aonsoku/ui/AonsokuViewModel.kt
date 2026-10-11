@@ -22,7 +22,7 @@ import org.json.JSONObject
 data class LibraryItem(
     val id: String, val title: String, val subtitle: String = "",
     val cover: String? = null, val kind: String = "song",
-    val starred: Boolean = false, val song: SongEntity? = null,
+    val starred: Boolean = false, val song: SongEntity? = null, val radio: NativeRadio? = null,
 )
 fun SongEntity.item() = LibraryItem(id, title, artist.orEmpty(), coverArt ?: albumId, "song", starred != null, this)
 fun AlbumEntity.item() = LibraryItem(id, name, "$artist · $songCount songs", coverArt ?: id, "album", starred != null)
@@ -38,6 +38,7 @@ data class NativePage(
 )
 data class HomeSection(val title: String, val sort: String, val items: List<LibraryItem>)
 
+@OptIn(FlowPreview::class)
 class AonsokuViewModel(application: Application, private val saved: SavedStateHandle) : AndroidViewModel(application) {
     val services = AppServices.getInstance(application)
     private val _signedIn = MutableStateFlow(services.authentication.hasCredentials())
@@ -48,6 +49,8 @@ class AonsokuViewModel(application: Application, private val saved: SavedStateHa
     val preferences = MutableStateFlow<Map<String, String>>(emptyMap())
     val playback = MutableStateFlow(AudioPlaybackSnapshot())
     val queue = MutableStateFlow(AudioQueueSnapshot())
+    val dialog = MutableStateFlow<NativeDialog?>(null)
+    val playerExpanded = MutableStateFlow(false)
     val messages = MutableSharedFlow<String>(extraBufferCapacity = 16)
     val sync = services.library.syncState
     var playbackService: PlaybackService? = null
@@ -129,10 +132,19 @@ class AonsokuViewModel(application: Application, private val saved: SavedStateHa
                 val paging = LibraryPagination(80, if (more) p.items.size else 0)
                 var total = 0
                 val items = when (p.route) {
+                    "radios" -> l.getRadios().map { LibraryItem(it.id, it.name, it.streamUrl, kind = "radio", radio = it) }.also { total = it.size }
+                    "history" -> services.preferences.getPlayHistory(10000).mapNotNull { runCatching { JSONObject(it).optString("id") }.getOrNull() }.let { ids -> val songs = l.getSongsByIds(ids).associateBy { it.id }; ids.mapNotNull { songs[it]?.item() } }.also { total = it.size }
                     "home" -> {
                         home.value = listOf("Recently played" to "played", "Most played" to "playCount", "Recently added" to "created", "Explore" to "random").map { (title, sort) ->
                             HomeSection(title, sort, l.getAlbums(LibraryPagination(12, 0), AlbumFilter(sortBy = sort)).items.map { it.item() })
                         }
+                        val pins = runCatching { JSONArray(preference("pinned_home_store.items") ?: "[]") }.getOrDefault(JSONArray())
+                        val pinned = (0 until pins.length()).mapNotNull { index ->
+                            val pin = pins.getJSONObject(index)
+                            if (pin.optString("type") == "album") l.getAlbum(pin.optString("id"))?.first?.item()
+                            else l.getPlaylist(pin.optString("id"))?.let { LibraryItem(it.id, it.name, "${it.songCount} songs", it.coverArt, "playlist") }
+                        }
+                        if (pinned.isNotEmpty()) home.value = listOf(HomeSection("Pinned", "pinned", pinned)) + home.value
                         emptyList()
                     }
                     "library", "playlists" -> l.getPlaylists(paging).let { total = it.total; it.items.map { row -> row.item() } }
@@ -156,7 +168,9 @@ class AonsokuViewModel(application: Application, private val saved: SavedStateHa
         }
     }
     fun open(item: LibraryItem) {
-        if (item.kind == "song") playItems(listOf(item), 0)
+        if (item.kind == "radio") {
+            item.radio?.let { radio -> replaceQueue(AudioCommand.SetContextQueue(listOf(QueueSong("radio:${radio.id}", radio.name, "Live radio", null, "", null, 0.0, null, radio.streamUrl, null)), 0, true, null, QueueSourceId("radio", radio.id), radio.name, "off")) }
+        } else if (item.kind == "song") playItems(listOf(item), 0)
         else navigate(item.kind, item.title, item.id)
     }
     fun command(command: AudioCommand) = launch {
@@ -165,13 +179,59 @@ class AonsokuViewModel(application: Application, private val saved: SavedStateHa
         val result = a.execute(command)
         if (result is AudioCommandResult.Failure) messages.emit(result.message)
     }
-    fun playItems(items: List<LibraryItem>, index: Int) = command(AudioCommand.PlaySongsById(items.filter { it.kind == "song" }.map { it.id }, index))
+    fun playItems(items: List<LibraryItem>, index: Int) = replaceQueue(AudioCommand.PlaySongsById(items.filter { it.kind == "song" }.map { it.id }, index))
     fun playPage(shuffle: Boolean = false) {
         val p = page.value
         when (p.route) {
-            "album" -> command(AudioCommand.PlayAlbumById(p.id!!, 0, shuffle))
-            "playlist" -> command(AudioCommand.PlayPlaylistById(p.id!!, 0, shuffle))
+            "album" -> replaceQueue(AudioCommand.PlayAlbumById(p.id!!, 0, shuffle))
+            "playlist" -> replaceQueue(AudioCommand.PlayPlaylistById(p.id!!, 0, shuffle))
             else -> { val songs = p.items.filter { it.kind == "song" }; playItems(if (shuffle) songs.shuffled() else songs, 0) }
+        }
+    }
+    private fun replaceQueue(command: AudioCommand) {
+        val q = queue.value
+        val sameContext = when (command) {
+            is AudioCommand.PlayAlbumById -> q.sourceId?.type == "album" && q.sourceId?.id == command.albumId && !command.shuffle
+            is AudioCommand.PlayPlaylistById -> q.sourceId?.type == "playlist" && q.sourceId?.id == command.playlistId && !command.shuffle
+            else -> false
+        }
+        if (sameContext) { command(AudioCommand.Play); return }
+        val remaining = q.userQueue.drop(if (q.isInUserQueue) 1 else 0)
+        val play = { command(command); if (booleanPreference("player_store.settings.fullscreen.autoFullscreenEnabled", false)) playerExpanded.value = true; Unit }
+        if (playback.value.isPlaying && remaining.isNotEmpty()) dialog.value = NativeDialog.Confirm("Replace queue?", "${remaining.size} manually added songs remain. Replace the current queue?", play)
+        else play()
+    }
+    fun favorite(item: LibraryItem) = launch { services.library.setStarred(item.id, item.kind, !item.starred); reload() }
+    fun playlistForm(id: String? = null, songs: List<String> = emptyList()) = launch {
+        val detail = id?.let { services.library.getPlaylist(it) }
+        dialog.value = NativeDialog.Form(if (id == null) "Create playlist" else "Edit playlist", listOf(NativeField("name", "Name", detail?.name.orEmpty()), NativeField("comment", "Description", detail?.comment.orEmpty()), NativeField("public", "Public playlist", detail?.isPublic.toString(), toggle = true))) { values ->
+            if (id == null) services.library.createPlaylist(values["name"].orEmpty(), values["comment"].orEmpty(), values["public"] == "true", songs)
+            else services.library.updatePlaylist(id, values["name"], values["comment"], values["public"] == "true")
+            reload()
+        }
+    }
+    fun addToPlaylist(songIds: List<String>) = launch {
+        val playlists = mutableListOf<PlaylistEntity>()
+        var offset = 0
+        do { val p = services.library.getPlaylists(LibraryPagination(100, offset)); playlists += p.items; offset += p.items.size } while (p.hasMore)
+        val owned = playlists.filter { it.owner == null || it.owner == services.authentication.getCredentials()?.username }
+        dialog.value = NativeDialog.Choose("Add to playlist", listOf("New playlist" to { playlistForm(songs = songIds); Unit }) + owned.map { playlist -> playlist.name to { launch { services.library.updatePlaylist(playlist.id, add = songIds); messages.emit("Added to ${playlist.name}") }; Unit } })
+    }
+    fun radioForm(radio: NativeRadio? = null) {
+        dialog.value = NativeDialog.Form(if (radio == null) "Create radio station" else "Edit radio station", listOf(NativeField("name", "Name", radio?.name.orEmpty()), NativeField("stream", "Stream URL", radio?.streamUrl.orEmpty()), NativeField("home", "Homepage URL", radio?.homePageUrl.orEmpty()))) { values ->
+            services.library.saveRadio(NativeRadio(radio?.id.orEmpty(), values["name"].orEmpty(), values["stream"].orEmpty(), values["home"].orEmpty())); reload()
+        }
+    }
+    fun pin(item: LibraryItem) {
+        val pins = runCatching { JSONArray(preference("pinned_home_store.items") ?: "[]") }.getOrDefault(JSONArray())
+        val existing = (0 until pins.length()).map { pins.getJSONObject(it) }
+        val next = existing.filterNot { it.optString("id") == item.id && it.optString("type") == item.kind }.toMutableList()
+        if (next.size == existing.size) next.add(0, JSONObject().put("id", item.id).put("type", item.kind))
+        setPreference("pinned_home_store.items", JSONArray(next)); reload()
+    }
+    fun logout() {
+        dialog.value = NativeDialog.Confirm("Sign out?", "Playback will stop. Your downloaded music and preferences stay on this device.") {
+            command(AudioCommand.Stop); services.authentication.clearCredentials(); _signedIn.value = false
         }
     }
     fun booleanPreference(path: String, default: Boolean): Boolean = preference(path)?.toBooleanStrictOrNull() ?: default

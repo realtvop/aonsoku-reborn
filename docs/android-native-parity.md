@@ -57,3 +57,13 @@ records its actual verified range below; unresolved entries must remain visible.
   until a user playback command. Fixed NativeLogger's Java 21 List.removeFirst
   linkage on Android 14. APK rebuild and all 133 unit tests pass; Pixel 5 renders
   the native home and floating navigation after a data-preserving install.
+- Stage 2 service layer: typed playlist create/edit/delete/add/remove/replace
+  operations preserve repeated IDs and ownership; radio CRUD, favorites/rating,
+  artist info/top tracks, native play history, queued download progress and
+  explicit/smart/LRU cache sources are available without a WebView. Queue
+  replacement confirmation lives before native dispatch. Compile and original
+  native tests pass; added encoding/duplicate/decoder regression coverage.
+- Native lyric service: server structured/plain lyrics, LRCLIB privacy opt-in,
+  custom-server candidates/romanization, source ordering, prefer-synced fallback,
+  explicit selection and offline cache. Regression tests cover multiple LRC
+  timestamps, fractions, offset, plain text and same-time translations.
