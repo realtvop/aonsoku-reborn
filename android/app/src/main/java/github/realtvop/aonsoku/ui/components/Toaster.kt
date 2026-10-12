@@ -1,5 +1,6 @@
 package github.realtvop.aonsoku.ui.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
@@ -22,10 +23,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.collectLatest
 
 enum class ToastKind { Success, Error, Info }
 
@@ -59,10 +62,9 @@ private class ToastVisuals(val toast: Toast) : SnackbarVisuals {
 fun ToastHost(toaster: Toaster, modifier: Modifier = Modifier) {
     val hostState = remember { SnackbarHostState() }
     LaunchedEffect(toaster) {
-        toaster.toasts.collect { toast ->
-            hostState.currentSnackbarData?.dismiss()
-            hostState.showSnackbar(ToastVisuals(toast))
-        }
+        // Showing a message suspends until it leaves, so a newer one cancels
+        // it and takes its place instead of waiting for its turn.
+        toaster.toasts.collectLatest { toast -> hostState.showSnackbar(ToastVisuals(toast)) }
     }
     SnackbarHost(hostState = hostState, modifier = modifier) { data ->
         val kind = (data.visuals as? ToastVisuals)?.toast?.kind ?: ToastKind.Info
@@ -72,7 +74,11 @@ fun ToastHost(toaster: Toaster, modifier: Modifier = Modifier) {
             ToastKind.Info -> Icons.Rounded.Info to MaterialTheme.colorScheme.onSurfaceVariant
         }
         Snackbar(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            // A tap sends the message away before its time is up.
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .clip(MaterialTheme.shapes.large)
+                .clickable { data.dismiss() },
             shape = MaterialTheme.shapes.large,
             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
             contentColor = MaterialTheme.colorScheme.onSurface,

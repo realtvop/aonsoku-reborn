@@ -120,6 +120,12 @@ class AppGraph(
         player.connect()
     }
 
+    /** The session moved to another address of the server: look at it afresh. */
+    fun onServerChanged() {
+        network.scheduleCheck(0)
+        library.notifyChanged(LibraryChange.Library)
+    }
+
     /** The app came back to the foreground. */
     fun onForeground() {
         if (session.state.value !is SessionState.SignedIn) return

@@ -25,7 +25,8 @@
     "language": "Language",
     "server": "Server",
     "about": "About",
-    "serverLogout": "Logout"
+    "serverLogout": "Logout",
+    "account": "Account"
   },
   "generic": {
     "seeMore": "See more",

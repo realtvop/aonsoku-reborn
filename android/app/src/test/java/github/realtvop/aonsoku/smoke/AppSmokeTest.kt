@@ -7,7 +7,10 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
@@ -24,6 +27,7 @@ import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
@@ -33,6 +37,9 @@ import androidx.compose.ui.unit.dp
 import github.realtvop.aonsoku.player.RepeatMode
 import github.realtvop.aonsoku.session.SessionState
 import github.realtvop.aonsoku.settings.LyricsSource
+import github.realtvop.aonsoku.settings.ReplayGainSettings
+import github.realtvop.aonsoku.settings.ReplayGainType
+import github.realtvop.aonsoku.settings.ServerUrlSettings
 import github.realtvop.aonsoku.settings.ThemeMode
 import github.realtvop.aonsoku.ui.AonsokuApp
 import org.junit.Assert.assertEquals
@@ -448,6 +455,169 @@ class AppSmokeTest {
         assertTrue(world.server.requested("lrclib"))
     }
 
+    @Test
+    fun accountSheetLeadsToAboutWithTheVersionOfTheServer() {
+        openHome()
+        compose.onNodeWithContentDescription("Account").performClick()
+        waitForText("About")
+        waitForText(SmokeWorld.USERNAME)
+        snapshot("account")
+
+        compose.onNodeWithText("About").performClick()
+        waitForText("Client")
+        waitForText("navidrome")
+        waitForText("0.53.3 (smoke)")
+        snapshot("about")
+    }
+
+    @Test
+    fun settingsListTheirPagesAndTranslateTheApp() {
+        openSettings()
+        for (page in SETTINGS_PAGES) compose.onNodeWithText(page).assertIsDisplayed()
+        snapshot("settings")
+
+        compose.onNodeWithText("Language & Region").performClick()
+        waitForText("English (US)")
+        snapshot("settings-language")
+        reach(hasText("简体中文")).performClick()
+        waitUntil("the language to change") { settings().language == "zh-Hans" }
+        waitForText("语言和地区")
+
+        back()
+        waitForText("播放器和音频")
+    }
+
+    @Test
+    fun serverSettingsSaveTheAddressesOfTheServer() {
+        openSettings("Server")
+        // The address signed in to is the primary one, and the one in use.
+        waitForText(world.server.url)
+        waitUntil("the primary address to be in use") { named("Primary URL") == 2 }
+        snapshot("settings-server")
+
+        compose.onNodeWithContentDescription("Primary URL").performTextReplacement("not an address")
+        reach(hasText("Save server URLs")).performClick()
+        waitForText("Please enter a valid primary URL.")
+
+        // Nothing answers at the new primary address, so the fallback takes over.
+        compose.onNodeWithContentDescription("Primary URL").performTextReplacement("$NO_SERVER/")
+        compose.onNodeWithContentDescription("Fallback URL").performTextReplacement(world.server.url)
+        reach(hasText("Save server URLs")).performClick()
+        waitForText("Server URLs saved successfully.")
+        assertEquals(ServerUrlSettings(NO_SERVER, world.server.url, "fallback"), settings().server)
+        waitUntil("the fallback address to be in use") { named("Fallback URL") == 2 }
+    }
+
+    @Test
+    fun appearanceSettingsPickTheModeAndItsTheme() {
+        openSettings("Appearance")
+        waitForText("Always use album covers")
+        compose.onNodeWithText("Always use album covers").performClick()
+        waitUntil("album covers for songs") { settings().useAlbumCoverForSongs }
+
+        // Following the system offers a theme for each of the two modes.
+        themeMode("System").performClick()
+        waitUntil("the mode to follow the system") { settings().themeMode == ThemeMode.System }
+        waitForText("Night Owl Light")
+        snapshot("settings-appearance")
+        scrollTo("Dracula")
+        reach(hasText("Noctis Lilac")).performClick()
+        waitUntil("the light theme to change") { settings().lightTheme == "noctis-lilac" }
+
+        // One mode only lists its own themes.
+        scrollTo("Always use album covers")
+        themeMode("Dark").performClick()
+        waitUntil("the dark mode") { settings().themeMode == ThemeMode.Dark }
+        waitUntil("the light themes to leave") {
+            compose.onAllNodesWithText("Noctis Lilac").fetchSemanticsNodes().isEmpty()
+        }
+        reach(hasText("Dracula")).performClick()
+        waitUntil("the dark theme to change") { settings().darkTheme == "dracula" }
+        snapshot("settings-themes")
+
+        // The colors of the wallpaper take the place of the themes.
+        reach(hasText("Material You theme color")).performClick()
+        waitUntil("the themes to leave") {
+            settings().materialYou && compose.onAllNodesWithText("Dracula").fetchSemanticsNodes().isEmpty()
+        }
+    }
+
+    @Test
+    fun audioSettingsTuneReplayGainLyricsAndHistory() {
+        openSettings("Player & Audio")
+        waitForText("Enable haptic feedback")
+        snapshot("settings-audio")
+        compose.onNodeWithText("Enable haptic feedback").performClick()
+        waitUntil("haptics to be off") { !settings().hapticFeedback }
+
+        // The options of ReplayGain only show while it is on.
+        compose.onNodeWithText("Enabled").performClick()
+        reach(hasText("Album gain")).performClick()
+        reach(hasContentDescription("PreAmp (dB)"))
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(4f) }
+        reach(hasContentDescription("Default Gain (dB)"))
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(-3f) }
+        waitUntil("ReplayGain to be set up") {
+            settings().replayGain == ReplayGainSettings(true, ReplayGainType.Album, preAmp = 4, defaultGain = -3)
+        }
+        snapshot("settings-replaygain")
+
+        // The handle at the end of a source drags it; one row up swaps the two.
+        reach(hasContentDescription("Drag LRCLIB source")).performTouchInput {
+            down(center)
+            repeat(8) { moveBy(Offset(0f, -10.dp.toPx())) }
+            up()
+        }
+        waitUntil("LRCLIB to be asked first") {
+            settings().lyrics.sourcePriority ==
+                listOf(LyricsSource.LrcLib, LyricsSource.Navidrome, LyricsSource.Custom)
+        }
+        snapshot("settings-lyrics")
+
+        reach(hasText("Custom lyrics server")).performClick()
+        waitUntil("the custom server to be on") { settings().lyrics.customServerEnabled }
+        reach(hasContentDescription("Server URL")).performTextReplacement("not an address")
+        compose.onNodeWithContentDescription("Server URL").performImeAction()
+        waitForText("Enter a valid HTTP or HTTPS lyrics server URL.")
+        compose.onNodeWithContentDescription("Server URL")
+            .performTextReplacement("https://lyrics.example.com/api/")
+        // Moving on to the next field is enough to keep what was typed.
+        reach(hasContentDescription("Password")).performTextReplacement("open sesame")
+        compose.onNodeWithContentDescription("Password").performImeAction()
+        waitUntil("the lyrics server to be kept") {
+            settings().lyrics.customServerUrl == "https://lyrics.example.com/api" &&
+                settings().lyrics.customServerPassword == "open sesame"
+        }
+
+        reach(hasContentDescription("Maximum history size"))
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(200f) }
+        waitUntil("the history to grow") { settings().playHistoryMaxSize == 200 }
+        snapshot("settings-history")
+    }
+
+    @Test
+    fun contentAndPrivacySettingsShowRadiosAndTurnOffLrcLib() {
+        openSettings("Content")
+        waitForText("Hide radios section")
+        snapshot("settings-content")
+        compose.onNodeWithText("Hide radios section").performClick()
+        waitUntil("the radios to be shown") { !settings().hideRadios }
+
+        back()
+        waitForText("Privacy & Security")
+        compose.onNodeWithText("Privacy & Security").performClick()
+        waitForText("LRCLIB is used to find song lyrics.")
+        snapshot("settings-privacy")
+        compose.onNodeWithText("LRCLIB").performClick()
+        waitUntil("LRCLIB to be turned off") { !settings().lrcLibEnabled }
+
+        // The library lists the radios from now on.
+        back()
+        back()
+        compose.onNodeWithText("Library").performClick()
+        waitForText("Radios")
+    }
+
     /** Signs in and waits for the synced home page. */
     private fun openHome() {
         world.signIn()
@@ -465,6 +635,21 @@ class AppSmokeTest {
         compose.onNodeWithText("Library").performClick()
         waitForText("Playlists")
     }
+
+    /** Opens the settings from the account sheet, and the page [page] names. */
+    private fun openSettings(page: String? = null) {
+        openHome()
+        compose.onNodeWithContentDescription("Account").performClick()
+        waitForText("Settings")
+        compose.onNodeWithText("Settings").performClick()
+        waitForText("Appearance")
+        if (page != null) compose.onNodeWithText(page).performClick()
+    }
+
+    /** The button of a mode; a theme and a group of themes go by the same name. */
+    private fun themeMode(name: String) = compose.onNode(
+        hasText(name) and hasAnyAncestor(SemanticsMatcher.keyIsDefined(SemanticsProperties.SelectableGroup)),
+    )
 
     /** Starts [song] from the page of [album] and waits for the mini player to show it. */
     private fun play(album: String, song: String) {
@@ -501,6 +686,11 @@ class AppSmokeTest {
 
     private fun playerState() = world.graph.player.state.value
 
+    private fun settings() = world.graph.settings.current
+
+    /** How many things on screen go by [text]. */
+    private fun named(text: String) = compose.onAllNodesWithText(text).fetchSemanticsNodes().size
+
     private fun lyricChoices() = world.graph.settings.current.lyrics.selected.values.toList()
 
     private fun isEnabled(description: String): Boolean =
@@ -509,11 +699,30 @@ class AppSmokeTest {
 
     private fun contextTitles() = playerState().contextSongs.map { it.title }
 
-    /** Scrolls the page until [text] is composed; lazy pages only hold what is visible. */
-    private fun scrollTo(text: String) = waitUntil("\"$text\" in the page") {
+    private fun scrollTo(text: String) = scrollTo(hasText(text))
+
+    /** Scrolls the page until the node is composed; lazy pages only hold what is visible. */
+    private fun scrollTo(matcher: SemanticsMatcher) = waitUntil("${matcher.description} in the page") {
         runCatching {
-            compose.onAllNodes(hasScrollToNodeAction()).onFirst().performScrollToNode(hasText(text))
+            compose.onAllNodes(hasScrollToNodeAction()).onFirst().performScrollToNode(matcher)
         }.isSuccess
+    }
+
+    /**
+     * Scrolls the node clear of the bars floating over the bottom of a page,
+     * where a touch would land on them instead of on it.
+     */
+    private fun reach(matcher: SemanticsMatcher): SemanticsNodeInteraction {
+        scrollTo(matcher)
+        val page = compose.onAllNodes(hasScrollToNodeAction()).onFirst()
+        val free = page.fetchSemanticsNode().boundsInRoot.bottom -
+            with(compose.density) { FLOATING_BARS.toPx() }
+        val bottom = compose.onNode(matcher).fetchSemanticsNode().boundsInRoot.bottom
+        if (bottom > free) {
+            page.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, bottom - free) }
+            compose.waitForIdle()
+        }
+        return compose.onNode(matcher)
     }
 
     private fun back() {
@@ -542,7 +751,7 @@ class AppSmokeTest {
     private fun visibleTexts(): String = compose.onAllNodes(isRoot()).fetchSemanticsNodes()
         .flatMap { root -> root.texts() }
         .joinToString(" | ")
-        .take(900)
+        .take(1_600)
 
     private fun SemanticsNode.texts(): List<String> {
         val own = config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text } +
@@ -552,5 +761,14 @@ class AppSmokeTest {
 
     private companion object {
         const val SNAPSHOT_SETTLE_MS = 1_200L
+
+        /** An address of this machine that refuses connections. */
+        const val NO_SERVER = "http://127.0.0.1:1"
+
+        /** More than the navigation bar and the mini player cover of a page. */
+        val FLOATING_BARS = 180.dp
+
+        val SETTINGS_PAGES =
+            listOf("Server", "Appearance", "Language & Region", "Player & Audio", "Content", "Privacy & Security")
     }
 }

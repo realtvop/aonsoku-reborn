@@ -221,6 +221,7 @@
   },
   "menu": {
     "about": "关于",
+    "account": "账户",
     "language": "语言",
     "server": "服务器",
     "serverLogout": "登出"

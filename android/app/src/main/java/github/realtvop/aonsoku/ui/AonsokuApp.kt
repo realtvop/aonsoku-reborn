@@ -6,11 +6,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -22,7 +21,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import github.realtvop.aonsoku.AppGraph
 import github.realtvop.aonsoku.LocalAppGraph
@@ -35,9 +33,6 @@ import github.realtvop.aonsoku.theme.resolveDarkTheme
 import github.realtvop.aonsoku.ui.components.ToastHost
 import github.realtvop.aonsoku.ui.login.LoginScreen
 import github.realtvop.aonsoku.ui.shell.MainShell
-
-/** Keeps toasts above the floating navigation bar of the signed-in shell. */
-private val FloatingBarsReserve = 88.dp
 
 /**
  * [systemBars] is composed with whether the content behind the system bars is
@@ -74,12 +69,17 @@ fun AonsokuApp(graph: AppGraph, systemBars: @Composable (dark: Boolean) -> Unit 
                     ) { isSignedIn ->
                         if (isSignedIn) MainShell() else LoginScreen()
                     }
+                    // At the top, like the web app's: clear of the floating bars, the
+                    // keyboard, and the buttons that end a page.
                     ToastHost(
                         toaster = graph.toaster,
                         modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
-                            .padding(bottom = if (signedIn) FloatingBarsReserve else 0.dp),
+                            .align(Alignment.TopCenter)
+                            .windowInsetsPadding(
+                                WindowInsets.safeDrawing.only(
+                                    WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
+                                ),
+                            ),
                     )
                 }
             }

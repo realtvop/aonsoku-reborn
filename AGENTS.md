@@ -603,7 +603,9 @@ App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
   Screens call `PlayerController`; they never talk to `PlaybackService`
   directly.
 - `ui/`: `AonsokuApp` is the root composable (theme, strings, session gate,
-  toasts). `ui/shell/MainShell` hosts the type-safe Navigation Compose graph
+  toasts). Toasts (`Toaster` / `ToastHost`) show at the top of the screen like
+  the web app's, a newer one replaces the one on screen, and a tap dismisses
+  one. `ui/shell/MainShell` hosts the type-safe Navigation Compose graph
   (`ui/navigation/Routes.kt`) with one back stack per top-level tab and the
   floating navigation bar (`FloatingNavBar`: Home/Library pill plus a detached
   Search button), with the floating `ui/player/MiniPlayer` above it once
@@ -663,6 +665,21 @@ App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
   - Lazy list keys must be unique: lists that may repeat a song (album
     tracks, playlists, favorites) key by index + id, and id-keyed lists are
     de-duplicated before they reach a lazy layout.
+- `ui/settings/`: `SettingsScreen` shows the list of settings pages, or the
+  page `SettingsRoute.page` names (`SettingsCategory`: server, appearance,
+  language, audio, content, privacy; opened from the account sheet in
+  `ui/shell/UserSheet.kt`, which also opens `AboutDialog`). Pages are built
+  from `SettingsComponents.kt` (`SettingsPage` with `settingsSection` groups
+  of `SwitchSetting`, `SliderSetting`, `ChoiceSetting`, `FieldSetting`,
+  `ValueSetting` rows) and write straight to `SettingsRepository`; whatever
+  consumes a setting observes it, so a page never calls into a service. A
+  section is declared outside composition, so its title is resolved with
+  `LocalStrings.current.t(...)` rather than `t(...)`. Text fields commit when
+  they lose the focus or on the keyboard's done action. Short reorderable
+  lists inside a page (the lyric source priority) use
+  `ui/components/ReorderableColumn.kt`. Web settings that have no meaning
+  natively (automatic fullscreen, pointer cursors, browser picture-in-picture)
+  are left out.
 - `actions/LibraryActions` (`AppGraph.actions`) holds the library operations
   shared by menus, cards, and pages: resolving the songs of an
   album/artist/playlist for play / play next / add to queue, starring,

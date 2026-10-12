@@ -13,13 +13,22 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import github.realtvop.aonsoku.BuildConfig
+import github.realtvop.aonsoku.LocalAppGraph
+import github.realtvop.aonsoku.data.model.ServerInfo
+import github.realtvop.aonsoku.data.runSuspendCatching
 import github.realtvop.aonsoku.i18n.t
 import github.realtvop.aonsoku.ui.login.AppTitle
 import java.text.DateFormat
@@ -28,6 +37,16 @@ import java.util.Date
 @Composable
 fun AboutDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
+    val graph = LocalAppGraph.current
+    val online by graph.network.isOnline.collectAsStateWithLifecycle()
+    var server by remember { mutableStateOf<ServerInfo?>(null) }
+    var loading by remember { mutableStateOf(online) }
+    LaunchedEffect(online) {
+        if (!online) return@LaunchedEffect
+        loading = true
+        runSuspendCatching { graph.api.ping() }.onSuccess { server = it }
+        loading = false
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { AppTitle() },
@@ -50,6 +69,23 @@ fun AboutDialog(onDismiss: () -> Unit) {
                         }
                     }
                 }
+                // What the server said about itself; nothing to show while it cannot be asked.
+                val info = server
+                if (info != null || loading) {
+                    AboutSection(title = t("about.server")) {
+                        if (info == null) {
+                            Text(
+                                text = t("generic.loading"),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            ServerRow(label = t("about.type"), value = info.type)
+                            ServerRow(label = t("about.version"), value = info.serverVersion)
+                            ServerRow(label = t("about.apiVersion"), value = info.version)
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
@@ -69,6 +105,13 @@ fun AboutDialog(onDismiss: () -> Unit) {
             TextButton(onClick = onDismiss) { Text(t("generic.cancel")) }
         },
     )
+}
+
+/** A fact about the server; older servers leave some of them out. */
+@Composable
+private fun ServerRow(label: String, value: String) {
+    if (value.isEmpty()) return
+    AboutRow(label = label) { AboutChip(value, highlighted = true) }
 }
 
 @Composable

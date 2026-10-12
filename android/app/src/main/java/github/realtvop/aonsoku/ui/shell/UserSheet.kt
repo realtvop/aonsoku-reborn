@@ -39,6 +39,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -56,7 +58,11 @@ import kotlinx.coroutines.launch
 @Composable
 fun UserAvatarButton(modifier: Modifier = Modifier) {
     var sheetOpen by remember { mutableStateOf(false) }
-    IconButton(onClick = { sheetOpen = true }, modifier = modifier) {
+    val label = t("menu.account")
+    IconButton(
+        onClick = { sheetOpen = true },
+        modifier = modifier.semantics { contentDescription = label },
+    ) {
         UserAvatar(size = 32)
     }
     if (sheetOpen) {
