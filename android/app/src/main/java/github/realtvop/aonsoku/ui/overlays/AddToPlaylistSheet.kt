@@ -24,6 +24,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import github.realtvop.aonsoku.LocalAppGraph
 import github.realtvop.aonsoku.data.model.Playlist
+import github.realtvop.aonsoku.data.runSuspendCatching
 import github.realtvop.aonsoku.i18n.t
 import github.realtvop.aonsoku.ui.components.ActionDivider
 import github.realtvop.aonsoku.ui.components.ActionItem
@@ -38,7 +39,7 @@ fun AddToPlaylistSheet(overlay: Overlay.AddToPlaylist, controller: OverlayContro
     val graph = LocalAppGraph.current
     var query by rememberSaveable { mutableStateOf("") }
     val playlists by produceState<List<Playlist>?>(initialValue = null) {
-        value = runCatching { graph.library.playlistsNow() }.getOrDefault(emptyList())
+        value = runSuspendCatching { graph.library.playlistsNow() }.getOrDefault(emptyList())
     }
     val filtered = remember(playlists, query) {
         val needle = query.trim()

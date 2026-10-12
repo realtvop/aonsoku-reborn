@@ -6,6 +6,7 @@ import github.realtvop.aonsoku.data.model.Artist
 import github.realtvop.aonsoku.data.model.Playlist
 import github.realtvop.aonsoku.data.model.Radio
 import github.realtvop.aonsoku.data.model.Song
+import github.realtvop.aonsoku.data.runSuspendCatching
 import github.realtvop.aonsoku.i18n.Translations
 import github.realtvop.aonsoku.player.PlayerController
 import github.realtvop.aonsoku.player.QueueSource
@@ -125,7 +126,7 @@ class LibraryActions(
 
     fun addAlbumToPlaylist(album: Album, playlistId: String?) {
         scope.launch {
-            val ids = runCatching { albumSongs(album) }.getOrDefault(emptyList()).map { it.id }
+            val ids = runSuspendCatching { albumSongs(album) }.getOrDefault(emptyList()).map { it.id }
             if (ids.isEmpty()) {
                 toaster.error(strings().t("toast.server.error"))
             } else if (playlistId == null) {

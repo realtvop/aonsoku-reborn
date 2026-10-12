@@ -84,14 +84,16 @@ class NetworkMonitor(
         checkJob?.cancel()
         checkJob = scope.launch {
             if (delayMillis > 0) delay(delayMillis)
-            _isOnline.value = runCatching { probe() }.getOrDefault(false)
+            // A probe that was superseded while it ran stops here: its answer
+            // would overwrite the one of the newer probe.
+            _isOnline.value = runSuspendCatching { probe() }.getOrDefault(false)
         }
     }
 
     /** Runs the probe now and returns the fresh result. */
     suspend fun checkNow(): Boolean {
         checkJob?.cancel()
-        val reachable = runCatching { probe() }.getOrDefault(false)
+        val reachable = runSuspendCatching { probe() }.getOrDefault(false)
         _isOnline.value = reachable
         return reachable
     }

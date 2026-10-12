@@ -27,6 +27,7 @@ import github.realtvop.aonsoku.data.image.CoverArt
 import github.realtvop.aonsoku.data.model.Album
 import github.realtvop.aonsoku.data.model.AlbumInfo
 import github.realtvop.aonsoku.data.model.FeaturedArtist
+import github.realtvop.aonsoku.data.runSuspendCatching
 import github.realtvop.aonsoku.i18n.LocalStrings
 import github.realtvop.aonsoku.i18n.plural
 import github.realtvop.aonsoku.i18n.t
@@ -77,7 +78,7 @@ class AlbumViewModel(private val graph: AppGraph, private val albumId: String) :
         viewModelScope.launch {
             source.state.collect { state ->
                 if (state is Loadable.Failed && state.offline && _extras.value.summary == null) {
-                    val summary = runCatching { graph.library.localAlbumSummary(albumId) }.getOrNull()
+                    val summary = runSuspendCatching { graph.library.localAlbumSummary(albumId) }.getOrNull()
                     _extras.update { it.copy(summary = summary) }
                 }
             }
@@ -105,14 +106,14 @@ class AlbumViewModel(private val graph: AppGraph, private val albumId: String) :
     }
 
     private suspend fun loadInfo() {
-        val info = runCatching { graph.library.albumInfo(albumId) }.getOrNull() ?: return
+        val info = runSuspendCatching { graph.library.albumInfo(albumId) }.getOrNull() ?: return
         _extras.update { it.copy(info = info) }
     }
 
     private suspend fun loadRelated(artistId: String, genre: String) = coroutineScope {
         val byArtist = async {
             if (artistId.isEmpty()) return@async emptyList()
-            runCatching {
+            runSuspendCatching {
                 graph.library.albums(
                     AlbumListRequest(filter = AlbumFilters.DISCOGRAPHY, artistId = artistId),
                     offset = 0,
@@ -122,7 +123,7 @@ class AlbumViewModel(private val graph: AppGraph, private val albumId: String) :
         }
         val byGenre = async {
             if (genre.isEmpty()) return@async emptyList()
-            runCatching { graph.library.genreAlbums(genre, RELATED_ALBUMS + 1) }
+            runSuspendCatching { graph.library.genreAlbums(genre, RELATED_ALBUMS + 1) }
                 .getOrDefault(emptyList())
         }
         val artistAlbums = relatedAlbums(byArtist.await(), albumId, newestFirst = true)
@@ -240,7 +241,7 @@ private fun AlbumContent(album: Album, extras: AlbumExtras, tracksUnavailable: B
                 InfoPanel(
                     name = album.name,
                     html = notes,
-                    lastFmUrl = info?.lastFmUrl,
+                    lastFmUrl = info.lastFmUrl,
                     modifier = Modifier.padding(bottom = 16.dp),
                 )
             }

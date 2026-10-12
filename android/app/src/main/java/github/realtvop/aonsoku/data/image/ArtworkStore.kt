@@ -1,9 +1,12 @@
 package github.realtvop.aonsoku.data.image
 
 import github.realtvop.aonsoku.data.NetworkMonitor
+import github.realtvop.aonsoku.data.runSuspendCatching
 import github.realtvop.aonsoku.plugins.data.LibraryService
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import java.io.File
@@ -17,9 +20,11 @@ import java.util.concurrent.ConcurrentHashMap
 class ArtworkStore(
     private val library: LibraryService,
     private val network: NetworkMonitor,
+    /** Owns the downloads, so one that several images wait for outlives any of them. */
+    private val scope: CoroutineScope,
 ) {
     private val downloads = Semaphore(MAX_PARALLEL_DOWNLOADS)
-    private val inFlight = ConcurrentHashMap<String, CompletableDeferred<File?>>()
+    private val inFlight = ConcurrentHashMap<String, Deferred<File?>>()
 
     /**
      * Returns the first cached file among [ids]; when none is cached the
@@ -37,7 +42,7 @@ class ArtworkStore(
 
     /** Cached file for [id] without touching the network. */
     suspend fun cached(id: String): File? =
-        runCatching { library.resolveCoverImage(id)?.file }.getOrNull()?.takeIf { it.exists() }
+        runSuspendCatching { library.resolveCoverImage(id)?.file }.getOrNull()?.takeIf { it.exists() }
 
     suspend fun avatar(username: String): File? {
         if (username.isEmpty()) return null
@@ -46,28 +51,24 @@ class ArtworkStore(
         return download("avatar:$username") { library.downloadAvatar(username, AVATAR_SIZE).file }
     }
 
+    /**
+     * Downloads once per [key]: every image asking for the same artwork waits
+     * for the same download. A caller that goes away (an image scrolled off
+     * screen) only stops waiting; the download finishes for the others and for
+     * the cache.
+     */
     private suspend fun download(key: String, block: suspend () -> File): File? {
-        val pending = CompletableDeferred<File?>()
-        val existing = inFlight.putIfAbsent(key, pending)
-        if (existing != null) return existing.await()
-        try {
-            val file = downloads.withPermit {
-                try {
-                    block()
-                } catch (error: CancellationException) {
-                    throw error
-                } catch (_: Exception) {
-                    null
-                }
-            }
-            pending.complete(file)
-            return file
-        } catch (error: CancellationException) {
-            pending.complete(null)
-            throw error
-        } finally {
-            inFlight.remove(key, pending)
+        val created = scope.async(start = CoroutineStart.LAZY) {
+            downloads.withPermit { runSuspendCatching { block() }.getOrNull() }
         }
+        val existing = inFlight.putIfAbsent(key, created)
+        if (existing != null) {
+            created.cancel()
+            return existing.await()
+        }
+        created.invokeOnCompletion { inFlight.remove(key, created) }
+        created.start()
+        return created.await()
     }
 
     companion object {

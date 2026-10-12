@@ -48,6 +48,7 @@ import github.realtvop.aonsoku.LocalAppGraph
 import github.realtvop.aonsoku.data.AlbumFilters
 import github.realtvop.aonsoku.data.image.CoverArt
 import github.realtvop.aonsoku.data.model.SearchResult
+import github.realtvop.aonsoku.data.runSuspendCatching
 import github.realtvop.aonsoku.i18n.plural
 import github.realtvop.aonsoku.i18n.t
 import github.realtvop.aonsoku.ui.components.CoverImage
@@ -91,7 +92,7 @@ class SearchViewModel(private val graph: AppGraph) : ViewModel() {
                 .distinctUntilChanged()
                 .mapLatest { query ->
                     val result = if (isSearchable(query)) {
-                        runCatching { graph.library.search(query, RESULT_COUNT) }.getOrNull()
+                        runSuspendCatching { graph.library.search(query, RESULT_COUNT) }.getOrNull()
                     } else {
                         null
                     }

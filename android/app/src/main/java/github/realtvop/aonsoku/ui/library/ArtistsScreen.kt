@@ -35,6 +35,7 @@ import github.realtvop.aonsoku.AppGraph
 import github.realtvop.aonsoku.data.LibraryChange
 import github.realtvop.aonsoku.data.image.CoverArt
 import github.realtvop.aonsoku.data.model.Artist
+import github.realtvop.aonsoku.data.runSuspendCatching
 import github.realtvop.aonsoku.i18n.plural
 import github.realtvop.aonsoku.i18n.t
 import github.realtvop.aonsoku.ui.components.CoverImage
@@ -70,7 +71,7 @@ class ArtistsViewModel(private val graph: AppGraph) : ViewModel() {
 
     private fun load() {
         viewModelScope.launch {
-            _artists.value = runCatching { graph.library.artists() }.getOrDefault(emptyList())
+            _artists.value = runSuspendCatching { graph.library.artists() }.getOrDefault(emptyList())
         }
     }
 }

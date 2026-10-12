@@ -45,7 +45,7 @@ class AppGraph(val application: Application) {
         client = httpClient,
         onUnreachable = network::markServerUnreachable,
     )
-    val artwork = ArtworkStore(services.library, network)
+    val artwork = ArtworkStore(services.library, network, scope)
     val library = LibraryRepository(api, services.library, network)
     val sync = LibrarySyncCoordinator(
         library = services.library,

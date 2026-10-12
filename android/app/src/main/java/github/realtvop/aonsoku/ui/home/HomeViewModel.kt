@@ -7,6 +7,7 @@ import github.realtvop.aonsoku.data.HomeSection
 import github.realtvop.aonsoku.data.LibraryChange
 import github.realtvop.aonsoku.data.PinnedEntry
 import github.realtvop.aonsoku.data.model.Album
+import github.realtvop.aonsoku.data.runSuspendCatching
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -82,7 +83,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 
     private fun reloadPinned() {
         viewModelScope.launch {
-            val pinned = runCatching {
+            val pinned = runSuspendCatching {
                 graph.library.pinnedItems(graph.settings.current.pinnedHome)
             }.getOrDefault(emptyList())
             _state.update { it.copy(pinned = pinned) }
@@ -106,17 +107,17 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 
     private suspend fun fetch(includeCarousel: Boolean) = coroutineScope {
         val carousel: Deferred<List<Album>>? = if (includeCarousel) {
-            async { runCatching { graph.library.carouselAlbums() }.getOrDefault(emptyList()) }
+            async { runSuspendCatching { graph.library.carouselAlbums() }.getOrDefault(emptyList()) }
         } else {
             null
         }
         val pinned = async {
-            runCatching { graph.library.pinnedItems(graph.settings.current.pinnedHome) }
+            runSuspendCatching { graph.library.pinnedItems(graph.settings.current.pinnedHome) }
                 .getOrDefault(emptyList())
         }
         val sections = HomeSection.entries.map { section ->
             async {
-                section to runCatching { graph.library.homeAlbums(section) }
+                section to runSuspendCatching { graph.library.homeAlbums(section) }
                     .getOrDefault(emptyList())
             }
         }

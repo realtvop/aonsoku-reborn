@@ -13,6 +13,7 @@ import github.realtvop.aonsoku.data.api.SubsonicApi
 import github.realtvop.aonsoku.data.formatIsoTimestamp
 import github.realtvop.aonsoku.data.model.Radio
 import github.realtvop.aonsoku.data.model.Song
+import github.realtvop.aonsoku.data.runSuspendCatching
 import github.realtvop.aonsoku.data.toQueueSong
 import github.realtvop.aonsoku.data.toSong
 import github.realtvop.aonsoku.i18n.Translations
@@ -589,7 +590,7 @@ class PlayerController(
         val isCurrent = _state.value.current?.id == song.id
         if (isCurrent) applyCurrentStarred(starred)
         scope.launch {
-            val succeeded = runCatching { library.setSongStarred(song, starred) }.isSuccess
+            val succeeded = runSuspendCatching { library.setSongStarred(song, starred) }.isSuccess
             if (!succeeded) {
                 if (_state.value.current?.id == song.id) applyCurrentStarred(!starred)
                 toaster.error(strings().t("toast.server.error"))

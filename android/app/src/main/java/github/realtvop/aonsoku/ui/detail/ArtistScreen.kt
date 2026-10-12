@@ -20,6 +20,7 @@ import github.realtvop.aonsoku.data.image.CoverArt
 import github.realtvop.aonsoku.data.model.Artist
 import github.realtvop.aonsoku.data.model.ArtistInfo
 import github.realtvop.aonsoku.data.model.Song
+import github.realtvop.aonsoku.data.runSuspendCatching
 import github.realtvop.aonsoku.i18n.plural
 import github.realtvop.aonsoku.i18n.t
 import github.realtvop.aonsoku.ui.components.AlbumRowSection
@@ -84,13 +85,13 @@ class ArtistViewModel(private val graph: AppGraph, private val artistId: String)
     }
 
     private suspend fun loadInfo() {
-        val info = runCatching { graph.library.artistInfo(artistId) }.getOrNull() ?: return
+        val info = runSuspendCatching { graph.library.artistInfo(artistId) }.getOrNull() ?: return
         _extras.update { it.copy(info = info) }
     }
 
     private suspend fun loadTopSongs(artistName: String) {
         if (artistName.isEmpty()) return
-        val songs = runCatching { graph.library.topSongs(artistName) }.getOrDefault(emptyList())
+        val songs = runSuspendCatching { graph.library.topSongs(artistName) }.getOrDefault(emptyList())
         if (songs.isNotEmpty()) _extras.update { it.copy(topSongs = songs.take(TOP_SONGS)) }
     }
 
@@ -185,8 +186,8 @@ private fun ArtistContent(artist: Artist, extras: ArtistExtras) {
                 InfoPanel(
                     name = artist.name,
                     html = biography,
-                    lastFmUrl = info?.lastFmUrl,
-                    musicBrainzUrl = info?.musicBrainzId
+                    lastFmUrl = info.lastFmUrl,
+                    musicBrainzUrl = info.musicBrainzId
                         ?.takeIf { it.isNotBlank() }
                         ?.let { "https://musicbrainz.org/artist/$it" },
                 )

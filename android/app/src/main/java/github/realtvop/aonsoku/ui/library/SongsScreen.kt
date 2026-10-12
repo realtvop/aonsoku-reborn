@@ -30,6 +30,7 @@ import github.realtvop.aonsoku.data.LibraryRepository
 import github.realtvop.aonsoku.data.SongListRequest
 import github.realtvop.aonsoku.data.SongOrder
 import github.realtvop.aonsoku.data.model.Song
+import github.realtvop.aonsoku.data.runSuspendCatching
 import github.realtvop.aonsoku.i18n.t
 import github.realtvop.aonsoku.ui.components.ActionDivider
 import github.realtvop.aonsoku.ui.components.ActionSheet
@@ -127,7 +128,7 @@ class SongsViewModel(private val graph: AppGraph, private val route: SongsRoute)
     private fun reload() {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
-            val page = runCatching {
+            val page = runSuspendCatching {
                 graph.library.songs(request(), 0, LibraryRepository.SONG_PAGE_SIZE)
             }.getOrNull()
             val total = if (byArtist) page?.songs?.size ?: 0 else songCount(page?.total ?: 0)
@@ -145,14 +146,14 @@ class SongsViewModel(private val graph: AppGraph, private val route: SongsRoute)
 
     /** The header shows the size of the whole library, as the web app does. */
     private suspend fun songCount(pageTotal: Int): Int =
-        runCatching { graph.library.totalSongCount() }.getOrDefault(0).takeIf { it > 0 } ?: pageTotal
+        runSuspendCatching { graph.library.totalSongCount() }.getOrDefault(0).takeIf { it > 0 } ?: pageTotal
 
     fun loadMore() {
         val current = _state.value
         if (current.loading || current.loadingMore || !current.hasMore) return
         _state.update { it.copy(loadingMore = true) }
         loadJob = viewModelScope.launch {
-            val page = runCatching {
+            val page = runSuspendCatching {
                 graph.library.songs(request(), current.songs.size, LibraryRepository.SONG_PAGE_SIZE)
             }.getOrNull()
             _state.update {

@@ -38,6 +38,7 @@ import github.realtvop.aonsoku.data.AlbumListRequest
 import github.realtvop.aonsoku.data.LibraryChange
 import github.realtvop.aonsoku.data.LibraryRepository
 import github.realtvop.aonsoku.data.model.Album
+import github.realtvop.aonsoku.data.runSuspendCatching
 import github.realtvop.aonsoku.i18n.t
 import github.realtvop.aonsoku.ui.components.ActionDivider
 import github.realtvop.aonsoku.ui.components.ActionSheet
@@ -166,7 +167,7 @@ class AlbumsViewModel(private val graph: AppGraph, route: AlbumsRoute) : ViewMod
     private fun reload() {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
-            val page = runCatching {
+            val page = runSuspendCatching {
                 graph.library.albums(request(), 0, LibraryRepository.ALBUM_PAGE_SIZE)
             }.getOrNull()
             _state.update {
@@ -185,7 +186,7 @@ class AlbumsViewModel(private val graph: AppGraph, route: AlbumsRoute) : ViewMod
         if (current.loading || current.loadingMore || !current.hasMore) return
         _state.update { it.copy(loadingMore = true) }
         loadJob = viewModelScope.launch {
-            val page = runCatching {
+            val page = runSuspendCatching {
                 graph.library.albums(request(), current.albums.size, LibraryRepository.ALBUM_PAGE_SIZE)
             }.getOrNull()
             _state.update {

@@ -38,6 +38,7 @@ import github.realtvop.aonsoku.AppGraph
 import github.realtvop.aonsoku.LocalAppGraph
 import github.realtvop.aonsoku.data.LibraryChange
 import github.realtvop.aonsoku.data.model.Radio
+import github.realtvop.aonsoku.data.runSuspendCatching
 import github.realtvop.aonsoku.i18n.t
 import github.realtvop.aonsoku.ui.components.EmptyState
 import github.realtvop.aonsoku.ui.components.NowPlayingBars
@@ -73,7 +74,7 @@ class RadiosViewModel(private val graph: AppGraph) : ViewModel() {
 
     private fun load() {
         viewModelScope.launch {
-            val loaded = runCatching { graph.library.radios() }.getOrNull()
+            val loaded = runSuspendCatching { graph.library.radios() }.getOrNull()
             _radios.value = loaded ?: _radios.value ?: emptyList()
         }
     }

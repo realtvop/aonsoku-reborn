@@ -36,6 +36,7 @@ import github.realtvop.aonsoku.LocalAppGraph
 import github.realtvop.aonsoku.data.model.Album
 import github.realtvop.aonsoku.data.model.Song
 import github.realtvop.aonsoku.data.parseIsoTimestamp
+import github.realtvop.aonsoku.data.runSuspendCatching
 import github.realtvop.aonsoku.i18n.LocalStrings
 import github.realtvop.aonsoku.i18n.t
 import github.realtvop.aonsoku.ui.components.formatBytes
@@ -59,9 +60,9 @@ fun SongInfoSheet(overlay: Overlay.SongInfo, controller: OverlayController) {
     val sheetState = rememberExpandedSheetState()
     val scope = rememberCoroutineScope()
     val details by produceState<SongDetails?>(initialValue = null, overlay.songId) {
-        val song = runCatching { graph.library.song(overlay.songId) }.getOrNull()
+        val song = runSuspendCatching { graph.library.song(overlay.songId) }.getOrNull()
         val album = song?.albumId?.takeIf { it.isNotEmpty() }?.let { albumId ->
-            runCatching { graph.library.albumDetails(albumId) }.getOrNull()
+            runSuspendCatching { graph.library.albumDetails(albumId) }.getOrNull()
         }
         value = SongDetails(song, album)
     }
