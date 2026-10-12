@@ -35,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +45,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -61,8 +63,10 @@ import github.realtvop.aonsoku.ui.navigation.appDestinations
 import github.realtvop.aonsoku.ui.overlays.LocalOverlays
 import github.realtvop.aonsoku.ui.overlays.OverlayController
 import github.realtvop.aonsoku.ui.overlays.OverlayHost
+import github.realtvop.aonsoku.ui.player.FullscreenPlayer
 import github.realtvop.aonsoku.ui.player.MiniPlayer
 import github.realtvop.aonsoku.ui.player.QueueReplacementDialog
+import github.realtvop.aonsoku.ui.player.rememberFullscreenPlayerState
 
 /**
  * Bottom space taken by the floating navigation and player. Scrolling pages
@@ -79,6 +83,9 @@ fun MainShell() {
     val initialTab = rememberSaveable { TopLevelTab.Home }
     val navigator = remember(navController) { AppNavigator(navController, initialTab) }
     val overlays = remember { OverlayController() }
+    val fullscreenPlayer = rememberFullscreenPlayerState()
+    // A link followed from the player or one of its menus leads to a page below it.
+    SideEffect { navigator.onOpen = fullscreenPlayer::close }
 
     DisposableEffect(navController, navigator) {
         val listener = NavController.OnDestinationChangedListener { _, destination, _ ->
@@ -108,51 +115,60 @@ fun MainShell() {
         ) {
             val spatial = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
             val effects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
-            NavHost(
-                navController = navController,
-                startDestination = HomeRoute,
-                modifier = Modifier.fillMaxSize(),
-                enterTransition = { forwardEnter(spatial, effects) },
-                exitTransition = { forwardExit(effects) },
-                popEnterTransition = { backEnter(effects) },
-                popExitTransition = { backExit(spatial, effects) },
+            // The pages and bars are out of reach while the player covers them.
+            val covered = fullscreenPlayer.isOpen && playerState.hasMedia
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(if (covered) Modifier.clearAndSetSemantics { } else Modifier),
             ) {
-                appDestinations()
-            }
-
-            AnimatedVisibility(
-                visible = !imeVisible,
-                modifier = Modifier.align(Alignment.BottomCenter),
-                enter = slideInVertically(spatial) { it } + fadeIn(effects),
-                exit = slideOutVertically(spatial) { it } + fadeOut(effects),
-            ) {
-                Column(
-                    modifier = Modifier
-                        .navigationBarsPadding()
-                        .padding(bottom = FloatingBarsBottomMargin),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(FloatingBarsSpacing),
+                NavHost(
+                    navController = navController,
+                    startDestination = HomeRoute,
+                    modifier = Modifier.fillMaxSize(),
+                    enterTransition = { forwardEnter(spatial, effects) },
+                    exitTransition = { forwardExit(effects) },
+                    popEnterTransition = { backEnter(effects) },
+                    popExitTransition = { backExit(spatial, effects) },
                 ) {
-                    AnimatedVisibility(
-                        visible = playerState.hasMedia,
-                        enter = slideInVertically(spatial) { it / 2 } + fadeIn(effects),
-                        exit = slideOutVertically(spatial) { it / 2 } + fadeOut(effects),
+                    appDestinations()
+                }
+
+                AnimatedVisibility(
+                    visible = !imeVisible,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    enter = slideInVertically(spatial) { it } + fadeIn(effects),
+                    exit = slideOutVertically(spatial) { it } + fadeOut(effects),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .navigationBarsPadding()
+                            .padding(bottom = FloatingBarsBottomMargin),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(FloatingBarsSpacing),
                     ) {
-                        MiniPlayer(
-                            state = playerState,
-                            onExpand = {},
-                            modifier = Modifier
-                                .padding(horizontal = 12.dp)
-                                .widthIn(max = 560.dp),
+                        AnimatedVisibility(
+                            visible = playerState.hasMedia,
+                            enter = slideInVertically(spatial) { it / 2 } + fadeIn(effects),
+                            exit = slideOutVertically(spatial) { it / 2 } + fadeOut(effects),
+                        ) {
+                            MiniPlayer(
+                                state = playerState,
+                                onExpand = { fullscreenPlayer.open() },
+                                modifier = Modifier
+                                    .padding(horizontal = 12.dp)
+                                    .widthIn(max = 560.dp),
+                            )
+                        }
+                        FloatingNavBar(
+                            currentTab = navigator.currentTab,
+                            onSelect = navigator::selectTab,
                         )
                     }
-                    FloatingNavBar(
-                        currentTab = navigator.currentTab,
-                        onSelect = navigator::selectTab,
-                    )
                 }
             }
 
+            FullscreenPlayer(playerState = playerState, sheet = fullscreenPlayer)
             QueueReplacementDialog()
             OverlayHost(overlays)
         }

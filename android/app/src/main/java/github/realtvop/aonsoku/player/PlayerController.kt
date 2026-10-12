@@ -482,6 +482,33 @@ class PlayerController(
 
     fun playFromUserQueue(index: Int) = run(AudioCommand.PlayUserQueueAt(index))
 
+    /**
+     * Plays [song] right away and keeps everything that is queued, the way a
+     * song picked from the play history starts: it is queued next and then
+     * skipped to.
+     */
+    fun playNow(song: Song) {
+        val audio = service
+        val current = _state.value
+        if (audio == null || !current.hasMedia || current.isRadio) {
+            playSongs(listOf(song), 0, bypassConfirmation = true)
+            return
+        }
+        remember(listOf(song))
+        val queueSong = song.toQueueSong(settings.current.useAlbumCoverForSongs)
+        scope.launch {
+            val added = audio.execute(AudioCommand.AddToUserQueue(listOf(queueSong), "next"))
+            if (added is AudioCommandResult.Failure) {
+                report(added)
+                return@launch
+            }
+            // "Next" lands behind a user-queue song that is playing.
+            val index = if (audio.queueState.value.isInUserQueue) 1 else 0
+            val played = audio.execute(AudioCommand.PlayUserQueueAt(index))
+            if (played is AudioCommandResult.Failure) report(played)
+        }
+    }
+
     fun addToQueueNext(songs: List<Song>) = addToQueue(songs, "next")
 
     fun addToQueueLast(songs: List<Song>) = addToQueue(songs, "last")

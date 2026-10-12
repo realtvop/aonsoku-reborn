@@ -22,6 +22,9 @@ fun themePaletteFor(id: String, dark: Boolean): ThemePalette {
 /** Blend [amount] of [other] into the receiver. */
 fun Color.blend(other: Color, amount: Float): Color = lerp(this, other, amount)
 
+/** The red of a liked heart; the same on every theme, like the web app. */
+val LikedColor = Color(0xFFEF4444)
+
 fun Color.isDark(): Boolean = luminance() < 0.4f
 
 /** A readable content color for arbitrary (for example artwork-derived) backgrounds. */

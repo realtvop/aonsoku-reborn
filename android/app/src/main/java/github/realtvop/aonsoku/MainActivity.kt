@@ -39,6 +39,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         val graph = (application as AonsokuApplication).graph
         setContent {
             AonsokuApp(graph) { dark ->
+                // Light icons on a dark backdrop, and the other way around.
                 val view = LocalView.current
                 SideEffect {
                     WindowCompat.getInsetsController(window, view).apply {

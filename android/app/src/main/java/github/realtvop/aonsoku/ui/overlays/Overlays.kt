@@ -61,6 +61,14 @@ sealed interface Overlay {
 
     data class SongInfo(val songId: String) : Overlay
 
+    /** Options of the song that is playing, opened from the full-screen player. */
+    data object CurrentSongMenu : Overlay
+
+    data object SleepTimer : Overlay
+
+    /** How strongly the artwork tints the full-screen player. */
+    data object PlayerColors : Overlay
+
     /** Full-screen view of an artwork. */
     data class Artwork(
         val art: CoverArt,
@@ -105,6 +113,9 @@ fun OverlayHost(controller: OverlayController) {
             is Overlay.RadioForm -> RadioFormDialog(overlay, controller)
             is Overlay.DeleteRadio -> DeleteRadioDialog(overlay, controller)
             is Overlay.SongInfo -> SongInfoSheet(overlay, controller)
+            Overlay.CurrentSongMenu -> CurrentSongMenuSheet(controller)
+            Overlay.SleepTimer -> SleepTimerSheet(controller)
+            Overlay.PlayerColors -> PlayerColorsSheet(controller)
             is Overlay.Artwork -> ArtworkViewer(overlay, controller)
         }
     }

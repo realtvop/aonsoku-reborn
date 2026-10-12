@@ -26,11 +26,18 @@ class AppNavigator(
         private set
 
     /**
+     * Runs whenever a page is requested, also when it is already open. The
+     * shell uses it to close what covers the pages, such as the player.
+     */
+    var onOpen: () -> Unit = {}
+
+    /**
      * Pushes [route] unless that exact page is already on top (a second tap
      * on the same link). Another album or artist is a new page, so this must
      * not be a single-top launch, which would replace the page that is open.
      */
     fun open(route: Any) {
+        onOpen()
         val current = controller.currentBackStackEntry
         val type: KClass<out Any> = route::class
         val alreadyOpen = current != null &&

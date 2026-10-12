@@ -19,7 +19,6 @@ import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import github.realtvop.aonsoku.LocalAppGraph
@@ -28,6 +27,7 @@ import github.realtvop.aonsoku.i18n.LocalStrings
 import github.realtvop.aonsoku.i18n.plural
 import github.realtvop.aonsoku.i18n.t
 import github.realtvop.aonsoku.settings.PinnedHomeItem
+import github.realtvop.aonsoku.theme.LikedColor
 import github.realtvop.aonsoku.ui.components.ActionDivider
 import github.realtvop.aonsoku.ui.components.ActionItem
 import github.realtvop.aonsoku.ui.components.ActionSheet
@@ -40,8 +40,6 @@ import github.realtvop.aonsoku.ui.navigation.ArtistRoute
 import github.realtvop.aonsoku.ui.navigation.LocalNavigator
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-
-private val LikedTint = Color(0xFFEF4444)
 
 /** True while nothing was queued manually; "add last" then equals "play next". */
 @Composable
@@ -92,7 +90,7 @@ fun SongMenuSheet(overlay: Overlay.SongMenu, controller: OverlayController) {
         ActionItem(
             icon = if (starred) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
             label = t(if (starred) "options.unlike" else "options.like"),
-            iconTint = if (starred) LikedTint else null,
+            iconTint = if (starred) LikedColor else null,
             onClick = { graph.player.setSongStarred(song, !starred) },
         )
         ActionDivider()
@@ -188,7 +186,7 @@ fun AlbumMenuSheet(overlay: Overlay.AlbumMenu, controller: OverlayController) {
                 if (starred) "album.buttons.dislike" else "album.buttons.like",
                 "name" to album.name,
             ),
-            iconTint = if (starred) LikedTint else null,
+            iconTint = if (starred) LikedColor else null,
             onClick = { graph.actions.setAlbumStarred(album.id, !starred) },
         )
         ActionDivider()
@@ -242,7 +240,7 @@ fun ArtistMenuSheet(overlay: Overlay.ArtistMenu, controller: OverlayController) 
                 if (starred) "album.buttons.dislike" else "album.buttons.like",
                 "name" to artist.name,
             ),
-            iconTint = if (starred) LikedTint else null,
+            iconTint = if (starred) LikedColor else null,
             onClick = { graph.actions.setArtistStarred(artist.id, !starred) },
         )
         ActionDivider()

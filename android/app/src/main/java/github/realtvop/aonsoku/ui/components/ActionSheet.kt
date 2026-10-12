@@ -129,7 +129,10 @@ fun SheetHeader(
     }
 }
 
-/** One action of an [ActionSheet]. The sheet closes before [onClick] runs. */
+/**
+ * One action of an [ActionSheet]. The sheet closes before [onClick] runs.
+ * [trailingText] shows the current state of what the action changes.
+ */
 @Composable
 fun ActionItem(
     icon: ImageVector,
@@ -138,6 +141,7 @@ fun ActionItem(
     enabled: Boolean = true,
     destructive: Boolean = false,
     iconTint: Color? = null,
+    trailingText: String? = null,
 ) {
     val dismiss = LocalSheetDismiss.current
     val contentColor = when {
@@ -166,7 +170,17 @@ fun ActionItem(
             color = contentColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
         )
+        if (trailingText != null) {
+            Spacer(Modifier.width(12.dp))
+            Text(
+                text = trailingText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
+        }
     }
 }
 

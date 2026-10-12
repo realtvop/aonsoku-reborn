@@ -6,10 +6,10 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Person
-import androidx.compose.material.icons.rounded.QueueMusic
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -32,12 +32,13 @@ import coil3.toBitmap
 import github.realtvop.aonsoku.LocalAppGraph
 import github.realtvop.aonsoku.data.image.CoverArt
 import github.realtvop.aonsoku.data.model.Song
+import github.realtvop.aonsoku.plugins.audio.QueueSong
 
 enum class CoverKind(val placeholder: ImageVector) {
     Album(Icons.Rounded.Album),
     Song(Icons.Rounded.MusicNote),
     Artist(Icons.Rounded.Person),
-    Playlist(Icons.Rounded.QueueMusic),
+    Playlist(Icons.AutoMirrored.Rounded.QueueMusic),
 }
 
 /** Cover ids for a song: its own cover and the album cover as fallback. */
@@ -54,6 +55,13 @@ fun songCoverArt(coverArt: String?, albumId: String?, useAlbumCover: Boolean): C
     val ordered = if (useAlbumCover) listOf(albumId, coverArt) else listOf(coverArt, albumId)
     return CoverArt(ordered.filterNotNull().filter { it.isNotEmpty() }.distinct())
 }
+
+/** Cover of a queue entry, whose cover id already follows the album-cover setting. */
+@Composable
+fun queueSongCoverArt(song: QueueSong): CoverArt =
+    remember(song.id, song.coverArtId, song.albumId) {
+        songCoverArt(song.coverArtId, song.albumId, useAlbumCover = false)
+    }
 
 /**
  * Artwork from the native image cache with a themed placeholder. Pass

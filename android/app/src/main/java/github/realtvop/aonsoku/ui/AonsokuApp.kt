@@ -17,6 +17,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,6 +30,7 @@ import github.realtvop.aonsoku.i18n.I18n
 import github.realtvop.aonsoku.i18n.LocalStrings
 import github.realtvop.aonsoku.session.SessionState
 import github.realtvop.aonsoku.theme.AonsokuTheme
+import github.realtvop.aonsoku.theme.LocalSystemBarsOverride
 import github.realtvop.aonsoku.theme.resolveDarkTheme
 import github.realtvop.aonsoku.ui.components.ToastHost
 import github.realtvop.aonsoku.ui.login.LoginScreen
@@ -37,19 +39,26 @@ import github.realtvop.aonsoku.ui.shell.MainShell
 /** Keeps toasts above the floating navigation bar of the signed-in shell. */
 private val FloatingBarsReserve = 88.dp
 
+/**
+ * [systemBars] is composed with whether the content behind the system bars is
+ * dark, which is the theme unless a surface such as the full-screen player
+ * covers the bars with its own color.
+ */
 @Composable
-fun AonsokuApp(graph: AppGraph, onThemeResolved: @Composable (dark: Boolean) -> Unit = {}) {
+fun AonsokuApp(graph: AppGraph, systemBars: @Composable (dark: Boolean) -> Unit = {}) {
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val session by graph.session.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val strings = remember(settings.language) { I18n.load(context, settings.language) }
     val dark = resolveDarkTheme(settings.themeMode)
+    val barsOverride = remember { mutableStateOf<Boolean?>(null) }
 
     AonsokuTheme(settings = settings, dark = dark) {
-        onThemeResolved(dark)
+        systemBars(barsOverride.value ?: dark)
         CompositionLocalProvider(
             LocalAppGraph provides graph,
             LocalStrings provides strings,
+            LocalSystemBarsOverride provides barsOverride,
         ) {
             Surface(
                 modifier = Modifier.fillMaxSize(),

@@ -25,7 +25,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -38,7 +37,7 @@ import github.realtvop.aonsoku.player.PlayerController
 import github.realtvop.aonsoku.player.PlayerState
 import github.realtvop.aonsoku.ui.components.CoverImage
 import github.realtvop.aonsoku.ui.components.CoverKind
-import github.realtvop.aonsoku.ui.components.songCoverArt
+import github.realtvop.aonsoku.ui.components.queueSongCoverArt
 import github.realtvop.aonsoku.ui.shell.MiniPlayerHeight
 
 /**
@@ -138,11 +137,8 @@ private fun MiniArtwork(state: PlayerState) {
         }
         return
     }
-    val art = remember(song.id, song.coverArtId, song.albumId) {
-        songCoverArt(song.coverArtId, song.albumId, useAlbumCover = false)
-    }
     CoverImage(
-        art = art,
+        art = queueSongCoverArt(song),
         modifier = Modifier.size(44.dp),
         kind = CoverKind.Song,
         shape = MaterialTheme.shapes.small,

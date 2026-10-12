@@ -13,6 +13,7 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalContext
@@ -26,6 +27,13 @@ import github.realtvop.aonsoku.settings.ThemeMode
 
 /** Whether the resolved app theme (not necessarily the system) is dark. */
 val LocalIsDarkTheme = staticCompositionLocalOf { false }
+
+/**
+ * Set by a surface that covers the system bars with a color of its own, such
+ * as the full-screen player: whether that surface is dark. It is null while
+ * the bars sit on the theme background.
+ */
+val LocalSystemBarsOverride = staticCompositionLocalOf { mutableStateOf<Boolean?>(null) }
 
 fun isMaterialYouAvailable(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 

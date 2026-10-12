@@ -570,8 +570,11 @@ App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
   (server + Room, mirrored to the notification via
   `AudioService.setLikeActive`), pushes ReplayGain settings to the service,
   and handles the `RemoteCommand`s the service cannot complete itself
-  (`like`, `shuffle`). Screens call `PlayerController`; they never talk to
-  `PlaybackService` directly.
+  (`like`, `shuffle`). It mirrors the service's sleep timer as
+  `sleepTimer` (`startSleepTimer`, end of track, cancel), and `playNow`
+  starts one song (a history entry) without discarding what is queued.
+  Screens call `PlayerController`; they never talk to `PlaybackService`
+  directly.
 - `ui/`: `AonsokuApp` is the root composable (theme, strings, session gate,
   toasts). `ui/shell/MainShell` hosts the type-safe Navigation Compose graph
   (`ui/navigation/Routes.kt`) with one back stack per top-level tab and the
@@ -579,6 +582,25 @@ App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
   Search button), with the floating `ui/player/MiniPlayer` above it once
   something is loaded. Scrolling pages add `LocalFloatingBarsPadding` to
   their content padding.
+- `ui/player/`: tapping `MiniPlayer` opens `FullscreenPlayer`, a sheet that
+  `MainShell` draws over the pages and the floating bars. It slides up,
+  follows a downward drag, closes on back, and while it is open the content
+  below is removed from the semantics tree. `FullscreenPlayerState`
+  (remembered by `MainShell`) holds whether it is open and its `PlayerTab`;
+  add a tab there rather than opening a second surface. The sheet is tinted
+  with the artwork (`PlayerPalette.kt`: the backdrop mixes the cover's
+  average color into the theme background by the `songColorIntensity`
+  setting, and `PlayerPalette` picks content colors that contrast with it;
+  composables inside read `LocalPlayerPalette` instead of the theme's
+  on-colors), and it reports through `LocalSystemBarsOverride` whether the
+  system bar icons must be light or dark. `PlayingView` is the
+  artwork/progress/transport/volume view built from `PlayerControls.kt`;
+  `QueueView` shows the play history above the current song (out of sight
+  until scrolled to), then the manually queued songs and the context queue,
+  with drag-to-reorder inside a section (`ui/components/Reorder.kt`, which
+  restricts a drag to the rows `canMove` allows) and a menu per row.
+  `AppNavigator.onOpen` runs whenever a page is requested and closes the
+  player, so a link followed from one of its menus is not hidden behind it.
 - Screens: each page is a `@Composable XScreen()` registered in
   `ui/navigation/AppDestinations.kt` and backed by a `ViewModel` obtained
   with `graphViewModel { XViewModel(it) }` (`ui/components/GraphViewModel.kt`),
@@ -615,9 +637,12 @@ App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
   `LocalOverlays.current.show(Overlay.X(...))`; `OverlayHost` in `MainShell`
   renders the one current `Overlay` (song/album/artist/playlist/radio menus
   as modal bottom sheets built with `ui/components/ActionSheet.kt`, add to
-  playlist, playlist and radio forms, delete confirmations, song info, and
-  the zoomable `ArtworkViewer`). Add new menus as `Overlay` subtypes rather
-  than page-local sheet state.
+  playlist, playlist and radio forms, delete confirmations, song info, the
+  zoomable `ArtworkViewer`, and the player's sheets in `PlayerMenus.kt`:
+  current-song menu, sleep timer, and color intensity). Add new menus as
+  `Overlay` subtypes rather than page-local sheet state. An `ActionSheet`
+  item runs after the sheet has closed, so resolve what it acts on (a queue
+  index, for example) at that moment rather than when the sheet opened.
 
 App tests (`android/app/src/test`) are JVM unit tests. Besides the pure
 logic tests, `smoke/AppSmokeTest` runs the real app on Robolectric: the real

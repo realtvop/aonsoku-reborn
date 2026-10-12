@@ -313,7 +313,8 @@
     "lyrics": "Lyrics",
     "selectLyrics": "Lyrics settings",
     "switchButton": "Switch to Big Player",
-    "emptyQueue": "No songs in queue"
+    "emptyQueue": "No songs in queue",
+    "close": "Close"
   },
   "lyrics": {
     "customSelect": {
@@ -413,6 +414,7 @@
         "close": "Close Miniplayer"
       },
       "volume": {
+        "label": "Volume",
         "mute": "Mute",
         "unmute": "Unmute"
       }
@@ -772,6 +774,11 @@
       "locked": "Server URL settings are locked by this deployment."
     },
     "appearance": {
+      "colors": {
+        "queue": {
+          "intensity": "Color intensity"
+        }
+      },
       "general": {
         "group": "General",
         "description": "Customize the app's look and display behaviors.",

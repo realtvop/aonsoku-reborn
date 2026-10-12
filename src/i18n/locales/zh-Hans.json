@@ -128,6 +128,7 @@
     "songCount_other": "{{count}} 首歌曲"
   },
   "fullscreen": {
+    "close": "关闭",
     "emptyQueue": "队列中没有歌曲",
     "loadingLyrics": "搜索歌词…",
     "lyrics": "歌词",
@@ -304,6 +305,7 @@
       "star": "收藏当前歌曲",
       "unstar": "取消收藏当前歌曲",
       "volume": {
+        "label": "音量",
         "mute": "静音",
         "unmute": "取消静音"
       }
@@ -462,6 +464,11 @@
       }
     },
     "appearance": {
+      "colors": {
+        "queue": {
+          "intensity": "颜色强度"
+        }
+      },
       "general": {
         "albumCoverForSongs": {
           "info": "启用后，所有曲目的封面请求都会使用专辑封面，以减少加载时间。",
