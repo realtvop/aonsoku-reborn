@@ -9,7 +9,10 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.TimeUnit
 import javax.imageio.ImageIO
 
 /**
@@ -244,6 +247,12 @@ class FakeSubsonicServer {
             "getCoverArt", "getAvatar" -> MockResponse()
                 .setHeader("Content-Type", "image/png")
                 .setBody(Buffer().write(artwork))
+            // Served slowly: the shadowed audio output plays as fast as data
+            // arrives, and a song that stays current is what tests can rely on.
+            "stream", "download" -> MockResponse()
+                .setHeader("Content-Type", "audio/wav")
+                .setBody(Buffer().write(audio))
+                .throttleBody(STREAM_BYTES_PER_SECOND, 1, TimeUnit.SECONDS)
             else -> failed(0, "Not implemented: $endpoint")
         }
     }
@@ -380,6 +389,19 @@ class FakeSubsonicServer {
     }
 
     private companion object {
+        const val STREAM_BYTES_PER_SECOND = 2_048L
+
+        /** Three seconds of silence as 8 kHz mono 16-bit PCM. */
+        val audio: ByteArray by lazy {
+            val samples = ByteArray(8_000 * 2 * 3)
+            val header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
+                .put("RIFF".toByteArray()).putInt(36 + samples.size).put("WAVE".toByteArray())
+                .put("fmt ".toByteArray()).putInt(16).putShort(1).putShort(1)
+                .putInt(8_000).putInt(16_000).putShort(2).putShort(16)
+                .put("data".toByteArray()).putInt(samples.size)
+            header.array() + samples
+        }
+
         /** A plain teal square; enough for decoding and tinting. */
         val artwork: ByteArray by lazy {
             val image = BufferedImage(64, 64, BufferedImage.TYPE_INT_RGB)

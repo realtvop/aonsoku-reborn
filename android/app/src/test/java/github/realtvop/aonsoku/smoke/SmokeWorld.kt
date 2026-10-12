@@ -2,6 +2,7 @@ package github.realtvop.aonsoku.smoke
 
 import android.app.Application
 import android.content.ComponentName
+import android.content.Intent
 import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.room.RoomDatabase
@@ -13,12 +14,15 @@ import github.realtvop.aonsoku.AppGraph
 import github.realtvop.aonsoku.data.image.AvatarArtKeyer
 import github.realtvop.aonsoku.data.image.CoverArtFetcher
 import github.realtvop.aonsoku.data.image.CoverArtKeyer
+import github.realtvop.aonsoku.plugins.audio.PlaybackService
 import github.realtvop.aonsoku.session.LoginResult
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import org.junit.rules.TestWatcher
 import org.junit.runner.Description
+import org.robolectric.Robolectric
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.android.controller.ServiceController
 import java.time.Duration
 
 /**
@@ -36,6 +40,8 @@ class SmokeWorld : TestWatcher() {
     lateinit var graph: AppGraph
         private set
 
+    private var playback: ServiceController<PlaybackService>? = null
+
     @OptIn(DelicateCoilApi::class)
     override fun starting(description: Description) {
         System.setProperty("java.awt.headless", "true")
@@ -49,6 +55,7 @@ class SmokeWorld : TestWatcher() {
             ComponentName(application.packageName, ComponentActivity::class.java.name),
         )
         graph = AppGraph(application).also { it.initialize() }
+        startPlaybackService(application)
         SingletonImageLoader.setUnsafe { context ->
             ImageLoader.Builder(context)
                 .components {
@@ -61,8 +68,23 @@ class SmokeWorld : TestWatcher() {
         }
     }
 
+    /**
+     * Runs the real playback service in this process and hands its binder to
+     * whoever binds it, as the system would.
+     */
+    private fun startPlaybackService(application: Application) {
+        val controller = Robolectric.buildService(PlaybackService::class.java).create()
+        playback = controller
+        shadowOf(application).setComponentNameAndServiceForBindService(
+            ComponentName(application, PlaybackService::class.java),
+            controller.get().onBind(Intent(application, PlaybackService::class.java)),
+        )
+    }
+
     @OptIn(DelicateCoilApi::class)
     override fun finished(description: Description) {
+        runCatching { graph.player.shutdown() }
+        runCatching { playback?.destroy() }
         runCatching { graph.scope.cancel() }
         server.shutdown()
         SingletonImageLoader.reset()
@@ -98,8 +120,11 @@ class SmokeWorld : TestWatcher() {
     }
 
     /** State worth knowing when a wait times out. */
-    fun describe(): String =
-        "online=${graph.network.isOnline.value} requests=${server.requests.distinct()}"
+    fun describe(): String {
+        val player = graph.player.state.value
+        return "online=${graph.network.isOnline.value} requests=${server.requests.distinct()} " +
+            "player=${player.current?.title}/playing=${player.isPlaying}/loading=${player.isLoading}"
+    }
 
     private fun resetSingletons() {
         SINGLETONS.forEach { (className, fieldName) ->

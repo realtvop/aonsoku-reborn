@@ -628,8 +628,11 @@ walks through the pages, so a page that crashes while composing, loading, or
 navigating fails the build without a device. `smoke/SmokeWorld` builds that
 world per test: it installs `FakeAndroidKeyStore`, resets the process-wide
 `:core` singletons listed in `SmokeWorld.SINGLETONS` (add new ones there),
-and offers `waitUntil`, which runs main-thread and delayed work while
-background threads make progress. Lazy pages only compose what is visible, so
+runs the real `PlaybackService` in-process and hands its binder to
+`PlayerController`, and offers `waitUntil`, which runs main-thread and delayed
+work while background threads make progress. The shadowed audio output plays
+as fast as data arrives, so the fake server throttles `stream`: assert on the
+current song and the queue, not on `isPlaying`. Lazy pages only compose what is visible, so
 tests scroll to what they assert. Add a journey there when adding a screen.
 
 `AudioService` additions made for the native UI (all executed by

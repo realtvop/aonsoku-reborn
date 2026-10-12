@@ -21,6 +21,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import github.realtvop.aonsoku.session.SessionState
 import github.realtvop.aonsoku.ui.AonsokuApp
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -173,6 +174,37 @@ class AppSmokeTest {
 
         compose.onNode(hasSetTextAction()).performTextReplacement("cedar")
         waitForText("Cedar and Stone")
+    }
+
+    @Test
+    fun tappingASongLoadsItIntoThePlayer() {
+        openLibrary()
+        compose.onNodeWithText("Albums").performClick()
+        waitForText("Tidal Hours")
+        compose.onNodeWithText("Tidal Hours").performClick()
+        waitForText("Undertow")
+
+        compose.onNodeWithText("Undertow").performClick()
+        waitUntil("the song to become current") {
+            world.graph.player.state.value.current?.title == "Undertow"
+        }
+        // The mini player shows the song next to its row on the page.
+        waitUntil("the mini player") {
+            compose.onAllNodesWithText("Undertow").fetchSemanticsNodes().size >= 2
+        }
+        // The album continues after the tapped song.
+        val state = world.graph.player.state.value
+        assertEquals(listOf("Undertow", "Slack Water"), state.contextSongs.map { it.title })
+
+        waitUntil("the stream request") { world.server.requested("stream") }
+
+        compose.onNodeWithContentDescription("Next").performClick()
+        waitUntil("the next song") {
+            world.graph.player.state.value.current?.title == "Slack Water"
+        }
+        waitUntil("the mini player to follow") {
+            compose.onAllNodesWithText("Slack Water").fetchSemanticsNodes().size >= 2
+        }
     }
 
     /** Signs in and waits for the synced home page. */
