@@ -149,6 +149,7 @@ class SmokeWorld : TestWatcher() {
             "$CORE.preferences.PreferencesService" to "instance",
             "$CORE.preferences.NativePreferencesStore" to "sharedDataStore",
             "$CORE.data.LibraryService" to "instance",
+            "$CORE.audio.AudioCacheService" to "instance",
             "$CORE.data.db.AonsokuDatabase" to "INSTANCE",
             "$CORE.coordination.CoordinationRuntime" to "instance",
         )

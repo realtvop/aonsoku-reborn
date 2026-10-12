@@ -33,10 +33,56 @@ object AudioCacheUtils {
         return File(context.cacheDir, CACHE_DIRECTORY_NAME)
     }
 
-    fun getMetadataFile(context: Context, songId: String): File {
-        val dir = getCacheDirectory(context, createIfNeeded = true)
-        return File(dir, "${cacheId(songId)}.json")
+    /** The note next to an audio file that says what it is. */
+    fun metadataFile(directory: File, songId: String): File = File(directory, "${cacheId(songId)}.json")
+
+    /** The song a cache file name stands for; null when the name is not one of ours. */
+    fun songId(cacheId: String): String? {
+        if (cacheId.isEmpty()) return null
+        val bytes = try {
+            Base64.decode(cacheId, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
+        } catch (_: Throwable) {
+            // Fallback for JVM unit tests where android.util.Base64 is stubbed
+            try {
+                java.util.Base64.getUrlDecoder().decode(cacheId)
+            } catch (_: IllegalArgumentException) {
+                null
+            }
+        } ?: return null
+        val songId = String(bytes, Charsets.UTF_8)
+        // Only names this app could have written: decoding must round-trip.
+        return songId.takeIf { it.isNotEmpty() && cacheId(it) == cacheId }
     }
+
+    /** The cached audio of [songId] in the first of [directories] that has it. */
+    fun findFile(directories: List<File>, songId: String): File? {
+        val cacheId = cacheId(songId)
+        for (directory in directories) {
+            if (!directory.isDirectory) continue
+            for (extension in AUDIO_EXTENSIONS) {
+                val file = File(directory, "$cacheId.$extension")
+                if (file.exists()) return file
+            }
+        }
+        return null
+    }
+
+    /** Deletes every cached copy of [songId] and its note; true when a file went. */
+    fun deleteFiles(directories: List<File>, songId: String): Boolean {
+        val cacheId = cacheId(songId)
+        var deleted = false
+        for (directory in directories) {
+            for (extension in AUDIO_EXTENSIONS) {
+                val file = File(directory, "$cacheId.$extension")
+                if (file.exists() && file.delete()) deleted = true
+            }
+            File(directory, "$cacheId.json").delete()
+        }
+        return deleted
+    }
+
+    /** The extensions [fileExtension] gives to audio files. */
+    val AUDIO_EXTENSIONS = listOf("mp3", "flac", "m4a", "aac", "ogg", "opus", "wav", "audio")
 
     fun fileExtension(contentType: String): String {
         val normalized = contentType

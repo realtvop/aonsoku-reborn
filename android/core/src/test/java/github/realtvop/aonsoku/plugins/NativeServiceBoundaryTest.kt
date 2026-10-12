@@ -1,5 +1,6 @@
 package github.realtvop.aonsoku.plugins
 
+import github.realtvop.aonsoku.plugins.audio.AudioCacheService
 import github.realtvop.aonsoku.plugins.audio.AudioCommand
 import github.realtvop.aonsoku.plugins.audio.AudioCommandResult
 import github.realtvop.aonsoku.plugins.audio.AudioEvent
@@ -33,6 +34,7 @@ class NativeServiceBoundaryTest {
             mock(AuthenticationService::class.java),
             mock(PreferencesService::class.java),
             mock(LibraryService::class.java),
+            mock(AudioCacheService::class.java),
         )
         val firstAudio = FakeAudioService()
         val secondAudio = FakeAudioService()

@@ -26,4 +26,7 @@ interface AlbumDao {
     @Query("SELECT * FROM album WHERE id IN (:ids)") suspend fun getByIds(ids: List<String>): List<AlbumEntity>
     @Query("UPDATE album SET starred = :starred, starredAt = :starredAt WHERE id = :id") suspend fun updateStarred(id: String, starred: String?, starredAt: Long?)
     @Query("SELECT DISTINCT coverArt FROM album WHERE coverArt IS NOT NULL AND coverArt != ''") suspend fun getCoverArtIds(): List<String>
+    @Query("SELECT id FROM album") suspend fun getIds(): List<String>
+    @Query("SELECT id, name FROM album") suspend fun getNames(): List<IdName>
+    @Query("SELECT coverArt AS id, name FROM album WHERE coverArt IS NOT NULL AND coverArt != ''") suspend fun getCoverNames(): List<IdName>
 }

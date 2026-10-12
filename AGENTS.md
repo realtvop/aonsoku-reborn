@@ -152,8 +152,27 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   by `PlaybackService`. Queue commands resolve local songs through
   `LibraryService`, preserve the existing context/user/shuffle/history order,
   and return `AudioCommandResult` errors for missing local data or failed
-  handoffs. Download manager, playback persistence, and scrobble buffering are
-  also owned by `PlaybackService`.
+  handoffs. Playback persistence and scrobble buffering are also owned by
+  `PlaybackService`.
+- Android offline audio is owned by the application-scoped
+  `audio/AudioCacheService` (`AppServices.audioCache`), not by
+  `PlaybackService`: the files in the audio cache directories, their index
+  (rows of type `audio` in the Room `cacheMeta` table, carrying the source
+  `explicit`, `smart`, or `lru` and the smart-download triggers), and the one
+  download queue (four at a time; what plays now before the user's downloads
+  before smart downloads; a song is never fetched twice at once). It publishes
+  `cached` and `downloads` as `StateFlow`s plus `AudioCacheEvent`s. A request
+  for a song that is already kept fetches nothing and only changes the owner
+  when it outranks what the file was kept for. The user's downloads are
+  written to `pending-downloads.json` until they succeed and run again on
+  `resume()` after a passing failure; `AudioUnavailableException` (the server
+  refused, or sent a Subsonic error document instead of audio) drops them.
+  Files without an index row (the Capacitor app kept its index in the
+  WebView) are adopted as explicit downloads, the one kind that is never
+  removed automatically. `NativeDownloadManager` is only the transfer of one
+  song into the cache. `PlaybackService` asks for an `lru` copy of what it
+  streams and touches the cached file it plays; it has no download state of
+  its own.
 - Android authentication and Subsonic HTTP access are owned by the
   application-scoped `bridge/AuthenticationService`. It owns the encrypted
   credential store, login/fallback probing, server discovery, and typed
@@ -164,7 +183,8 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   preserves the `pref.` keys, queue-state key, play-history codec, and existing
   serialization. It exposes a shared change flow.
 - Android `AppServices` is the application-scoped service graph for
-  authentication, preferences, library, audio, and coordination ports.
+  authentication, preferences, library, the audio cache, and the audio and
+  coordination ports.
   `PlaybackService` registers its `AudioService` when created and unregisters
   only itself on destruction; `coordination/CoordinationRuntime` (application
   scoped, `CoordinationRuntime.getInstance(context)`) registers the

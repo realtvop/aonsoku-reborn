@@ -25,4 +25,7 @@ interface ArtistDao {
     @RawQuery suspend fun queryCount(query: SupportSQLiteQuery): Int
     @Query("UPDATE artist SET starred = :starred, starredAt = :starredAt WHERE id = :id") suspend fun updateStarred(id: String, starred: String?, starredAt: Long?)
     @Query("SELECT DISTINCT coverArt FROM artist WHERE coverArt IS NOT NULL AND coverArt != ''") suspend fun getCoverArtIds(): List<String>
+    @Query("SELECT id FROM artist") suspend fun getIds(): List<String>
+    @Query("SELECT id, name FROM artist") suspend fun getNames(): List<IdName>
+    @Query("SELECT coverArt AS id, name FROM artist WHERE coverArt IS NOT NULL AND coverArt != ''") suspend fun getCoverNames(): List<IdName>
 }

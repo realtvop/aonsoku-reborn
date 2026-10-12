@@ -228,54 +228,8 @@ class PlaybackService : MediaSessionService(), AudioService {
     }
     lateinit var persistence: PlaybackStatePersistence
 
-    val downloadManager by lazy { NativeDownloadManager(this, authenticationService) }
-    private val backgroundCacheSongIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
-    private val downloadListeners = mutableListOf<DownloadListener>()
-
-    interface DownloadListener {
-        fun onDownloadProgress(songId: String, loaded: Long, total: Long)
-        fun onDownloadCompleted(songId: String, fileUri: String, contentType: String, sizeBytes: Long)
-        fun onDownloadFailed(songId: String, errorMessage: String)
-    }
-
-    fun addDownloadListener(listener: DownloadListener) {
-        synchronized(downloadListeners) {
-            if (!downloadListeners.contains(listener)) {
-                downloadListeners.add(listener)
-            }
-        }
-    }
-
-    fun removeDownloadListener(listener: DownloadListener) {
-        synchronized(downloadListeners) {
-            downloadListeners.remove(listener)
-        }
-    }
-
-    fun isBackgroundCache(songId: String): Boolean = backgroundCacheSongIds.contains(songId)
-    fun removeBackgroundCache(songId: String): Boolean = backgroundCacheSongIds.remove(songId)
-
-    private fun startBackgroundCache(songId: String) {
-        val cacheId = AudioCacheUtils.cacheId(songId)
-        val extensions = listOf("mp3", "flac", "m4a", "aac", "ogg", "opus", "wav", "audio")
-
-        val cacheDirectories = listOf(
-            AudioCacheUtils.getCacheDirectory(this),
-            AudioCacheUtils.getSecondaryCacheDirectory(this)
-        )
-        for (directory in cacheDirectories) {
-            if (directory.exists() && directory.isDirectory) {
-                for (ext in extensions) {
-                    if (File(directory, "$cacheId.$ext").exists()) {
-                        return
-                    }
-                }
-            }
-        }
-
-        backgroundCacheSongIds.add(songId)
-        downloadManager.download(songId)
-    }
+    /** The audio kept for offline playback; shared with the downloads of the app. */
+    private val audioCache by lazy { AudioCacheService.getInstance(applicationContext) }
 
     interface Listener {
         fun onRemoteCommand(command: String, position: Double?)
@@ -1670,26 +1624,6 @@ class PlaybackService : MediaSessionService(), AudioService {
 
         showNotification()
 
-        downloadManager.addListener(object : NativeDownloadManager.Listener {
-            override fun onDownloadProgress(songId: String, loaded: Long, total: Long) {
-                synchronized(downloadListeners) {
-                    downloadListeners.forEach { it.onDownloadProgress(songId, loaded, total) }
-                }
-            }
-
-            override fun onDownloadCompleted(songId: String, fileUri: String, contentType: String, sizeBytes: Long) {
-                synchronized(downloadListeners) {
-                    downloadListeners.forEach { it.onDownloadCompleted(songId, fileUri, contentType, sizeBytes) }
-                }
-            }
-
-            override fun onDownloadFailed(songId: String, errorMessage: String) {
-                synchronized(downloadListeners) {
-                    downloadListeners.forEach { it.onDownloadFailed(songId, errorMessage) }
-                }
-            }
-        })
-
         registerSystemReceivers()
         restorePlaybackState()
     }
@@ -2237,8 +2171,10 @@ class PlaybackService : MediaSessionService(), AudioService {
         val url = resolved.first
         val kind = resolved.second
 
-        if (kind == "stream") {
-            startBackgroundCache(song.id)
+        when (kind) {
+            // A streamed song is kept as well, so the next time it plays from the device.
+            "stream" -> audioCache.download(song.id, AudioCacheSource.Lru)
+            "native-file" -> serviceScope.launch { audioCache.touch(song.id) }
         }
 
         val localArtworkFile = if (!song.coverArtId.isNullOrEmpty()) {

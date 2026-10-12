@@ -1,6 +1,7 @@
 package github.realtvop.aonsoku.plugins
 
 import android.content.Context
+import github.realtvop.aonsoku.plugins.audio.AudioCacheService
 import github.realtvop.aonsoku.plugins.audio.AudioService
 import github.realtvop.aonsoku.plugins.bridge.AuthenticationService
 import github.realtvop.aonsoku.plugins.coordination.CoordinationService
@@ -17,11 +18,13 @@ class AppServices internal constructor(
     val authentication: AuthenticationService,
     val preferences: PreferencesService,
     val library: LibraryService,
+    val audioCache: AudioCacheService,
 ) {
     private constructor(context: Context) : this(
         authentication = AuthenticationService.getInstance(context.applicationContext),
         preferences = PreferencesService.getInstance(context.applicationContext),
         library = LibraryService.getInstance(context.applicationContext),
+        audioCache = AudioCacheService.getInstance(context.applicationContext),
     )
 
     private val audio = AtomicReference<AudioService?>(null)

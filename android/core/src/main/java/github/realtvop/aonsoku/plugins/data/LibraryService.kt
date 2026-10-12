@@ -7,6 +7,7 @@ import github.realtvop.aonsoku.plugins.bridge.ServerCredentials
 import github.realtvop.aonsoku.plugins.data.db.AonsokuDatabase
 import github.realtvop.aonsoku.plugins.data.db.entity.AlbumEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.ArtistEntity
+import github.realtvop.aonsoku.plugins.data.db.entity.CacheMetaEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.GenreEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.LyricsEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.PlaylistDetailEntity
@@ -100,6 +101,9 @@ data class LibraryCacheStats(
     val audioCount: Int,
     val coverCount: Int,
 )
+
+/** How many cover and avatar images are cached, and what they weigh. */
+data class CoverCacheStats(val count: Int, val sizeBytes: Long)
 
 /**
  * Application-scoped owner of Android's local library and image cache.
@@ -578,6 +582,86 @@ class LibraryService private constructor(context: Context) {
         imageCache.clearCoverImages()
     }
 
+    suspend fun getCoverCacheStats(): CoverCacheStats = withContext(Dispatchers.IO) {
+        CoverCacheStats(
+            count = database.cacheMetaDao().coverCount(),
+            sizeBytes = database.cacheMetaDao().sizeByType(TYPE_COVER),
+        )
+    }
+
+    /**
+     * Deletes the images that were shown longest ago until the image cache
+     * fits in [quotaBytes]; 0 means no limit. Returns how many went.
+     */
+    suspend fun trimCoverImages(quotaBytes: Long): Int = withContext(Dispatchers.IO) {
+        if (quotaBytes <= 0) return@withContext 0
+        val covers = database.cacheMetaDao().getByTypeOldestFirst(TYPE_COVER)
+        var size = covers.sumOf { it.sizeBytes }
+        var removed = 0
+        for (cover in covers) {
+            if (size <= quotaBytes) break
+            imageCache.deleteCoverImage(cover.id)
+            size -= cover.sizeBytes
+            removed++
+        }
+        removed
+    }
+
+    /** Every row of the cache index: images, audio, and downloaded collections. */
+    suspend fun getCacheEntries(): List<CacheMetaEntity> = withContext(Dispatchers.IO) {
+        database.cacheMetaDao().getAll()
+    }
+
+    /**
+     * The cover ids the synced library refers to, for fetching them ahead of
+     * use. Artists are also shown by their own id. [songCovers] adds the
+     * covers of single songs; [albumIds] adds the ids albums go by when song
+     * rows show the album cover.
+     */
+    suspend fun getCoverArtIds(songCovers: Boolean, albumIds: Boolean): List<String> =
+        withContext(Dispatchers.IO) {
+            val ids = LinkedHashSet<String>()
+            ids += database.artistDao().getCoverArtIds()
+            ids += database.artistDao().getIds()
+            ids += database.albumDao().getCoverArtIds()
+            ids += database.playlistDao().getCoverArtIds()
+            if (songCovers) ids += database.songDao().getCoverArtIds()
+            if (albumIds) ids += database.albumDao().getIds()
+            ids.filter { it.isNotEmpty() }
+        }
+
+    /**
+     * What each cover id of the library belongs to: the name of the album,
+     * artist, or playlist. An album names a cover before a playlist using it.
+     */
+    suspend fun getCoverNames(): Map<String, String> = withContext(Dispatchers.IO) {
+        val names = HashMap<String, String>()
+        val sources = listOf(
+            database.albumDao().getCoverNames(),
+            database.albumDao().getNames(),
+            database.artistDao().getCoverNames(),
+            database.artistDao().getNames(),
+            database.playlistDao().getCoverNames(),
+        )
+        for (rows in sources) rows.forEach { names.putIfAbsent(it.id, it.name) }
+        names
+    }
+
+    suspend fun clearLyrics() = withContext(Dispatchers.IO) { database.lyricsDao().deleteAll() }
+
+    suspend fun getStarredSongIds(): List<String> = withContext(Dispatchers.IO) {
+        database.songDao().getStarredSongIds()
+    }
+
+    suspend fun getStarredPlaylistIds(): List<String> = withContext(Dispatchers.IO) {
+        database.playlistDao().getStarredIds()
+    }
+
+    /** Which of [ids] are songs of the synced library. */
+    suspend fun getExistingSongIds(ids: Collection<String>): Set<String> = withContext(Dispatchers.IO) {
+        ids.chunked(SQL_VARIABLE_CHUNK).flatMapTo(HashSet()) { database.songDao().getExistingIds(it) }
+    }
+
     suspend fun downloadCoverImage(coverArtId: String, size: String): CachedImageFile {
         val credentials = authenticationService.getCredentials()
             ?: throw IllegalStateException("No stored credentials")
@@ -606,6 +690,7 @@ class LibraryService private constructor(context: Context) {
     companion object {
         /** SQLite binds at most 999 variables per statement on older devices. */
         private const val SQL_VARIABLE_CHUNK = 500
+        private const val TYPE_COVER = "cover"
 
         private val IDLE_SYNC_STATE = LibrarySyncState(
             phase = "idle",
