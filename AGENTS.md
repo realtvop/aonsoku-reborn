@@ -6,10 +6,10 @@ repository.
 ## Project Overview
 
 Aonsoku is a multi-runtime music streaming client for Navidrome/Subsonic
-servers. It targets the web, Electron desktop, and Capacitor iOS/Android. It
-supports synchronized lyrics, radio streaming, Discord RPC, offline
-library/cache features, and cross-device coordination with remote control and
-handoff.
+servers. It targets the web, Electron desktop, Capacitor iOS, and a fully
+native Android app (Kotlin + Jetpack Compose, no WebView). It supports
+synchronized lyrics, radio streaming, Discord RPC, offline library/cache
+features, and cross-device coordination with remote control and handoff.
 
 ## Architecture Change Hygiene
 
@@ -27,10 +27,10 @@ pnpm run electron:dev     # Electron desktop dev
 
 # Build
 pnpm run build            # Production web build (tsc + vite)
-pnpm run build:mobile     # Capacitor bundle with automatic fine-grained chunks
+pnpm run build:mobile     # Capacitor (iOS) bundle with automatic fine-grained chunks
 pnpm run electron:build   # Electron renderer/main/preload build
 pnpm run make             # Create Electron distributable packages
-pnpm exec cap sync        # Copy the preceding build into Android/iOS
+pnpm exec cap sync ios    # Copy the preceding build into the iOS host
 
 # Lint & Format (Biome)
 pnpm run lint             # Check only
@@ -58,9 +58,13 @@ pnpm coordination:deploy # Guided login/configuration/key creation/deployment; r
 pnpm --filter @aonsoku/coordination-worker test:deploy # Deployment wizard regression tests
 pnpm --filter @aonsoku/coordination-worker deploy:raw # Direct Wrangler deployment for operators/CI
 
-# Android native plugin
-cd android && ./gradlew :aonsoku-capacitor-native:compileDebugKotlin
-cd android && ./gradlew :aonsoku-capacitor-native:testDebugUnitTest
+# Android native app (Gradle 9 wrapper, JDK 21; no Node/pnpm step required).
+# The build reads package.json (version), src/i18n/locales and public/fonts
+# straight from the repository.
+cd android && ./gradlew :core:compileDebugKotlin     # Native services module
+cd android && ./gradlew :core:testDebugUnitTest      # Service unit tests
+cd android && ./gradlew :app:testDebugUnitTest       # App unit tests
+cd android && ./gradlew :app:assembleDebug           # Debug APK
 
 # Android release signing
 # Local release builds read aonsokuRelease* from ~/.gradle/gradle.properties.
@@ -112,62 +116,61 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   is not part of the shared `src/` SPA, so web/Capacitor builds never bundle
   it. `tailwind.config.js` scans `electron/renderer/**` for its utility
   classes, and `tsconfig.electron-renderer.json` type-checks it.
-- **Capacitor iOS/Android**: `capacitor.config.ts` points native hosts at
-  `dist`. The custom native plugin lives in
-  `capacitor-plugins/capacitor-native` and is included through pnpm workspace
-  package `@aonsoku/capacitor-native`.
-- Android native pages use the application-scoped
-  `github.realtvop.aonsoku.plugins.data.LibraryService` for Room queries,
-  metadata sync, lyrics, and image-cache ownership. It is created with the
-  application context, exposes typed Kotlin paging/filter/search and
-  `StateFlow`/`SharedFlow` sync notifications, and is not cancelled when
-  `DataPlugin` is destroyed. `DataPlugin` is only the Capacitor adapter: it
-  parses `PluginCall` arguments, converts entities to the existing JS shapes,
-  and forwards service events through `notifyListeners`. Android native UI
-  should call `LibraryService.getInstance(context)` directly rather than
-  locating a Capacitor plugin instance.
+- **Capacitor iOS**: `capacitor.config.ts` points the iOS host at `dist`. The
+  custom native plugin lives in `capacitor-plugins/capacitor-native` (TypeScript
+  definitions + Swift sources) and is included through pnpm workspace package
+  `@aonsoku/capacitor-native`. The package no longer has an Android side.
+- **Android (native)**: `android/` is a standalone Gradle project (Kotlin DSL,
+  version catalog in `android/gradle/libs.versions.toml`, AGP 9 with built-in
+  Kotlin) with two modules. It does not use Capacitor, a WebView, or the web
+  bundle. See "Android Native App" below.
+  - `android/core` (`:core`, namespace `github.realtvop.aonsoku.plugins`) holds
+    the long-lived native services: authentication, preferences, library/Room,
+    playback, downloads, scrobbling, and the coordination socket runtime.
+  - `android/app` (`:app`, namespace `github.realtvop.aonsoku`) is the Jetpack
+    Compose / Material 3 Expressive UI.
+- Android `LibraryService`
+  (`github.realtvop.aonsoku.plugins.data.LibraryService`) is application
+  scoped and owns Room queries, metadata sync, lyrics, and the image cache. It
+  exposes typed Kotlin paging/filter/search and `StateFlow`/`SharedFlow` sync
+  notifications. UI code calls `LibraryService.getInstance(context)` (or
+  `AppServices.library`) directly.
 - `PlaybackService` implements the typed Android `AudioService` contract in
   `audio/AudioService.kt`. Its `StateFlow` playback/queue snapshots and
   independent `SharedFlow` event stream are available from
   `PlaybackService.LocalBinder.getAudioService()`; player, MediaSession,
   foreground-service, audio-route, and system-volume resources remain owned by
-  `PlaybackService`. `AudioPlugin` adapts the existing JS method/event
-  contract and may be destroyed without releasing those service resources.
+  `PlaybackService`. It also maps ExoPlayer errors to `AudioEvent.Error`,
+  publishes coordination snapshots on playback/queue changes, and forwards
+  system-media commands issued during remote projection to the coordination
+  port.
 - Android queue resolution by song/album/playlist ID, queue edits, handoff
   preparation/rollback, and sleep timers are `AudioService` commands executed
   by `PlaybackService`. Queue commands resolve local songs through
   `LibraryService`, preserve the existing context/user/shuffle/history order,
   and return `AudioCommandResult` errors for missing local data or failed
   handoffs. Download manager, playback persistence, and scrobble buffering are
-  also owned by `PlaybackService`; `AudioPlugin` retains only JSON parsing and
-  JS result/event adaptation.
+  also owned by `PlaybackService`.
 - Android authentication and Subsonic HTTP access are owned by the
   application-scoped `bridge/AuthenticationService`. It owns the encrypted
   credential store, login/fallback probing, server discovery, and typed
-  requests. `BridgePlugin` keeps the existing method names and JSON fields but
-  only validates `PluginCall` input and converts service results. `LibraryService`,
-  `PlaybackService`, download/source resolution, and native scrobbling use the
-  same authentication service rather than creating plugin-scoped credential or
-  HTTP clients.
+  requests. `LibraryService`, `PlaybackService`, download/source resolution,
+  and native scrobbling use the same authentication service.
 - Android preferences are owned by the application-scoped
   `preferences/PreferencesService`, which wraps `NativePreferencesStore` and
   preserves the `pref.` keys, queue-state key, play-history codec, and existing
-  serialization. It exposes a shared change flow so native UI and the
-  Capacitor `PreferencesPlugin` can subscribe independently. The plugin only
-  converts values and forwards a `preferencesChanged` event; destroying it
-  does not close or reset the service.
+  serialization. It exposes a shared change flow.
 - Android `AppServices` is the application-scoped service graph for
   authentication, preferences, library, audio, and coordination ports.
   `PlaybackService` registers its `AudioService` when created and unregisters
-  only itself on destruction; `AonsokuNativeCoordinationPlugin` registers a
-  `CoordinationService` port for the WebSocket lifecycle. Remote commands,
-  native snapshots, projection, handoff preparation, fencing, and rollback
-  now use these ports rather than `AudioPlugin.activeInstance` or a
-  coordination plugin instance lookup. The WebSocket plugin remains the
-  protocol/Capacitor adapter, while playback resources and queue state remain
-  in `PlaybackService`.
-- Native UI service boundaries, binding/lifecycle rules, adapter duties, and
-  the remaining TypeScript/WebView responsibilities are documented in
+  only itself on destruction; `coordination/CoordinationRuntime` (application
+  scoped, `CoordinationRuntime.getInstance(context)`) registers the
+  `CoordinationService` port and owns the WebSocket lifecycle. Remote
+  commands, native snapshots, projection, handoff preparation, fencing, and
+  rollback use these ports. The runtime publishes socket state as a
+  `StateFlow` and forwards unconsumed envelopes, tracked command acks, and
+  reconnect requests as `CoordinationRuntimeEvent`s.
+- Service boundaries and binding/lifecycle rules are documented in
   `docs/android-native-services.md`.
 - The iOS host owns long-lived native services through
   `AonsokuNativePlugin.AppServices`. `AudioService` owns AVPlayer, queue,
@@ -258,11 +261,13 @@ Metadata/library sync is runtime-specific:
   the main thread.
 - **Worker fallback**: if Web Workers are unavailable, sync falls back to
   `src/service/cache/metadata-sync.ts` on the main thread.
-- **Electron, Capacitor iOS/Android**: sync uses
+- **Electron, Capacitor iOS**: sync uses
   `src/native/data/native-sync-adapter.ts` and the runtime's
   `AonsokuNativeData` implementation. Electron implements the bridge in
-  `electron/main/native/data/`; mobile uses the Capacitor plugin. Native
+  `electron/main/native/data/`; iOS uses the Capacitor plugin. Native
   runtimes do not fall back to the browser Worker/IndexedDB sync path.
+- **Android (native)**: the Compose app drives `LibraryService` (Room +
+  `SyncEngine`) directly; no TypeScript is involved.
 
 ### Data Flow
 
@@ -455,8 +460,9 @@ Normal Web (`pnpm run build`) and Electron renderer builds use
 and `heavy-vendor` bundles. Capacitor builds use `pnpm run build:mobile`
 (`vite --mode mobile`), which leaves chunk ownership to Rollup so lazy modules
 stay separate instead of collapsing every page and dependency into startup
-chunks. Android/iOS CI and release workflows must use `build:mobile` before
-`cap sync`; do not use the normal Web build for a native package.
+chunks. iOS CI and release workflows must use `build:mobile` before
+`cap sync ios`; do not use the normal Web build for a native package. The
+Android app is native and never consumes the web bundle.
 
 The HTML boot shell and its inline styles load without the application
 stylesheet; `src/main.tsx` restores native preferences before dynamically
@@ -476,11 +482,36 @@ route chunks or application CSS.
 - **TypeScript**: strict mode, path alias `@/` -> `src/`.
 - **Rust**: coordination server is a separate Cargo project under
   `coordination-server/`.
-- **Native**: Android host lives under `android/`; iOS host lives under `ios/`;
-  shared Capacitor plugin source lives under
+- **Native**: the native Android app lives under `android/` (`:core` services
+  + `:app` Compose UI); the iOS host lives under `ios/`; the Capacitor plugin
+  (TypeScript definitions + iOS Swift sources) lives under
   `capacitor-plugins/capacitor-native/`.
 - **Git hooks**: Husky is configured (`.husky/`) and pre-commit runs
   `pnpm lint`.
+
+## Android Native App
+
+The Android app is written in Kotlin with Jetpack Compose and Material 3
+Expressive. It replaces the former Capacitor Android host; `capacitor-android`
+is no longer a runtime that ships, although the shared web code may still
+contain `capacitor-android` branches used for capability typing.
+
+- Toolchain: Gradle wrapper 9.x, AGP 9 (built-in Kotlin — do not apply
+  `org.jetbrains.kotlin.android`), Kotlin/Compose compiler plugin and KSP
+  versions pinned in `android/gradle/libs.versions.toml`, `compileSdk` 37,
+  `minSdk` 24, JDK 21. Build scripts are Kotlin DSL.
+- `android/app/build.gradle.kts` reads the product version from the root
+  `package.json` (`BuildConfig.APP_VERSION`), and its
+  `syncAonsokuSharedAssets` task packages `src/i18n/locales/*.json` as
+  `assets/i18n/` and the Poppins weights from `public/fonts` as
+  `assets/fonts/`. Translations therefore have one source of truth; add or
+  change strings in `src/i18n/locales`.
+- `versionCode`/`versionName` in `android/app/build.gradle.kts` are rewritten
+  by `capacitor-set-version` in `create-tag.yml`; keep exactly one occurrence
+  of each name in that file.
+- Existing installs upgrade in place: the application id, encrypted
+  credential store, DataStore preferences (`pref.*`, `queue_state`), Room
+  library database, and audio/image cache directories are unchanged.
 
 ## Commit Message Format
 
@@ -512,7 +543,8 @@ interface) supporting multiple playback stacks:
 | Stack | Runtime | Implementation |
 |---|---|---|
 | Web Audio (HTMLAudioElement) | web, electron | `src/player/playback/web-backend.ts` |
-| Native audio (Capacitor plugin) | capacitor-ios, capacitor-android | `src/player/playback/native-backend.ts` |
+| Native audio (Capacitor plugin) | capacitor-ios | `src/player/playback/native-backend.ts` |
+| Android native app (no TS) | android | `android/core` `PlaybackService` / `AudioService` |
 | Desktop native audio bridge | electron | `electron/preload/native-audio.ts` + `electron/main/native/audio/` |
 
 Key files:

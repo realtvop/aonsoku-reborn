@@ -1,9 +1,8 @@
 # Android native service boundaries
 
-The Android Capacitor module exposes application-scoped Kotlin services for
-native UI. Native screens should use these services or bind to
-`PlaybackService.LocalBinder`; they should not locate a Capacitor plugin or
-hold an `Activity`, `WebView`, `Plugin`, or `PluginCall`.
+The `android/core` module (`:core`) exposes application-scoped Kotlin services
+to the native Compose app in `android/app`. Screens use these services or bind
+to `PlaybackService.LocalBinder`; services never hold an `Activity`.
 
 ## Service graph and lifetime
 
@@ -54,19 +53,17 @@ screen lifecycle. The service itself is not released when the screen or
 Capacitor WebView goes away. Each caller must collect and cancel its own flow
 job; subscribing or cancelling one client does not replace other clients.
 
-## Capacitor adapters
+## Coordination runtime
 
-`DataPlugin`, `AudioPlugin`, `BridgePlugin`, `PreferencesPlugin`, and
-`AonsokuNativeCoordinationPlugin` remain compatibility adapters. They parse
-Capacitor arguments, preserve existing JS method names/fields/units, convert
-typed results to JS objects, and forward events with `notifyListeners`.
-Coordination protocol JSON is parsed at the coordination adapter boundary and
-is passed to the typed audio port for remote commands, projection, snapshots,
-and handoff fencing.
+`CoordinationRuntime.getInstance(context)` is the application-scoped owner of
+the coordination WebSocket. It registers itself as the `CoordinationService`
+port in `AppServices`, handles heartbeats, de-duplication, sequence tracking,
+remote commands, snapshot publication, remote projection, and both sides of a
+handoff directly against the `AudioService` port, and persists tokens/config
+through `CoordinationTokenStore` and the `aonsoku_coordination` preferences.
 
-The following behavior remains in the TypeScript/WebView layer: route and
-screen state, Zustand stores, React Query orchestration, Web Audio playback
-when native playback is unavailable, queue replacement confirmation, Web
-coordination observation, and UI-specific media-session projection. The
-native services provide the long-lived Android state and primitives; they do
-not replace those shared cross-runtime UI policies.
+Clients observe `socketState` (a `StateFlow`) and `events`
+(`CoordinationRuntimeEvent`: unconsumed envelopes, acks for tracked commands,
+and reconnect requests). Tickets are one-time and short-lived, so the runtime
+never reconnects by itself: it emits `ReconnectNeeded` and its owner fetches a
+fresh ticket and calls `connect()` again.
