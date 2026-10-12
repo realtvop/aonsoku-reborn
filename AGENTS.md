@@ -65,6 +65,7 @@ cd android && ./gradlew :core:compileDebugKotlin     # Native services module
 cd android && ./gradlew :core:testDebugUnitTest      # Service unit tests
 cd android && ./gradlew :app:testDebugUnitTest       # App unit tests
 cd android && ./gradlew :app:assembleDebug           # Debug APK
+node scripts/android/generate-theme-palettes.mjs     # Regenerate ThemePalettes.kt from src/themes.css
 
 # Android release signing
 # Local release builds read aonsokuRelease* from ~/.gradle/gradle.properties.
@@ -512,6 +513,37 @@ contain `capacitor-android` branches used for capability typing.
 - Existing installs upgrade in place: the application id, encrypted
   credential store, DataStore preferences (`pref.*`, `queue_state`), Room
   library database, and audio/image cache directories are unchanged.
+
+App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
+
+- `AppGraph` is the application-scoped object graph (manual DI) created by
+  `AonsokuApplication`; it wraps `AppServices` from `:core` and is exposed to
+  composables through `LocalAppGraph`. It loads settings and restores the
+  session before the first frame.
+- `settings/`: `AppSettings` is the single serializable preferences document,
+  stored by `SettingsRepository` under the `native_app_settings` key of
+  `PreferencesService`. On the first native launch
+  `LegacySettingsImporter` seeds it from the zustand documents the former
+  WebView app persisted (`theme_store`, `lang_store`, `player_store`,
+  `app_store`, `cache_settings`, `pinned_home_store`, `player_history`).
+- `i18n/`: `I18n` loads the packaged locale JSON at runtime and resolves
+  dotted keys, `{{name}}` interpolation, CLDR plural suffixes, and dayjs-style
+  relative time, with English as fallback. Use `t("key")` / `plural(...)` in
+  composables; never hardcode user-facing strings.
+- `theme/`: `ThemePalettes.kt` is generated from `src/themes.css` (20 web
+  themes); `ColorSchemes.kt` maps the web tokens onto Material 3 roles and
+  `AonsokuTheme` applies `MaterialExpressiveTheme` with the expressive motion
+  scheme, Poppins typography, light/dark/system mode, per-mode theme choice,
+  and Material You dynamic color on Android 12+.
+- `session/SessionManager` owns sign-in state on top of
+  `AuthenticationService`: login with protocol-version check, primary/fallback
+  server selection, and logout.
+- `ui/`: `AonsokuApp` is the root composable (theme, strings, session gate,
+  toasts). `ui/shell/MainShell` hosts the type-safe Navigation Compose graph
+  (`ui/navigation/Routes.kt`) with one back stack per top-level tab and the
+  floating navigation bar (`FloatingNavBar`: Home/Library pill plus a detached
+  Search button). Scrolling pages add `LocalFloatingBarsPadding` to their
+  content padding.
 
 ## Commit Message Format
 
