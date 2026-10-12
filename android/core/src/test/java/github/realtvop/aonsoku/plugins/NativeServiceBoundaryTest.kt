@@ -144,6 +144,11 @@ class NativeServiceBoundaryTest {
         override fun getSystemVolume() = 0.5
         override fun setSystemVolume(value: Double) = value
         override fun getSleepTimerRemaining() = 0.0
+        override fun getSleepTimerMode() = "duration"
+        override fun setLikeActive(active: Boolean) = Unit
+        override fun setReplayGain(
+            config: github.realtvop.aonsoku.plugins.audio.ReplayGainConfig,
+        ) = Unit
         override fun setRequestId(requestId: String?) = Unit
         override fun getFullState(): JSONObject = JSONObject().apply {
             put("currentTime", playback.value.currentTimeSeconds)

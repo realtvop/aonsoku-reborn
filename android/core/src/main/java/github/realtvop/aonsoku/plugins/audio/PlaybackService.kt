@@ -116,6 +116,9 @@ class PlaybackService : MediaSessionService(), AudioService {
     private var remoteControlTargetDeviceId: String? = null
     private var remoteControlExpectedGeneration: Int? = null
     private var currentRequestId: String? = null
+    private var currentRadioId: String? = null
+    private var replayGainConfig = ReplayGainConfig()
+    private var replayGainJob: kotlinx.coroutines.Job? = null
     private var lastPlaybackState = "idle"
     private var isBuffering = false
     private val stateHandler = Handler(Looper.getMainLooper())
@@ -170,13 +173,13 @@ class PlaybackService : MediaSessionService(), AudioService {
     var currentScrobbleSongDuration: Double = 0.0
         private set
 
-    var isLikeActive: Boolean = false
+    private var currentItemLiked: Boolean = false
         set(value) {
             field = value
             updateNotification()
             mediaSession?.setCustomLayout(getCustomLayoutButtons())
         }
-    var sleepTimerMode: String = "duration"
+    private var sleepTimerMode: String = "duration"
     var isTransitioning = false
 
     private val CUSTOM_COMMAND_TOGGLE_SHUFFLE by lazy {
@@ -191,7 +194,7 @@ class PlaybackService : MediaSessionService(), AudioService {
         val shuffleIconResId = resources.getIdentifier(shuffleIconName, "drawable", packageName)
         val shuffleIcon = if (shuffleIconResId != 0) shuffleIconResId else android.R.drawable.ic_menu_share
 
-        val likeIconName = if (isLikeActive) "ic_favorite" else "ic_favorite_border"
+        val likeIconName = if (currentItemLiked) "ic_favorite" else "ic_favorite_border"
         val likeIconResId = resources.getIdentifier(likeIconName, "drawable", packageName)
         val likeIcon = if (likeIconResId != 0) likeIconResId else android.R.drawable.btn_star
 
@@ -577,12 +580,11 @@ class PlaybackService : MediaSessionService(), AudioService {
             }
         }
         if (type == "toggle_like") {
-            val songId = queueEngine.currentSong?.id ?: return true
-            serviceScope.launch {
-                val nextActive = libraryService.toggleSongStarred(songId)
-                withContext(Dispatchers.Main.immediate) {
-                    isLikeActive = nextActive
-                }
+            // The app layer owns starring (server call, local library, and the
+            // liked state shown here), exactly as for the notification action.
+            stateHandler.post {
+                emitStateEvent(AudioEvent.RemoteCommand("like", null))
+                listeners.forEach { it.onRemoteCommand("like", null) }
             }
         }
         return true
@@ -774,6 +776,86 @@ class PlaybackService : MediaSessionService(), AudioService {
         return (sleepTimerEndTime - System.currentTimeMillis()).coerceAtLeast(0L) / 1000.0
     }
 
+    override fun getSleepTimerMode(): String = sleepTimerMode
+
+    override fun setLikeActive(active: Boolean) {
+        stateHandler.post { currentItemLiked = active }
+    }
+
+    override fun setReplayGain(config: ReplayGainConfig) {
+        stateHandler.post {
+            replayGainConfig = config
+            applyReplayGain(queueEngine.currentSong?.id)
+        }
+    }
+
+    /**
+     * Applies ReplayGain as player volume. ExoPlayer cannot amplify, so gains
+     * above 0 dB are capped at unity; the default gain is applied at once and
+     * refined when the song's metadata has been read.
+     */
+    private fun applyReplayGain(songId: String?) {
+        replayGainJob?.cancel()
+        val config = replayGainConfig
+        if (!config.enabled || songId == null || currentRadioId != null) {
+            basePlayer?.volume = 1f
+            return
+        }
+        basePlayer?.volume = ReplayGainCalculator.volume(null, config)
+        replayGainJob = serviceScope.launch {
+            val metadata = withContext(Dispatchers.IO) {
+                libraryService.getSong(songId)?.replayGainJson
+            }
+            if (queueEngine.currentSong?.id == songId && currentRadioId == null) {
+                basePlayer?.volume = ReplayGainCalculator.volume(metadata, config)
+            }
+        }
+    }
+
+    private fun playRadio(command: AudioCommand.PlayRadio): AudioCommandResult {
+        val currentPlayer = player
+            ?: return AudioCommandResult.Failure("not_ready", "Playback service is not ready")
+        handleScrobbleSongEnded()
+        clearQueueState()
+        currentRadioId = command.radioId
+        replayGainJob?.cancel()
+        basePlayer?.volume = 1f
+        val metadata = MediaMetadata.Builder()
+            .setTitle(command.name)
+            .setArtist(command.subtitle)
+            .build()
+        currentSongMetadata = metadata
+        val mediaItem = MediaItem.Builder()
+            .setUri(Uri.parse(command.streamUrl))
+            .setMediaMetadata(metadata)
+            .build()
+        localPlaybackMediaItem = mediaItem
+        cachedArtworkBitmap = null
+        isTransitioning = true
+        currentPlayer.stop()
+        currentPlayer.clearMediaItems()
+        currentPlayer.setMediaItem(mediaItem)
+        currentPlayer.prepare()
+        emitQueueContentsChanged("set-list")
+        emitPlaybackState("loading")
+        currentPlayer.play()
+        showNotification()
+        return AudioCommandResult.Success
+    }
+
+    private fun clearPlayback() {
+        player?.stop()
+        player?.clearMediaItems()
+        handleScrobbleSongEnded()
+        clearQueueState()
+        currentRadioId = null
+        localPlaybackMediaItem = null
+        replayGainJob?.cancel()
+        basePlayer?.volume = 1f
+        emitQueueContentsChanged("set-list")
+        emitPlaybackState("idle")
+    }
+
     override suspend fun execute(command: AudioCommand): AudioCommandResult =
         withContext(Dispatchers.Main.immediate) {
             val currentPlayer = player
@@ -887,6 +969,14 @@ class PlaybackService : MediaSessionService(), AudioService {
                     )
                     AudioCommand.ClearUserQueue -> clearUserQueue()
                     is AudioCommand.PlayAtIndex -> playAtIndex(command.index, command.startTime)
+                    is AudioCommand.PlayUserQueueAt -> {
+                        queueEngine.playUserQueueAt(command.index)
+                        persistence.markStateDirty()
+                    }
+                    is AudioCommand.ReorderUserQueue -> {
+                        queueEngine.reorderUserQueue(command.fromIndex, command.toIndex)
+                        persistence.markStateDirty()
+                    }
                     is AudioCommand.MarkAsShuffled -> markAsShuffled(command.originalSongs)
                     is AudioCommand.PrepareHandoff -> return@withContext prepareHandoff(
                         command.snapshot,
@@ -896,6 +986,8 @@ class PlaybackService : MediaSessionService(), AudioService {
                         applyRollbackHandoff()
                         return@withContext AudioCommandResult.Success
                     }
+                    is AudioCommand.PlayRadio -> return@withContext playRadio(command)
+                    AudioCommand.ClearPlayback -> clearPlayback()
                 }
                 AudioCommandResult.Success
             } catch (error: Throwable) {
@@ -919,6 +1011,7 @@ class PlaybackService : MediaSessionService(), AudioService {
             isPlaying = currentPlayer?.isPlaying == true,
             isBuffering = isBuffering,
             volume = getSystemVolume(),
+            radioId = currentRadioId,
         )
     }
 
@@ -1861,7 +1954,7 @@ class PlaybackService : MediaSessionService(), AudioService {
         val shuffleIconResId = resources.getIdentifier(shuffleIconName, "drawable", packageName)
         val shuffleIcon = if (shuffleIconResId != 0) shuffleIconResId else android.R.drawable.ic_menu_share
 
-        val likeIconName = if (isLikeActive) "ic_favorite" else "ic_favorite_border"
+        val likeIconName = if (currentItemLiked) "ic_favorite" else "ic_favorite_border"
         val likeIconResId = resources.getIdentifier(likeIconName, "drawable", packageName)
         val likeIcon = if (likeIconResId != 0) likeIconResId else android.R.drawable.btn_star
 
@@ -2115,6 +2208,8 @@ class PlaybackService : MediaSessionService(), AudioService {
 
     fun loadSong(song: QueueSong, autoplay: Boolean, startTime: Double?) {
         isTransitioning = true
+        currentRadioId = null
+        applyReplayGain(song.id)
         NativeLogger.debug("Loading song: ${song.title} - ${song.artist} (autoplay=$autoplay)", "playback-service")
         val resolver = NativeSourceResolver(this)
         val resolved = resolver.resolveSource(song)
@@ -2298,6 +2393,7 @@ class PlaybackService : MediaSessionService(), AudioService {
                             savedRestoreTime = persistedState.currentTime
                             loadSong(song, autoplay = false, startTime = persistedState.currentTime)
                         }
+                        emitQueueContentsChanged("restore")
                     }
                 }
             } catch (_: Exception) {
@@ -2315,6 +2411,7 @@ class PlaybackService : MediaSessionService(), AudioService {
         if (song != null) {
             handleScrobbleSongStarted(song.id, song.duration)
         }
+        emitQueueContentsChanged("set-list")
     }
 
     internal fun restoreHandoffState(state: PlaybackPersistState, autoplay: Boolean) {
@@ -2362,11 +2459,14 @@ class PlaybackService : MediaSessionService(), AudioService {
 
     fun setRepeatMode(mode: String) {
         val loopState = LoopState.fromValue(mode)
+        if (queueEngine.loopState == loopState) return
         queueEngine.setLoopState(loopState)
         persistence.markStateDirty()
+        emitQueueContentsChanged("repeat")
     }
 
     fun setShuffle(enabled: Boolean) {
+        if (queueEngine.isShuffleActive == enabled) return
         queueEngine.setShuffleActive(enabled)
         player?.shuffleModeEnabled = enabled
         persistence.markStateDirty()
@@ -2378,6 +2478,9 @@ class PlaybackService : MediaSessionService(), AudioService {
         queueEngine.markAsShuffled(originalSongs)
         player?.shuffleModeEnabled = true
         persistence.markStateDirty()
+        updateNotification()
+        mediaSession?.setCustomLayout(getCustomLayoutButtons())
+        emitQueueContentsChanged("shuffle")
     }
 
     fun updateRemotePlaybackProjection(

@@ -51,6 +51,12 @@ class PreferencesService private constructor(context: Context) {
         emitChange("play_history", null)
     }
 
+    /** Replaces the whole history; [songs] are ordered newest first. */
+    suspend fun setPlayHistory(songs: List<String>) {
+        store.setPlayHistory(songs)
+        emitChange("play_history", null)
+    }
+
     suspend fun clearPlayHistory() {
         store.clearPlayHistory()
         emitChange("play_history", null)

@@ -56,6 +56,12 @@ fun parseIsoTimestamp(value: String?): Long? {
     }.getOrNull()
 }
 
+/** ISO-8601 UTC timestamp in the format Subsonic servers use. */
+fun formatIsoTimestamp(epochMillis: Long): String =
+    java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US).apply {
+        timeZone = java.util.TimeZone.getTimeZone("UTC")
+    }.format(java.util.Date(epochMillis))
+
 fun SongEntity.toModel(): Song = Song(
     id = id,
     parent = parent,

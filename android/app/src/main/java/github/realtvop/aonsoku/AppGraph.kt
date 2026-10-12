@@ -7,6 +7,9 @@ import github.realtvop.aonsoku.data.LibrarySyncCoordinator
 import github.realtvop.aonsoku.data.NetworkMonitor
 import github.realtvop.aonsoku.data.api.SubsonicApi
 import github.realtvop.aonsoku.data.image.ArtworkStore
+import github.realtvop.aonsoku.i18n.I18n
+import github.realtvop.aonsoku.i18n.Translations
+import github.realtvop.aonsoku.player.PlayerController
 import github.realtvop.aonsoku.plugins.AppServices
 import github.realtvop.aonsoku.session.SessionManager
 import github.realtvop.aonsoku.session.SessionState
@@ -43,6 +46,18 @@ class AppGraph(val application: Application) {
     val artwork = ArtworkStore(services.library, network)
     val library = LibraryRepository(api, services.library, network)
     val sync = LibrarySyncCoordinator(services.library, network, settings, scope)
+    val player = PlayerController(
+        context = application,
+        scope = scope,
+        settings = settings,
+        library = library,
+        preferences = services.preferences,
+        toaster = toaster,
+        strings = ::strings,
+    )
+
+    /** Strings for the current language, for code that runs outside composition. */
+    fun strings(): Translations = I18n.load(application, settings.current.language)
 
     /**
      * Loads what the first frame depends on (theme, language, session). Both
@@ -61,6 +76,7 @@ class AppGraph(val application: Application) {
         network.start()
         network.scheduleCheck(0)
         sync.onSessionStarted()
+        player.connect()
     }
 
     /** The app came back to the foreground. */
@@ -76,6 +92,7 @@ class AppGraph(val application: Application) {
 
     /** Ends the session and drops everything tied to the signed-in account. */
     suspend fun signOut() {
+        player.shutdown()
         sync.onSessionEnded()
         session.logout()
         services.library.clearLibraryData()

@@ -556,12 +556,38 @@ App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
   (`ArtworkStore` → `LibraryService.resolveCoverImage`/`downloadCoverImage`,
   one 700px copy per cover id, bounded parallel downloads). Screens use
   `CoverImage`; never build authenticated image URLs in UI code.
+- `player/`: `PlayerController` is the only UI-facing owner of playback. It
+  binds `PlaybackService`, mirrors its `StateFlow` snapshots into
+  `PlayerState`/`PlaybackProgress`, and turns user intent into
+  `AudioCommand`s. The queue rules of the web player live here and in the
+  pure `QueuePlanner`: the context queue always starts at the current song
+  (earlier songs are dropped, or rotated to the end with repeat-all),
+  shuffle/repeat changes rebuild it from the remembered source list, and
+  starting something new asks first (`pendingReplacement` →
+  `QueueReplacementDialog`) when it would discard manually queued songs while
+  playing. It also records play history (songs played ≥ 10s, stored through
+  `PreferencesService` play history), owns like toggling for the current song
+  (server + Room, mirrored to the notification via
+  `AudioService.setLikeActive`), pushes ReplayGain settings to the service,
+  and handles the `RemoteCommand`s the service cannot complete itself
+  (`like`, `shuffle`). Screens call `PlayerController`; they never talk to
+  `PlaybackService` directly.
 - `ui/`: `AonsokuApp` is the root composable (theme, strings, session gate,
   toasts). `ui/shell/MainShell` hosts the type-safe Navigation Compose graph
   (`ui/navigation/Routes.kt`) with one back stack per top-level tab and the
   floating navigation bar (`FloatingNavBar`: Home/Library pill plus a detached
-  Search button). Scrolling pages add `LocalFloatingBarsPadding` to their
-  content padding.
+  Search button), with the floating `ui/player/MiniPlayer` above it once
+  something is loaded. Scrolling pages add `LocalFloatingBarsPadding` to
+  their content padding.
+
+`AudioService` additions made for the native UI (all executed by
+`PlaybackService`): `PlayRadio` (internet radio as a queue-less live stream;
+`AudioPlaybackSnapshot.radioId` marks it), `ClearPlayback`, `PlayUserQueueAt`
+and `ReorderUserQueue`, `setLikeActive`, `getSleepTimerMode`, and
+`setReplayGain` (`ReplayGainCalculator` turns the song's stored ReplayGain
+tags into a player volume). Queue snapshots are now also published when the
+context queue, repeat mode, or shuffle flag changes, and an ExoPlayer failure
+is reported as `AudioEvent.Error` with state `failed`.
 
 ## Commit Message Format
 

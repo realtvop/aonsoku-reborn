@@ -14,6 +14,18 @@ data class AudioPlaybackSnapshot(
     val isPlaying: Boolean = false,
     val isBuffering: Boolean = false,
     val volume: Double = 0.0,
+    /** Set while an internet radio station is playing instead of the queue. */
+    val radioId: String? = null,
+)
+
+/** ReplayGain preferences applied to queue playback. Gains are in dB. */
+data class ReplayGainConfig(
+    val enabled: Boolean = false,
+    /** "track" or "album". */
+    val mode: String = "track",
+    val preAmp: Double = 0.0,
+    /** Gain used for songs without ReplayGain metadata. */
+    val defaultGain: Double = -6.0,
 )
 
 data class AudioQueueSnapshot(
@@ -76,9 +88,25 @@ sealed interface AudioCommand {
     data class RemoveSongsById(val songIds: List<String>) : AudioCommand
     data object ClearUserQueue : AudioCommand
     data class PlayAtIndex(val index: Int, val startTime: Double?) : AudioCommand
+
+    /** Jump to the song at [index] of the user queue. */
+    data class PlayUserQueueAt(val index: Int) : AudioCommand
+    data class ReorderUserQueue(val fromIndex: Int, val toIndex: Int) : AudioCommand
     data class MarkAsShuffled(val originalSongs: List<QueueSong>) : AudioCommand
     data class PrepareHandoff(val snapshot: JSONObject, val autoplay: Boolean) : AudioCommand
     data object RollbackHandoff : AudioCommand
+
+    /** Replace the queue with a single internet radio stream. */
+    data class PlayRadio(
+        val radioId: String,
+        val name: String,
+        val streamUrl: String,
+        /** Secondary line for the system media surface (for example "Radio"). */
+        val subtitle: String,
+    ) : AudioCommand
+
+    /** Stop playback and drop the queue, the radio stream, and persisted state. */
+    data object ClearPlayback : AudioCommand
 }
 
 sealed interface AudioCommandResult {
@@ -127,6 +155,14 @@ interface AudioService {
     fun getSystemVolume(): Double
     fun setSystemVolume(value: Double): Double
     fun getSleepTimerRemaining(): Double
+
+    /** "duration" or "endOfTrack"; only meaningful while a timer is pending. */
+    fun getSleepTimerMode(): String
+
+    /** Whether the current item is liked, shown on the system media surface. */
+    fun setLikeActive(active: Boolean)
+
+    fun setReplayGain(config: ReplayGainConfig)
     fun setRequestId(requestId: String?)
     fun getFullState(): JSONObject?
     fun pauseAndGetFullState(): JSONObject?

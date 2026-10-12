@@ -35,7 +35,7 @@ class SettingsRepository(
     /**
      * Reads the stored settings. On the first native launch the preferences
      * written by the former WebView app are imported so users keep their
-     * theme, language, lyrics, and cache choices.
+     * theme, language, lyrics, cache choices, and play history.
      */
     suspend fun load() {
         val stored = preferences.getAllPreferences()
@@ -48,6 +48,13 @@ class SettingsRepository(
         val imported = LegacySettingsImporter.import(stored)
         _state.value = imported
         preferences.setPreference(KEY, json.encodeToString(AppSettings.serializer(), imported))
+        importPlayHistory(stored, imported.playHistoryMaxSize)
+    }
+
+    private suspend fun importPlayHistory(stored: Map<String, String>, maxSize: Int) {
+        val history = LegacySettingsImporter.importPlayHistory(stored)
+        if (history.isEmpty() || preferences.getPlayHistory(1).isNotEmpty()) return
+        preferences.setPlayHistory(history.take(maxSize))
     }
 
     fun update(transform: (AppSettings) -> AppSettings) {

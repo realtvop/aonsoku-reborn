@@ -185,6 +185,43 @@ class NativeQueueEngine {
         }
     }
 
+    /**
+     * Jump to a song in the user queue. Everything queued before it (including
+     * the user-queue song that is playing, if any) moves to the played history
+     * so "previous" can walk back through it.
+     */
+    fun playUserQueueAt(index: Int) {
+        if (index < 0 || index >= userQueue.size) return
+        if (isInUserQueue && index == 0) return
+
+        if (!isInUserQueue) {
+            currentSong?.let { pushShuffleHistory(it.id) }
+        }
+        val skipped = userQueue.take(index)
+        skipped.forEach { pushShuffleHistory(it.id) }
+        playedUserQueueHistory = playedUserQueueHistory + skipped
+        userQueue = userQueue.drop(index)
+        isInUserQueue = true
+        notifyAdvance(QueueAdvanceReason.SKIP)
+    }
+
+    /**
+     * Move a song inside the user queue. The song that is currently playing
+     * from the user queue (index 0 while [isInUserQueue]) keeps its place.
+     */
+    fun reorderUserQueue(fromIndex: Int, toIndex: Int) {
+        if (fromIndex == toIndex) return
+        if (fromIndex < 0 || fromIndex >= userQueue.size) return
+        if (toIndex < 0 || toIndex >= userQueue.size) return
+        if (isInUserQueue && (fromIndex == 0 || toIndex == 0)) return
+
+        val mutableUserQueue = userQueue.toMutableList()
+        val song = mutableUserQueue.removeAt(fromIndex)
+        mutableUserQueue.add(toIndex, song)
+        userQueue = mutableUserQueue
+        delegate?.queueEngineDidChangeContents(this, "queue-edit")
+    }
+
     // MARK: - Playback Control
 
     fun handleEnded() {
@@ -336,8 +373,6 @@ class NativeQueueEngine {
     }
 
     private fun applyShuffle() {
-        if (contextSongs.size <= 1) return
-
         originalContextSongs = contextSongs
 
         currentSong?.let {
@@ -347,14 +382,18 @@ class NativeQueueEngine {
         }
 
         val upcoming = contextSongs.drop(currentIndex + 1)
-        if (upcoming.isNotEmpty()) {
+        if (upcoming.size > 1) {
             val shuffled = shuffleEngine.shuffleWithGapAvoidance(upcoming, shuffleHistory)
             contextSongs = contextSongs.take(currentIndex + 1) + shuffled
         }
 
-        if (userQueue.isNotEmpty()) {
-            originalUserSongs = userQueue
-            userQueue = shuffleEngine.shuffleWithGapAvoidance(userQueue, shuffleHistory)
+        // The song playing from the user queue is its head and must stay there.
+        val playingHead = if (isInUserQueue) userQueue.take(1) else emptyList()
+        val pendingUserSongs = userQueue.drop(playingHead.size)
+        if (pendingUserSongs.size > 1) {
+            originalUserSongs = pendingUserSongs
+            userQueue = playingHead +
+                shuffleEngine.shuffleWithGapAvoidance(pendingUserSongs, shuffleHistory)
         }
 
         isShuffleActive = true
@@ -362,34 +401,49 @@ class NativeQueueEngine {
     }
 
     private fun applyUnshuffle() {
-        if (originalContextSongs.isEmpty()) {
-            isShuffleActive = false
-            return
-        }
-
-        val currentSongId = currentSong?.id
-        val newIdx = if (currentSongId != null) {
-            originalContextSongs.indexOfFirst { it.id == currentSongId }
-        } else -1
-
-        if (newIdx != -1) {
+        val contextSongId = contextSongs.getOrNull(currentIndex)?.id
+        if (originalContextSongs.isNotEmpty()) {
+            val restoredIndex = originalContextSongs.indexOfFirst { it.id == contextSongId }
             contextSongs = originalContextSongs
-            currentIndex = newIdx
-        } else {
-            contextSongs = originalContextSongs
-            currentIndex = minOf(currentIndex, contextSongs.size - 1)
+            currentIndex = if (restoredIndex != -1) {
+                restoredIndex
+            } else {
+                minOf(currentIndex, contextSongs.size - 1)
+            }
         }
 
-        if (originalUserSongs.isNotEmpty()) {
-            userQueue = originalUserSongs
-            originalUserSongs = emptyList()
-        }
+        restoreUserQueueOrder()
 
         originalContextSongs = emptyList()
         playedUserQueueHistory = emptyList()
         isShuffleActive = false
         shuffleHistory = emptyList()
         delegate?.queueEngineDidChangeContents(this, "unshuffle")
+    }
+
+    /**
+     * Puts the pending user-queue songs back in the order they were queued in.
+     * Only songs that are still pending are kept: songs played or removed while
+     * shuffling stay gone, and songs queued in the meantime stay queued (ahead
+     * of the restored ones when they were added to play next).
+     */
+    private fun restoreUserQueueOrder() {
+        if (originalUserSongs.isEmpty()) return
+
+        val playingHead = if (isInUserQueue) userQueue.take(1) else emptyList()
+        val pending = userQueue.drop(playingHead.size).toMutableList()
+        val originalIds = originalUserSongs.mapTo(HashSet()) { it.id }
+        val addedToPlayNext = pending.takeWhile { it.id !in originalIds }
+        repeat(addedToPlayNext.size) { pending.removeAt(0) }
+
+        val restored = mutableListOf<QueueSong>()
+        for (original in originalUserSongs) {
+            val index = pending.indexOfFirst { it.id == original.id }
+            if (index != -1) restored += pending.removeAt(index)
+        }
+
+        userQueue = playingHead + addedToPlayNext + restored + pending
+        originalUserSongs = emptyList()
     }
 
     private fun reshuffleForWrap(lastPlayedSongId: String?) {

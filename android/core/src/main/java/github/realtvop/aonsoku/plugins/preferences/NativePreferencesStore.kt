@@ -66,6 +66,13 @@ class NativePreferencesStore(context: Context) {
         }
     }
 
+    /** Replaces the whole history; [songs] are ordered newest first. */
+    suspend fun setPlayHistory(songs: List<String>) {
+        dataStore.edit { mutablePreferences ->
+            mutablePreferences[PLAY_HISTORY_KEY] = PlayHistoryCodec.encode(songs)
+        }
+    }
+
     suspend fun clearPlayHistory() {
         dataStore.edit { mutablePreferences ->
             mutablePreferences.remove(PLAY_HISTORY_KEY)
