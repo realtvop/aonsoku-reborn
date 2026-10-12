@@ -7,10 +7,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
-import coil3.request.crossfade
-import github.realtvop.aonsoku.data.image.AvatarArtKeyer
-import github.realtvop.aonsoku.data.image.CoverArtFetcher
-import github.realtvop.aonsoku.data.image.CoverArtKeyer
+import github.realtvop.aonsoku.data.image.artworkImageLoader
 
 class AonsokuApplication : Application(), SingletonImageLoader.Factory {
     lateinit var graph: AppGraph
@@ -28,15 +25,6 @@ class AonsokuApplication : Application(), SingletonImageLoader.Factory {
         )
     }
 
-    /** Artwork is served from the native image cache instead of HTTP. */
     override fun newImageLoader(context: PlatformContext): ImageLoader =
-        ImageLoader.Builder(context)
-            .components {
-                add(CoverArtFetcher.CoverFactory(graph.artwork))
-                add(CoverArtFetcher.AvatarFactory(graph.artwork))
-                add(CoverArtKeyer())
-                add(AvatarArtKeyer())
-            }
-            .crossfade(true)
-            .build()
+        artworkImageLoader(context, graph.artwork).build()
 }

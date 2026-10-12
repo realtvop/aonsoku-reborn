@@ -27,6 +27,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import github.realtvop.aonsoku.player.RepeatMode
 import github.realtvop.aonsoku.session.SessionState
+import github.realtvop.aonsoku.settings.ThemeMode
 import github.realtvop.aonsoku.ui.AonsokuApp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -53,9 +54,12 @@ class AppSmokeTest {
     @get:Rule(order = 1)
     val compose = createAndroidComposeRule<ComponentActivity>()
 
+    private val screenshots = SmokeScreenshots(compose)
+
     @Test
     fun signingInThroughTheLoginScreenOpensHome() {
-        compose.setContent { AonsokuApp(world.graph) }
+        showApp()
+        snapshot("login")
 
         // The field starts out with a scheme.
         compose.onNodeWithText("URL").performTextReplacement(world.server.url)
@@ -75,6 +79,8 @@ class AppSmokeTest {
         openHome()
         waitForText("Northern Lights")
         compose.onNodeWithText("Recently added").assertIsDisplayed()
+        waitUntil("the covers to load") { world.server.requested("getCoverArt") }
+        snapshot("home")
     }
 
     @Test
@@ -83,11 +89,13 @@ class AppSmokeTest {
         compose.onNodeWithText("Albums").performClick()
         waitForText("Paper Boats")
         waitForText("Hearthside")
+        snapshot("albums")
 
         // A two-disc album: tracks are grouped under disc headers.
         compose.onNodeWithText("Northern Lights").performClick()
         waitForText("First Snow")
         waitForText("About Northern Lights")
+        snapshot("album")
         scrollTo("Disc 2")
         scrollTo("Thaw")
         scrollTo("More from this artist")
@@ -109,10 +117,12 @@ class AppSmokeTest {
         waitForText("Play next")
         waitForText("Add to playlist")
         waitForText("Go to artist")
+        snapshot("song-menu")
 
         compose.onNodeWithText("Get info").performClick()
         waitForText("900 kbps")
         waitForText("FLAC")
+        snapshot("song-info")
     }
 
     @Test
@@ -121,9 +131,11 @@ class AppSmokeTest {
         compose.onNodeWithText("Artists").performClick()
         waitForText("Aurora Lane")
         waitForText("Cedar and Stone")
+        snapshot("artists")
 
         compose.onNodeWithText("Blue Meridian").performClick()
         waitForText("About Blue Meridian")
+        snapshot("artist")
         scrollTo("Popular")
         scrollTo("Low Tide")
         scrollTo("Recent albums")
@@ -134,6 +146,7 @@ class AppSmokeTest {
     fun playlistsOpenIncludingRepeatedSongsAndEmptyOnes() {
         openLibrary()
         waitForText("Morning Mix")
+        snapshot("library")
 
         compose.onNodeWithText("Morning Mix").performClick()
         // "First Snow" is in the playlist twice.
@@ -141,11 +154,13 @@ class AppSmokeTest {
             compose.onAllNodesWithText("First Snow").fetchSemanticsNodes().size == 2
         }
         waitForText("Songs for the first coffee")
+        snapshot("playlist")
 
         back()
         waitForText("Empty Crate")
         compose.onNodeWithText("Empty Crate").performClick()
         waitForText("This playlist does not have any songs!")
+        snapshot("playlist-empty")
     }
 
     @Test
@@ -156,17 +171,20 @@ class AppSmokeTest {
         compose.onNodeWithText("Favorites").performClick()
         waitForText("First Snow")
         waitForText("Undertow")
+        snapshot("favorites")
 
         back()
         waitForText("Playlists")
         compose.onNodeWithText("Songs").performClick()
         waitForText("First Snow")
+        snapshot("songs")
         scrollTo("Kindling")
 
         back()
         waitForText("Playlists")
         compose.onNodeWithText("Radios").performClick()
         waitForText("Harbor FM")
+        snapshot("radios")
     }
 
     @Test
@@ -174,10 +192,12 @@ class AppSmokeTest {
         openHome()
         compose.onNodeWithContentDescription("Search").performClick()
         waitForText("Search for an album, artist or song")
+        snapshot("search")
 
         compose.onNode(hasSetTextAction()).performTextInput("tid")
         waitForText("Tidal Hours")
         waitForText("Low Tide")
+        snapshot("search-results")
 
         compose.onNode(hasSetTextAction()).performTextReplacement("cedar")
         waitForText("Cedar and Stone")
@@ -204,6 +224,7 @@ class AppSmokeTest {
         assertEquals(listOf("Undertow", "Slack Water"), state.contextSongs.map { it.title })
 
         waitUntil("the stream request") { world.server.requested("stream") }
+        snapshot("mini-player")
 
         compose.onNodeWithContentDescription("Next").performClick()
         waitUntil("the next song") {
@@ -221,6 +242,7 @@ class AppSmokeTest {
 
         // The page and the mini player are covered: only the player shows the song.
         assertEquals(1, compose.onAllNodesWithText("Low Tide").fetchSemanticsNodes().size)
+        snapshot("player")
         compose.onNodeWithText("Tidal Hours").assertIsDisplayed()
 
         compose.onNodeWithContentDescription("Like Low Tide by Blue Meridian").performClick()
@@ -245,6 +267,7 @@ class AppSmokeTest {
         expandPlayer("Undertow")
         compose.onNodeWithContentDescription("Settings").performClick()
         waitForText("Color intensity")
+        snapshot("player-colors")
     }
 
     @Test
@@ -257,6 +280,7 @@ class AppSmokeTest {
         waitForText("From Tidal Hours")
         waitForText("Undertow")
         waitForText("Slack Water")
+        snapshot("queue")
 
         // The handle at the end of a row drags it; one row down swaps the two.
         compose.onNodeWithText("Undertow").performTouchInput {
@@ -270,6 +294,7 @@ class AppSmokeTest {
 
         compose.onNodeWithText("Undertow").performTouchInput { longClick() }
         waitForText("Remove from queue")
+        snapshot("queue-menu")
         compose.onNodeWithText("Remove from queue").performClick()
         waitUntil("the song to leave the queue") {
             contextTitles() == listOf("Low Tide", "Slack Water")
@@ -278,6 +303,7 @@ class AppSmokeTest {
         compose.onNodeWithText("Slack Water").performClick()
         waitUntil("the tapped song to play") { playerState().current?.title == "Slack Water" }
         waitForText("No songs in queue")
+        snapshot("queue-history")
 
         // Back leaves the queue for the playing view first, then closes the player.
         back()
@@ -293,8 +319,10 @@ class AppSmokeTest {
 
         compose.onNodeWithContentDescription("More options for Low Tide").performClick()
         waitForText("Sleep timer")
+        snapshot("current-song-menu")
         compose.onNodeWithText("Sleep timer").performClick()
         waitForText("End of current track")
+        snapshot("sleep-timer")
         compose.onNodeWithText("15 min").performClick()
         waitUntil("the sleep timer to start") { world.graph.player.sleepTimer.value.active }
 
@@ -313,8 +341,13 @@ class AppSmokeTest {
     /** Signs in and waits for the synced home page. */
     private fun openHome() {
         world.signIn()
-        compose.setContent { AonsokuApp(world.graph) }
+        showApp()
         waitForText("Recently added")
+    }
+
+    private fun showApp() {
+        if (screenshots.dark) world.graph.settings.update { it.copy(themeMode = ThemeMode.Dark) }
+        compose.setContent { AonsokuApp(world.graph) }
     }
 
     private fun openLibrary() {
@@ -345,6 +378,15 @@ class AppSmokeTest {
 
     private fun waitForPlayerToClose() = waitUntil("the player to close") {
         compose.onAllNodesWithContentDescription("Close").fetchSemanticsNodes().isEmpty()
+    }
+
+    /** Saves what is on screen when the run asks for screenshots. */
+    private fun snapshot(name: String) {
+        if (!screenshots.enabled) return
+        // Artwork and transitions get a moment to settle.
+        val settled = System.nanoTime() + SNAPSHOT_SETTLE_MS * 1_000_000
+        waitUntil("the screen to settle") { System.nanoTime() > settled }
+        screenshots.save(name)
     }
 
     private fun playerState() = world.graph.player.state.value
@@ -390,5 +432,9 @@ class AppSmokeTest {
         val own = config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text } +
             config.getOrNull(SemanticsProperties.ContentDescription).orEmpty().map { "[$it]" }
         return own + children.flatMap { it.texts() }
+    }
+
+    private companion object {
+        const val SNAPSHOT_SETTLE_MS = 1_200L
     }
 }

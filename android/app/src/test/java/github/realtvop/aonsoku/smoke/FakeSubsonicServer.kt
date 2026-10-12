@@ -11,6 +11,7 @@ import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import javax.imageio.ImageIO
@@ -246,7 +247,7 @@ class FakeSubsonicServer {
             "getLyricsBySongId" -> ok("lyricsList", JSONObject().put("structuredLyrics", JSONArray()))
             "getCoverArt", "getAvatar" -> MockResponse()
                 .setHeader("Content-Type", "image/png")
-                .setBody(Buffer().write(artwork))
+                .setBody(Buffer().write(artwork(param("id") ?: param("username").orEmpty())))
             // Served slowly: the shadowed audio output plays as fast as data
             // arrives, and a song that stays current is what tests can rely on.
             "stream", "download" -> MockResponse()
@@ -402,11 +403,29 @@ class FakeSubsonicServer {
             header.array() + samples
         }
 
-        /** A plain teal square; enough for decoding and tinting. */
-        val artwork: ByteArray by lazy {
-            val image = BufferedImage(64, 64, BufferedImage.TYPE_INT_RGB)
-            for (x in 0 until 64) for (y in 0 until 64) image.setRGB(x, y, 0x1F7A8C)
-            ByteArrayOutputStream().also { ImageIO.write(image, "png", it) }.toByteArray()
+        const val ARTWORK_SIZE = 64
+
+        /** One base color per cover, so pages are tinted differently. */
+        val artworkColors = intArrayOf(0x1F7A8C, 0xB5446E, 0x3D5A80, 0xC8553D, 0x588157, 0x6A4C93)
+
+        val artworks = ConcurrentHashMap<Int, ByteArray>()
+
+        /** A square fading from the color of [id] to a darker shade; enough for decoding and tinting. */
+        fun artwork(id: String): ByteArray {
+            val color = artworkColors[Math.floorMod(id.hashCode(), artworkColors.size)]
+            return artworks.getOrPut(color) {
+                val image = BufferedImage(ARTWORK_SIZE, ARTWORK_SIZE, BufferedImage.TYPE_INT_RGB)
+                for (x in 0 until ARTWORK_SIZE) {
+                    for (y in 0 until ARTWORK_SIZE) {
+                        val light = 1f - 0.5f * (x + y) / (2 * ARTWORK_SIZE)
+                        val red = ((color shr 16 and 0xFF) * light).toInt()
+                        val green = ((color shr 8 and 0xFF) * light).toInt()
+                        val blue = ((color and 0xFF) * light).toInt()
+                        image.setRGB(x, y, red shl 16 or (green shl 8) or blue)
+                    }
+                }
+                ByteArrayOutputStream().also { ImageIO.write(image, "png", it) }.toByteArray()
+            }
         }
     }
 }

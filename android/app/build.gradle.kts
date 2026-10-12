@@ -154,6 +154,18 @@ android {
             // The Compose smoke tests run on Robolectric against the real
             // resources, locale files, and fonts.
             isIncludeAndroidResources = true
+            // -PsmokeScreenshots=<directory> makes the smoke tests save what
+            // they see as PNG files (see SmokeScreenshots), to look at the UI
+            // without a device; -PsmokeTheme=dark takes them in the dark theme.
+            all { test ->
+                providers.gradleProperty("smokeScreenshots").orNull?.let { directory ->
+                    test.systemProperty("aonsoku.smoke.screenshots", directory)
+                    test.systemProperty("robolectric.pixelCopyRenderMode", "hardware")
+                }
+                providers.gradleProperty("smokeTheme").orNull?.let { theme ->
+                    test.systemProperty("aonsoku.smoke.theme", theme)
+                }
+            }
         }
     }
 }

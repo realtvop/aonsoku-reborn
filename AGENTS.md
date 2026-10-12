@@ -64,6 +64,8 @@ pnpm --filter @aonsoku/coordination-worker deploy:raw # Direct Wrangler deployme
 cd android && ./gradlew :core:compileDebugKotlin     # Native services module
 cd android && ./gradlew :core:testDebugUnitTest      # Service unit tests
 cd android && ./gradlew :app:testDebugUnitTest       # App unit tests + JVM smoke tests (Robolectric)
+cd android && ./gradlew :app:testDebugUnitTest --tests '*AppSmokeTest*' \
+  -PsmokeScreenshots=/tmp/aonsoku-shots [-PsmokeTheme=dark]  # Save a PNG of every screen the smoke tests visit
 cd android && ./gradlew :app:assembleDebug           # Debug APK
 node scripts/android/generate-theme-palettes.mjs     # Regenerate ThemePalettes.kt from src/themes.css
 
@@ -554,8 +556,10 @@ App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
 - `data/image/`: artwork is loaded by Coil through `CoverArtFetcher`, which
   resolves `CoverArt`/`AvatarArt` models to files in the native image cache
   (`ArtworkStore` → `LibraryService.resolveCoverImage`/`downloadCoverImage`,
-  one 700px copy per cover id, bounded parallel downloads). Screens use
-  `CoverImage`; never build authenticated image URLs in UI code.
+  one 700px copy per cover id, bounded parallel downloads). The loader is
+  configured in one place, `artworkImageLoader`, used by `AonsokuApplication`
+  and by the smoke tests. Screens use `CoverImage`; never build authenticated
+  image URLs in UI code.
 - `player/`: `PlayerController` is the only UI-facing owner of playback. It
   binds `PlaybackService`, mirrors its `StateFlow` snapshots into
   `PlayerState`/`PlaybackProgress`, and turns user intent into
@@ -657,8 +661,21 @@ runs the real `PlaybackService` in-process and hands its binder to
 `PlayerController`, and offers `waitUntil`, which runs main-thread and delayed
 work while background threads make progress. The shadowed audio output plays
 as fast as data arrives, so the fake server throttles `stream`: assert on the
-current song and the queue, not on `isPlaying`. Lazy pages only compose what is visible, so
-tests scroll to what they assert. Add a journey there when adding a screen.
+current song and the queue, not on `isPlaying`. Lazy pages only compose what
+is visible, so tests scroll to what they assert. Add a journey there when
+adding a screen.
+
+The same journeys double as a way to look at the UI without a device:
+`snapshot("name")` calls in `AppSmokeTest` save a PNG per screen when the run
+passes `-PsmokeScreenshots=<directory>` (`smoke/SmokeScreenshots`, which draws
+sheets and dialogs over the activity they cover), and `-PsmokeTheme=dark`
+takes them in the dark theme. The fake server answers `getCoverArt` with a
+colored square per id, so artwork tinting shows up too. Two things differ from
+a device there: the test image loader decodes with `BitmapFactory` and does
+not crossfade (Robolectric has no `ImageDecoder`, and a fade would be caught
+half-way), and the screen size is the one in the test's `@Config` (the
+journeys assume that phone size). Review layout changes this way before
+asking for a device run.
 
 `AudioService` additions made for the native UI (all executed by
 `PlaybackService`): `PlayRadio` (internet radio as a queue-less live stream;

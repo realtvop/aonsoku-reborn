@@ -7,13 +7,12 @@ import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.room.RoomDatabase
 import androidx.test.core.app.ApplicationProvider
-import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.annotation.DelicateCoilApi
+import coil3.imageDecoderEnabled
+import coil3.request.crossfade
 import github.realtvop.aonsoku.AppGraph
-import github.realtvop.aonsoku.data.image.AvatarArtKeyer
-import github.realtvop.aonsoku.data.image.CoverArtFetcher
-import github.realtvop.aonsoku.data.image.CoverArtKeyer
+import github.realtvop.aonsoku.data.image.artworkImageLoader
 import github.realtvop.aonsoku.plugins.audio.PlaybackService
 import github.realtvop.aonsoku.session.LoginResult
 import kotlinx.coroutines.async
@@ -57,13 +56,11 @@ class SmokeWorld : TestWatcher() {
         graph = AppGraph(application).also { it.initialize() }
         startPlaybackService(application)
         SingletonImageLoader.setUnsafe { context ->
-            ImageLoader.Builder(context)
-                .components {
-                    add(CoverArtFetcher.CoverFactory(graph.artwork))
-                    add(CoverArtFetcher.AvatarFactory(graph.artwork))
-                    add(CoverArtKeyer())
-                    add(AvatarArtKeyer())
-                }
+            // Robolectric decodes files with BitmapFactory but not with ImageDecoder.
+            // A fade runs on wall-clock time, so a screenshot would catch it half-way.
+            artworkImageLoader(context, graph.artwork)
+                .imageDecoderEnabled(false)
+                .crossfade(false)
                 .build()
         }
     }

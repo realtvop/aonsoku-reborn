@@ -1,6 +1,7 @@
 package github.realtvop.aonsoku.data.image
 
 import coil3.ImageLoader
+import coil3.PlatformContext
 import coil3.decode.DataSource
 import coil3.decode.ImageSource
 import coil3.fetch.FetchResult
@@ -8,6 +9,7 @@ import coil3.fetch.Fetcher
 import coil3.fetch.SourceFetchResult
 import coil3.key.Keyer
 import coil3.request.Options
+import coil3.request.crossfade
 import okio.FileSystem
 import okio.Path.Companion.toOkioPath
 
@@ -55,3 +57,14 @@ class CoverArtKeyer : Keyer<CoverArt> {
 class AvatarArtKeyer : Keyer<AvatarArt> {
     override fun key(data: AvatarArt, options: Options): String = "avatar:${data.username}"
 }
+
+/** The app's image loader: artwork is served from the native image cache instead of HTTP. */
+fun artworkImageLoader(context: PlatformContext, store: ArtworkStore): ImageLoader.Builder =
+    ImageLoader.Builder(context)
+        .components {
+            add(CoverArtFetcher.CoverFactory(store))
+            add(CoverArtFetcher.AvatarFactory(store))
+            add(CoverArtKeyer())
+            add(AvatarArtKeyer())
+        }
+        .crossfade(true)
