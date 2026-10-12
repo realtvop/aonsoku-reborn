@@ -74,6 +74,6 @@ class ArtworkStore(
     companion object {
         const val CACHE_SIZE = "700"
         private const val AVATAR_SIZE = "128"
-        private const val MAX_PARALLEL_DOWNLOADS = 6
+        private const val MAX_PARALLEL_DOWNLOADS = 8
     }
 }

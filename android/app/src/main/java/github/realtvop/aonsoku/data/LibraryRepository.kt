@@ -596,6 +596,18 @@ class LibraryRepository(
 
     suspend fun localSong(id: String): Song? = library.getSong(id)?.toModel()
 
+    /**
+     * Makes sure [songs] are in the local library, so they are listed while
+     * offline. A song that is there already stays as it is: the copy at hand
+     * may know less about it (one rebuilt from the queue, for example).
+     */
+    suspend fun remember(songs: List<Song>) {
+        if (songs.isEmpty()) return
+        val known = library.getExistingSongIds(songs.map { it.id })
+        val unknown = songs.filter { it.id !in known }
+        if (unknown.isNotEmpty()) library.upsertSongs(unknown.map { it.toEntity() })
+    }
+
     // endregion
 
     // region Mutations

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -63,10 +64,27 @@ fun UserAvatarButton(modifier: Modifier = Modifier) {
         onClick = { sheetOpen = true },
         modifier = modifier.semantics { contentDescription = label },
     ) {
-        UserAvatar(size = 32)
+        BadgedAvatar(size = 32)
     }
     if (sheetOpen) {
         UserSheet(onDismiss = { sheetOpen = false })
+    }
+}
+
+/** The account picture with a mark for the state of the server and of the sync. */
+@Composable
+private fun BadgedAvatar(size: Int, modifier: Modifier = Modifier) {
+    val badge = rememberSyncBadge()
+    Box(modifier = modifier) {
+        UserAvatar(size = size)
+        if (badge != null) {
+            SyncBadgeDot(
+                badge = badge,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .offset(x = 3.dp, y = 3.dp),
+            )
+        }
     }
 }
 
@@ -128,7 +146,7 @@ private fun UserSheet(onDismiss: () -> Unit) {
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                UserAvatar(size = 44)
+                BadgedAvatar(size = 44)
                 Spacer(Modifier.width(14.dp))
                 Column {
                     Text(
@@ -147,6 +165,8 @@ private fun UserSheet(onDismiss: () -> Unit) {
                 }
             }
             Spacer(Modifier.height(8.dp))
+            HorizontalDivider()
+            SyncSection()
             HorizontalDivider()
             Spacer(Modifier.height(8.dp))
             SheetAction(

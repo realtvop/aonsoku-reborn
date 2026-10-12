@@ -136,6 +136,7 @@ fun SongRow(
                 )
             }
         }
+        CachedIndicator(songId = song.id, modifier = Modifier.padding(start = 8.dp))
         trailing()
         if (onMore != null) {
             IconButton(onClick = onMore) {

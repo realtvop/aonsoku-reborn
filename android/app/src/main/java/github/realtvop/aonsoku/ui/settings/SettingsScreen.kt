@@ -16,6 +16,7 @@ import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Security
+import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LoadingIndicator
@@ -55,6 +56,7 @@ enum class SettingsCategory(val id: String, val icon: ImageVector) {
     Audio("audio", Icons.Rounded.Headphones),
     Content("content", Icons.AutoMirrored.Rounded.Article),
     Privacy("privacy", Icons.Rounded.Security),
+    Storage("storage", Icons.Rounded.Storage),
     ;
 
     val titleKey: String get() = "settings.options.$id"
@@ -63,6 +65,10 @@ enum class SettingsCategory(val id: String, val icon: ImageVector) {
 /** The list of settings pages, or the page [route] names. */
 @Composable
 fun SettingsScreen(route: SettingsRoute) {
+    if (route.page == CACHE_MANAGER_PAGE) {
+        CacheManagerPage()
+        return
+    }
     when (SettingsCategory.entries.firstOrNull { it.id == route.page }) {
         null -> SettingsRoot()
         SettingsCategory.Server -> ServerSettings()
@@ -71,6 +77,7 @@ fun SettingsScreen(route: SettingsRoute) {
         SettingsCategory.Audio -> AudioSettings()
         SettingsCategory.Content -> ContentSettings()
         SettingsCategory.Privacy -> PrivacySettings()
+        SettingsCategory.Storage -> StorageSettings()
     }
 }
 

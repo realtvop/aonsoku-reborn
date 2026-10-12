@@ -62,6 +62,7 @@ import github.realtvop.aonsoku.i18n.t
 import github.realtvop.aonsoku.player.PlayerState
 import github.realtvop.aonsoku.player.RepeatMode
 import github.realtvop.aonsoku.plugins.audio.QueueSong
+import github.realtvop.aonsoku.ui.components.CachedIndicator
 import github.realtvop.aonsoku.ui.components.CoverImage
 import github.realtvop.aonsoku.ui.components.CoverKind
 import github.realtvop.aonsoku.ui.components.ReorderState
@@ -339,6 +340,7 @@ fun QueueView(state: PlayerState, onShowPlaying: () -> Unit, modifier: Modifier 
                         art = songCoverArt(song),
                         onClick = { playAndShow { player.playNow(song) } },
                         onLongClick = { showMenu(Overlay.SongMenu(song)) },
+                        songId = song.id,
                     )
                 }
             }
@@ -479,6 +481,7 @@ private fun LazyItemScope.ReorderableQueueRow(
         art = queueSongCoverArt(entry.song),
         onClick = onClick,
         onLongClick = onLongClick,
+        songId = entry.song.id,
         modifier = Modifier.reorderItem(this, reorder, entry.key),
         lifted = reorder.isLifted(entry.key),
         handle = {
@@ -510,6 +513,7 @@ private fun QueueRow(
     art: CoverArt,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    songId: String,
     modifier: Modifier = Modifier,
     lifted: Boolean = false,
     handle: (@Composable () -> Unit)? = null,
@@ -561,6 +565,11 @@ private fun QueueRow(
                 )
             }
         }
+        CachedIndicator(
+            songId = songId,
+            modifier = Modifier.padding(start = 8.dp),
+            tint = palette.muted,
+        )
         handle?.invoke()
     }
 }

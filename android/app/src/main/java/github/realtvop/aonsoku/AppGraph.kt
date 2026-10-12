@@ -12,6 +12,7 @@ import github.realtvop.aonsoku.data.image.ArtworkStore
 import github.realtvop.aonsoku.data.lyrics.LyricsRepository
 import github.realtvop.aonsoku.data.lyrics.LyricsSources
 import github.realtvop.aonsoku.data.lyrics.LyricsStore
+import github.realtvop.aonsoku.data.offline.OfflineManager
 import github.realtvop.aonsoku.i18n.I18n
 import github.realtvop.aonsoku.i18n.Translations
 import github.realtvop.aonsoku.player.PlayerController
@@ -72,12 +73,27 @@ class AppGraph(
         ),
         serverType = { session.credentials?.serverType },
     )
+    val offline = OfflineManager(
+        cache = services.audioCache,
+        library = services.library,
+        repository = library,
+        settings = settings,
+        network = network,
+        artwork = artwork,
+        lyrics = lyrics,
+        toaster = toaster,
+        strings = ::strings,
+        scope = scope,
+    )
     val sync = LibrarySyncCoordinator(
         library = services.library,
         network = network,
         settings = settings,
         scope = scope,
-        onSynced = { library.notifyChanged(LibraryChange.Library) },
+        onSynced = {
+            library.notifyChanged(LibraryChange.Library)
+            offline.onLibrarySynced()
+        },
     )
     val player = PlayerController(
         context = application,
@@ -117,6 +133,7 @@ class AppGraph(
         network.start()
         network.scheduleCheck(0)
         sync.onSessionStarted()
+        offline.start()
         player.connect()
     }
 
@@ -141,6 +158,7 @@ class AppGraph(
     suspend fun signOut() {
         player.shutdown()
         sync.onSessionEnded()
+        offline.end()
         session.logout()
         services.library.clearLibraryData()
         lyrics.clearCache()

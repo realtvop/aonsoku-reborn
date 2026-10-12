@@ -266,6 +266,7 @@ fun SliderSetting(
     range: IntRange,
     step: Int = 1,
     info: String? = null,
+    enabled: Boolean = true,
     valueLabel: (Int) -> String = { it.toString() },
 ) {
     val state = remember(range, step) {
@@ -293,7 +294,7 @@ fun SliderSetting(
             Text(
                 text = valueLabel(shown),
                 style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum"),
-                color = MaterialTheme.colorScheme.primary,
+                color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Slider(
@@ -304,6 +305,7 @@ fun SliderSetting(
                 if (snapped != value) onValueChange(snapped.coerceIn(range.first, range.last))
             },
             modifier = Modifier.semantics { contentDescription = title },
+            enabled = enabled,
             colors = colors,
         )
     }

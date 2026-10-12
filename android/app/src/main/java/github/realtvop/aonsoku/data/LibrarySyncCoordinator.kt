@@ -59,11 +59,15 @@ class LibrarySyncCoordinator(
         library.syncIncremental()
     }
 
-    /** User-initiated refresh; allowed on metered connections. */
-    fun syncNow(): Boolean {
+    /**
+     * User-initiated refresh; allowed on metered connections. An incremental
+     * one leaves out what was synced a moment ago, a [full] one asks the
+     * server for everything again.
+     */
+    fun syncNow(full: Boolean = false): Boolean {
         if (!network.online || library.syncState.value.isSyncing) return false
         lastAutomaticSyncAt = System.currentTimeMillis()
-        library.syncIncremental()
+        if (full) library.syncAll() else library.syncIncremental()
         return true
     }
 

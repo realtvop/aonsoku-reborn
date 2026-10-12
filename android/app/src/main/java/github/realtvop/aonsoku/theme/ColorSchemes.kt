@@ -25,6 +25,14 @@ fun Color.blend(other: Color, amount: Float): Color = lerp(this, other, amount)
 /** The red of a liked heart; the same on every theme, like the web app. */
 val LikedColor = Color(0xFFEF4444)
 
+/** Colors that say how something is doing; the same on every theme, like the web app. */
+object StatusColors {
+    val Offline = Color(0xFFEF4444)
+    val Caution = Color(0xFFF59E0B)
+    val Active = Color(0xFF3B82F6)
+    val Done = Color(0xFF10B981)
+}
+
 fun Color.isDark(): Boolean = luminance() < 0.4f
 
 /** A readable content color for arbitrary (for example artwork-derived) backgrounds. */

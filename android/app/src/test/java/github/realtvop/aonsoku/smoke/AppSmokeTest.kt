@@ -15,6 +15,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.isSelected
@@ -618,6 +619,119 @@ class AppSmokeTest {
         waitForText("Radios")
     }
 
+    @Test
+    fun aSongIsDownloadedFromItsMenuAndLetGoAgain() {
+        world.server.throttleStreams = false
+        openLibrary()
+        compose.onNodeWithText("Albums").performClick()
+        waitForText("Paper Boats")
+        compose.onNodeWithText("Paper Boats").performClick()
+        waitForText("Harbor")
+
+        compose.onNodeWithContentDescription("More options for Harbor").performClick()
+        waitForText("Download")
+        compose.onNodeWithText("Download").performClick()
+        waitUntil("the song to be downloaded") { "so-al-2-1" in cachedSongs() }
+        // The row says so, and the menu offers the way back.
+        waitForDescription("Downloaded")
+        snapshot("downloaded")
+
+        compose.onNodeWithContentDescription("More options for Harbor").performClick()
+        waitForText("Remove download")
+        compose.onNodeWithText("Remove download").performClick()
+        waitUntil("the download to be removed") {
+            cachedSongs().isEmpty() &&
+                compose.onAllNodesWithContentDescription("Downloaded").fetchSemanticsNodes().isEmpty()
+        }
+    }
+
+    @Test
+    fun anAlbumIsDownloadedFromItsMenu() {
+        world.server.throttleStreams = false
+        openLibrary()
+        compose.onNodeWithText("Albums").performClick()
+        waitForText("Paper Boats")
+        compose.onNodeWithText("Paper Boats").performClick()
+        waitForText("Harbor")
+
+        compose.onNodeWithContentDescription("More options for Paper Boats").performClick()
+        waitForText("Download album")
+        snapshot("album-menu")
+        compose.onNodeWithText("Download album").performClick()
+        waitForText("Downloading 3 songs")
+        waitUntil("the album to be downloaded") {
+            cachedSongs() == setOf("so-al-2-1", "so-al-2-2", "so-al-2-3")
+        }
+        waitUntil("every row to say so") {
+            compose.onAllNodesWithContentDescription("Downloaded").fetchSemanticsNodes().size == 3
+        }
+
+        // Asking again has nothing left to do.
+        compose.onNodeWithContentDescription("More options for Paper Boats").performClick()
+        waitForText("Download album")
+        compose.onNodeWithText("Download album").performClick()
+        waitUntil("the answer") { named("Downloaded") >= 1 }
+    }
+
+    @Test
+    fun accountSheetShowsTheSyncAndStartsOne() {
+        openHome()
+        // The mark on the account picture says the library is in sync.
+        waitForDescription("Sync complete")
+        compose.onNodeWithContentDescription("Account").performClick()
+        waitForText("Sync Now")
+        for (step in listOf("Essentials", "Library Skeleton", "Full Songs")) {
+            compose.onNodeWithText(step).assertIsDisplayed()
+        }
+        snapshot("account-sync")
+
+        val before = world.server.requests.count { it == "getArtists" }
+        compose.onNodeWithText("Sync Now").performClick()
+        waitUntil("another sync") { world.server.requests.count { it == "getArtists" } > before }
+        waitUntil("the sync to end") { world.graph.sync.state.value.phase == "done" }
+    }
+
+    @Test
+    fun storageSettingsFollowSmartDownloadsAndClearTheCaches() {
+        world.server.throttleStreams = false
+        openSettings("Offline Experience")
+        waitForText("Smart Downloads")
+        snapshot("settings-storage")
+
+        // The favorites of the library: "First Snow" and "Undertow".
+        reach(hasText("Enable smart downloads")).performClick()
+        waitUntil("the favorites to be downloaded") { world.graph.offline.pools.value.smart.count == 2 }
+        scrollTo(hasText("2 songs", substring = true))
+        snapshot("settings-storage-pools")
+
+        reach(hasContentDescription("Recently played: Quota, 1 GB")).performClick()
+        waitForText("256 MB")
+        compose.onNodeWithText("256 MB").performClick()
+        waitUntil("the quota to change") { settings().cache.lruQuota == 268_435_456L }
+
+        // Every cached item by name, to be deleted one at a time.
+        reach(hasText("items,", substring = true)).performClick()
+        waitForText("First Snow")
+        waitForText("Undertow")
+        snapshot("cache-manager")
+        compose.onNodeWithText("Smart").performClick()
+        waitForText("Undertow")
+        compose.onNodeWithText("Album").performClick()
+        waitForText("No cached items.")
+        compose.onNodeWithText("All").performClick()
+        reach(hasContentDescription("Delete: Undertow")).performClick()
+        waitForText("Delete cached item?")
+        compose.onNodeWithText("Delete").performClick()
+        waitUntil("the item to be deleted") { cachedSongs() == setOf("so-al-1-1") }
+        waitUntil("the list to follow") { named("Undertow") == 0 }
+
+        back()
+        reach(hasText("Clear all caches")).performClick()
+        waitUntil("the question") { named("Clear all caches") == 2 }
+        compose.onNode(hasText("Clear") and hasAnyAncestor(isDialog())).performClick()
+        waitUntil("the caches to be empty") { world.graph.offline.pools.value.isEmpty }
+    }
+
     /** Signs in and waits for the synced home page. */
     private fun openHome() {
         world.signIn()
@@ -687,6 +801,8 @@ class AppSmokeTest {
     private fun playerState() = world.graph.player.state.value
 
     private fun settings() = world.graph.settings.current
+
+    private fun cachedSongs() = world.graph.offline.cached.value.keys
 
     /** How many things on screen go by [text]. */
     private fun named(text: String) = compose.onAllNodesWithText(text).fetchSemanticsNodes().size
@@ -768,7 +884,14 @@ class AppSmokeTest {
         /** More than the navigation bar and the mini player cover of a page. */
         val FLOATING_BARS = 180.dp
 
-        val SETTINGS_PAGES =
-            listOf("Server", "Appearance", "Language & Region", "Player & Audio", "Content", "Privacy & Security")
+        val SETTINGS_PAGES = listOf(
+            "Server",
+            "Appearance",
+            "Language & Region",
+            "Player & Audio",
+            "Content",
+            "Privacy & Security",
+            "Offline Experience",
+        )
     }
 }

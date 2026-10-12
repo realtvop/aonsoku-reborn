@@ -175,23 +175,25 @@ fun RemoveFromPlaylistDialog(overlay: Overlay.RemoveFromPlaylist, controller: Ov
     )
 }
 
-/** Destructive confirmation with "Cancel" and "Continue". */
+/** Destructive confirmation; the buttons say "Cancel" and "Continue" unless told otherwise. */
 @Composable
 fun ConfirmDialog(
     title: String,
     description: String,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
+    confirmLabel: String = t("logout.dialog.confirm"),
+    cancelLabel: String = t("logout.dialog.cancel"),
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = { Text(description) },
         confirmButton = {
-            Button(onClick = onConfirm) { Text(t("logout.dialog.confirm")) }
+            Button(onClick = onConfirm) { Text(confirmLabel) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(t("logout.dialog.cancel")) }
+            TextButton(onClick = onDismiss) { Text(cancelLabel) }
         },
     )
 }

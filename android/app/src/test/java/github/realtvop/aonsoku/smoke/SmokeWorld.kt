@@ -3,6 +3,8 @@ package github.realtvop.aonsoku.smoke
 import android.app.Application
 import android.content.ComponentName
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.room.RoomDatabase
@@ -22,6 +24,7 @@ import org.junit.runner.Description
 import org.robolectric.Robolectric
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
+import org.robolectric.shadows.ShadowNetworkCapabilities
 import java.time.Duration
 
 /**
@@ -53,6 +56,7 @@ class SmokeWorld : TestWatcher() {
         shadowOf(application.packageManager).addActivityIfNotPresent(
             ComponentName(application.packageName, ComponentActivity::class.java.name),
         )
+        metered(false)
         // Nothing a test does may reach the internet, LRCLIB included.
         graph = AppGraph(application, lrcLibUrl = server.lrcLibUrl).also { it.initialize() }
         startPlaybackService(application)
@@ -87,6 +91,23 @@ class SmokeWorld : TestWatcher() {
         server.shutdown()
         SingletonImageLoader.reset()
         resetSingletons()
+    }
+
+    /**
+     * Says what kind of connection the device is on; the app reads it when a
+     * session starts. Tests run on an unmetered one, the case in which nothing
+     * is held back, unless they ask for the other.
+     */
+    fun metered(metered: Boolean) {
+        val application = ApplicationProvider.getApplicationContext<Application>()
+        val connectivity = application.getSystemService(ConnectivityManager::class.java)
+        val capabilities = ShadowNetworkCapabilities.newInstance()
+        shadowOf(capabilities).apply {
+            addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+            addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            if (!metered) addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+        }
+        shadowOf(connectivity).setNetworkCapabilities(connectivity.activeNetwork, capabilities)
     }
 
     /** Signs in to the fake server and starts the session like the login screen does. */

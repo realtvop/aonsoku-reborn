@@ -103,6 +103,8 @@ fun CurrentSongMenuSheet(controller: OverlayController) {
             }
         }
         ActionDivider()
+        DownloadAction(song)
+        ActionDivider()
         ActionItem(
             icon = Icons.Rounded.Info,
             label = t("options.info"),

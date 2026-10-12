@@ -13,6 +13,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CopyOnWriteArraySet
 import java.util.concurrent.TimeUnit
 import javax.imageio.ImageIO
 
@@ -56,6 +57,20 @@ class FakeSubsonicServer {
 
     private val starredSongs = mutableSetOf(songs[0].id, songs[8].id)
     private val starredAlbums = mutableSetOf(albums[2].id)
+
+    /** Ids of the playlists the server reports as starred; none unless a test adds one. */
+    val starredPlaylists: MutableSet<String> = CopyOnWriteArraySet()
+
+    /**
+     * Audio trickles in by default, which keeps a song current long enough
+     * for playback tests. Tests of downloads switch it off to get whole files.
+     */
+    @Volatile
+    var throttleStreams = true
+
+    /** While set, audio is answered with "service unavailable", as a server does that restarts. */
+    @Volatile
+    var failStreams = false
 
     val url: String get() = server.url("/").toString().trimEnd('/')
 
@@ -318,10 +333,10 @@ class FakeSubsonicServer {
                 .setBody(Buffer().write(artwork(param("id") ?: param("username").orEmpty())))
             // Served slowly: the shadowed audio output plays as fast as data
             // arrives, and a song that stays current is what tests can rely on.
-            "stream", "download" -> MockResponse()
+            "stream", "download" -> if (failStreams) MockResponse().setResponseCode(503) else MockResponse()
                 .setHeader("Content-Type", "audio/wav")
                 .setBody(Buffer().write(audio))
-                .throttleBody(STREAM_BYTES_PER_SECOND, 1, TimeUnit.SECONDS)
+                .apply { if (throttleStreams) throttleBody(STREAM_BYTES_PER_SECOND, 1, TimeUnit.SECONDS) }
             else -> failed(0, "Not implemented: $endpoint")
         }
     }
@@ -447,6 +462,7 @@ class FakeSubsonicServer {
         .put("created", "2024-01-01T10:00:00Z")
         .put("changed", "2024-02-01T10:00:00Z")
         .put("coverArt", "pl-${playlist.id}")
+        .apply { if (playlist.id in starredPlaylists) put("starred", "2024-06-01T10:00:00Z") }
 
     private fun ok(key: String? = null, value: Any? = null): MockResponse {
         val payload = envelope("ok")

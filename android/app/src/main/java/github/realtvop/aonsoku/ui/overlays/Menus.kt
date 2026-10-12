@@ -7,6 +7,8 @@ import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
@@ -23,6 +25,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import github.realtvop.aonsoku.LocalAppGraph
 import github.realtvop.aonsoku.data.image.CoverArt
+import github.realtvop.aonsoku.data.model.Song
 import github.realtvop.aonsoku.i18n.LocalStrings
 import github.realtvop.aonsoku.i18n.plural
 import github.realtvop.aonsoku.i18n.t
@@ -34,6 +37,8 @@ import github.realtvop.aonsoku.ui.components.ActionSheet
 import github.realtvop.aonsoku.ui.components.CoverKind
 import github.realtvop.aonsoku.ui.components.SheetHeader
 import github.realtvop.aonsoku.ui.components.humanDuration
+import github.realtvop.aonsoku.ui.components.rememberCachedAudio
+import github.realtvop.aonsoku.ui.components.rememberDownload
 import github.realtvop.aonsoku.ui.components.songCoverArt
 import github.realtvop.aonsoku.ui.navigation.AlbumRoute
 import github.realtvop.aonsoku.ui.navigation.ArtistRoute
@@ -153,10 +158,32 @@ fun SongMenuSheet(overlay: Overlay.SongMenu, controller: OverlayController) {
             }
         }
         ActionDivider()
+        DownloadAction(song)
+        ActionDivider()
         ActionItem(
             icon = Icons.Rounded.Info,
             label = t("options.info"),
             onClick = { controller.show(Overlay.SongInfo(song.id)) },
+        )
+    }
+}
+
+/** Keeps [song] on the device, or lets go of the copy that is there or on its way. */
+@Composable
+internal fun DownloadAction(song: Song) {
+    val offline = LocalAppGraph.current.offline
+    val kept = rememberCachedAudio(song.id) != null || rememberDownload(song.id) != null
+    if (kept) {
+        ActionItem(
+            icon = Icons.Rounded.DownloadDone,
+            label = t("options.removeDownload"),
+            onClick = { offline.removeDownloads(listOf(song.id)) },
+        )
+    } else {
+        ActionItem(
+            icon = Icons.Rounded.Download,
+            label = t("options.download"),
+            onClick = { offline.download(listOf(song)) },
         )
     }
 }
@@ -209,6 +236,12 @@ fun AlbumMenuSheet(overlay: Overlay.AlbumMenu, controller: OverlayController) {
         )
         ActionDivider()
         ActionItem(
+            icon = Icons.Rounded.Download,
+            label = t("options.downloadAlbum"),
+            onClick = { graph.offline.downloadAlbum(album) },
+        )
+        ActionDivider()
+        ActionItem(
             icon = Icons.Rounded.PushPin,
             label = t(if (pinned) "options.unpin" else "options.pin"),
             onClick = { graph.actions.togglePin(pin) },
@@ -254,6 +287,12 @@ fun ArtistMenuSheet(overlay: Overlay.ArtistMenu, controller: OverlayController) 
             label = t("options.addLast"),
             enabled = !userQueueEmpty,
             onClick = { graph.actions.queueArtist(artist, next = false) },
+        )
+        ActionDivider()
+        ActionItem(
+            icon = Icons.Rounded.Download,
+            label = t("options.downloadArtist"),
+            onClick = { graph.offline.downloadArtist(artist) },
         )
     }
 }
@@ -312,6 +351,12 @@ fun PlaylistMenuSheet(overlay: Overlay.PlaylistMenu, controller: OverlayControll
             onClick = { graph.actions.queuePlaylist(playlist, next = false) },
         )
         ActionDivider()
+        ActionItem(
+            icon = Icons.Rounded.Download,
+            label = t("options.downloadPlaylist"),
+            enabled = hasSongs,
+            onClick = { graph.offline.downloadPlaylist(playlist) },
+        )
         ActionItem(
             icon = Icons.Rounded.PushPin,
             label = t(if (pinned) "options.unpin" else "options.pin"),

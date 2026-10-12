@@ -687,7 +687,7 @@ App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
     de-duplicated before they reach a lazy layout.
 - `ui/settings/`: `SettingsScreen` shows the list of settings pages, or the
   page `SettingsRoute.page` names (`SettingsCategory`: server, appearance,
-  language, audio, content, privacy; opened from the account sheet in
+  language, audio, content, privacy, storage; opened from the account sheet in
   `ui/shell/UserSheet.kt`, which also opens `AboutDialog`). Pages are built
   from `SettingsComponents.kt` (`SettingsPage` with `settingsSection` groups
   of `SwitchSetting`, `SliderSetting`, `ChoiceSetting`, `FieldSetting`,
@@ -699,7 +699,30 @@ App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
   lists inside a page (the lyric source priority) use
   `ui/components/ReorderableColumn.kt`. Web settings that have no meaning
   natively (automatic fullscreen, pointer cursors, browser picture-in-picture)
-  are left out.
+  are left out. The storage page (`StorageSettings.kt`) shows the pools from
+  `OfflineManager.pools`, asks before it clears one, and opens
+  `CacheManagerPage` (`SettingsRoute("storage-items")`), which lists every
+  entry of the cache index by name. Library caching cannot be switched off
+  natively: the Room library is what every list reads.
+- `data/offline/OfflineManager` (`AppGraph.offline`) decides what is kept on
+  the device and is the app's only caller of `AudioCacheService`: the user's
+  downloads of songs, albums, playlists, and artists (the songs are written to
+  Room first so they can be listed offline, and a downloaded song brings its
+  lyrics and cover along); smart downloads (`SmartDownloads.wanted` in
+  `OfflineRules.kt`: favorite songs and favorite playlists, evaluated again
+  when the rules, the favorites, the playlists, the synced library, or the
+  connection change, and never on a metered connection); the playback-cache
+  and image quotas of `AppSettings.cache`; marking cached songs the synced
+  library no longer lists (`missingFromLibrary`); and the cover-art sync that
+  follows a library sync when the setting asks for it. Signing out clears the
+  downloads and images together with the library. Song rows and queue rows
+  show `ui/components/CachedIndicator`; menus use `DownloadAction` in
+  `ui/overlays/Menus.kt`. `ui/shell/SyncStatus.kt` holds the sync tiers, the
+  mark on the account picture (`syncBadge`), and the `SyncSection` of the
+  account sheet, whose "Sync Now" runs a full sync (the one on the storage
+  page is incremental). Downloads run in the app process without a foreground
+  service: they stop with the process, and the user's own resume at the next
+  start.
 - `actions/LibraryActions` (`AppGraph.actions`) holds the library operations
   shared by menus, cards, and pages: resolving the songs of an
   album/artist/playlist for play / play next / add to queue, starring,
@@ -743,7 +766,13 @@ takes them in the dark theme. The fake server answers `getCoverArt` with a
 colored square per id, so artwork tinting shows up too, and it stands in for
 LRCLIB and a custom lyrics server (`SmokeWorld` passes its address to
 `AppGraph(lrcLibUrl = …)`; nothing a test does may reach the internet).
-`smoke/LyricsRepositoryTest` uses the same world without a UI. Two things
+`smoke/LyricsRepositoryTest` and `smoke/OfflineManagerTest` use the same
+world without a UI. For downloads the fake server has `throttleStreams`
+(switch it off, or a download takes as long as playing the song),
+`failStreams`, and `starredPlaylists`, and `SmokeWorld.metered(...)` sets
+whether the shadow network is metered (unmetered unless a test says so;
+Robolectric's own default counts as metered, which holds smart downloads and
+automatic syncs back). Two things
 differ from a device there: the test image loader decodes with `BitmapFactory`
 and does not crossfade (Robolectric has no `ImageDecoder`, and a fade would be
 caught half-way), and the screen size is the one in the test's `@Config` (the
