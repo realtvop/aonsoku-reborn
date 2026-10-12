@@ -20,4 +20,7 @@ interface PlaylistDao {
     @Query("DELETE FROM playlist") suspend fun deleteAll()
     @Query("DELETE FROM playlistDetail") suspend fun deleteAllDetails()
     @Query("SELECT COUNT(*) FROM playlist") suspend fun count(): Int
+    @Query("DELETE FROM playlist WHERE id = :id") suspend fun deleteById(id: String)
+    @Query("DELETE FROM playlistDetail WHERE id = :id") suspend fun deleteDetailById(id: String)
+    @Query("SELECT DISTINCT coverArt FROM playlist WHERE coverArt IS NOT NULL AND coverArt != ''") suspend fun getCoverArtIds(): List<String>
 }

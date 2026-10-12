@@ -2,6 +2,8 @@ package github.realtvop.aonsoku.plugins.data.db.dao
 
 import androidx.room.Dao
 import androidx.room.Query
+import androidx.sqlite.db.SupportSQLiteQuery
+import androidx.room.RawQuery
 import androidx.room.Upsert
 import github.realtvop.aonsoku.plugins.data.db.entity.SongEntity
 
@@ -23,4 +25,6 @@ interface SongDao {
     @Query("SELECT id FROM song WHERE starredAt IS NOT NULL") suspend fun getStarredSongIds(): List<String>
     @Query("DELETE FROM song WHERE id IN (:ids)") suspend fun deleteByIds(ids: List<String>): Int
     @Query("SELECT COUNT(*) FROM song") suspend fun count(): Int
+    @RawQuery suspend fun query(query: SupportSQLiteQuery): List<SongEntity>
+    @RawQuery suspend fun queryCount(query: SupportSQLiteQuery): Int
 }

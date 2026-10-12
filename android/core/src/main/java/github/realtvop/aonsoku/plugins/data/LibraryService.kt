@@ -272,7 +272,9 @@ class LibraryService private constructor(context: Context) {
     }
 
     suspend fun getSongsByIds(ids: List<String>): List<SongEntity> = withContext(Dispatchers.IO) {
-        if (ids.isEmpty()) emptyList() else database.songDao().getByIds(ids)
+        if (ids.isEmpty()) emptyList() else ids.distinct().chunked(SQL_VARIABLE_CHUNK).flatMap {
+            database.songDao().getByIds(it)
+        }
     }
 
     suspend fun getSong(id: String): SongEntity? = withContext(Dispatchers.IO) {
@@ -313,6 +315,161 @@ class LibraryService private constructor(context: Context) {
     suspend fun getGenres(): List<GenreEntity> = withContext(Dispatchers.IO) {
         database.genreDao().getAll()
     }
+
+    // region Typed queries for native screens
+
+    suspend fun queryAlbums(query: AlbumQuery): LibraryPage<AlbumEntity> =
+        withContext(Dispatchers.IO) {
+            val items = database.albumDao().query(LibrarySql.albums(query))
+            val total = database.albumDao().queryCount(LibrarySql.albumCount(query))
+            LibraryPage(items, total, hasMore(query.limit, query.offset, total))
+        }
+
+    suspend fun querySongs(query: SongQuery): LibraryPage<SongEntity> =
+        withContext(Dispatchers.IO) {
+            val items = database.songDao().query(LibrarySql.songs(query))
+            val total = database.songDao().queryCount(LibrarySql.songCount(query))
+            LibraryPage(items, total, hasMore(query.limit, query.offset, total))
+        }
+
+    suspend fun queryArtists(query: ArtistQuery): LibraryPage<ArtistEntity> =
+        withContext(Dispatchers.IO) {
+            val items = database.artistDao().query(LibrarySql.artists(query))
+            val total = database.artistDao().queryCount(LibrarySql.artistCount(query))
+            LibraryPage(items, total, hasMore(query.limit, query.offset, total))
+        }
+
+    suspend fun getAlbumsByIds(ids: List<String>): List<AlbumEntity> =
+        withContext(Dispatchers.IO) {
+            if (ids.isEmpty()) emptyList() else ids.chunked(SQL_VARIABLE_CHUNK).flatMap {
+                database.albumDao().getByIds(it)
+            }
+        }
+
+    suspend fun countSongs(): Int = withContext(Dispatchers.IO) { database.songDao().count() }
+
+    suspend fun countAlbums(): Int = withContext(Dispatchers.IO) { database.albumDao().count() }
+
+    private fun hasMore(limit: Int?, offset: Int, total: Int): Boolean =
+        limit != null && offset + limit < total
+
+    // endregion
+
+    // region Write-through from online browsing
+
+    /** Keeps the local copy of an album and its tracks fresh after an online read. */
+    suspend fun upsertAlbum(album: AlbumEntity, songs: List<SongEntity>) =
+        withContext(Dispatchers.IO) {
+            database.albumDao().upsert(album)
+            if (songs.isNotEmpty()) database.songDao().bulkUpsert(songs)
+        }
+
+    suspend fun upsertAlbums(albums: List<AlbumEntity>) = withContext(Dispatchers.IO) {
+        if (albums.isNotEmpty()) database.albumDao().bulkUpsert(albums)
+    }
+
+    suspend fun upsertSongs(songs: List<SongEntity>) = withContext(Dispatchers.IO) {
+        if (songs.isNotEmpty()) database.songDao().bulkUpsert(songs)
+    }
+
+    suspend fun upsertPlaylists(playlists: List<PlaylistEntity>) = withContext(Dispatchers.IO) {
+        if (playlists.isNotEmpty()) database.playlistDao().bulkUpsert(playlists)
+    }
+
+    /** Replaces the playlist summaries, dropping playlists deleted on the server. */
+    suspend fun replacePlaylists(playlists: List<PlaylistEntity>) = withContext(Dispatchers.IO) {
+        val dao = database.playlistDao()
+        val keep = playlists.map { it.id }.toSet()
+        val stale = dao.getAllDetailIds().filter { it !in keep }
+        dao.deleteAll()
+        if (playlists.isNotEmpty()) dao.bulkUpsert(playlists)
+        if (stale.isNotEmpty()) dao.deleteDetails(stale)
+        _dataChanges.tryEmit(LibraryDataChange(listOf("playlists"), "remote"))
+    }
+
+    suspend fun upsertPlaylistDetail(detail: PlaylistDetailEntity) = withContext(Dispatchers.IO) {
+        val dao = database.playlistDao()
+        dao.upsertDetail(detail)
+        dao.upsert(
+            PlaylistEntity(
+                id = detail.id,
+                name = detail.name,
+                comment = detail.comment,
+                songCount = detail.songCount,
+                duration = detail.duration,
+                isPublic = detail.isPublic,
+                owner = detail.owner,
+                created = detail.created,
+                changed = detail.changed,
+                coverArt = detail.coverArt,
+                starred = detail.starred,
+                starredAt = detail.starredAt,
+            ),
+        )
+        _dataChanges.tryEmit(LibraryDataChange(listOf("playlists"), "remote"))
+    }
+
+    suspend fun deletePlaylist(id: String) = withContext(Dispatchers.IO) {
+        database.playlistDao().deleteById(id)
+        database.playlistDao().deleteDetailById(id)
+        _dataChanges.tryEmit(LibraryDataChange(listOf("playlists"), "local"))
+    }
+
+    suspend fun setSongsStarred(ids: List<String>, starred: Boolean) =
+        withContext(Dispatchers.IO) {
+            if (ids.isEmpty()) return@withContext
+            val now = System.currentTimeMillis()
+            ids.chunked(SQL_VARIABLE_CHUNK).forEach { chunk ->
+                database.songDao().updateStarred(
+                    chunk,
+                    if (starred) isoTimestamp(now) else null,
+                    if (starred) now else null,
+                )
+            }
+            _dataChanges.tryEmit(LibraryDataChange(listOf("songs", "favorites"), "local"))
+        }
+
+    suspend fun setAlbumStarred(id: String, starred: Boolean) = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        database.albumDao().updateStarred(
+            id,
+            if (starred) isoTimestamp(now) else null,
+            if (starred) now else null,
+        )
+        _dataChanges.tryEmit(LibraryDataChange(listOf("albums"), "local"))
+    }
+
+    suspend fun setArtistStarred(id: String, starred: Boolean) = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        database.artistDao().updateStarred(
+            id,
+            if (starred) isoTimestamp(now) else null,
+            if (starred) now else null,
+        )
+        _dataChanges.tryEmit(LibraryDataChange(listOf("artists"), "local"))
+    }
+
+    /** Drops the synced library (not the audio or cover files) and its sync markers. */
+    suspend fun clearLibraryData() = withContext(Dispatchers.IO) {
+        syncEngine.cancel()
+        database.songDao().deleteAll()
+        database.albumDao().deleteAll()
+        database.artistDao().deleteAll()
+        database.playlistDao().deleteAll()
+        database.playlistDao().deleteAllDetails()
+        database.genreDao().deleteAll()
+        database.lyricsDao().deleteAll()
+        database.syncStateDao().deleteAll()
+        _syncState.value = IDLE_SYNC_STATE
+        _dataChanges.tryEmit(
+            LibraryDataChange(
+                listOf("songs", "albums", "artists", "playlists", "genres", "favorites"),
+                "local",
+            ),
+        )
+    }
+
+    // endregion
 
     suspend fun getFavorites(
         pagination: LibraryPagination,
@@ -441,7 +598,15 @@ class LibraryService private constructor(context: Context) {
 
     fun storedCredentials(): ServerCredentials? = authenticationService.getCredentials()
 
+    private fun isoTimestamp(epochMillis: Long): String =
+        java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        }.format(java.util.Date(epochMillis))
+
     companion object {
+        /** SQLite binds at most 999 variables per statement on older devices. */
+        private const val SQL_VARIABLE_CHUNK = 500
+
         private val IDLE_SYNC_STATE = LibrarySyncState(
             phase = "idle",
             tier = null,

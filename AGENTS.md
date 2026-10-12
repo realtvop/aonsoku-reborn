@@ -538,6 +538,24 @@ App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
 - `session/SessionManager` owns sign-in state on top of
   `AuthenticationService`: login with protocol-version check, primary/fallback
   server selection, and logout.
+- `data/`: `api/SubsonicApi` is the typed OkHttp client for the UI layer; it
+  signs requests with the credentials owned by `AuthenticationService`, so the
+  UI, playback, and sync share one identity. `LibraryRepository` is the single
+  read/write entry point for screens: lists read the Room library through the
+  typed, parameterized `LibraryService.queryAlbums/querySongs/queryArtists`
+  (`LibraryQueries.kt`; the legacy DAO `getFiltered` sort expressions never
+  sorted) and fall back to the server while the library is empty; detail
+  pages emit the local copy first and then the server copy (`Loadable`), and
+  everything read online is written through to Room. Server-ordered album
+  lists (recently/most played) prefer the server when online.
+  `NetworkMonitor` defines "online" as an authenticated ping to a configured
+  URL succeeding (plus metered detection); `LibrarySyncCoordinator` runs the
+  startup sync and the throttled foreground incremental sync.
+- `data/image/`: artwork is loaded by Coil through `CoverArtFetcher`, which
+  resolves `CoverArt`/`AvatarArt` models to files in the native image cache
+  (`ArtworkStore` → `LibraryService.resolveCoverImage`/`downloadCoverImage`,
+  one 700px copy per cover id, bounded parallel downloads). Screens use
+  `CoverImage`; never build authenticated image URLs in UI code.
 - `ui/`: `AonsokuApp` is the root composable (theme, strings, session gate,
   toasts). `ui/shell/MainShell` hosts the type-safe Navigation Compose graph
   (`ui/navigation/Routes.kt`) with one back stack per top-level tab and the

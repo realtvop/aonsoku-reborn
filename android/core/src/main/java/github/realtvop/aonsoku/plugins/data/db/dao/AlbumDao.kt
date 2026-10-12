@@ -2,6 +2,8 @@ package github.realtvop.aonsoku.plugins.data.db.dao
 
 import androidx.room.Dao
 import androidx.room.Query
+import androidx.sqlite.db.SupportSQLiteQuery
+import androidx.room.RawQuery
 import androidx.room.Upsert
 import github.realtvop.aonsoku.plugins.data.db.entity.AlbumEntity
 import github.realtvop.aonsoku.plugins.data.db.entity.SongEntity
@@ -19,4 +21,9 @@ interface AlbumDao {
     @Upsert suspend fun upsert(album: AlbumEntity)
     @Upsert suspend fun bulkUpsert(albums: List<AlbumEntity>)
     @Query("DELETE FROM album") suspend fun deleteAll()
+    @RawQuery suspend fun query(query: SupportSQLiteQuery): List<AlbumEntity>
+    @RawQuery suspend fun queryCount(query: SupportSQLiteQuery): Int
+    @Query("SELECT * FROM album WHERE id IN (:ids)") suspend fun getByIds(ids: List<String>): List<AlbumEntity>
+    @Query("UPDATE album SET starred = :starred, starredAt = :starredAt WHERE id = :id") suspend fun updateStarred(id: String, starred: String?, starredAt: Long?)
+    @Query("SELECT DISTINCT coverArt FROM album WHERE coverArt IS NOT NULL AND coverArt != ''") suspend fun getCoverArtIds(): List<String>
 }

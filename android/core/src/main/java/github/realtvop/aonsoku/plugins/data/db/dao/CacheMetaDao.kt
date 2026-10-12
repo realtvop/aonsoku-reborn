@@ -17,4 +17,10 @@ interface CacheMetaDao {
     @Query("DELETE FROM cacheMeta WHERE key = :key") suspend fun delete(key: String)
     @Query("DELETE FROM cacheMeta WHERE type = :type") suspend fun deleteByType(type: String): Int
     @Query("DELETE FROM cacheMeta") suspend fun deleteAll()
+    @Query("SELECT * FROM cacheMeta ORDER BY cachedAt DESC") suspend fun getAll(): List<CacheMetaEntity>
+    @Query("SELECT * FROM cacheMeta WHERE type = :type ORDER BY lastAccessedAt ASC") suspend fun getByTypeOldestFirst(type: String): List<CacheMetaEntity>
+    @Query("SELECT * FROM cacheMeta WHERE type = :type AND source = :source ORDER BY lastAccessedAt ASC") suspend fun getByTypeAndSource(type: String, source: String): List<CacheMetaEntity>
+    @Query("SELECT COALESCE(SUM(sizeBytes), 0) FROM cacheMeta WHERE type = :type") suspend fun sizeByType(type: String): Long
+    @Query("UPDATE cacheMeta SET lastAccessedAt = :now WHERE key = :key") suspend fun touch(key: String, now: Long)
+    @Query("DELETE FROM cacheMeta WHERE key IN (:keys)") suspend fun deleteKeys(keys: List<String>)
 }

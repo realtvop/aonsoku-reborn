@@ -2,6 +2,8 @@ package github.realtvop.aonsoku.plugins.data.db.dao
 
 import androidx.room.Dao
 import androidx.room.Query
+import androidx.sqlite.db.SupportSQLiteQuery
+import androidx.room.RawQuery
 import androidx.room.Upsert
 import github.realtvop.aonsoku.plugins.data.db.entity.ArtistEntity
 
@@ -19,4 +21,8 @@ interface ArtistDao {
     @Upsert suspend fun bulkUpsert(artists: List<ArtistEntity>)
     @Query("DELETE FROM artist") suspend fun deleteAll()
     @Query("SELECT COUNT(*) FROM artist") suspend fun count(): Int
+    @RawQuery suspend fun query(query: SupportSQLiteQuery): List<ArtistEntity>
+    @RawQuery suspend fun queryCount(query: SupportSQLiteQuery): Int
+    @Query("UPDATE artist SET starred = :starred, starredAt = :starredAt WHERE id = :id") suspend fun updateStarred(id: String, starred: String?, starredAt: Long?)
+    @Query("SELECT DISTINCT coverArt FROM artist WHERE coverArt IS NOT NULL AND coverArt != ''") suspend fun getCoverArtIds(): List<String>
 }

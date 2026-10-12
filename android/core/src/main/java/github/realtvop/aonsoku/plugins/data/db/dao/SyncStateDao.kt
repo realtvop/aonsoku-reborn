@@ -11,4 +11,5 @@ interface SyncStateDao {
     @Query("SELECT lastSyncedAt FROM syncState WHERE key = :key") suspend fun getLastSyncedAt(key: String): Long?
     @Upsert suspend fun upsert(state: SyncStateEntity)
     @Query("DELETE FROM syncState") suspend fun deleteAll()
+    @Query("DELETE FROM syncState WHERE key = :key") suspend fun delete(key: String)
 }

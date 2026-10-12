@@ -108,7 +108,10 @@ fun LoginScreen() {
         loading = true
         scope.launch {
             when (graph.session.login(url, username.trim(), password, allowIncompatible)) {
-                LoginResult.Success -> graph.toaster.success(strings.t("toast.server.success"))
+                LoginResult.Success -> {
+                    graph.startSession()
+                    graph.toaster.success(strings.t("toast.server.success"))
+                }
                 LoginResult.IncompatibleServer -> incompatibleServer = true
                 LoginResult.Failed -> graph.toaster.error(strings.t("toast.server.error"))
             }

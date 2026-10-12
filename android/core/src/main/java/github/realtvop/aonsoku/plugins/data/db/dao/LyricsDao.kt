@@ -11,4 +11,5 @@ interface LyricsDao {
     @Upsert suspend fun upsert(lyrics: LyricsEntity)
     @Query("UPDATE lyrics SET lastAccessedAt = :now WHERE songId = :songId") suspend fun updateAccessTime(songId: String, now: Long)
     @Query("DELETE FROM lyrics") suspend fun deleteAll()
+    @Query("DELETE FROM lyrics WHERE songId = :songId") suspend fun deleteBySongId(songId: String)
 }
