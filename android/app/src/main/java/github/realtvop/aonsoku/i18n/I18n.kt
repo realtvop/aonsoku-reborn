@@ -77,8 +77,15 @@ class Translations(
         return interpolate(template, arrayOf("count" to count, *args))
     }
 
-    /** Relative time such as "5 minutes ago", using the dayjs strings of the locale. */
-    fun fromNow(epochMillis: Long, now: Long = System.currentTimeMillis()): String {
+    /**
+     * Relative time such as "5 minutes ago", using the dayjs strings of the
+     * locale. With [withoutSuffix] only the amount ("5 minutes") is returned.
+     */
+    fun fromNow(
+        epochMillis: Long,
+        now: Long = System.currentTimeMillis(),
+        withoutSuffix: Boolean = false,
+    ): String {
         val seconds = ((now - epochMillis) / 1000.0).let { kotlin.math.abs(it) }
         val minutes = seconds / 60
         val hours = minutes / 60
@@ -98,6 +105,7 @@ class Translations(
             else -> "yy" to Math.round(months / 12).toInt()
         }
         val amount = t("dayjs.relativeTime.$unit").replace("%d", value.toString())
+        if (withoutSuffix) return amount
         val frame = if (epochMillis > now) "future" else "past"
         return t("dayjs.relativeTime.$frame").replace("%s", amount)
     }

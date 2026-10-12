@@ -1146,5 +1146,11 @@
   "warnings": {
     "reload": "有一首歌曲正在播放！\n你确定要重新加载页面吗？",
     "songError": "无法播放歌曲，请检查服务器！"
+  },
+  "navigation": {
+    "back": "返回"
+  },
+  "common": {
+    "noResults": "未找到结果"
   }
 }

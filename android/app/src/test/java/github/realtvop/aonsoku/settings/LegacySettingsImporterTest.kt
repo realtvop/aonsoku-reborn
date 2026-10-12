@@ -22,6 +22,25 @@ class LegacySettingsImporterTest {
     }
 
     @Test
+    fun importsRememberedAlbumListFilter() {
+        val settings = LegacySettingsImporter.import(
+            mapOf("albums-list-filter" to "byYear", "albums-list-year" to "newest"),
+        )
+
+        assertEquals("byYear", settings.albumList.filter)
+        assertEquals("newest", settings.albumList.yearFilter)
+    }
+
+    @Test
+    fun ignoresAlbumFiltersThatNeedMoreContext() {
+        val settings = LegacySettingsImporter.import(
+            mapOf("albums-list-filter" to "byGenre", "albums-list-year" to "sideways"),
+        )
+
+        assertEquals(AlbumListPreferences(), settings.albumList)
+    }
+
+    @Test
     fun importsThemeLanguageAndContentPreferences() {
         val settings = LegacySettingsImporter.import(
             mapOf(

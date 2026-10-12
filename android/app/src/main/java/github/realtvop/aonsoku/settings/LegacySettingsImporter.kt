@@ -125,6 +125,14 @@ object LegacySettingsImporter {
             settings = settings.copy(pinnedHome = pinned)
         }
 
+        // The album list remembered its filter as plain preference values.
+        stored["albums-list-filter"]?.takeIf { it in RESTORABLE_ALBUM_FILTERS }?.let { filter ->
+            settings = settings.copy(albumList = settings.albumList.copy(filter = filter))
+        }
+        stored["albums-list-year"]?.takeIf { it == "oldest" || it == "newest" }?.let { year ->
+            settings = settings.copy(albumList = settings.albumList.copy(yearFilter = year))
+        }
+
         state(stored, "player_history")?.let { history ->
             settings = settings.copy(
                 playHistoryMaxSize = history.optInt("maxSize", 100).coerceIn(10, 1000),
@@ -197,6 +205,18 @@ object LegacySettingsImporter {
             hex.chunked(2).map { it.toInt(16).toChar() }.joinToString("")
         }.getOrDefault("")
     }
+
+    /** Filters that make sense without extra arguments (no genre, artist, or query). */
+    private val RESTORABLE_ALBUM_FILTERS = setOf(
+        "alphabeticalByArtist",
+        "starred",
+        "frequent",
+        "alphabeticalByName",
+        "random",
+        "newest",
+        "recent",
+        "byYear",
+    )
 
     private fun state(stored: Map<String, String>, key: String): JSONObject? {
         val raw = stored[key] ?: return null

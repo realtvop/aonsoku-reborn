@@ -22,6 +22,8 @@ class LibrarySyncCoordinator(
     private val network: NetworkMonitor,
     private val settings: SettingsRepository,
     private val scope: CoroutineScope,
+    /** Called whenever a sync run finished and the local library changed. */
+    private val onSynced: () -> Unit = {},
 ) {
     private var sessionJob: Job? = null
     private var startedForSession = false
@@ -90,6 +92,7 @@ class LibrarySyncCoordinator(
                 settings.update {
                     it.copy(cache = it.cache.copy(lastSyncedAt = System.currentTimeMillis()))
                 }
+                onSynced()
             }
         }
     }

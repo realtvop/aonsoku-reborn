@@ -40,9 +40,6 @@ data class AlbumsRoute(
 data object FavoritesRoute
 
 @Serializable
-data object PlaylistsRoute
-
-@Serializable
 data object RadiosRoute
 
 @Serializable

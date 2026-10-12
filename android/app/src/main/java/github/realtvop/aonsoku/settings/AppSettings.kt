@@ -127,9 +127,10 @@ data class ServerUrlSettings(
 
 @Serializable
 data class AlbumListPreferences(
-    val filter: String = "recentlyAdded",
-    val yearFilter: String = "newest",
-    val genre: String = "",
+    /** Last chosen album filter, using the Subsonic list types of the web app. */
+    val filter: String = "newest",
+    /** "oldest" or "newest", for the release-year filter. */
+    val yearFilter: String = "oldest",
 )
 
 /** Every user preference of the native app. Persisted as one JSON document. */

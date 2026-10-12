@@ -1155,5 +1155,11 @@
       "cloud": "Needs network",
       "orphan": "Removed from server (still playable offline)"
     }
+  },
+  "navigation": {
+    "back": "Back"
+  },
+  "common": {
+    "noResults": "No results found"
   }
 }

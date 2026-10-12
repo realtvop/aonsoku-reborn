@@ -9,6 +9,8 @@ import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
+import androidx.navigation.toRoute
+import kotlin.reflect.KClass
 
 /**
  * Navigation entry point handed to screens. Each top-level tab keeps its own
@@ -23,8 +25,19 @@ class AppNavigator(
     var currentTab by mutableStateOf(initialTab)
         private set
 
+    /**
+     * Pushes [route] unless that exact page is already on top (a second tap
+     * on the same link). Another album or artist is a new page, so this must
+     * not be a single-top launch, which would replace the page that is open.
+     */
     fun open(route: Any) {
-        controller.navigate(route) { launchSingleTop = true }
+        val current = controller.currentBackStackEntry
+        val type: KClass<out Any> = route::class
+        val alreadyOpen = current != null &&
+            current.destination.hasRoute(type) &&
+            runCatching { current.toRoute<Any>(type) == route }.getOrDefault(false)
+        if (alreadyOpen) return
+        controller.navigate(route)
     }
 
     fun back() {

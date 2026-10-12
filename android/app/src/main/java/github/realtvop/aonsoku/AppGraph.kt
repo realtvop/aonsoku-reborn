@@ -2,6 +2,8 @@ package github.realtvop.aonsoku
 
 import android.app.Application
 import androidx.compose.runtime.staticCompositionLocalOf
+import github.realtvop.aonsoku.actions.LibraryActions
+import github.realtvop.aonsoku.data.LibraryChange
 import github.realtvop.aonsoku.data.LibraryRepository
 import github.realtvop.aonsoku.data.LibrarySyncCoordinator
 import github.realtvop.aonsoku.data.NetworkMonitor
@@ -45,13 +47,27 @@ class AppGraph(val application: Application) {
     )
     val artwork = ArtworkStore(services.library, network)
     val library = LibraryRepository(api, services.library, network)
-    val sync = LibrarySyncCoordinator(services.library, network, settings, scope)
+    val sync = LibrarySyncCoordinator(
+        library = services.library,
+        network = network,
+        settings = settings,
+        scope = scope,
+        onSynced = { library.notifyChanged(LibraryChange.Library) },
+    )
     val player = PlayerController(
         context = application,
         scope = scope,
         settings = settings,
         library = library,
         preferences = services.preferences,
+        toaster = toaster,
+        strings = ::strings,
+    )
+    val actions = LibraryActions(
+        scope = scope,
+        library = library,
+        player = player,
+        settings = settings,
         toaster = toaster,
         strings = ::strings,
     )

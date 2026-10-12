@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -37,10 +38,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.AsyncImage
 import github.realtvop.aonsoku.LocalAppGraph
+import github.realtvop.aonsoku.data.image.AvatarArt
 import github.realtvop.aonsoku.i18n.t
 import github.realtvop.aonsoku.session.SessionState
 import github.realtvop.aonsoku.ui.components.rememberExpandedSheetState
@@ -62,6 +66,10 @@ fun UserAvatarButton(modifier: Modifier = Modifier) {
 
 @Composable
 fun UserAvatar(size: Int, modifier: Modifier = Modifier) {
+    val graph = LocalAppGraph.current
+    val session by graph.session.state.collectAsStateWithLifecycle()
+    val username = (session as? SessionState.SignedIn)?.credentials?.username.orEmpty()
+    var loaded by remember(username) { mutableStateOf(false) }
     Box(
         modifier = modifier
             .size(size.dp)
@@ -69,12 +77,24 @@ fun UserAvatar(size: Int, modifier: Modifier = Modifier) {
             .background(MaterialTheme.colorScheme.surfaceContainerHighest),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            imageVector = Icons.Rounded.Person,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size((size * 0.6f).dp),
-        )
+        if (!loaded) {
+            Icon(
+                imageVector = Icons.Rounded.Person,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size((size * 0.6f).dp),
+            )
+        }
+        if (username.isNotEmpty()) {
+            AsyncImage(
+                model = AvatarArt(username),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+                onSuccess = { loaded = true },
+                onError = { loaded = false },
+            )
+        }
     }
 }
 

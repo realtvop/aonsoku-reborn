@@ -26,9 +26,13 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import java.util.Calendar
@@ -137,9 +141,19 @@ class LibraryRepository(
     private val network: NetworkMonitor,
 ) {
     private val _changes = MutableSharedFlow<LibraryChange>(extraBufferCapacity = 16)
+    private val _starredOverrides = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     private val requestLimit = Semaphore(ALBUM_FETCH_CONCURRENCY)
 
     val changes: SharedFlow<LibraryChange> = _changes.asSharedFlow()
+
+    /**
+     * Star state changed during this session, keyed by song, album, or artist
+     * id. Lists keep the objects they loaded, so UI that shows a star reads
+     * this first.
+     */
+    val starredOverrides: StateFlow<Map<String, Boolean>> = _starredOverrides.asStateFlow()
+
+    fun isStarred(id: String, loaded: Boolean): Boolean = _starredOverrides.value[id] ?: loaded
 
     private val online: Boolean get() = network.online
 
@@ -177,7 +191,8 @@ class LibraryRepository(
     }
 
     /** Pinned albums and playlists, most recently played first. */
-    suspend fun pinnedItems(items: List<PinnedHomeItem>): List<PinnedEntry> {
+    suspend fun pinnedItems(pinned: List<PinnedHomeItem>): List<PinnedEntry> {
+        val items = pinned.distinctBy { it.type to it.id }
         if (items.isEmpty()) return emptyList()
         val localAlbums = library.getAlbumsByIds(items.filter { it.type == "album" }.map { it.id })
             .associateBy { it.id }
@@ -230,7 +245,7 @@ class LibraryRepository(
         val local = library.queryArtists(ArtistQuery()).items
         if (local.isNotEmpty()) return local.map { it.toModel() }
         if (!online) return emptyList()
-        return remote { api.getArtists() }.orEmpty()
+        return remote { api.getArtists() }.orEmpty().distinctBy { it.id }
     }
 
     suspend fun albums(request: AlbumListRequest, offset: Int, limit: Int): AlbumPage {
@@ -422,7 +437,7 @@ class LibraryRepository(
                 .takeIf { it.isNotEmpty() }
         },
         fresh = {
-            val playlists = api.getPlaylists()
+            val playlists = api.getPlaylists().distinctBy { it.id }
             library.replacePlaylists(playlists.map { it.toEntity() })
             playlists
         },
@@ -432,7 +447,7 @@ class LibraryRepository(
 
     suspend fun playlistsNow(): List<Playlist> {
         if (online) {
-            remote { api.getPlaylists() }?.let { playlists ->
+            remote { api.getPlaylists() }?.distinctBy { it.id }?.let { playlists ->
                 library.replacePlaylists(playlists.map { it.toEntity() })
                 return playlists
             }
@@ -442,7 +457,7 @@ class LibraryRepository(
 
     suspend fun radios(): List<Radio> {
         if (!online) return emptyList()
-        return api.getRadios()
+        return api.getRadios().distinctBy { it.id }
     }
 
     suspend fun genres(): List<Genre> {
@@ -460,9 +475,14 @@ class LibraryRepository(
             song = local.songs.map { it.toModel() },
         )
         if (!result.isEmpty || !online) return result
-        return remote {
+        val found = remote {
             api.search(query, artistCount = count, albumCount = count, songCount = count)
-        } ?: result
+        } ?: return result
+        return found.copy(
+            artist = found.artist.distinctBy { it.id },
+            album = found.album.distinctBy { it.id },
+            song = found.song.distinctBy { it.id },
+        )
     }
 
     // endregion
@@ -497,6 +517,12 @@ class LibraryRepository(
         }
         if (!online) return localSongs
         return remote { fetchAlbum(id)?.song }.orEmpty().ifEmpty { localSongs }
+    }
+
+    /** Full album (tracks, record labels) from the server when online, else the local copy. */
+    suspend fun albumDetails(id: String): Album? {
+        if (online) remote { fetchAlbum(id) }?.let { return it }
+        return localAlbum(id)
     }
 
     suspend fun albumInfo(id: String): AlbumInfo? =
@@ -580,24 +606,36 @@ class LibraryRepository(
             library.upsertSong(song.toEntity())
         }
         library.setSongsStarred(listOf(song.id), starred)
+        _starredOverrides.update { it + (song.id to starred) }
         try {
             if (starred) api.star(song.id) else api.unstar(song.id)
         } catch (error: Exception) {
             library.setSongsStarred(listOf(song.id), !starred)
+            _starredOverrides.update { it + (song.id to !starred) }
             throw error
         }
         _changes.tryEmit(LibraryChange.Favorites)
     }
 
     suspend fun setAlbumStarred(id: String, starred: Boolean) {
-        if (starred) api.star(id) else api.unstar(id)
-        library.setAlbumStarred(id, starred)
-        _changes.tryEmit(LibraryChange.Favorites)
+        setStarred(id, starred) { library.setAlbumStarred(id, starred) }
     }
 
     suspend fun setArtistStarred(id: String, starred: Boolean) {
-        if (starred) api.star(id) else api.unstar(id)
-        library.setArtistStarred(id, starred)
+        setStarred(id, starred) { library.setArtistStarred(id, starred) }
+    }
+
+    /** Optimistic star change for albums and artists; undone when the server call fails. */
+    private suspend fun setStarred(id: String, starred: Boolean, persist: suspend () -> Unit) {
+        val previous = _starredOverrides.value[id]
+        _starredOverrides.update { it + (id to starred) }
+        try {
+            if (starred) api.star(id) else api.unstar(id)
+        } catch (error: Exception) {
+            _starredOverrides.update { if (previous == null) it - id else it + (id to previous) }
+            throw error
+        }
+        persist()
         _changes.tryEmit(LibraryChange.Favorites)
     }
 

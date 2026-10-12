@@ -579,6 +579,42 @@ App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
   Search button), with the floating `ui/player/MiniPlayer` above it once
   something is loaded. Scrolling pages add `LocalFloatingBarsPadding` to
   their content padding.
+- Screens: each page is a `@Composable XScreen()` registered in
+  `ui/navigation/AppDestinations.kt` and backed by a `ViewModel` obtained
+  with `graphViewModel { XViewModel(it) }` (`ui/components/GraphViewModel.kt`),
+  which builds it from `AppGraph` and scopes it to the navigation entry, so
+  page state survives while the page stays on a back stack. View models read
+  through `LibraryRepository`; `LoadableSource` wraps its cached-then-fresh
+  `Loadable` flows, and pages reload on `LibraryRepository.changes`
+  (`LibraryChange`) and when `NetworkMonitor` reports the server reachable
+  again. `AppNavigator.open(route)` pushes a page unless that exact route is
+  already on top; do not use `launchSingleTop` for it, which would replace an
+  album page with another album in place and reuse its view model.
+  - `ui/home` (carousel, pinned items, album sections), `ui/library`
+    (library root with playlists, albums with filters, artists, songs,
+    radios), `ui/search`, and `ui/detail` (album, artist, playlist,
+    favorites).
+  - Detail pages share `DetailPage` + `DetailHeader`/`DetailActions`
+    (`ui/detail/`): the header is tinted with the artwork's average color
+    (`DetailHeaderState.accent`), and the page bar (`SubPageTopBar`) turns
+    solid and titled once the header title has scrolled under it.
+  - Lazy list keys must be unique: lists that may repeat a song (album
+    tracks, playlists, favorites) key by index + id, and id-keyed lists are
+    de-duplicated before they reach a lazy layout.
+- `actions/LibraryActions` (`AppGraph.actions`) holds the library operations
+  shared by menus, cards, and pages: resolving the songs of an
+  album/artist/playlist for play / play next / add to queue, starring,
+  playlist and radio edits with their toasts, and pinning to the home page.
+  Starring is optimistic (`LibraryRepository.setStarred` keeps an override
+  until the server answers).
+- `ui/overlays/`: context menus, forms, and confirmations are not owned by
+  the page that opens them. A page calls
+  `LocalOverlays.current.show(Overlay.X(...))`; `OverlayHost` in `MainShell`
+  renders the one current `Overlay` (song/album/artist/playlist/radio menus
+  as modal bottom sheets built with `ui/components/ActionSheet.kt`, add to
+  playlist, playlist and radio forms, delete confirmations, song info, and
+  the zoomable `ArtworkViewer`). Add new menus as `Overlay` subtypes rather
+  than page-local sheet state.
 
 `AudioService` additions made for the native UI (all executed by
 `PlaybackService`): `PlayRadio` (internet radio as a queue-less live stream;

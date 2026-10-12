@@ -38,8 +38,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,6 +58,9 @@ import github.realtvop.aonsoku.ui.navigation.HomeRoute
 import github.realtvop.aonsoku.ui.navigation.LocalNavigator
 import github.realtvop.aonsoku.ui.navigation.TopLevelTab
 import github.realtvop.aonsoku.ui.navigation.appDestinations
+import github.realtvop.aonsoku.ui.overlays.LocalOverlays
+import github.realtvop.aonsoku.ui.overlays.OverlayController
+import github.realtvop.aonsoku.ui.overlays.OverlayHost
 import github.realtvop.aonsoku.ui.player.MiniPlayer
 import github.realtvop.aonsoku.ui.player.QueueReplacementDialog
 
@@ -75,6 +78,7 @@ fun MainShell() {
     val navController = rememberNavController()
     val initialTab = rememberSaveable { TopLevelTab.Home }
     val navigator = remember(navController) { AppNavigator(navController, initialTab) }
+    val overlays = remember { OverlayController() }
 
     DisposableEffect(navController, navigator) {
         val listener = NavController.OnDestinationChangedListener { _, destination, _ ->
@@ -94,6 +98,7 @@ fun MainShell() {
 
     CompositionLocalProvider(
         LocalNavigator provides navigator,
+        LocalOverlays provides overlays,
         LocalFloatingBarsPadding provides floatingBarsHeight + navigationBarInset,
     ) {
         Box(
@@ -149,6 +154,7 @@ fun MainShell() {
             }
 
             QueueReplacementDialog()
+            OverlayHost(overlays)
         }
     }
 }
