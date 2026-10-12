@@ -63,7 +63,7 @@ pnpm --filter @aonsoku/coordination-worker deploy:raw # Direct Wrangler deployme
 # straight from the repository.
 cd android && ./gradlew :core:compileDebugKotlin     # Native services module
 cd android && ./gradlew :core:testDebugUnitTest      # Service unit tests
-cd android && ./gradlew :app:testDebugUnitTest       # App unit tests
+cd android && ./gradlew :app:testDebugUnitTest       # App unit tests + JVM smoke tests (Robolectric)
 cd android && ./gradlew :app:assembleDebug           # Debug APK
 node scripts/android/generate-theme-palettes.mjs     # Regenerate ThemePalettes.kt from src/themes.css
 
@@ -589,7 +589,10 @@ App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
   (`LibraryChange`) and when `NetworkMonitor` reports the server reachable
   again. `AppNavigator.open(route)` pushes a page unless that exact route is
   already on top; do not use `launchSingleTop` for it, which would replace an
-  album page with another album in place and reuse its view model.
+  album page with another album in place and reuse its view model. Wrap
+  suspending loads in `runSuspendCatching` (`data/RunSuspendCatching.kt`),
+  never `runCatching`: the latter swallows the cancellation of a superseded
+  load, which then publishes its empty result over the fresh one.
   - `ui/home` (carousel, pinned items, album sections), `ui/library`
     (library root with playlists, albums with filters, artists, songs,
     radios), `ui/search`, and `ui/detail` (album, artist, playlist,
@@ -615,6 +618,19 @@ App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
   playlist, playlist and radio forms, delete confirmations, song info, and
   the zoomable `ArtworkViewer`). Add new menus as `Overlay` subtypes rather
   than page-local sheet state.
+
+App tests (`android/app/src/test`) are JVM unit tests. Besides the pure
+logic tests, `smoke/AppSmokeTest` runs the real app on Robolectric: the real
+`AppGraph`, native services, Room, DataStore, credential store, HTTP clients,
+and the Compose UI, against `smoke/FakeSubsonicServer` (an in-process
+MockWebServer with a fixed library). It signs in, lets the library sync, and
+walks through the pages, so a page that crashes while composing, loading, or
+navigating fails the build without a device. `smoke/SmokeWorld` builds that
+world per test: it installs `FakeAndroidKeyStore`, resets the process-wide
+`:core` singletons listed in `SmokeWorld.SINGLETONS` (add new ones there),
+and offers `waitUntil`, which runs main-thread and delayed work while
+background threads make progress. Lazy pages only compose what is visible, so
+tests scroll to what they assert. Add a journey there when adding a screen.
 
 `AudioService` additions made for the native UI (all executed by
 `PlaybackService`): `PlayRadio` (internet radio as a queue-less live stream;

@@ -148,6 +148,14 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
+    testOptions {
+        unitTests {
+            // The Compose smoke tests run on Robolectric against the real
+            // resources, locale files, and fonts.
+            isIncludeAndroidResources = true
+        }
+    }
 }
 
 kotlin {
@@ -216,4 +224,9 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.org.json)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.okhttp.mockwebserver)
+    testImplementation(libs.robolectric)
 }

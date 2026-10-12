@@ -1,0 +1,133 @@
+package github.realtvop.aonsoku.smoke
+
+import android.app.Application
+import android.content.ComponentName
+import android.os.Looper
+import androidx.activity.ComponentActivity
+import androidx.room.RoomDatabase
+import androidx.test.core.app.ApplicationProvider
+import coil3.ImageLoader
+import coil3.SingletonImageLoader
+import coil3.annotation.DelicateCoilApi
+import github.realtvop.aonsoku.AppGraph
+import github.realtvop.aonsoku.data.image.AvatarArtKeyer
+import github.realtvop.aonsoku.data.image.CoverArtFetcher
+import github.realtvop.aonsoku.data.image.CoverArtKeyer
+import github.realtvop.aonsoku.session.LoginResult
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
+import org.junit.rules.TestWatcher
+import org.junit.runner.Description
+import org.robolectric.Shadows.shadowOf
+import java.time.Duration
+
+/**
+ * Everything a smoke test needs around the UI: a fake Subsonic server, a real
+ * [AppGraph] on top of the real native services (Room, DataStore, credential
+ * store), and helpers to wait for asynchronous work.
+ *
+ * Robolectric hands every test a fresh application and data directory but
+ * keeps static state, so the process-wide service singletons are reset around
+ * each test.
+ */
+class SmokeWorld : TestWatcher() {
+    val server = FakeSubsonicServer()
+
+    lateinit var graph: AppGraph
+        private set
+
+    @OptIn(DelicateCoilApi::class)
+    override fun starting(description: Description) {
+        System.setProperty("java.awt.headless", "true")
+        FakeAndroidKeyStore.install()
+        resetSingletons()
+        server.start()
+
+        val application = ApplicationProvider.getApplicationContext<Application>()
+        // The Compose rule hosts the UI in a plain activity.
+        shadowOf(application.packageManager).addActivityIfNotPresent(
+            ComponentName(application.packageName, ComponentActivity::class.java.name),
+        )
+        graph = AppGraph(application).also { it.initialize() }
+        SingletonImageLoader.setUnsafe { context ->
+            ImageLoader.Builder(context)
+                .components {
+                    add(CoverArtFetcher.CoverFactory(graph.artwork))
+                    add(CoverArtFetcher.AvatarFactory(graph.artwork))
+                    add(CoverArtKeyer())
+                    add(AvatarArtKeyer())
+                }
+                .build()
+        }
+    }
+
+    @OptIn(DelicateCoilApi::class)
+    override fun finished(description: Description) {
+        runCatching { graph.scope.cancel() }
+        server.shutdown()
+        SingletonImageLoader.reset()
+        resetSingletons()
+    }
+
+    /** Signs in to the fake server and starts the session like the login screen does. */
+    fun signIn() {
+        val result = await { graph.session.login(server.url, USERNAME, PASSWORD) }
+        check(result == LoginResult.Success) { "Sign-in failed: $result" }
+        graph.startSession()
+    }
+
+    /** Runs [block] on the app scope and waits for it while keeping the main thread alive. */
+    fun <T> await(timeoutMillis: Long = TIMEOUT_MS, block: suspend () -> T): T {
+        val deferred = graph.scope.async { block() }
+        waitUntil("the operation to finish", timeoutMillis) { deferred.isCompleted }
+        return deferred.getCompleted()
+    }
+
+    /**
+     * Waits for [condition], running main-thread work (including delayed
+     * tasks) while background threads make progress.
+     */
+    fun waitUntil(what: String, timeoutMillis: Long = TIMEOUT_MS, condition: () -> Boolean) {
+        val deadline = System.nanoTime() + timeoutMillis * 1_000_000
+        while (true) {
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(STEP_MS))
+            if (condition()) return
+            if (System.nanoTime() > deadline) throw AssertionError("Timed out waiting for $what")
+            Thread.sleep(STEP_MS)
+        }
+    }
+
+    /** State worth knowing when a wait times out. */
+    fun describe(): String =
+        "online=${graph.network.isOnline.value} requests=${server.requests.distinct()}"
+
+    private fun resetSingletons() {
+        SINGLETONS.forEach { (className, fieldName) ->
+            val field = Class.forName(className).getDeclaredField(fieldName).apply {
+                isAccessible = true
+            }
+            (field.get(null) as? RoomDatabase)?.let { runCatching { it.close() } }
+            field.set(null, null)
+        }
+    }
+
+    companion object {
+        const val USERNAME = "tester"
+        const val PASSWORD = "not-a-real-password"
+        const val TIMEOUT_MS = 20_000L
+        private const val STEP_MS = 10L
+
+        private const val CORE = "github.realtvop.aonsoku.plugins"
+
+        /** Static holders of the `:core` services, as (class, field). */
+        private val SINGLETONS = listOf(
+            "$CORE.AppServices" to "instance",
+            "$CORE.bridge.AuthenticationService" to "instance",
+            "$CORE.preferences.PreferencesService" to "instance",
+            "$CORE.preferences.NativePreferencesStore" to "sharedDataStore",
+            "$CORE.data.LibraryService" to "instance",
+            "$CORE.data.db.AonsokuDatabase" to "INSTANCE",
+            "$CORE.coordination.CoordinationRuntime" to "instance",
+        )
+    }
+}
