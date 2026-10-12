@@ -560,6 +560,29 @@ App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
   configured in one place, `artworkImageLoader`, used by `AonsokuApplication`
   and by the smoke tests. Screens use `CoverImage`; never build authenticated
   image URLs in UI code.
+- `data/lyrics/`: `LyricsRepository` (`AppGraph.lyrics`) finds the lyrics of a
+  song the way the web player does. OpenSubsonic structured lyrics
+  (`getLyricsBySongId`) come from the Room `lyrics` table or the server and
+  are written back to Room, so a song keeps them offline once they were
+  shown. Lyrics as text come from the sources in the order of
+  `LyricsSettings.sourcePriority`: the music server (`getLyrics`), LRCLIB
+  (`LyricsSources`, off when `lrcLibEnabled` is false, single artist for
+  LMS), and a custom lyrics server (JSON entries or plain text, optional
+  `Authorization` value). Answers are cached per song and settings by
+  `LyricsStore` under the cache directory; lookups that found nothing are not
+  repeated for five minutes. `LyricsParser` is the pure part: LRC (several
+  timestamps per line, inline translations as a second line with the same
+  timestamp, a romanization track matched by timestamp), structured tracks
+  (the second track is the translation), and the order of preference when
+  resolving what to show (`resolve`: synced structured, unsynced structured,
+  LRC text, plain text). Per-song choices live in
+  `LyricsSettings.selected`, keyed by `LyricsSong.key` (path, artist, title,
+  album, the key the web app used): the chosen custom-server entry, whose
+  lyrics `LyricsStore` keeps under the files directory, a timing offset, or
+  lyrics turned off. Only the newest `MAX_CHOICES` are kept. As on the web, a
+  chosen entry is served by the custom source in its turn, so it does not
+  override a source placed before it. `revision` changes whenever a choice
+  may have changed what `load` returns.
 - `player/`: `PlayerController` is the only UI-facing owner of playback. It
   binds `PlaybackService`, mirrors its `StateFlow` snapshots into
   `PlayerState`/`PlaybackProgress`, and turns user intent into
@@ -598,7 +621,17 @@ App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
   composables inside read `LocalPlayerPalette` instead of the theme's
   on-colors), and it reports through `LocalSystemBarsOverride` whether the
   system bar icons must be light or dark. `PlayingView` is the
-  artwork/progress/transport/volume view built from `PlayerControls.kt`;
+  artwork/progress/transport/volume view built from `PlayerControls.kt`.
+  `rememberPlayerLyrics` loads the lyrics of the current song while the
+  player is open and reloads them when a lyric setting, the choice for the
+  song, or the reachability of the server changes; the lyrics tab button is
+  only disabled once it is known that there are none. `LyricsView` shows
+  synced lyrics that follow a frame clock interpolated between the service's
+  position reports (active line lit and resting near the top, others dimmed
+  and, on Android 12+, blurred; a tap seeks; scrolling by hand hides the
+  controls and pauses following for a few seconds) or plain lyrics;
+  `LyricsSettingsView` is the per-song page (lyrics off, offset, custom-server
+  search and entries).
   `QueueView` shows the play history above the current song (out of sight
   until scrolled to), then the manually queued songs and the context queue,
   with drag-to-reorder inside a section (`ui/components/Reorder.kt`, which
@@ -670,12 +703,15 @@ The same journeys double as a way to look at the UI without a device:
 passes `-PsmokeScreenshots=<directory>` (`smoke/SmokeScreenshots`, which draws
 sheets and dialogs over the activity they cover), and `-PsmokeTheme=dark`
 takes them in the dark theme. The fake server answers `getCoverArt` with a
-colored square per id, so artwork tinting shows up too. Two things differ from
-a device there: the test image loader decodes with `BitmapFactory` and does
-not crossfade (Robolectric has no `ImageDecoder`, and a fade would be caught
-half-way), and the screen size is the one in the test's `@Config` (the
-journeys assume that phone size). Review layout changes this way before
-asking for a device run.
+colored square per id, so artwork tinting shows up too, and it stands in for
+LRCLIB and a custom lyrics server (`SmokeWorld` passes its address to
+`AppGraph(lrcLibUrl = …)`; nothing a test does may reach the internet).
+`smoke/LyricsRepositoryTest` uses the same world without a UI. Two things
+differ from a device there: the test image loader decodes with `BitmapFactory`
+and does not crossfade (Robolectric has no `ImageDecoder`, and a fade would be
+caught half-way), and the screen size is the one in the test's `@Config` (the
+journeys assume that phone size). Review layout changes this way before asking
+for a device run.
 
 `AudioService` additions made for the native UI (all executed by
 `PlaybackService`): `PlayRadio` (internet radio as a queue-less live stream;

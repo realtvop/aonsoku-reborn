@@ -3,14 +3,18 @@ package github.realtvop.aonsoku.smoke
 import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.isRoot
+import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -21,12 +25,14 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import github.realtvop.aonsoku.player.RepeatMode
 import github.realtvop.aonsoku.session.SessionState
+import github.realtvop.aonsoku.settings.LyricsSource
 import github.realtvop.aonsoku.settings.ThemeMode
 import github.realtvop.aonsoku.ui.AonsokuApp
 import org.junit.Assert.assertEquals
@@ -338,6 +344,110 @@ class AppSmokeTest {
         waitForPlayerToClose()
     }
 
+    @Test
+    fun lyricsFollowTheSongAndSeekOnTap() {
+        play(album = "Tidal Hours", song = "Low Tide")
+        expandPlayer("Low Tide")
+
+        compose.onNodeWithContentDescription("Lyrics").performClick()
+        waitForText("The tide goes out")
+        // The second track of the server's lyrics is the translation.
+        waitForText("La marea baja")
+        snapshot("lyrics")
+
+        compose.onNodeWithText("Carry what I cannot keep").performClick()
+        waitUntil("the tapped line to be sung") { world.graph.player.progress.value.position >= 2.5 }
+        waitUntil("the tapped line to be lit") {
+            compose.onAllNodes(hasText("Carry what I cannot keep") and isSelected())
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+
+        // The song on top leads back to the playing view, which names the album.
+        compose.onNodeWithText("Low Tide").performClick()
+        waitForText("Tidal Hours")
+    }
+
+    @Test
+    fun lyricsOfASongCanBeShiftedAndTurnedOff() {
+        play(album = "Tidal Hours", song = "Low Tide")
+        expandPlayer("Low Tide")
+
+        compose.onNodeWithContentDescription("Lyrics settings").performClick()
+        waitForText("Low Tide by Blue Meridian")
+        // Without a custom lyrics server there are no entries to choose from.
+        waitForText("Use a custom lyrics service to choose more lyrics")
+        snapshot("lyrics-settings")
+
+        compose.onNodeWithContentDescription("Lyrics offset")
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(1.5f) }
+        waitForText("+1.5s")
+        assertEquals(listOf(1.5), lyricChoices().map { it.offset })
+        compose.onNodeWithText("Reset").performClick()
+        waitUntil("the offset to be forgotten") { lyricChoices().isEmpty() }
+
+        compose.onNodeWithText("Turn off lyrics").performClick()
+        waitForText("Lyrics off")
+        waitUntil("the lyrics tab to close") { !isEnabled("Lyrics") }
+        compose.onNodeWithText("Lyrics off").performClick()
+        waitForText("Turn off lyrics")
+        waitUntil("the lyrics tab to open") { isEnabled("Lyrics") }
+    }
+
+    @Test
+    fun customLyricsServerOffersEntriesToChooseFrom() {
+        world.graph.settings.update {
+            it.copy(
+                lyrics = it.lyrics.copy(
+                    customServerEnabled = true,
+                    customServerUrl = world.server.customLyricsUrl,
+                    customServerPassword = "open sesame",
+                    sourcePriority = listOf(LyricsSource.Custom, LyricsSource.Navidrome, LyricsSource.LrcLib),
+                ),
+            )
+        }
+        play(album = "Tidal Hours", song = "Undertow")
+        expandPlayer("Undertow")
+
+        // Until an entry is chosen the first one is used.
+        compose.onNodeWithContentDescription("Lyrics").performClick()
+        waitForText("First entry of Undertow")
+        assertEquals("open sesame", world.server.customLyricsAuthorization)
+
+        compose.onNodeWithContentDescription("Lyrics settings").performClick()
+        waitForText("ID: entry-1")
+        snapshot("lyrics-entries")
+        scrollTo("Undertow (Live)")
+        waitForText("Romaji")
+        compose.onAllNodesWithText("Select").onLast().performClick()
+
+        // Choosing an entry leads back to the lyrics, which are the chosen ones now.
+        waitForText("Second entry of Undertow")
+        waitForText("Sekando entori")
+        assertEquals(listOf("entry-2"), lyricChoices().map { it.key })
+    }
+
+    @Test
+    fun lyricsMissingOnTheServerComeFromLrcLib() {
+        play(album = "Tidal Hours", song = "Slack Water")
+        expandPlayer("Slack Water")
+
+        compose.onNodeWithContentDescription("Lyrics").performClick()
+        waitForText("Still water")
+        waitForText("Nothing pulls, nothing pushes")
+        assertTrue(world.server.requested("lrclib"))
+        snapshot("lyrics-plain")
+    }
+
+    @Test
+    fun aSongWithoutLyricsClosesTheLyricsTab() {
+        play(album = "Paper Boats", song = "Harbor")
+        expandPlayer("Harbor")
+
+        waitUntil("the search for lyrics to end") { !isEnabled("Lyrics") }
+        assertTrue(world.server.requested("getLyricsBySongId"))
+        assertTrue(world.server.requested("lrclib"))
+    }
+
     /** Signs in and waits for the synced home page. */
     private fun openHome() {
         world.signIn()
@@ -390,6 +500,12 @@ class AppSmokeTest {
     }
 
     private fun playerState() = world.graph.player.state.value
+
+    private fun lyricChoices() = world.graph.settings.current.lyrics.selected.values.toList()
+
+    private fun isEnabled(description: String): Boolean =
+        compose.onAllNodes(hasContentDescription(description) and isEnabled())
+            .fetchSemanticsNodes().isNotEmpty()
 
     private fun contextTitles() = playerState().contextSongs.map { it.title }
 

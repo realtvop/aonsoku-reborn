@@ -8,8 +8,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -401,6 +403,50 @@ fun PlayerIconButton(
         ),
     ) {
         Icon(icon, contentDescription = description, modifier = Modifier.size(iconSize))
+    }
+}
+
+/**
+ * A small labeled button in the player palette: outlined, or filled while
+ * what it stands for is [active].
+ */
+@Composable
+fun PlayerPill(
+    icon: ImageVector,
+    label: String,
+    active: Boolean,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+) {
+    val palette = LocalPlayerPalette.current
+    val content = when {
+        !enabled -> palette.content.copy(alpha = 0.3f)
+        active -> palette.content
+        else -> palette.content.copy(alpha = 0.6f)
+    }
+    Row(
+        modifier = Modifier
+            .height(32.dp)
+            .clip(CircleShape)
+            .then(
+                if (active) {
+                    Modifier.background(palette.container)
+                } else {
+                    Modifier.border(BorderStroke(1.dp, palette.outline), CircleShape)
+                },
+            )
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(14.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = content,
+            maxLines = 1,
+        )
     }
 }
 

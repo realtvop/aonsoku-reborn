@@ -1,10 +1,6 @@
 package github.realtvop.aonsoku.ui.player
 
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,7 +21,6 @@ import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material.icons.rounded.Repeat
@@ -55,7 +50,6 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -90,7 +84,6 @@ import kotlin.math.abs
 // current song can always be scrolled to the top with the history above it.
 private val QueueRowHeight = 64.dp
 private val SectionHeaderHeight = 36.dp
-private val CurrentSongHeight = 72.dp
 private val ModeButtonsHeight = 48.dp
 private val SourceLabelHeight = 20.dp
 private val EmptyMessageHeight = 52.dp
@@ -98,8 +91,8 @@ private val IndicatorHeight = 32.dp
 private val QueueBottomPadding = 16.dp
 
 /** Rows are inset from the screen edge and their content from the row. */
-private val RowInset = 8.dp
-private val RowContentInset = 12.dp
+private val RowInset = PlayerRowInset
+private val RowContentInset = PlayerRowContentInset
 
 /** Peeking at up to this many history rows springs back to the current song. */
 private const val HISTORY_PEEK_ROWS = 3
@@ -312,7 +305,7 @@ fun QueueView(state: PlayerState, onShowPlaying: () -> Unit, modifier: Modifier 
     val sourceName = state.sourceName?.takeIf { it.isNotBlank() }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        var below = CurrentSongHeight + ModeButtonsHeight + QueueBottomPadding
+        var below = CurrentSongRowHeight + ModeButtonsHeight + QueueBottomPadding
         if (userShown.isNotEmpty()) below += SectionHeaderHeight + QueueRowHeight * userShown.size
         if (contextShown.isNotEmpty()) {
             below += SectionHeaderHeight + QueueRowHeight * contextShown.size
@@ -351,7 +344,7 @@ fun QueueView(state: PlayerState, onShowPlaying: () -> Unit, modifier: Modifier 
             }
 
             item(key = "current", contentType = "current") {
-                QueueCurrentSong(state = state, song = current, onClick = onShowPlaying)
+                CurrentSongRow(state = state, song = current, onClick = onShowPlaying)
             }
             item(key = "modes", contentType = "modes") { QueueModeButtons(state) }
 
@@ -572,48 +565,6 @@ private fun QueueRow(
     }
 }
 
-/** The song that is playing, at the top of the queue; tapping it returns to the player. */
-@Composable
-private fun QueueCurrentSong(state: PlayerState, song: QueueSong, onClick: () -> Unit) {
-    val palette = LocalPlayerPalette.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = RowInset)
-            .clip(MaterialTheme.shapes.medium)
-            .clickable(onClick = onClick)
-            .heightIn(min = CurrentSongHeight)
-            .padding(start = RowContentInset),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        CoverImage(
-            art = queueSongCoverArt(song),
-            modifier = Modifier.size(48.dp),
-            kind = CoverKind.Song,
-            shape = MaterialTheme.shapes.small,
-        )
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = song.title,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = song.artist,
-                style = MaterialTheme.typography.bodySmall,
-                color = palette.muted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        LikeButton(state = state, song = song, iconSize = 22.dp)
-        SongOptionsButton(song = song, iconSize = 22.dp)
-    }
-}
-
 /** Shuffle and repeat as labeled buttons that say what a tap does. */
 @Composable
 private fun QueueModeButtons(state: PlayerState) {
@@ -625,14 +576,14 @@ private fun QueueModeButtons(state: PlayerState) {
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ModePill(
+        PlayerPill(
             icon = Icons.Rounded.Shuffle,
             label = t(shuffleActionKey(state.shuffle)),
             active = state.shuffle,
             enabled = !state.isPlayingOneSong && state.hasNext,
             onClick = player::toggleShuffle,
         )
-        ModePill(
+        PlayerPill(
             icon = if (state.repeat == RepeatMode.One) {
                 Icons.Rounded.RepeatOne
             } else {
@@ -641,46 +592,6 @@ private fun QueueModeButtons(state: PlayerState) {
             label = t(repeatActionKey(state.repeat)),
             active = state.repeat != RepeatMode.Off,
             onClick = player::cycleRepeat,
-        )
-    }
-}
-
-@Composable
-private fun ModePill(
-    icon: ImageVector,
-    label: String,
-    active: Boolean,
-    onClick: () -> Unit,
-    enabled: Boolean = true,
-) {
-    val palette = LocalPlayerPalette.current
-    val content = when {
-        !enabled -> palette.content.copy(alpha = 0.3f)
-        active -> palette.content
-        else -> palette.content.copy(alpha = 0.6f)
-    }
-    Row(
-        modifier = Modifier
-            .height(32.dp)
-            .clip(CircleShape)
-            .then(
-                if (active) {
-                    Modifier.background(palette.container)
-                } else {
-                    Modifier.border(BorderStroke(1.dp, palette.outline), CircleShape)
-                },
-            )
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .padding(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(14.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = content,
-            maxLines = 1,
         )
     }
 }

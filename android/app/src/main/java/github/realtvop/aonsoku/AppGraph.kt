@@ -9,6 +9,9 @@ import github.realtvop.aonsoku.data.LibrarySyncCoordinator
 import github.realtvop.aonsoku.data.NetworkMonitor
 import github.realtvop.aonsoku.data.api.SubsonicApi
 import github.realtvop.aonsoku.data.image.ArtworkStore
+import github.realtvop.aonsoku.data.lyrics.LyricsRepository
+import github.realtvop.aonsoku.data.lyrics.LyricsSources
+import github.realtvop.aonsoku.data.lyrics.LyricsStore
 import github.realtvop.aonsoku.i18n.I18n
 import github.realtvop.aonsoku.i18n.Translations
 import github.realtvop.aonsoku.player.PlayerController
@@ -22,13 +25,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 /**
  * Application-scoped object graph of the native app. It sits on top of the
  * long-lived native services in `:core` and outlives every Activity.
  */
-class AppGraph(val application: Application) {
+class AppGraph(
+    val application: Application,
+    /** Where LRCLIB is asked for lyrics; tests point it at a server of their own. */
+    lrcLibUrl: String = LyricsSources.LRCLIB_URL,
+) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val services: AppServices = AppServices.getInstance(application)
     val settings = SettingsRepository(services.preferences, scope)
@@ -47,6 +55,23 @@ class AppGraph(val application: Application) {
     )
     val artwork = ArtworkStore(services.library, network, scope)
     val library = LibraryRepository(api, services.library, network)
+    val lyrics = LyricsRepository(
+        api = api,
+        library = services.library,
+        songs = library,
+        settings = settings,
+        network = network,
+        store = LyricsStore(
+            choices = File(application.filesDir, "lyrics"),
+            cache = File(application.cacheDir, "lyrics"),
+        ),
+        sources = LyricsSources(
+            client = httpClient,
+            clientName = "Aonsoku v${BuildConfig.APP_VERSION} (${BuildConfig.REPOSITORY_URL})",
+            lrcLibUrl = lrcLibUrl,
+        ),
+        serverType = { session.credentials?.serverType },
+    )
     val sync = LibrarySyncCoordinator(
         library = services.library,
         network = network,
@@ -112,6 +137,7 @@ class AppGraph(val application: Application) {
         sync.onSessionEnded()
         session.logout()
         services.library.clearLibraryData()
+        lyrics.clearCache()
         settings.update {
             it.copy(pinnedHome = emptyList(), cache = it.cache.copy(lastSyncedAt = null))
         }

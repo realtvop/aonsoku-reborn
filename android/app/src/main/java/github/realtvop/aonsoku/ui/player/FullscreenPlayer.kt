@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Lyrics
 import androidx.compose.material.icons.rounded.Tune
@@ -78,7 +79,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 
 /** What the full-screen player shows between its header and its tab buttons. */
-enum class PlayerTab { Playing, Queue }
+enum class PlayerTab { Playing, Lyrics, LyricsSettings, Queue }
 
 /** Whether the full-screen player is open, and on which tab. */
 @Stable
@@ -191,6 +192,8 @@ fun FullscreenPlayer(
     )
     val palette = rememberPlayerPalette(backdropColor)
     val tab = if (state.isRadio) PlayerTab.Playing else sheet.tab
+    // Looked up while the player is open: the lyrics button depends on them.
+    val lyrics = rememberPlayerLyrics(song)
     var height by remember { mutableIntStateOf(0) }
     val closeFlingSpeed = with(LocalDensity.current) { CloseFlingSpeed.toPx() }
 
@@ -273,6 +276,15 @@ fun FullscreenPlayer(
                     ) { current ->
                         when (current) {
                             PlayerTab.Playing -> PlayingView(state)
+                            PlayerTab.Lyrics -> LyricsView(
+                                state = state,
+                                lyrics = lyrics,
+                                onShowPlaying = { sheet.show(PlayerTab.Playing) },
+                            )
+                            PlayerTab.LyricsSettings -> LyricsSettingsView(
+                                lyrics = lyrics,
+                                onChosen = { sheet.show(PlayerTab.Lyrics) },
+                            )
                             PlayerTab.Queue -> QueueView(
                                 state = state,
                                 onShowPlaying = { sheet.show(PlayerTab.Playing) },
@@ -280,7 +292,9 @@ fun FullscreenPlayer(
                         }
                     }
                     // A radio stream has neither a queue nor lyrics.
-                    if (!state.isRadio) PlayerTabs(tab = tab, onToggle = sheet::toggle)
+                    if (!state.isRadio) {
+                        PlayerTabs(tab = tab, hasLyrics = lyrics.mayExist, onToggle = sheet::toggle)
+                    }
                 }
             }
         }
@@ -326,7 +340,7 @@ private fun PlayerHeader(onClose: () -> Unit) {
 
 /** Switches between the tabs; the selected one returns to the playing view. */
 @Composable
-private fun PlayerTabs(tab: PlayerTab, onToggle: (PlayerTab) -> Unit) {
+private fun PlayerTabs(tab: PlayerTab, hasLyrics: Boolean, onToggle: (PlayerTab) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth(0.75f)
@@ -334,13 +348,19 @@ private fun PlayerTabs(tab: PlayerTab, onToggle: (PlayerTab) -> Unit) {
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Lyrics are not available in the native player yet.
         PlayerTabButton(
             icon = Icons.Rounded.Lyrics,
             label = t("fullscreen.lyrics"),
-            selected = false,
-            enabled = false,
-            onClick = {},
+            selected = tab == PlayerTab.Lyrics,
+            // Without lyrics there is nothing to open, but an open tab can always be left.
+            enabled = hasLyrics || tab == PlayerTab.Lyrics,
+            onClick = { onToggle(PlayerTab.Lyrics) },
+        )
+        PlayerTabButton(
+            icon = Icons.Rounded.Checklist,
+            label = t("fullscreen.selectLyrics"),
+            selected = tab == PlayerTab.LyricsSettings,
+            onClick = { onToggle(PlayerTab.LyricsSettings) },
         )
         PlayerTabButton(
             icon = Icons.AutoMirrored.Rounded.QueueMusic,

@@ -53,7 +53,8 @@ class SmokeWorld : TestWatcher() {
         shadowOf(application.packageManager).addActivityIfNotPresent(
             ComponentName(application.packageName, ComponentActivity::class.java.name),
         )
-        graph = AppGraph(application).also { it.initialize() }
+        // Nothing a test does may reach the internet, LRCLIB included.
+        graph = AppGraph(application, lrcLibUrl = server.lrcLibUrl).also { it.initialize() }
         startPlaybackService(application)
         SingletonImageLoader.setUnsafe { context ->
             // Robolectric decodes files with BitmapFactory but not with ImageDecoder.

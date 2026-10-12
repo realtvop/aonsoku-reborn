@@ -59,6 +59,15 @@ class FakeSubsonicServer {
 
     val url: String get() = server.url("/").toString().trimEnd('/')
 
+    /** The server also stands in for LRCLIB and for a custom lyrics server. */
+    val lrcLibUrl: String get() = "$url/lrclib"
+    val customLyricsUrl: String get() = "$url/custom-lyrics"
+
+    /** The `Authorization` header of the last request to the custom lyrics server. */
+    @Volatile
+    var customLyricsAuthorization: String? = null
+        private set
+
     fun start() {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse = runCatching {
@@ -243,8 +252,67 @@ class FakeSubsonicServer {
                 "scanStatus",
                 JSONObject().put("scanning", false).put("count", songs.size),
             )
-            "getLyrics" -> ok("lyrics", JSONObject())
-            "getLyricsBySongId" -> ok("lyricsList", JSONObject().put("structuredLyrics", JSONArray()))
+            // "Low Tide" has structured lyrics with a translation, "Undertow" LRC
+            // text, "Slack Water" only what LRCLIB knows, and the rest nothing.
+            "getLyricsBySongId" -> ok(
+                "lyricsList",
+                JSONObject().put(
+                    "structuredLyrics",
+                    if (param("id") == songs[LOW_TIDE].id) structuredLyrics() else JSONArray(),
+                ),
+            )
+            "getLyrics" -> ok(
+                "lyrics",
+                if (param("title") == songs[UNDERTOW].title) {
+                    JSONObject()
+                        .put("artist", param("artist"))
+                        .put("title", param("title"))
+                        .put("value", "[00:00.20]Pulled under\n[00:01.50]By the undertow\n[00:02.50]And out again")
+                } else {
+                    JSONObject()
+                },
+            )
+            "lrclib" -> if (param("track_name") == songs[SLACK_WATER].title) {
+                MockResponse()
+                    .setHeader("Content-Type", "application/json")
+                    .setBody(
+                        JSONObject()
+                            .put("id", 1)
+                            .put("plainLyrics", "Still water\nBetween the tides\n\nNothing pulls, nothing pushes")
+                            .put("syncedLyrics", JSONObject.NULL)
+                            .toString(),
+                    )
+            } else {
+                MockResponse()
+                    .setResponseCode(404)
+                    .setHeader("Content-Type", "application/json")
+                    .setBody(JSONObject().put("code", 404).put("name", "TrackNotFound").toString())
+            }
+            "custom-lyrics" -> {
+                customLyricsAuthorization = request.getHeader("Authorization")
+                val title = param("title").orEmpty()
+                MockResponse()
+                    .setHeader("Content-Type", "application/json")
+                    .setBody(
+                        JSONArray()
+                            .put(
+                                JSONObject()
+                                    .put("id", "entry-1")
+                                    .put("title", title)
+                                    .put("artist", param("artist").orEmpty())
+                                    .put("lyrics", "[00:00.20]First entry of $title\n[00:02.00]Its second line"),
+                            )
+                            .put(
+                                JSONObject()
+                                    .put("id", "entry-2")
+                                    .put("title", "$title (Live)")
+                                    .put("artist", param("artist").orEmpty())
+                                    .put("lyrics", "[00:00.20]Second entry of $title\n[00:02.00]Sung live")
+                                    .put("romaji", "[00:00.20]Sekando entori"),
+                            )
+                            .toString(),
+                    )
+            }
             "getCoverArt", "getAvatar" -> MockResponse()
                 .setHeader("Content-Type", "image/png")
                 .setBody(Buffer().write(artwork(param("id") ?: param("username").orEmpty())))
@@ -256,6 +324,37 @@ class FakeSubsonicServer {
                 .throttleBody(STREAM_BYTES_PER_SECOND, 1, TimeUnit.SECONDS)
             else -> failed(0, "Not implemented: $endpoint")
         }
+    }
+
+    /** Timed lines that fit into the few seconds of audio, with a long pause in between. */
+    private fun structuredLyrics(): JSONArray {
+        fun track(lang: String, vararg lines: Pair<Int, String>) = JSONObject()
+            .put("lang", lang)
+            .put("synced", true)
+            .put(
+                "line",
+                JSONArray(lines.map { (start, value) -> JSONObject().put("start", start).put("value", value) }),
+            )
+        return JSONArray()
+            .put(
+                track(
+                    "eng",
+                    0 to "The tide goes out",
+                    800 to "And leaves the shore to me",
+                    1_500 to "",
+                    2_000 to "Low tide, low tide",
+                    2_600 to "Carry what I cannot keep",
+                ),
+            )
+            .put(
+                track(
+                    "spa",
+                    0 to "La marea baja",
+                    800 to "Y me deja la orilla",
+                    2_000 to "Marea baja, marea baja",
+                    2_600 to "Llévate lo que no puedo guardar",
+                ),
+            )
     }
 
     private fun albumList(type: String?, genre: String?): List<FakeAlbum> = when (type) {
@@ -391,6 +490,11 @@ class FakeSubsonicServer {
 
     private companion object {
         const val STREAM_BYTES_PER_SECOND = 2_048L
+
+        /** Positions in [songs]. */
+        const val LOW_TIDE = 7
+        const val UNDERTOW = 8
+        const val SLACK_WATER = 9
 
         /** Three seconds of silence as 8 kHz mono 16-bit PCM. */
         val audio: ByteArray by lazy {
