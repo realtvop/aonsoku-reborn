@@ -50,6 +50,21 @@ class LyricsViewTest {
     }
 
     @Test
+    fun aLateFirstLineIsPrecededByAPauseFromTheStart() {
+        val late = listOf(LyricLine(6_000, 9_000, "First"), LyricLine(9_000, 12_000, "Second"))
+        val shown = withIntroPause(late)
+        assertEquals(listOf("", "First", "Second"), shown.map { it.text })
+        assertEquals(0L to 6_000L, shown.first().startMs to shown.first().endMs)
+        assertEquals(LyricPosition(active = 0, anchor = 0), lyricPositionAt(shown, 1_000))
+
+        // An early first line needs no pause, and a pause that is there already starts at zero.
+        val early = listOf(LyricLine(2_000, 4_000, "First"))
+        assertEquals(early, withIntroPause(early))
+        val paused = listOf(LyricLine(5_000, 9_000, ""), LyricLine(9_000, 12_000, "First"))
+        assertEquals(listOf(0L, 9_000L), withIntroPause(paused).map { it.startMs })
+    }
+
+    @Test
     fun noLinesIsNoPosition() {
         assertEquals(LyricPosition(active = -1, anchor = 0), lyricPositionAt(emptyList(), 5_000))
     }

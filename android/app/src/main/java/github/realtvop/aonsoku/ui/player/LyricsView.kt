@@ -166,6 +166,19 @@ fun LyricsView(
     }
 }
 
+/**
+ * Lyrics whose first line comes late begin with a pause, so that dots fill
+ * up while the intro plays, as on the web.
+ */
+internal fun withIntroPause(lines: List<LyricLine>): List<LyricLine> {
+    val first = lines.firstOrNull() ?: return lines
+    if (first.startMs < INTERLUDE_MIN_MS) return lines
+    if (first.text.isBlank() && first.translation.isBlank()) {
+        return listOf(first.copy(startMs = 0)) + lines.drop(1)
+    }
+    return listOf(LyricLine(startMs = 0, endMs = first.startMs, text = "")) + lines
+}
+
 /** The line being sung and the line the list rests on, which is the next one during a gap. */
 internal data class LyricPosition(val active: Int, val anchor: Int)
 
@@ -201,7 +214,7 @@ private fun SyncedLyrics(
     onAlignedChange: (Boolean) -> Unit,
 ) {
     val player = LocalAppGraph.current.player
-    val lines = lyrics.lines
+    val lines = remember(lyrics.lines) { withIntroPause(lyrics.lines) }
     val clock = rememberPlaybackClock(advancing)
     val offset = rememberUpdatedState(offsetMs)
     val position by remember(lines) {

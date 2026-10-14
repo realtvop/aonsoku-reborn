@@ -659,7 +659,8 @@ App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
   synced lyrics that follow a frame clock interpolated between the service's
   position reports (active line lit and resting near the top, others dimmed
   and, on Android 12+, blurred; a tap seeks; scrolling by hand hides the
-  controls and pauses following for a few seconds) or plain lyrics;
+  controls and pauses following for a few seconds; a long pause, a late
+  first line included, shows dots filling up) or plain lyrics;
   `LyricsSettingsView` is the per-song page (lyrics off, offset, custom-server
   search and entries).
   `QueueView` shows the play history above the current song (out of sight
