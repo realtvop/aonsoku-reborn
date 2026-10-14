@@ -731,6 +731,9 @@ class AppSmokeTest {
         waitUntil("the list to follow") { named("Undertow") == 0 }
 
         back()
+        // Left on, smart downloads would fetch the favorites again whenever their rules are next looked at.
+        reach(hasText("Enable smart downloads")).performClick()
+        waitUntil("smart downloads to be off") { !settings().cache.smartRules.enabled }
         reach(hasText("Clear all caches")).performClick()
         waitUntil("the question") { named("Clear all caches") == 2 }
         compose.onNode(hasText("Clear") and hasAnyAncestor(isDialog())).performClick()
