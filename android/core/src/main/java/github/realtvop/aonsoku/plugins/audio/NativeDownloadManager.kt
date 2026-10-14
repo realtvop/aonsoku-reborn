@@ -12,13 +12,15 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.Call
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 import java.net.URLEncoder
+import java.util.concurrent.TimeUnit
 
 /** An audio file that was written to the cache directory. */
 data class DownloadedAudio(val file: File, val contentType: String, val sizeBytes: Long)
@@ -58,17 +60,18 @@ class NativeDownloadManager(
         format: String? = null,
         onProgress: (loaded: Long, total: Long) -> Unit = { _, _ -> },
     ): DownloadedAudio = coroutineScope {
-        val connection = withContext(Dispatchers.IO) { open(songId, maxBitRate, format) }
-        // A blocked read does not notice cancellation; closing the socket ends it.
+        val call = client.newCall(request(songId, maxBitRate, format))
+        // A blocked read does not notice cancellation; cancelling the call ends it.
+        // (Closing a JDK HttpURLConnection instead waits for the lock the read holds.)
         val watcher = launch(start = CoroutineStart.UNDISPATCHED) {
             try {
                 awaitCancellation()
             } finally {
-                connection.disconnect()
+                call.cancel()
             }
         }
         try {
-            withContext(Dispatchers.IO) { receive(connection, songId, onProgress) }
+            withContext(Dispatchers.IO) { receive(call, songId, onProgress) }
         } catch (error: IOException) {
             // The failure of a transfer that was cancelled is the cancellation.
             ensureActive()
@@ -78,7 +81,7 @@ class NativeDownloadManager(
         }
     }
 
-    private fun open(songId: String, maxBitRate: Int?, format: String?): HttpURLConnection {
+    private fun request(songId: String, maxBitRate: Int?, format: String?): Request {
         // Signed out for now is not the server refusing: the download stays owed.
         val credentials = credentials() ?: throw IOException("No credentials found")
         val params = SubsonicAuthBuilder.buildQueryParams(
@@ -94,39 +97,40 @@ class NativeDownloadManager(
         val query = params.entries.joinToString("&") { (key, value) ->
             "${URLEncoder.encode(key, "UTF-8")}=${URLEncoder.encode(value, "UTF-8")}"
         }
-        val url = URL("${credentials.serverUrl.trimEnd('/')}/rest/stream?$query")
-        return (url.openConnection() as HttpURLConnection).apply {
-            connectTimeout = CONNECT_TIMEOUT_MS
-            readTimeout = READ_TIMEOUT_MS
-            requestMethod = "GET"
+        val url = "${credentials.serverUrl.trimEnd('/')}/rest/stream?$query"
+        return try {
+            Request.Builder().url(url).get().build()
+        } catch (error: IllegalArgumentException) {
+            throw IOException("Invalid server address", error)
         }
     }
 
     private suspend fun receive(
-        connection: HttpURLConnection,
+        call: Call,
         songId: String,
         onProgress: (loaded: Long, total: Long) -> Unit,
     ): DownloadedAudio {
         var tempFile: File? = null
+        val response = call.execute()
         try {
-            connection.connect()
-            val status = connection.responseCode
+            val status = response.code
             if (status !in 200..299) {
                 val message = "Server returned HTTP $status"
                 // Busy or briefly failing servers are worth another try; a refusal is not.
                 val refused = status in 400..499 && status != 408 && status != 429
                 throw if (refused) AudioUnavailableException(message) else IOException(message)
             }
-            val contentType = connection.contentType ?: "audio/mpeg"
+            val contentType = response.header("Content-Type") ?: "audio/mpeg"
             // Subsonic reports errors as a document with a successful HTTP status.
             if (!isAudio(contentType)) {
                 throw AudioUnavailableException("Server returned $contentType instead of audio")
             }
-            val total = connection.contentLengthLong.coerceAtLeast(0L)
+            val body = response.body ?: throw IOException("Server sent no data")
+            val total = body.contentLength().coerceAtLeast(0L)
 
             val temp = File.createTempFile(TEMP_PREFIX, TEMP_SUFFIX, tempDirectory().apply { mkdirs() })
             tempFile = temp
-            connection.inputStream.use { input ->
+            body.byteStream().use { input ->
                 FileOutputStream(temp).use { output ->
                     val buffer = ByteArray(BUFFER_BYTES)
                     var loaded = 0L
@@ -171,16 +175,23 @@ class NativeDownloadManager(
             return DownloadedAudio(destination, contentType, size)
         } finally {
             tempFile?.delete()
-            connection.disconnect()
+            response.close()
         }
     }
 
     companion object {
         const val TEMP_PREFIX = "download_"
         const val TEMP_SUFFIX = ".tmp"
-        private const val CONNECT_TIMEOUT_MS = 30_000
-        private const val READ_TIMEOUT_MS = 300_000
+        private const val CONNECT_TIMEOUT_SECONDS = 30L
+        private const val READ_TIMEOUT_SECONDS = 300L
         private const val BUFFER_BYTES = 64 * 1024
+
+        private val client: OkHttpClient by lazy {
+            OkHttpClient.Builder()
+                .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                .build()
+        }
         private const val PROGRESS_INTERVAL_MS = 200L
 
         /** Whether a response of this type is the song rather than a message about it. */

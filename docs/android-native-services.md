@@ -49,7 +49,9 @@ anything playing.
   (HTTP 4xx other than 408/429, or a non-audio body such as a Subsonic error
   document) is final. Anything else is passing: an `explicit` transfer stays
   owed (`pending-downloads.json`) and runs again on `resume()` or at the next
-  start, the others are dropped and asked for again when they matter.
+  start, the others are dropped and asked for again when they matter. The
+  transfer is an OkHttp call that is cancelled with its coroutine, which also
+  ends a read waiting on the network.
 - **Observation**: `cached` and `downloads` are `StateFlow`s keyed by song
   id; `events` reports `Downloaded`, `Failed`, and `Removed`.
 

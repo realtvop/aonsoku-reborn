@@ -170,7 +170,8 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   Files without an index row (the Capacitor app kept its index in the
   WebView) are adopted as explicit downloads, the one kind that is never
   removed automatically. `NativeDownloadManager` is only the transfer of one
-  song into the cache. `PlaybackService` asks for an `lru` copy of what it
+  song into the cache (an OkHttp call, cancelled together with its
+  coroutine). `PlaybackService` asks for an `lru` copy of what it
   streams and touches the cached file it plays; it has no download state of
   its own.
 - Android authentication and Subsonic HTTP access are owned by the
