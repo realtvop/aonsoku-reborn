@@ -641,8 +641,14 @@ App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
   their content padding.
 - `ui/player/`: tapping `MiniPlayer` opens `FullscreenPlayer`, a sheet that
   `MainShell` draws over the pages and the floating bars. It slides up,
-  follows a downward drag, closes on back, and while it is open the content
-  below is removed from the semantics tree. `FullscreenPlayerState`
+  follows a downward drag and a predictive back gesture, closes on back, and
+  while it is open the content below is removed from the semantics tree. The
+  playback notification and the system's media controls open it too:
+  `PlaybackService` puts `EXTRA_OPEN_PLAYER` on their intent, and
+  `MainActivity` hands the request to the shell through `PlayerSheetLink`.
+  The link also tells the activity while a `VolumeBar` of this device's
+  playback is on screen; the volume keys then change the volume without the
+  system's volume panel, as the web app has it. `FullscreenPlayerState`
   (remembered by `MainShell`) holds whether it is open and its `PlayerTab`;
   add a tab there rather than opening a second surface. The sheet is tinted
   with the artwork (`PlayerPalette.kt`: the backdrop mixes the cover's

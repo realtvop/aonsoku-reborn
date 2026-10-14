@@ -32,6 +32,8 @@ import github.realtvop.aonsoku.theme.LocalSystemBarsOverride
 import github.realtvop.aonsoku.theme.resolveDarkTheme
 import github.realtvop.aonsoku.ui.components.ToastHost
 import github.realtvop.aonsoku.ui.login.LoginScreen
+import github.realtvop.aonsoku.ui.player.LocalPlayerSheetLink
+import github.realtvop.aonsoku.ui.player.PlayerSheetLink
 import github.realtvop.aonsoku.ui.shell.MainShell
 
 /**
@@ -40,7 +42,11 @@ import github.realtvop.aonsoku.ui.shell.MainShell
  * covers the bars with its own color.
  */
 @Composable
-fun AonsokuApp(graph: AppGraph, systemBars: @Composable (dark: Boolean) -> Unit = {}) {
+fun AonsokuApp(
+    graph: AppGraph,
+    playerLink: PlayerSheetLink = remember { PlayerSheetLink() },
+    systemBars: @Composable (dark: Boolean) -> Unit = {},
+) {
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val session by graph.session.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -54,6 +60,7 @@ fun AonsokuApp(graph: AppGraph, systemBars: @Composable (dark: Boolean) -> Unit 
             LocalAppGraph provides graph,
             LocalStrings provides strings,
             LocalSystemBarsOverride provides barsOverride,
+            LocalPlayerSheetLink provides playerLink,
         ) {
             Surface(
                 modifier = Modifier.fillMaxSize(),

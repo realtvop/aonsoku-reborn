@@ -47,6 +47,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -493,6 +495,14 @@ fun VolumeBar(modifier: Modifier = Modifier) {
     val player = LocalAppGraph.current.player
     val palette = LocalPlayerPalette.current
     val volume by player.volume.collectAsStateWithLifecycle()
+    // The volume keys change what the bar shows only for this device.
+    val remote by player.remote.collectAsStateWithLifecycle()
+    val local by remember { derivedStateOf { remote == null } }
+    val link = LocalPlayerSheetLink.current
+    DisposableEffect(link, local) {
+        if (local) link.volumeBarShown()
+        onDispose { if (local) link.volumeBarHidden() }
+    }
     var beforeMute by remember { mutableFloatStateOf(0.5f) }
     val level = volume.toFloat().coerceIn(0f, 1f)
     val muted = level <= 0f

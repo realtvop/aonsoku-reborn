@@ -46,8 +46,10 @@ import github.realtvop.aonsoku.settings.ReplayGainType
 import github.realtvop.aonsoku.settings.ServerUrlSettings
 import github.realtvop.aonsoku.settings.ThemeMode
 import github.realtvop.aonsoku.ui.AonsokuApp
+import github.realtvop.aonsoku.ui.player.PlayerSheetLink
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -74,6 +76,9 @@ class AppSmokeTest {
     val compose = createAndroidComposeRule<ComponentActivity>()
 
     private val screenshots = SmokeScreenshots(compose)
+
+    /** What the activity would tell the player: open on a notification tap. */
+    private val playerLink = PlayerSheetLink()
 
     @Test
     fun signingInThroughTheLoginScreenOpensHome() {
@@ -334,6 +339,26 @@ class AppSmokeTest {
         waitForDescription("Volume")
         back()
         waitForPlayerToClose()
+    }
+
+    @Test
+    fun theNotificationOpensThePlayerWhoseVolumeBarTakesTheVolumeKeys() {
+        play(album = "Tidal Hours", song = "Low Tide")
+        assertFalse(playerLink.showsVolume)
+
+        compose.runOnUiThread { playerLink.requestOpen() }
+        waitForDescription("Close")
+        waitUntil("the volume bar to take the keys") { playerLink.showsVolume }
+
+        // The queue has no volume bar, so the system shows the volume there.
+        compose.onNodeWithContentDescription("Queue").performClick()
+        waitForText("CONTINUE PLAYING")
+        waitUntil("the keys to go back to the system") { !playerLink.showsVolume }
+        back()
+        waitUntil("the volume bar again") { playerLink.showsVolume }
+        back()
+        waitForPlayerToClose()
+        assertFalse(playerLink.showsVolume)
     }
 
     @Test
@@ -904,7 +929,7 @@ class AppSmokeTest {
 
     private fun showApp() {
         if (screenshots.dark) world.graph.settings.update { it.copy(themeMode = ThemeMode.Dark) }
-        compose.setContent { AonsokuApp(world.graph) }
+        compose.setContent { AonsokuApp(world.graph, playerLink) }
     }
 
     private fun openLibrary() {

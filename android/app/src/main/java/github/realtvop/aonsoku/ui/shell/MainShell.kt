@@ -64,9 +64,12 @@ import github.realtvop.aonsoku.ui.overlays.LocalOverlays
 import github.realtvop.aonsoku.ui.overlays.OverlayController
 import github.realtvop.aonsoku.ui.overlays.OverlayHost
 import github.realtvop.aonsoku.ui.player.FullscreenPlayer
+import github.realtvop.aonsoku.ui.player.LocalPlayerSheetLink
 import github.realtvop.aonsoku.ui.player.MiniPlayer
 import github.realtvop.aonsoku.ui.player.QueueReplacementDialog
 import github.realtvop.aonsoku.ui.player.rememberFullscreenPlayerState
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Bottom space taken by the floating navigation and player. Scrolling pages
@@ -76,6 +79,9 @@ val LocalFloatingBarsPadding = staticCompositionLocalOf { 0.dp }
 
 private val FloatingBarsBottomMargin = 12.dp
 private val FloatingBarsSpacing = 8.dp
+
+/** How long a request to open the player waits for playback to bind after a start. */
+private const val OPEN_REQUEST_WAIT_MS = 5_000L
 
 @Composable
 fun MainShell() {
@@ -102,6 +108,16 @@ fun MainShell() {
     val imeVisible = WindowInsets.isImeVisible
 
     NotificationPermissionEffect(isPlaying = playerState.isPlaying)
+
+    // A tap on the playback notification opens the player, once it has bound.
+    val playerLink = LocalPlayerSheetLink.current
+    val openRequested by playerLink.openRequested.collectAsStateWithLifecycle()
+    LaunchedEffect(openRequested) {
+        if (!openRequested) return@LaunchedEffect
+        playerLink.consumeOpenRequest()
+        withTimeoutOrNull(OPEN_REQUEST_WAIT_MS) { graph.player.state.first { it.hasMedia } }
+            ?.let { fullscreenPlayer.open() }
+    }
 
     CompositionLocalProvider(
         LocalNavigator provides navigator,

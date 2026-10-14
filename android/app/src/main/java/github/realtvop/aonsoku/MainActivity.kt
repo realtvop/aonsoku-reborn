@@ -6,9 +6,11 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -16,13 +18,17 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.platform.LocalView
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
+import github.realtvop.aonsoku.plugins.audio.PlaybackService
 import github.realtvop.aonsoku.plugins.debug.DebugActivity
 import github.realtvop.aonsoku.ui.AonsokuApp
+import github.realtvop.aonsoku.ui.player.PlayerSheetLink
 
 class MainActivity : ComponentActivity(), SensorEventListener {
     private var sensorManager: SensorManager? = null
     private var shakeSensor: Sensor? = null
     private val shakeDetector = DebugShakeDetector(::openDebugPage)
+    private val playerLink = PlayerSheetLink()
+    private var audioManager: AudioManager? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
@@ -38,7 +44,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
         val graph = (application as AonsokuApplication).graph
         setContent {
-            AonsokuApp(graph) { dark ->
+            AonsokuApp(graph, playerLink) { dark ->
                 // Light icons on a dark backdrop, and the other way around.
                 val view = LocalView.current
                 SideEffect {
@@ -53,6 +59,37 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         sensorManager = getSystemService(SENSOR_SERVICE) as? SensorManager
         shakeSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
             ?: sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        audioManager = getSystemService(AUDIO_SERVICE) as? AudioManager
+        // A recreated activity has handled its intent already.
+        if (savedInstanceState == null) openPlayerIfAsked(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        openPlayerIfAsked(intent)
+    }
+
+    /** The playback notification and the system's media controls open the player. */
+    private fun openPlayerIfAsked(intent: Intent?) {
+        if (intent?.getBooleanExtra(PlaybackService.EXTRA_OPEN_PLAYER, false) != true) return
+        intent.removeExtra(PlaybackService.EXTRA_OPEN_PLAYER)
+        playerLink.requestOpen()
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val direction = when (event.keyCode) {
+            KeyEvent.KEYCODE_VOLUME_UP -> AudioManager.ADJUST_RAISE
+            KeyEvent.KEYCODE_VOLUME_DOWN -> AudioManager.ADJUST_LOWER
+            else -> return super.dispatchKeyEvent(event)
+        }
+        val audio = audioManager
+        if (!playerLink.showsVolume || audio == null) return super.dispatchKeyEvent(event)
+        // Without FLAG_SHOW_UI: the player's own volume bar shows the change.
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, 0)
+        }
+        return true
     }
 
     override fun onResume() {

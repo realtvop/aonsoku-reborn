@@ -78,6 +78,9 @@ class PlaybackService : MediaSessionService(), AudioService {
         const val ACTION_TOGGLE_SHUFFLE = "github.realtvop.aonsoku.action.TOGGLE_SHUFFLE"
         const val ACTION_TOGGLE_LIKE = "github.realtvop.aonsoku.action.TOGGLE_LIKE"
 
+        /** Set on the intent of the notification and the session: the app opens its player. */
+        const val EXTRA_OPEN_PLAYER = "github.realtvop.aonsoku.extra.OPEN_PLAYER"
+
         private const val REQUEST_CODE_CONTENT = 1000
         private const val REQUEST_CODE_PLAY_PAUSE = 1001
         private const val REQUEST_CODE_SKIP_NEXT = 1002
@@ -1620,12 +1623,27 @@ class PlaybackService : MediaSessionService(), AudioService {
         mediaSession = MediaSession.Builder(this, player!!)
             .setCallback(callback)
             .setCustomLayout(getCustomLayoutButtons())
+            .setSessionActivity(openPlayerIntent())
             .build()
 
         showNotification()
 
         registerSystemReceivers()
         restorePlaybackState()
+    }
+
+    /** Opens the app on its player, for the notification and the system's media controls. */
+    private fun openPlayerIntent(): PendingIntent {
+        val openIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            putExtra(EXTRA_OPEN_PLAYER, true)
+        } ?: Intent()
+        return PendingIntent.getActivity(
+            this,
+            REQUEST_CODE_CONTENT,
+            openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
     }
 
     private fun mapPlayerErrorCode(error: PlaybackException): String =
@@ -1815,15 +1833,7 @@ class PlaybackService : MediaSessionService(), AudioService {
             text = "Playing"
         }
 
-        val openIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
-            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        } ?: Intent()
-        val contentPendingIntent = PendingIntent.getActivity(
-            this,
-            REQUEST_CODE_CONTENT,
-            openIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
+        val contentPendingIntent = openPlayerIntent()
 
         val stopIntent = Intent(this, PlaybackService::class.java).setAction(ACTION_STOP)
         val stopPendingIntent = PendingIntent.getService(

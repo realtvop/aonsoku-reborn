@@ -1,6 +1,6 @@
 package github.realtvop.aonsoku.ui.player
 
-import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
@@ -81,6 +81,7 @@ import github.realtvop.aonsoku.theme.LocalSystemBarsOverride
 import github.realtvop.aonsoku.ui.components.queueSongCoverArt
 import github.realtvop.aonsoku.ui.overlays.LocalOverlays
 import github.realtvop.aonsoku.ui.overlays.Overlay
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 
@@ -139,6 +140,9 @@ private val NoArtwork = CoverArt(emptyList())
 /** Position of the sheet as a fraction of its height: 0 is open, 1 is below the screen. */
 private const val OPEN = 0f
 private const val CLOSED = 1f
+
+/** How far the sheet follows a back gesture before the gesture is committed. */
+private const val PREDICTIVE_BACK_FRACTION = 0.12f
 
 /** A drag released past this fraction, or faster than the fling speed, closes the player. */
 private const val CLOSE_FRACTION = 0.25f
@@ -204,8 +208,19 @@ fun FullscreenPlayer(
     var height by remember { mutableIntStateOf(0) }
     val closeFlingSpeed = with(LocalDensity.current) { CloseFlingSpeed.toPx() }
 
-    BackHandler(enabled = shown) {
-        if (tab != PlayerTab.Playing) sheet.show(PlayerTab.Playing) else sheet.close()
+    // Back returns to the playing view first. From there the sheet follows
+    // the back gesture down a little before it closes, or settles again.
+    PredictiveBackHandler(enabled = shown) { progress ->
+        val closing = tab == PlayerTab.Playing
+        try {
+            progress.collect { event ->
+                if (closing) offset.snapTo(event.progress * PREDICTIVE_BACK_FRACTION)
+            }
+            if (closing) sheet.close() else sheet.show(PlayerTab.Playing)
+        } catch (cancelled: CancellationException) {
+            if (closing) scope.launch { offset.animateTo(OPEN, SheetSpring) }
+            throw cancelled
+        }
     }
 
     // The status bar icons have to be readable on the backdrop, not on the theme.
