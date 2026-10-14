@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -38,8 +40,10 @@ private const val MIN_PLAYLIST_NAME_LENGTH = 2
 fun PlaylistFormDialog(overlay: Overlay.PlaylistForm, controller: OverlayController) {
     val graph = LocalAppGraph.current
     val editing = overlay.playlist
-    var name by rememberSaveable { mutableStateOf(editing?.name.orEmpty()) }
-    var comment by rememberSaveable { mutableStateOf(editing?.comment.orEmpty()) }
+    val nameField = rememberTextFieldState(editing?.name.orEmpty())
+    val commentField = rememberTextFieldState(editing?.comment.orEmpty())
+    val name = nameField.text.toString()
+    val comment = commentField.text.toString()
     // New playlists are public by default, as in the web form.
     var isPublic by rememberSaveable { mutableStateOf(editing?.isPublic ?: true) }
     var submitted by rememberSaveable { mutableStateOf(false) }
@@ -83,11 +87,10 @@ fun PlaylistFormDialog(overlay: Overlay.PlaylistForm, controller: OverlayControl
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
+                    state = nameField,
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text(t("playlist.form.labels.name")) },
-                    singleLine = true,
+                    lineLimits = TextFieldLineLimits.SingleLine,
                     isError = submitted && !nameValid,
                     supportingText = if (submitted && !nameValid) {
                         { Text(t("playlist.form.validations.nameLength")) }
@@ -100,13 +103,11 @@ fun PlaylistFormDialog(overlay: Overlay.PlaylistForm, controller: OverlayControl
                     ),
                 )
                 OutlinedTextField(
-                    value = comment,
-                    onValueChange = { comment = it },
+                    state = commentField,
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text(t("playlist.form.labels.comment")) },
                     supportingText = { Text(t("playlist.form.labels.commentDescription")) },
-                    minLines = 2,
-                    maxLines = 4,
+                    lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 2, maxHeightInLines = 4),
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.Sentences,
                     ),

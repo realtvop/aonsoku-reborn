@@ -1,5 +1,6 @@
 package github.realtvop.aonsoku.smoke
 
+import okhttp3.HttpUrl
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -27,6 +28,9 @@ class FakeSubsonicServer {
 
     /** Endpoint names in the order they were requested, without `.view`. */
     val requests = CopyOnWriteArrayList<String>()
+
+    /** The requests themselves, to look at their parameters. */
+    val calls = CopyOnWriteArrayList<HttpUrl>()
 
     val artists = listOf(
         FakeArtist("ar-1", "Aurora Lane"),
@@ -102,6 +106,7 @@ class FakeSubsonicServer {
         val url = request.requestUrl ?: return failed(0, "no url")
         val endpoint = url.pathSegments.last().removeSuffix(".view")
         requests += endpoint
+        calls += url
         fun param(name: String): String? = url.queryParameter(name)
         fun int(name: String, default: Int): Int = param(name)?.toIntOrNull() ?: default
 

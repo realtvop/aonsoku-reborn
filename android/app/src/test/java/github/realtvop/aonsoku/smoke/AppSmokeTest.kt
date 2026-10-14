@@ -150,6 +150,63 @@ class AppSmokeTest {
     }
 
     @Test
+    fun aPlaylistIsCreatedAndASongAddedToIt() {
+        openLibrary()
+        compose.onNodeWithContentDescription("Create Playlist").performClick()
+        waitForText("Public")
+        val name = compose.onAllNodes(hasSetTextAction() and hasAnyAncestor(isDialog()))[0]
+        name.performTextInput("R")
+        compose.onNode(hasText("Create") and hasAnyAncestor(isDialog())).performClick()
+        waitForText("Playlist name must be at least 2 characters.")
+        name.performTextReplacement("Road Trip")
+        compose.onAllNodes(hasSetTextAction() and hasAnyAncestor(isDialog()))[1].performTextInput("For the long drive")
+        snapshot("playlist-form")
+        compose.onNode(hasText("Create") and hasAnyAncestor(isDialog())).performClick()
+        waitUntil("the playlist to be created") { call("createPlaylist") != null }
+        assertEquals("Road Trip", call("createPlaylist")?.queryParameter("name"))
+        waitForText("Playlist created successfully!")
+        waitUntil("the form to close") { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
+
+        // The playlists to add to are found by name.
+        compose.onNodeWithText("Albums").performClick()
+        waitForText("Tidal Hours")
+        compose.onNodeWithText("Tidal Hours").performClick()
+        compose.onNodeWithContentDescription("More options for Undertow").performClick()
+        compose.onNodeWithText("Add to playlist").performClick()
+        waitForText("Morning Mix")
+        compose.onNode(hasSetTextAction() and hasAnyAncestor(isDialog())).performTextInput("road")
+        waitUntil("the other playlists to be filtered out") { named("Morning Mix") == 0 }
+        snapshot("add-to-playlist")
+        compose.onNodeWithText("Road Trip").performClick()
+        waitUntil("the song to be added") { call("updatePlaylist")?.queryParameter("songIdToAdd") != null }
+        assertEquals("pl-3", call("updatePlaylist")?.queryParameter("playlistId"))
+    }
+
+    @Test
+    fun aRadioIsAddedFromTheRadiosPage() {
+        world.graph.settings.update { it.copy(hideRadios = false) }
+        openLibrary()
+        compose.onNodeWithText("Radios").performClick()
+        waitForText("Harbor FM")
+        compose.onNodeWithContentDescription("Add Radio").performClick()
+        waitForText("Stream URL")
+        val fields = compose.onAllNodes(hasSetTextAction() and hasAnyAncestor(isDialog()))
+        fields[0].performTextInput("Night Owl")
+        fields[2].performTextInput("owl.radio")
+        compose.onNode(hasText("Save") and hasAnyAncestor(isDialog())).performClick()
+        waitForText("Stream URL must be at least 10 characters")
+        snapshot("radio-form")
+
+        fields[2].performTextReplacement("https://radio.example.org/owl")
+        compose.onNode(hasText("Save") and hasAnyAncestor(isDialog())).performClick()
+        waitUntil("the radio to be created") { call("createInternetRadioStation") != null }
+        val created = call("createInternetRadioStation")
+        assertEquals("Night Owl", created?.queryParameter("name"))
+        assertEquals("https://radio.example.org/owl", created?.queryParameter("streamUrl"))
+        waitUntil("the form to close") { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
     fun artistListOpensAnArtistPage() {
         openLibrary()
         compose.onNodeWithText("Artists").performClick()
@@ -987,6 +1044,10 @@ class AppSmokeTest {
     }
 
     private fun playerState() = world.graph.player.state.value
+
+    /** The latest request the music server got for [endpoint]. */
+    private fun call(endpoint: String) =
+        world.server.calls.lastOrNull { it.pathSegments.last().removeSuffix(".view") == endpoint }
 
     private fun settings() = world.graph.settings.current
 

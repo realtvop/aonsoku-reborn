@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Add
@@ -14,11 +16,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -37,7 +36,8 @@ import github.realtvop.aonsoku.ui.components.SheetTitle
 @Composable
 fun AddToPlaylistSheet(overlay: Overlay.AddToPlaylist, controller: OverlayController) {
     val graph = LocalAppGraph.current
-    var query by rememberSaveable { mutableStateOf("") }
+    val queryField = rememberTextFieldState()
+    val query = queryField.text.toString()
     val playlists by produceState<List<Playlist>?>(initialValue = null) {
         value = runSuspendCatching { graph.library.playlistsNow() }.getOrDefault(emptyList())
     }
@@ -59,8 +59,7 @@ fun AddToPlaylistSheet(overlay: Overlay.AddToPlaylist, controller: OverlayContro
     ActionSheet(onDismiss = controller::dismiss) {
         SheetTitle(t("options.playlist.add"))
         OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
+            state = queryField,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
@@ -68,7 +67,7 @@ fun AddToPlaylistSheet(overlay: Overlay.AddToPlaylist, controller: OverlayContro
             leadingIcon = {
                 Icon(Icons.Rounded.Search, contentDescription = null, Modifier.size(20.dp))
             },
-            singleLine = true,
+            lineLimits = TextFieldLineLimits.SingleLine,
             shape = MaterialTheme.shapes.extraLarge,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         )

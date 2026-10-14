@@ -5,6 +5,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -56,9 +59,12 @@ object RadioFormRules {
 fun RadioFormDialog(overlay: Overlay.RadioForm, controller: OverlayController) {
     val graph = LocalAppGraph.current
     val editing = overlay.radio
-    var name by rememberSaveable { mutableStateOf(editing?.name.orEmpty()) }
-    var homePage by rememberSaveable { mutableStateOf(editing?.homePageUrl.orEmpty()) }
-    var stream by rememberSaveable { mutableStateOf(editing?.streamUrl.orEmpty()) }
+    val nameField = rememberTextFieldState(editing?.name.orEmpty())
+    val homePageField = rememberTextFieldState(editing?.homePageUrl.orEmpty())
+    val streamField = rememberTextFieldState(editing?.streamUrl.orEmpty())
+    val name = nameField.text.toString()
+    val homePage = homePageField.text.toString()
+    val stream = streamField.text.toString()
     var submitted by rememberSaveable { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
 
@@ -103,21 +109,18 @@ fun RadioFormDialog(overlay: Overlay.RadioForm, controller: OverlayController) {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 FormField(
-                    value = name,
-                    onValueChange = { name = it },
+                    state = nameField,
                     label = t("radios.table.name"),
                     errorKey = nameError.takeIf { submitted },
                 )
                 FormField(
-                    value = homePage,
-                    onValueChange = { homePage = it },
+                    state = homePageField,
                     label = t("radios.table.homepage"),
                     errorKey = homePageError.takeIf { submitted },
                     keyboardType = KeyboardType.Uri,
                 )
                 FormField(
-                    value = stream,
-                    onValueChange = { stream = it },
+                    state = streamField,
                     label = t("radios.table.stream"),
                     errorKey = streamError.takeIf { submitted },
                     keyboardType = KeyboardType.Uri,
@@ -146,19 +149,17 @@ fun RadioFormDialog(overlay: Overlay.RadioForm, controller: OverlayController) {
 
 @Composable
 private fun FormField(
-    value: String,
-    onValueChange: (String) -> Unit,
+    state: TextFieldState,
     label: String,
     errorKey: String?,
     keyboardType: KeyboardType = KeyboardType.Text,
     imeAction: ImeAction = ImeAction.Next,
 ) {
     OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
+        state = state,
         modifier = Modifier.fillMaxWidth(),
         label = { Text(label) },
-        singleLine = true,
+        lineLimits = TextFieldLineLimits.SingleLine,
         isError = errorKey != null,
         supportingText = if (errorKey != null) {
             { Text(t(errorKey)) }
