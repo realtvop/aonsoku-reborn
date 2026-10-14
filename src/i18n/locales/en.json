@@ -659,7 +659,8 @@
         "connecting": "Connecting",
         "authenticating": "Authenticating",
         "connected": "Connected",
-        "error": "Error"
+        "error": "Error",
+        "reconnecting": "Reconnecting"
       },
       "lastSync": {
         "label": "Last sync"
@@ -734,7 +735,21 @@
         "remoteControl": "Remote control",
         "relay": "Handoff",
         "peerDevice": "remote device",
-        "controllingDevice": "Controlling {{name}}"
+        "controllingDevice": "Controlling {{name}}",
+        "thisDevice": "This Device",
+        "liveDevices": "Live peer devices",
+        "offlineSnapshots": "Continue from offline playback",
+        "continue": "Continue",
+        "otherDevices": "Other devices playing",
+        "showDevices": "Show Devices",
+        "continueConfirmTitle": "Continue playback here?",
+        "continueConfirmDesc": "This will replace the active local playback on this device.",
+        "currentLocal": "Current on this device",
+        "willContinue": "Will continue from {{name}}"
+      },
+      "handoff": {
+        "prepare": "Preparing track...",
+        "committed": "Handoff successful!"
       }
     },
     "server": {

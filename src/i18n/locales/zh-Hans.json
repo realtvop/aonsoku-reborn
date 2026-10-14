@@ -678,7 +678,8 @@
         "connecting": "连接中",
         "authenticating": "认证中",
         "connected": "已连接",
-        "error": "错误"
+        "error": "错误",
+        "reconnecting": "正在重新连接"
       },
       "lastSync": {
         "label": "上次同步"
@@ -753,7 +754,21 @@
         "remoteControl": "远程控制",
         "relay": "接力",
         "peerDevice": "远程设备",
-        "controllingDevice": "正在控制 {{name}}"
+        "controllingDevice": "正在控制 {{name}}",
+        "thisDevice": "此设备",
+        "liveDevices": "在线设备",
+        "offlineSnapshots": "从离线播放继续",
+        "continue": "继续",
+        "otherDevices": "其他设备正在播放",
+        "showDevices": "查看设备",
+        "continueConfirmTitle": "在此设备继续播放？",
+        "continueConfirmDesc": "这将替换此设备上正在进行的播放。",
+        "currentLocal": "此设备当前播放",
+        "willContinue": "将从 {{name}} 继续"
+      },
+      "handoff": {
+        "prepare": "正在准备曲目…",
+        "committed": "接力成功！"
       }
     },
     "privacy": {
