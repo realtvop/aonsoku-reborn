@@ -66,6 +66,7 @@ import github.realtvop.aonsoku.ui.components.CachedIndicator
 import github.realtvop.aonsoku.ui.components.CoverImage
 import github.realtvop.aonsoku.ui.components.CoverKind
 import github.realtvop.aonsoku.ui.components.ReorderState
+import github.realtvop.aonsoku.ui.components.moveActions
 import github.realtvop.aonsoku.ui.components.queueSongCoverArt
 import github.realtvop.aonsoku.ui.components.rememberReorderState
 import github.realtvop.aonsoku.ui.components.reorderHandle
@@ -365,6 +366,16 @@ fun QueueView(state: PlayerState, onShowPlaying: () -> Unit, modifier: Modifier 
                         entry = entry,
                         reorder = reorder,
                         movable = !state.isRemote,
+                        onMoveUp = if (state.isRemote || entry.index <= userOffset) {
+                            null
+                        } else {
+                            { player.reorderUserQueue(entry.index, entry.index - 1) }
+                        },
+                        onMoveDown = if (state.isRemote || entry.index >= userOffset + userEntries.lastIndex) {
+                            null
+                        } else {
+                            { player.reorderUserQueue(entry.index, entry.index + 1) }
+                        },
                         onClick = { playAndShow { player.playFromUserQueue(entry.index) } },
                         onLongClick = {
                             showMenu(
@@ -410,6 +421,16 @@ fun QueueView(state: PlayerState, onShowPlaying: () -> Unit, modifier: Modifier 
                         entry = entry,
                         reorder = reorder,
                         movable = !state.isRemote,
+                        onMoveUp = if (state.isRemote || entry.index <= contextOffset) {
+                            null
+                        } else {
+                            { player.reorderContext(entry.index, entry.index - 1) }
+                        },
+                        onMoveDown = if (state.isRemote || entry.index >= contextOffset + contextEntries.lastIndex) {
+                            null
+                        } else {
+                            { player.reorderContext(entry.index, entry.index + 1) }
+                        },
                         onClick = { playAndShow { player.playFromContext(entry.index) } },
                         onLongClick = {
                             showMenu(
@@ -480,6 +501,8 @@ private fun LazyItemScope.ReorderableQueueRow(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     movable: Boolean = true,
+    onMoveUp: (() -> Unit)? = null,
+    onMoveDown: (() -> Unit)? = null,
 ) {
     QueueRow(
         title = entry.song.title,
@@ -488,7 +511,9 @@ private fun LazyItemScope.ReorderableQueueRow(
         onClick = onClick,
         onLongClick = onLongClick,
         songId = entry.song.id,
-        modifier = Modifier.reorderItem(this, reorder, entry.key),
+        modifier = Modifier
+            .reorderItem(this, reorder, entry.key)
+            .moveActions(t("generic.moveUp"), t("generic.moveDown"), onMoveUp, onMoveDown),
         lifted = reorder.isLifted(entry.key),
         handle = if (!movable) null else ({
             Box(

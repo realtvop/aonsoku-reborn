@@ -43,7 +43,9 @@
       }
     },
     "beta": "Beta",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "moveUp": "Move up",
+    "moveDown": "Move down"
   },
   "theme": {
     "label": "Theme",

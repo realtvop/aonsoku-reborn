@@ -22,6 +22,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.zIndex
+import github.realtvop.aonsoku.i18n.t
 import kotlin.math.roundToInt
 
 /**
@@ -46,6 +47,8 @@ fun <T : Any> ReorderableColumn(
     // The place the dragged row started from, and how far it has been dragged.
     var origin by remember { mutableStateOf<Int?>(null) }
     var offset by remember { mutableFloatStateOf(0f) }
+    val moveUp = t("generic.moveUp")
+    val moveDown = t("generic.moveDown")
 
     fun targetOf(from: Int): Int = (from + (offset / heightPx).roundToInt()).coerceIn(0, count - 1)
 
@@ -68,27 +71,34 @@ fun <T : Any> ReorderableColumn(
                     animationSpec = if (from == null) snap() else MaterialTheme.motionScheme.fastSpatialSpec(),
                     label = "reorderShift",
                 )
-                val handle = Modifier.pointerInput(index) {
-                    detectDragGestures(
-                        onDragStart = {
-                            origin = index
-                            offset = 0f
-                        },
-                        onDragEnd = {
-                            val to = targetOf(index)
-                            origin = null
-                            offset = 0f
-                            if (to != index) move(index, to)
-                        },
-                        onDragCancel = {
-                            origin = null
-                            offset = 0f
-                        },
-                    ) { change, amount ->
-                        change.consume()
-                        offset = (offset + amount.y).coerceIn(-index * heightPx, (count - 1 - index) * heightPx)
+                val handle = Modifier
+                    .moveActions(
+                        upLabel = moveUp,
+                        downLabel = moveDown,
+                        onMoveUp = if (index > 0) ({ move(index, index - 1) }) else null,
+                        onMoveDown = if (index < count - 1) ({ move(index, index + 1) }) else null,
+                    )
+                    .pointerInput(index) {
+                        detectDragGestures(
+                            onDragStart = {
+                                origin = index
+                                offset = 0f
+                            },
+                            onDragEnd = {
+                                val to = targetOf(index)
+                                origin = null
+                                offset = 0f
+                                if (to != index) move(index, to)
+                            },
+                            onDragCancel = {
+                                origin = null
+                                offset = 0f
+                            },
+                        ) { change, amount ->
+                            change.consume()
+                            offset = (offset + amount.y).coerceIn(-index * heightPx, (count - 1 - index) * heightPx)
+                        }
                     }
-                }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()

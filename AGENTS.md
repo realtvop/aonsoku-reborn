@@ -666,7 +666,9 @@ App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
   `QueueView` shows the play history above the current song (out of sight
   until scrolled to), then the manually queued songs and the context queue,
   with drag-to-reorder inside a section (`ui/components/Reorder.kt`, which
-  restricts a drag to the rows `canMove` allows) and a menu per row.
+  restricts a drag to the rows `canMove` allows) and a menu per row. Screen
+  readers move a row with the "Move up"/"Move down" actions of
+  `Modifier.moveActions` instead, as in `ReorderableColumn`.
   `AppNavigator.onOpen` runs whenever a page is requested and closes the
   player, so a link followed from one of its menus is not hidden behind it.
 - Screens: each page is a `@Composable XScreen()` registered in

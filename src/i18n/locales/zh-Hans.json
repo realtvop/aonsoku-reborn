@@ -181,7 +181,9 @@
         "poster": "海报"
       }
     },
-    "cancel": "取消"
+    "cancel": "取消",
+    "moveUp": "上移",
+    "moveDown": "下移"
   },
   "home": {
     "pinned": "已固定",

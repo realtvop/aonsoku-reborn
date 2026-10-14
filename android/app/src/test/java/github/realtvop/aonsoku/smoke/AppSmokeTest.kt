@@ -310,6 +310,11 @@ class AppSmokeTest {
         waitUntil("the dragged song to move down") {
             contextTitles() == listOf("Low Tide", "Slack Water", "Undertow")
         }
+        // A screen reader moves a row without a drag.
+        accessibilityAction(hasText("Undertow"), "Move up")
+        waitUntil("the song to move up again") {
+            contextTitles() == listOf("Low Tide", "Undertow", "Slack Water")
+        }
 
         compose.onNodeWithText("Undertow").performTouchInput { longClick() }
         waitForText("Remove from queue")
@@ -577,6 +582,15 @@ class AppSmokeTest {
         waitUntil("LRCLIB to be asked first") {
             settings().lyrics.sourcePriority ==
                 listOf(LyricsSource.LrcLib, LyricsSource.Navidrome, LyricsSource.Custom)
+        }
+        accessibilityAction(hasContentDescription("Drag LRCLIB source"), "Move down")
+        waitUntil("LRCLIB to be asked second") {
+            settings().lyrics.sourcePriority ==
+                listOf(LyricsSource.Navidrome, LyricsSource.LrcLib, LyricsSource.Custom)
+        }
+        accessibilityAction(hasContentDescription("Drag LRCLIB source"), "Move up")
+        waitUntil("LRCLIB to be asked first again") {
+            settings().lyrics.sourcePriority.first() == LyricsSource.LrcLib
         }
         snapshot("settings-lyrics")
 
@@ -992,6 +1006,14 @@ class AppSmokeTest {
 
     private fun back() {
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
+    }
+
+    /** Runs the accessibility action [label] of what [matcher] finds, as a screen reader does. */
+    private fun accessibilityAction(matcher: SemanticsMatcher, label: String) {
+        val action = compose.onNode(matcher).fetchSemanticsNode().config[SemanticsActions.CustomActions]
+            .single { it.label == label }
+        compose.runOnUiThread { action.action() }
         compose.waitForIdle()
     }
 

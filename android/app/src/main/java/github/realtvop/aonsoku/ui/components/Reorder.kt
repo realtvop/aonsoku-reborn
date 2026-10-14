@@ -25,6 +25,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -215,3 +218,22 @@ fun Modifier.reorderHandle(state: ReorderState, key: Any): Modifier =
             }
         }
     }
+
+/**
+ * Moves an item one place up or down without a drag, for accessibility
+ * services. A move that is null is not offered.
+ */
+fun Modifier.moveActions(
+    upLabel: String,
+    downLabel: String,
+    onMoveUp: (() -> Unit)?,
+    onMoveDown: (() -> Unit)?,
+): Modifier {
+    if (onMoveUp == null && onMoveDown == null) return this
+    return semantics {
+        customActions = listOfNotNull(
+            onMoveUp?.let { move -> CustomAccessibilityAction(upLabel) { move(); true } },
+            onMoveDown?.let { move -> CustomAccessibilityAction(downLabel) { move(); true } },
+        )
+    }
+}
