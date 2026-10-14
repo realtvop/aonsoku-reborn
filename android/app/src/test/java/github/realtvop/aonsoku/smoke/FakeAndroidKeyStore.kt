@@ -26,10 +26,15 @@ object FakeAndroidKeyStore {
     private const val NAME = "AndroidKeyStore"
     private val keys = ConcurrentHashMap<String, Key>()
 
-    /** Registers the provider (once) and forgets every key. */
+    /**
+     * Registers the provider and forgets every key. The provider is replaced
+     * each time: one registered by an earlier test may come from another
+     * Robolectric sandbox, whose classes this one's do not match.
+     */
     fun install() {
         keys.clear()
-        if (Security.getProvider(NAME) == null) Security.addProvider(FakeProvider())
+        Security.removeProvider(NAME)
+        Security.addProvider(FakeProvider())
     }
 
     class FakeProvider : Provider(NAME, 1.0, "In-memory AndroidKeyStore for JVM tests") {
@@ -89,6 +94,9 @@ object FakeAndroidKeyStore {
 
         override fun engineInit(params: AlgorithmParameterSpec?, random: SecureRandom?) {
             alias = (params as? KeyGenParameterSpec)?.keystoreAlias
+                // A spec from another sandbox's class loader is not this KeyGenParameterSpec.
+                ?: runCatching { params?.javaClass?.getMethod("getKeystoreAlias")?.invoke(params) as? String }
+                    .getOrNull()
         }
 
         override fun engineInit(keySize: Int, random: SecureRandom?) = Unit
