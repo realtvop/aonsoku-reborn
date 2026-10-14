@@ -16,6 +16,7 @@ import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Security
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -55,8 +56,9 @@ enum class SettingsCategory(val id: String, val icon: ImageVector) {
     Language("language", Icons.Rounded.Language),
     Audio("audio", Icons.Rounded.Headphones),
     Content("content", Icons.AutoMirrored.Rounded.Article),
-    Privacy("privacy", Icons.Rounded.Security),
     Storage("storage", Icons.Rounded.Storage),
+    CrossDevice("cross-device", Icons.Rounded.Share),
+    Privacy("privacy", Icons.Rounded.Security),
     ;
 
     val titleKey: String get() = "settings.options.$id"
@@ -76,8 +78,9 @@ fun SettingsScreen(route: SettingsRoute) {
         SettingsCategory.Language -> LanguageSettings()
         SettingsCategory.Audio -> AudioSettings()
         SettingsCategory.Content -> ContentSettings()
-        SettingsCategory.Privacy -> PrivacySettings()
         SettingsCategory.Storage -> StorageSettings()
+        SettingsCategory.CrossDevice -> CrossDeviceSettings()
+        SettingsCategory.Privacy -> PrivacySettings()
     }
 }
 

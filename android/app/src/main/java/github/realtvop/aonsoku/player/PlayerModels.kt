@@ -1,5 +1,6 @@
 package github.realtvop.aonsoku.player
 
+import github.realtvop.aonsoku.data.coordination.DeviceSnapshot
 import github.realtvop.aonsoku.data.model.Radio
 import github.realtvop.aonsoku.plugins.audio.QueueSong
 import github.realtvop.aonsoku.plugins.audio.QueueSourceId
@@ -60,8 +61,12 @@ data class PlayerState(
     val source: QueueSourceId? = null,
     val sourceName: String? = null,
     val isCurrentStarred: Boolean = false,
+    /** Name of the device under remote control whose playback this is, if any. */
+    val remoteDevice: String? = null,
 ) {
     val hasMedia: Boolean get() = current != null || radio != null
+
+    val isRemote: Boolean get() = remoteDevice != null
 
     val isRadio: Boolean get() = mediaType == MediaType.Radio
 
@@ -106,4 +111,15 @@ data class ReplacementRequest(
     val shuffle: Boolean,
     val source: QueueSource?,
     val sourceName: String?,
+    /** The controlled device it was asked for; null for this device. */
+    val targetDeviceId: String? = null,
+    /** One song picked on its own rather than a list (`play_song` on another device). */
+    val single: Boolean = false,
+)
+
+/** Another device under remote control, with its latest snapshot. */
+data class RemotePlayback(
+    val deviceId: String,
+    val deviceName: String,
+    val snapshot: DeviceSnapshot,
 )

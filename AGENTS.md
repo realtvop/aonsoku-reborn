@@ -193,7 +193,9 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   commands, native snapshots, projection, handoff preparation, fencing, and
   rollback use these ports. The runtime publishes socket state as a
   `StateFlow` and forwards unconsumed envelopes, tracked command acks, and
-  reconnect requests as `CoordinationRuntimeEvent`s.
+  reconnect requests as `CoordinationRuntimeEvent`s; `session_superseded` is
+  forwarded too, after the runtime has paused local playback. The native app
+  drives it from `data/coordination/CoordinationManager`.
 - Service boundaries and binding/lifecycle rules are documented in
   `docs/android-native-services.md`.
 - The iOS host owns long-lived native services through
@@ -394,8 +396,10 @@ the device drawer outside fullscreen, so home-page device links also work before
 local playback begins; fullscreen owns its own drawer while open.
 
 - Web uses the TypeScript WebSocket client (`src/coordination/wsClient.ts`).
-- Electron, iOS, and Android use `src/native/coordination/facade.ts` and their
-  runtime-native coordination implementations.
+- Electron and iOS use `src/native/coordination/facade.ts` and their
+  runtime-native coordination implementations. The native Android app has no
+  TypeScript: `data/coordination/CoordinationManager` drives the `:core`
+  `CoordinationRuntime` (see "Android Native App").
 - Electron native playback coordination is executed by
   `electron/main/native/coordination/playback.ts`: it publishes native queue
   snapshots, executes and acknowledges remote commands, prepares full queues
@@ -621,8 +625,11 @@ App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
   (`like`, `shuffle`). It mirrors the service's sleep timer as
   `sleepTimer` (`startSleepTimer`, end of track, cancel), and `playNow`
   starts one song (a history entry) without discarding what is queued.
-  Screens call `PlayerController`; they never talk to `PlaybackService`
-  directly.
+  While another device is controlled (`showRemote`, see
+  `data/coordination/`), `state`, `progress`, and `volume` show that device
+  (`PlayerState.remoteDevice`) and intents become remote commands; `local`
+  is always this device's own playback. Screens call `PlayerController`;
+  they never talk to `PlaybackService` directly.
 - `ui/`: `AonsokuApp` is the root composable (theme, strings, session gate,
   toasts). Toasts (`Toaster` / `ToastHost`) show at the top of the screen like
   the web app's, a newer one replaces the one on screen, and a tap dismisses
@@ -688,7 +695,8 @@ App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
     de-duplicated before they reach a lazy layout.
 - `ui/settings/`: `SettingsScreen` shows the list of settings pages, or the
   page `SettingsRoute.page` names (`SettingsCategory`: server, appearance,
-  language, audio, content, privacy, storage; opened from the account sheet in
+  language, audio, content, storage, cross-device, privacy, in the web's
+  order; opened from the account sheet in
   `ui/shell/UserSheet.kt`, which also opens `AboutDialog`). Pages are built
   from `SettingsComponents.kt` (`SettingsPage` with `settingsSection` groups
   of `SwitchSetting`, `SliderSetting`, `ChoiceSetting`, `FieldSetting`,
@@ -724,6 +732,32 @@ App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
   page is incremental). Downloads run in the app process without a foreground
   service: they stop with the process, and the user's own resume at the next
   start.
+- `data/coordination/CoordinationManager` (`AppGraph.coordination`) is the
+  app's side of cross-device playback; `CoordinationRuntime` keeps the socket,
+  snapshot publication, the remote commands this device executes, both sides
+  of a handoff, and the notification projection. The manager registers this
+  device with the music server's credentials (`CoordinationApi`: challenge,
+  register as platform `android`, token refresh, registering again when the
+  server no longer knows the refresh token, device list, rename, revoke,
+  account deletion), fetches a WebSocket ticket for every connection and
+  reconnects with a backoff capped at 30 s, and keeps the devices and the
+  snapshots the server projects (`CoordinationState`). A revoked device is
+  forgotten; signing out disconnects but keeps the registration, as on the
+  web. `enterRemoteControl` begins a control session and hands the device to
+  `PlayerController`; a queue replacement there asks against that device's
+  queue and is dropped when the target changes, and queue rows cannot be
+  removed or reordered (web parity). Control ends when the device goes
+  offline or stops playing. `requestHandoff` asks first when something plays
+  here (`HandoffState.pendingDeviceId`), then asks the server for the
+  device's queue, which the runtime prepares paused; the manager reports
+  `Prepare`, `Committed`, or the error (`DevicePlayback.handoffError`) and
+  gives up after 15 s. `DevicePlayback.group` sorts the devices into this
+  device, live, offline (snapshots up to 8 h old), and hidden, like the
+  web's device panel. History sync is not implemented; the web app never
+  calls it. The UI is in `ui/devices/`: `DevicesSheet` (`Overlay.Devices`,
+  opened from the home page's `OtherDevicesSection`, the player's devices
+  button, and its "Controlling …" chip) with `HandoffConfirmationDialog`; the
+  settings page is `ui/settings/CrossDeviceSettings.kt`.
 - `actions/LibraryActions` (`AppGraph.actions`) holds the library operations
   shared by menus, cards, and pages: resolving the songs of an
   album/artist/playlist for play / play next / add to queue, starring,
@@ -756,13 +790,20 @@ runs the real `PlaybackService` in-process and hands its binder to
 work while background threads make progress. The shadowed audio output plays
 as fast as data arrives, so the fake server throttles `stream`: assert on the
 current song and the queue, not on `isPlaying`. Lazy pages only compose what
-is visible, so tests scroll to what they assert. Add a journey there when
+is visible, so tests scroll to what they assert. Sheets and dialogs are
+windows with their own back dispatcher (`backInSheet`), and Robolectric's
+Compose never goes idle while a dialog window holds a `value`/`onValueChange`
+text field, so text fields in dialogs and sheets use the `TextFieldState`
+overloads. `smoke/FakeCoordinationServer` (`SmokeWorld.coordination`) is the
+coordination server's HTTP API and WebSocket on MockWebServer, used by the
+device journeys and `smoke/CoordinationManagerTest`. Add a journey there when
 adding a screen.
 
 The same journeys double as a way to look at the UI without a device:
 `snapshot("name")` calls in `AppSmokeTest` save a PNG per screen when the run
 passes `-PsmokeScreenshots=<directory>` (`smoke/SmokeScreenshots`, which draws
-sheets and dialogs over the activity they cover), and `-PsmokeTheme=dark`
+sheets and dialogs over the activity they cover, centered and dimmed as the
+window manager would), and `-PsmokeTheme=dark`
 takes them in the dark theme. The fake server answers `getCoverArt` with a
 colored square per id, so artwork tinting shows up too, and it stands in for
 LRCLIB and a custom lyrics server (`SmokeWorld` passes its address to

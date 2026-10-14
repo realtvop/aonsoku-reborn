@@ -14,6 +14,7 @@ import github.realtvop.aonsoku.data.model.Playlist
 import github.realtvop.aonsoku.data.model.Radio
 import github.realtvop.aonsoku.data.model.Song
 import github.realtvop.aonsoku.ui.components.CoverKind
+import github.realtvop.aonsoku.ui.devices.DevicesSheet
 
 /** Menus, pickers, and dialogs that can be opened from anywhere in the app. */
 sealed interface Overlay {
@@ -69,6 +70,9 @@ sealed interface Overlay {
     /** How strongly the artwork tints the full-screen player. */
     data object PlayerColors : Overlay
 
+    /** The devices of the cross-device account: control them, or continue their playback here. */
+    data object Devices : Overlay
+
     /** Full-screen view of an artwork. */
     data class Artwork(
         val art: CoverArt,
@@ -116,6 +120,7 @@ fun OverlayHost(controller: OverlayController) {
             Overlay.CurrentSongMenu -> CurrentSongMenuSheet(controller)
             Overlay.SleepTimer -> SleepTimerSheet(controller)
             Overlay.PlayerColors -> PlayerColorsSheet(controller)
+            Overlay.Devices -> DevicesSheet(controller)
             is Overlay.Artwork -> ArtworkViewer(overlay, controller)
         }
     }

@@ -8,6 +8,7 @@ import github.realtvop.aonsoku.data.LibraryRepository
 import github.realtvop.aonsoku.data.LibrarySyncCoordinator
 import github.realtvop.aonsoku.data.NetworkMonitor
 import github.realtvop.aonsoku.data.api.SubsonicApi
+import github.realtvop.aonsoku.data.coordination.CoordinationManager
 import github.realtvop.aonsoku.data.image.ArtworkStore
 import github.realtvop.aonsoku.data.lyrics.LyricsRepository
 import github.realtvop.aonsoku.data.lyrics.LyricsSources
@@ -17,6 +18,7 @@ import github.realtvop.aonsoku.i18n.I18n
 import github.realtvop.aonsoku.i18n.Translations
 import github.realtvop.aonsoku.player.PlayerController
 import github.realtvop.aonsoku.plugins.AppServices
+import github.realtvop.aonsoku.plugins.coordination.CoordinationRuntime
 import github.realtvop.aonsoku.session.SessionManager
 import github.realtvop.aonsoku.session.SessionState
 import github.realtvop.aonsoku.settings.SettingsRepository
@@ -112,6 +114,17 @@ class AppGraph(
         toaster = toaster,
         strings = ::strings,
     )
+    val coordination = CoordinationManager(
+        context = application,
+        runtime = CoordinationRuntime.getInstance(application),
+        client = httpClient,
+        credentials = { session.credentials },
+        player = player,
+        network = network,
+        toaster = toaster,
+        strings = ::strings,
+        scope = scope,
+    )
 
     /** Strings for the current language, for code that runs outside composition. */
     fun strings(): Translations = I18n.load(application, settings.current.language)
@@ -135,6 +148,7 @@ class AppGraph(
         sync.onSessionStarted()
         offline.start()
         player.connect()
+        coordination.start()
     }
 
     /** The session moved to another address of the server: look at it afresh. */
@@ -148,6 +162,7 @@ class AppGraph(
         if (session.state.value !is SessionState.SignedIn) return
         network.onForeground()
         sync.onForeground()
+        coordination.onForeground()
     }
 
     fun onBackground() {
@@ -156,6 +171,7 @@ class AppGraph(
 
     /** Ends the session and drops everything tied to the signed-in account. */
     suspend fun signOut() {
+        coordination.end()
         player.shutdown()
         sync.onSessionEnded()
         offline.end()

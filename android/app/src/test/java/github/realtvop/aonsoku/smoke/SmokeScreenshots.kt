@@ -2,6 +2,8 @@ package github.realtvop.aonsoku.smoke
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.ViewRootForTest
@@ -12,6 +14,7 @@ import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import java.io.File
+import kotlin.math.roundToInt
 
 /**
  * Saves what a smoke test sees as PNG files, to look at the UI without a
@@ -39,9 +42,18 @@ class SmokeScreenshots(private val compose: AndroidComposeTestRule<*, out Compon
         val canvas = Canvas(image)
         val dialogs = compose.onAllNodes(isDialog())
         repeat(dialogs.fetchSemanticsNodes().size) { index ->
-            val bounds = dialogs[index].fetchSemanticsNode().boundsInWindow
+            val node = dialogs[index].fetchSemanticsNode()
+            val window = (node.root as ViewRootForTest).view.rootView
+            val params = window.layoutParams as? WindowManager.LayoutParams
+            if (params != null && params.flags and WindowManager.LayoutParams.FLAG_DIM_BEHIND != 0) {
+                canvas.drawColor(Color.argb((params.dimAmount * 255).roundToInt(), 0, 0, 0))
+            }
+            // Robolectric leaves a window smaller than the screen at the top
+            // left; the window manager centers a dialog.
+            val left = node.boundsInWindow.left + ((image.width - window.width) / 2f).coerceAtLeast(0f)
+            val top = node.boundsInWindow.top + ((image.height - window.height) / 2f).coerceAtLeast(0f)
             val dialog = dialogs[index].captureToImage().asAndroidBitmap()
-            canvas.drawBitmap(dialog, bounds.left, bounds.top, null)
+            canvas.drawBitmap(dialog, left, top, null)
         }
         val file = File(directory, "$name.png").apply { parentFile?.mkdirs() }
         file.outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }

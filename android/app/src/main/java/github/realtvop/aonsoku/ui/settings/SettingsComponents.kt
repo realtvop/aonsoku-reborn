@@ -360,6 +360,7 @@ fun FieldSetting(
     placeholder: String? = null,
     enabled: Boolean = true,
     secret: Boolean = false,
+    keyboardType: KeyboardType = if (secret) KeyboardType.Password else KeyboardType.Uri,
     onCommit: () -> Unit = {},
 ) {
     val focus = LocalFocusManager.current
@@ -382,7 +383,7 @@ fun FieldSetting(
             visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
             keyboardOptions = KeyboardOptions(
                 autoCorrectEnabled = false,
-                keyboardType = if (secret) KeyboardType.Password else KeyboardType.Uri,
+                keyboardType = keyboardType,
                 imeAction = ImeAction.Done,
             ),
             // Leaving the field commits, so done only has to let go of it.

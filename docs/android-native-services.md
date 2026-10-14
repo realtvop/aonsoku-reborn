@@ -102,4 +102,16 @@ Clients observe `socketState` (a `StateFlow`) and `events`
 (`CoordinationRuntimeEvent`: unconsumed envelopes, acks for tracked commands,
 and reconnect requests). Tickets are one-time and short-lived, so the runtime
 never reconnects by itself: it emits `ReconnectNeeded` and its owner fetches a
-fresh ticket and calls `connect()` again.
+fresh ticket and calls `connect()` again. `session_superseded` is forwarded
+after the runtime has paused local playback, so the owner can tell the user
+where playback went. A close the server starts is answered at once, so a
+dropped connection is noticed without waiting for a timeout.
+
+In the native app that owner is `data/coordination/CoordinationManager`: it
+registers the device over HTTP (`CoordinationApi`), fetches the tickets,
+reconnects with a backoff capped at 30 seconds, keeps the device list and the
+projected snapshots, and runs remote control and the handoffs the user
+starts. Commands for a controlled device go out through
+`sendActiveControlCommand`; a handoff to this device starts with
+`requestHandoffCandidateFromCache` or `requestHandoffCandidate`, and the
+runtime prepares the queue it receives before it answers `target_ready`.

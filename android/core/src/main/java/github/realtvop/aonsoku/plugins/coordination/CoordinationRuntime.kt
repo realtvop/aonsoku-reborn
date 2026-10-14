@@ -555,6 +555,12 @@ class CoordinationRuntime internal constructor(
                 dispatchEnvelope(text)
             }
 
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                // OkHttp leaves answering the server's close to the listener;
+                // without the answer onClosed waits for the connection to time out.
+                webSocket.close(1000, null)
+            }
+
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 if (this@CoordinationRuntime.webSocket !== webSocket) return
                 this@CoordinationRuntime.webSocket = null
@@ -1228,7 +1234,7 @@ class CoordinationRuntime internal constructor(
                 audioService()?.executeRemoteControlCommand(
                     JSONObject().put("type", "pause"),
                 )
-                return
+                // Forwarded too: the owner tells the user where playback went.
             }
         }
         emitEnvelope(json)

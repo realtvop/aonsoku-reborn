@@ -109,6 +109,9 @@ fun HomeScreen() {
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = floatingBarsContentPadding(),
                 ) {
+                    item(key = "devices") {
+                        OtherDevicesSection(onOpen = { overlays.show(Overlay.Devices) })
+                    }
                     if (state.isEmpty) {
                         item(key = "empty") {
                             EmptyState(

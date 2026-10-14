@@ -10,6 +10,8 @@ import android.util.Log
 import android.util.LruCache
 import github.realtvop.aonsoku.data.LibraryRepository
 import github.realtvop.aonsoku.data.api.SubsonicApi
+import github.realtvop.aonsoku.data.coordination.PlaybackSnapshot
+import github.realtvop.aonsoku.data.coordination.RemoteCommand
 import github.realtvop.aonsoku.data.formatIsoTimestamp
 import github.realtvop.aonsoku.data.model.Radio
 import github.realtvop.aonsoku.data.model.Song
@@ -24,6 +26,7 @@ import github.realtvop.aonsoku.plugins.audio.AudioPlaybackSnapshot
 import github.realtvop.aonsoku.plugins.audio.AudioQueueSnapshot
 import github.realtvop.aonsoku.plugins.audio.PlaybackService
 import github.realtvop.aonsoku.plugins.audio.QueueSong
+import github.realtvop.aonsoku.plugins.audio.QueueSourceId
 import github.realtvop.aonsoku.plugins.audio.ReplayGainConfig
 import github.realtvop.aonsoku.plugins.preferences.PreferencesService
 import github.realtvop.aonsoku.settings.ReplayGainSettings
@@ -32,6 +35,7 @@ import github.realtvop.aonsoku.settings.SettingsRepository
 import github.realtvop.aonsoku.ui.components.Toaster
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,6 +49,11 @@ import kotlinx.coroutines.launch
  * its typed state into flows, and turns user intent into `AudioCommand`s while
  * applying the queue rules of the web player (context queue starting at the
  * current song, user queue, replacement confirmation, shuffle/repeat rebuilds).
+ *
+ * While another device is under remote control ([showRemote]), [state],
+ * [progress], and [volume] describe that device and the same intents become
+ * [RemoteCommand]s for it, as in the web player store; [local] still describes
+ * this device, which stays paused.
  */
 class PlayerController(
     private val context: Context,
@@ -55,9 +64,16 @@ class PlayerController(
     private val toaster: Toaster,
     private val strings: () -> Translations,
 ) {
+    // What the playback service reports.
+    private val _local = MutableStateFlow(PlayerState())
+    private val _localProgress = MutableStateFlow(PlaybackProgress())
+    private val _localVolume = MutableStateFlow(1.0)
+
+    // What the screens show: the local playback, or the device under remote control.
     private val _state = MutableStateFlow(PlayerState())
     private val _progress = MutableStateFlow(PlaybackProgress())
     private val _volume = MutableStateFlow(1.0)
+    private val _remote = MutableStateFlow<RemotePlayback?>(null)
     private val _sleepTimer = MutableStateFlow(SleepTimerState())
     private val _pendingReplacement = MutableStateFlow<ReplacementRequest?>(null)
     private val _historyVersion = MutableStateFlow(0)
@@ -65,6 +81,12 @@ class PlayerController(
     val state: StateFlow<PlayerState> = _state.asStateFlow()
     val progress: StateFlow<PlaybackProgress> = _progress.asStateFlow()
     val volume: StateFlow<Double> = _volume.asStateFlow()
+
+    /** The playback of this device, also while another one is controlled. */
+    val local: StateFlow<PlayerState> = _local.asStateFlow()
+
+    /** The device under remote control, if any. */
+    val remote: StateFlow<RemotePlayback?> = _remote.asStateFlow()
     val sleepTimer: StateFlow<SleepTimerState> = _sleepTimer.asStateFlow()
     val pendingReplacement: StateFlow<ReplacementRequest?> = _pendingReplacement.asStateFlow()
 
@@ -81,6 +103,20 @@ class PlayerController(
     private var shuffleStartHistory: List<String> = emptyList()
     private val knownSongs = LruCache<String, Song>(KNOWN_SONGS_CAPACITY)
     private var tracked: TrackedPlay? = null
+
+    private var remoteSend: ((RemoteCommand) -> Unit)? = null
+    private var remoteTicker: Job? = null
+    private var remoteLookup: Job? = null
+
+    /** Songs of the remote queue that were found, and those that could not be. */
+    private val remoteSongs = HashMap<String, Song>()
+    private val unknownRemoteSongs = HashSet<String>()
+
+    /**
+     * Likes toggled here for songs of the controlled device. Snapshots do not
+     * say what is liked, and the library here learns it at its next sync.
+     */
+    private val remoteLikes = HashMap<String, Boolean>()
 
     init {
         scope.launch {
@@ -114,7 +150,8 @@ class PlayerController(
 
     /** Stops playback and releases the service, for example on sign-out. */
     fun shutdown() {
-        clear()
+        hideRemote()
+        clearLocal()
         if (bindRequested) {
             runCatching { context.unbindService(connection) }
             bindRequested = false
@@ -143,10 +180,10 @@ class PlayerController(
         serviceJob?.cancel()
         serviceJob = null
         service = null
-        _state.value = PlayerState()
-        _progress.value = PlaybackProgress()
+        updateLocal { PlayerState() }
+        setLocalProgress(PlaybackProgress())
         _sleepTimer.value = SleepTimerState()
-        _pendingReplacement.value = null
+        if (_remote.value == null) _pendingReplacement.value = null
         sourceSongs = emptyList()
         tracked = null
     }
@@ -178,17 +215,19 @@ class PlayerController(
 
     private fun onPlayback(snapshot: AudioPlaybackSnapshot) {
         val radioId = snapshot.radioId
-        val current = _state.value
+        val current = _local.value
         val duration = snapshot.durationSeconds.takeIf { it > 0 }
             ?: current.current?.duration?.takeIf { radioId == null }
             ?: 0.0
-        _progress.value = PlaybackProgress(
-            position = snapshot.currentTimeSeconds.coerceAtLeast(0.0),
-            duration = duration,
-            buffered = snapshot.bufferedTimeSeconds,
+        setLocalProgress(
+            PlaybackProgress(
+                position = snapshot.currentTimeSeconds.coerceAtLeast(0.0),
+                duration = duration,
+                buffered = snapshot.bufferedTimeSeconds,
+            ),
         )
-        _volume.value = snapshot.volume
-        _state.update { state ->
+        setLocalVolume(snapshot.volume)
+        updateLocal { state ->
             state.copy(
                 isPlaying = snapshot.isPlaying,
                 isLoading = snapshot.isBuffering || snapshot.state == "loading",
@@ -205,8 +244,8 @@ class PlayerController(
     }
 
     private fun onQueue(queue: AudioQueueSnapshot) {
-        val previousId = _state.value.current?.id
-        _state.update { state ->
+        val previousId = _local.value.current?.id
+        updateLocal { state ->
             state.copy(
                 connected = true,
                 current = queue.currentSong,
@@ -244,7 +283,7 @@ class PlayerController(
 
     private fun onCurrentSongChanged(song: QueueSong?) {
         if (song == null) {
-            _state.update { it.copy(isCurrentStarred = false) }
+            updateLocal { it.copy(isCurrentStarred = false) }
             service?.setLikeActive(false)
             return
         }
@@ -252,8 +291,8 @@ class PlayerController(
             val starred = library.localSong(song.id)?.isStarred
                 ?: knownSongs.get(song.id)?.isStarred
                 ?: false
-            if (_state.value.current?.id == song.id) {
-                _state.update { it.copy(isCurrentStarred = starred) }
+            if (_local.value.current?.id == song.id) {
+                updateLocal { it.copy(isCurrentStarred = starred) }
                 service?.setLikeActive(starred)
             }
         }
@@ -263,12 +302,12 @@ class PlayerController(
         when (event) {
             is AudioEvent.Error -> {
                 Log.w(TAG, "Playback error ${event.code}: ${event.message}")
-                val key = if (_state.value.isRadio) "radios.error" else "warnings.songError"
+                val key = if (_local.value.isRadio) "radios.error" else "warnings.songError"
                 toaster.error(strings().t(key))
             }
             is AudioEvent.RemoteCommand -> onSystemCommand(event.command)
             is AudioEvent.SleepTimerFired -> _sleepTimer.value = SleepTimerState()
-            is AudioEvent.SystemVolumeChanged -> _volume.value = event.volume
+            is AudioEvent.SystemVolumeChanged -> setLocalVolume(event.volume)
             else -> Unit
         }
     }
@@ -291,34 +330,68 @@ class PlayerController(
 
     // region Transport
 
-    fun play() = run(AudioCommand.Play)
+    fun play() {
+        if (sendRemote(RemoteCommand.Play)) {
+            setRemotePlaying(true)
+            return
+        }
+        run(AudioCommand.Play)
+    }
 
-    fun pause() = run(AudioCommand.Pause)
+    fun pause() {
+        if (sendRemote(RemoteCommand.Pause)) {
+            setRemotePlaying(false)
+            return
+        }
+        pauseLocal()
+    }
+
+    /** Pauses this device, also while another one is controlled. */
+    fun pauseLocal() = run(AudioCommand.Pause)
 
     fun togglePlayPause() {
-        if (!_state.value.hasMedia) return
+        _remote.value?.let { remote ->
+            sendRemote(RemoteCommand.TogglePlayPause)
+            setRemotePlaying(!remote.snapshot.snapshot.isPlaying)
+            return
+        }
+        if (!_local.value.hasMedia) return
         run(AudioCommand.TogglePlayPause)
     }
 
     fun next() {
-        if (_state.value.isRadio) return
+        if (sendRemote(RemoteCommand.Next)) return
+        if (_local.value.isRadio) return
         run(AudioCommand.Next)
     }
 
     fun previous() {
-        if (_state.value.isRadio) return
+        if (sendRemote(RemoteCommand.Previous)) return
+        if (_local.value.isRadio) return
         run(AudioCommand.Previous)
     }
 
     fun seek(seconds: Double) {
-        if (_state.value.isRadio) return
-        _progress.update { it.copy(position = seconds.coerceAtLeast(0.0)) }
+        val position = seconds.coerceAtLeast(0.0)
+        if (sendRemote(RemoteCommand.Seek(position))) {
+            updateRemote { it.copy(snapshot = it.snapshot.carriedTo(position = position)) }
+            return
+        }
+        if (_local.value.isRadio) return
+        setLocalProgress(_localProgress.value.copy(position = position))
         run(AudioCommand.Seek(seconds))
     }
 
     fun setVolume(value: Double) {
         val clamped = value.coerceIn(0.0, 1.0)
-        _volume.value = clamped
+        if (sendRemote(RemoteCommand.SetVolume(clamped))) {
+            _volume.value = clamped
+            updateRemote {
+                it.copy(snapshot = it.snapshot.copy(snapshot = it.snapshot.snapshot.copy(volume = clamped)))
+            }
+            return
+        }
+        setLocalVolume(clamped)
         service?.setSystemVolume(clamped)
     }
 
@@ -348,7 +421,12 @@ class PlayerController(
             else -> 0
         }.coerceIn(0, queueSongs.lastIndex)
 
-        val current = _state.value
+        _remote.value?.let { remote ->
+            playRemotely(remote, queueSongs, start, shuffle, source, sourceName, bypassConfirmation)
+            return
+        }
+
+        val current = _local.value
         val sameContext = !shuffle &&
             !current.isRadio &&
             !current.isInUserQueue &&
@@ -371,7 +449,30 @@ class PlayerController(
     }
 
     fun playSong(song: Song) {
-        val current = _state.value
+        _remote.value?.let { remote ->
+            remember(listOf(song))
+            val snapshot = remote.snapshot.snapshot
+            if (snapshot.songId == song.id) {
+                play()
+                return
+            }
+            val request = ReplacementRequest(
+                songs = listOf(song.toQueueSong(settings.current.useAlbumCoverForSongs)),
+                index = 0,
+                shuffle = false,
+                source = null,
+                sourceName = null,
+                targetDeviceId = remote.deviceId,
+                single = true,
+            )
+            if (needsConfirmation(snapshot)) {
+                _pendingReplacement.value = request
+            } else {
+                sendRemote(RemoteCommand.PlaySong(song.id))
+            }
+            return
+        }
+        val current = _local.value
         if (!current.isRadio && current.current?.id == song.id) {
             play()
             return
@@ -380,7 +481,7 @@ class PlayerController(
     }
 
     private fun needsConfirmation(): Boolean {
-        val current = _state.value
+        val current = _local.value
         return QueuePlanner.shouldConfirmReplacement(
             isPlaying = current.isPlaying,
             userQueueSize = current.userQueue.size,
@@ -388,10 +489,33 @@ class PlayerController(
         )
     }
 
+    /** The same question, about what the controlled device plays. */
+    private fun needsConfirmation(snapshot: PlaybackSnapshot): Boolean =
+        QueuePlanner.shouldConfirmReplacement(
+            isPlaying = snapshot.isPlaying,
+            userQueueSize = snapshot.userQueue.size,
+            isInUserQueue = snapshot.inUserQueue,
+        )
+
     /** Resolves the pending request: replace the queue, or queue it up next. */
     fun confirmReplacement(replaceQueue: Boolean) {
         val request = _pendingReplacement.value ?: return
         _pendingReplacement.value = null
+        // Asked about another playback target than the current one.
+        if (request.targetDeviceId != _remote.value?.deviceId) return
+        if (request.targetDeviceId != null) {
+            when {
+                !replaceQueue -> sendRemote(
+                    RemoteCommand.AddToQueueNext(
+                        QueuePlanner.replacementPlayNext(request.songs, request.index, request.shuffle)
+                            .map { it.id },
+                    ),
+                )
+                request.single -> sendRemote(RemoteCommand.PlaySong(request.songs[request.index].id))
+                else -> startRemoteQueue(request)
+            }
+            return
+        }
         if (replaceQueue) {
             startQueue(request)
         } else {
@@ -408,7 +532,7 @@ class PlayerController(
 
     private fun startQueue(request: ReplacementRequest) {
         val audio = service ?: return
-        val repeat = _state.value.repeat
+        val repeat = _local.value.repeat
         val shuffle = request.shuffle && request.songs.size > 1
         val queue = QueuePlanner.build(
             songs = request.songs,
@@ -446,15 +570,17 @@ class PlayerController(
     }
 
     fun playRadio(radios: List<Radio>, index: Int) {
+        // Radio stations play here only, as on the web.
+        if (_remote.value != null) return
         val radio = radios.getOrNull(index) ?: return
-        val current = _state.value
+        val current = _local.value
         if (current.isRadio && current.radio?.id == radio.id) {
             play()
             return
         }
         radioList = radios
         sourceSongs = emptyList()
-        _state.update { it.copy(radio = radio, mediaType = MediaType.Radio) }
+        updateLocal { it.copy(radio = radio, mediaType = MediaType.Radio) }
         run(
             AudioCommand.PlayRadio(
                 radioId = radio.id,
@@ -465,8 +591,13 @@ class PlayerController(
         )
     }
 
-    /** Stops playback and empties the queue. */
+    /** Stops playback and empties the queue; does nothing to a controlled device. */
     fun clear() {
+        if (_remote.value != null) return
+        clearLocal()
+    }
+
+    private fun clearLocal() {
         _pendingReplacement.value = null
         radioList = emptyList()
         sourceSongs = emptyList()
@@ -478,9 +609,27 @@ class PlayerController(
 
     // region Queue edits
 
-    fun playFromContext(index: Int) = run(AudioCommand.PlayAtIndex(index, null))
+    fun playFromContext(index: Int) {
+        _remote.value?.let { remote ->
+            sendRemote(RemoteCommand.PlayAtIndex(remote.snapshot.snapshot.contextQueue, index))
+            return
+        }
+        run(AudioCommand.PlayAtIndex(index, null))
+    }
 
-    fun playFromUserQueue(index: Int) = run(AudioCommand.PlayUserQueueAt(index))
+    fun playFromUserQueue(index: Int) {
+        _remote.value?.let { remote ->
+            val snapshot = remote.snapshot.snapshot
+            sendRemote(
+                RemoteCommand.PlayAtIndex(
+                    snapshot.contextQueue + snapshot.userQueue,
+                    snapshot.contextQueue.size + index,
+                ),
+            )
+            return
+        }
+        run(AudioCommand.PlayUserQueueAt(index))
+    }
 
     /**
      * Plays [song] right away and keeps everything that is queued, the way a
@@ -488,8 +637,14 @@ class PlayerController(
      * skipped to.
      */
     fun playNow(song: Song) {
+        if (_remote.value != null) {
+            remember(listOf(song))
+            sendRemote(RemoteCommand.AddToQueueNext(listOf(song.id)))
+            sendRemote(RemoteCommand.Next)
+            return
+        }
         val audio = service
-        val current = _state.value
+        val current = _local.value
         if (audio == null || !current.hasMedia || current.isRadio) {
             playSongs(listOf(song), 0, bypassConfirmation = true)
             return
@@ -516,7 +671,14 @@ class PlayerController(
     private fun addToQueue(songs: List<Song>, position: String) {
         if (songs.isEmpty()) return
         remember(songs)
-        if (!_state.value.hasMedia || _state.value.isRadio) {
+        val ids = songs.map { it.id }
+        val command = if (position == "next") {
+            RemoteCommand.AddToQueueNext(ids)
+        } else {
+            RemoteCommand.AddToQueueLast(ids)
+        }
+        if (sendRemote(command)) return
+        if (!_local.value.hasMedia || _local.value.isRadio) {
             playSongs(songs, 0, bypassConfirmation = true)
             return
         }
@@ -529,10 +691,17 @@ class PlayerController(
         run(AudioCommand.AddToUserQueue(songs, position))
     }
 
-    fun removeFromUserQueue(index: Int) = run(AudioCommand.RemoveFromUserQueue(listOf(index)))
+    // Removing and moving songs of a controlled device's queue is not offered,
+    // as on the web: the protocol addresses songs by id, not by position.
+
+    fun removeFromUserQueue(index: Int) {
+        if (_remote.value != null) return
+        run(AudioCommand.RemoveFromUserQueue(listOf(index)))
+    }
 
     fun removeFromContext(index: Int) {
-        val current = _state.value
+        if (_remote.value != null) return
+        val current = _local.value
         val removed = current.contextSongs.getOrNull(index) ?: return
         val (songs, nextIndex) = QueuePlanner.removeFromContext(
             songs = current.contextSongs,
@@ -544,27 +713,39 @@ class PlayerController(
         run(AudioCommand.UpdateContextQueue(songs, nextIndex))
     }
 
-    fun reorderUserQueue(fromIndex: Int, toIndex: Int) =
+    fun reorderUserQueue(fromIndex: Int, toIndex: Int) {
+        if (_remote.value != null) return
         run(AudioCommand.ReorderUserQueue(fromIndex, toIndex))
+    }
 
-    fun reorderContext(fromIndex: Int, toIndex: Int) =
+    fun reorderContext(fromIndex: Int, toIndex: Int) {
+        if (_remote.value != null) return
         run(AudioCommand.ReorderContextQueue(fromIndex, toIndex))
+    }
 
-    fun clearUserQueue() = run(AudioCommand.ClearUserQueue)
+    fun clearUserQueue() {
+        if (sendRemote(RemoteCommand.ClearQueue)) return
+        run(AudioCommand.ClearUserQueue)
+    }
 
     // endregion
 
     // region Shuffle and repeat
 
     fun toggleShuffle() {
-        val current = _state.value
+        _remote.value?.let { remote ->
+            sendRemote(RemoteCommand.SetShuffle(!remote.snapshot.snapshot.shuffle))
+            return
+        }
+        val current = _local.value
         if (current.isRadio || current.contextSongs.isEmpty()) return
         setShuffle(!current.shuffle)
     }
 
     fun setShuffle(enabled: Boolean) {
+        if (sendRemote(RemoteCommand.SetShuffle(enabled))) return
         val audio = service ?: return
-        val current = _state.value
+        val current = _local.value
         if (current.shuffle == enabled) return
         val rebuilt = rebuildContext(current, current.repeat, enabled)
         scope.launch {
@@ -576,8 +757,9 @@ class PlayerController(
     fun cycleRepeat() = setRepeat(_state.value.repeat.next())
 
     fun setRepeat(mode: RepeatMode) {
+        if (sendRemote(RemoteCommand.SetRepeat(mode.value))) return
         val audio = service ?: return
-        val current = _state.value
+        val current = _local.value
         if (current.repeat == mode) return
         // Repeat-all brings back the songs before the current one; turning it
         // off drops them again. Repeat-one keeps the order of repeat-off.
@@ -607,19 +789,27 @@ class PlayerController(
     // region Likes
 
     fun toggleCurrentLike() {
-        val current = _state.value
+        _remote.value?.let { remote ->
+            val songId = remote.snapshot.snapshot.songId.takeIf(String::isNotEmpty) ?: return
+            // The controlled device stars it; shown here until its library says so.
+            sendRemote(RemoteCommand.ToggleLike)
+            remoteLikes[songId] = !_state.value.isCurrentStarred
+            publishRemote()
+            return
+        }
+        val current = _local.value
         val queueSong = current.current ?: return
         setSongStarred(songFor(queueSong), !current.isCurrentStarred)
     }
 
     /** Stars or unstars [song] on the server and locally, optimistically. */
     fun setSongStarred(song: Song, starred: Boolean, onResult: (Boolean) -> Unit = {}) {
-        val isCurrent = _state.value.current?.id == song.id
+        val isCurrent = _local.value.current?.id == song.id
         if (isCurrent) applyCurrentStarred(starred)
         scope.launch {
             val succeeded = runSuspendCatching { library.setSongStarred(song, starred) }.isSuccess
             if (!succeeded) {
-                if (_state.value.current?.id == song.id) applyCurrentStarred(!starred)
+                if (_local.value.current?.id == song.id) applyCurrentStarred(!starred)
                 toaster.error(strings().t("toast.server.error"))
             } else {
                 knownSongs.get(song.id)?.let { known ->
@@ -640,7 +830,7 @@ class PlayerController(
     }
 
     private fun applyCurrentStarred(starred: Boolean) {
-        _state.update { it.copy(isCurrentStarred = starred) }
+        updateLocal { it.copy(isCurrentStarred = starred) }
         service?.setLikeActive(starred)
     }
 
@@ -700,7 +890,7 @@ class PlayerController(
     }
 
     private fun updateHistoryTracking() {
-        val current = _state.value
+        val current = _local.value
         val song = current.current?.takeIf { !current.isRadio }
         val now = SystemClock.elapsedRealtime()
         val active = tracked
@@ -752,6 +942,231 @@ class PlayerController(
 
     // endregion
 
+    // region Remote control
+
+    /**
+     * Shows [playback] instead of this device's own and sends what the user
+     * does to it through [send]. Called again with every new snapshot.
+     */
+    fun showRemote(playback: RemotePlayback, send: (RemoteCommand) -> Unit) {
+        if (_remote.value?.deviceId != playback.deviceId) {
+            // A question asked about another playback target no longer applies.
+            _pendingReplacement.value = null
+            remoteLikes.clear()
+            unknownRemoteSongs.clear()
+        }
+        remoteSend = send
+        _remote.value = playback
+        lookUpRemoteSongs()
+        publishRemote()
+    }
+
+    /** Back to the playback of this device. */
+    fun hideRemote() {
+        if (_remote.value == null) return
+        _remote.value = null
+        remoteSend = null
+        remoteTicker?.cancel()
+        remoteLookup?.cancel()
+        remoteLikes.clear()
+        _pendingReplacement.value = null
+        _state.value = _local.value
+        _progress.value = _localProgress.value
+        _volume.value = _localVolume.value
+    }
+
+    /** Sends [command] to the controlled device; false when there is none. */
+    private fun sendRemote(command: RemoteCommand): Boolean {
+        val send = remoteSend ?: return false
+        if (_remote.value == null) return false
+        send(command)
+        return true
+    }
+
+    /** What the web player sends to start a list on another device (`sendSongListRemote`). */
+    private fun playRemotely(
+        remote: RemotePlayback,
+        songs: List<QueueSong>,
+        start: Int,
+        shuffle: Boolean,
+        source: QueueSource?,
+        sourceName: String?,
+        bypassConfirmation: Boolean,
+    ) {
+        val snapshot = remote.snapshot.snapshot
+        val remoteContext = snapshot.contextQueue.drop(snapshot.contextIndex ?: 0)
+        val requested = songs.drop(start).map { it.id }
+        val sameContext = !snapshot.inUserQueue &&
+            !snapshot.shuffle &&
+            snapshot.songId == songs[start].id &&
+            snapshot.sourceId == source?.let { "${it.type}:${it.id}" } &&
+            remoteContext == requested
+        if (!shuffle && sameContext) {
+            play()
+            return
+        }
+        val request = ReplacementRequest(
+            songs = songs,
+            index = start,
+            shuffle = shuffle,
+            source = source,
+            sourceName = sourceName,
+            targetDeviceId = remote.deviceId,
+        )
+        if (!bypassConfirmation && needsConfirmation(snapshot)) {
+            _pendingReplacement.value = request
+            return
+        }
+        startRemoteQueue(request)
+    }
+
+    private fun startRemoteQueue(request: ReplacementRequest) {
+        val source = request.source
+        when (source?.type) {
+            "album" -> sendRemote(RemoteCommand.PlayAlbum(source.id, request.index, request.shuffle))
+            "playlist" -> sendRemote(RemoteCommand.PlayPlaylist(source.id, request.index, request.shuffle))
+            else -> {
+                val ids = request.songs.map { it.id }
+                sendRemote(RemoteCommand.ClearQueue)
+                sendRemote(RemoteCommand.AddToQueueLast(ids))
+                sendRemote(RemoteCommand.PlaySong(ids[request.index]))
+                if (request.shuffle) sendRemote(RemoteCommand.SetShuffle(true))
+            }
+        }
+        setRemotePlaying(true)
+    }
+
+    /** Shows the controlled device as playing or paused until it reports back. */
+    private fun setRemotePlaying(playing: Boolean) {
+        updateRemote { it.copy(snapshot = it.snapshot.carriedTo(isPlaying = playing)) }
+    }
+
+    private fun updateRemote(transform: (RemotePlayback) -> RemotePlayback) {
+        val current = _remote.value ?: return
+        _remote.value = transform(current)
+        publishRemote()
+    }
+
+    /** The remote device's playback in the shape the screens read. */
+    private fun publishRemote() {
+        val remote = _remote.value ?: return
+        val snapshot = remote.snapshot.snapshot
+        val useAlbumCover = settings.current.useAlbumCoverForSongs
+        val songs = HashMap<String, QueueSong>()
+        fun song(id: String): QueueSong = songs.getOrPut(id) {
+            remoteSongs[id]?.toQueueSong(useAlbumCover) ?: unknownSong(
+                id = id,
+                duration = if (id == snapshot.songId) snapshot.durationSeconds else 0.0,
+                looking = id !in unknownRemoteSongs,
+            )
+        }
+        val songId = snapshot.songId.takeIf(String::isNotEmpty)
+        _state.value = PlayerState(
+            connected = true,
+            current = songId?.let(::song),
+            isPlaying = snapshot.isPlaying,
+            shuffle = snapshot.shuffle,
+            repeat = RepeatMode.fromValue(snapshot.repeat),
+            contextSongs = snapshot.contextQueue.map(::song),
+            contextIndex = (snapshot.contextIndex ?: 0).coerceAtLeast(0),
+            userQueue = snapshot.userQueue.map(::song),
+            isInUserQueue = snapshot.inUserQueue,
+            playedUserQueueHistory = snapshot.restorePrevious.map(::song),
+            source = snapshot.sourceId?.let(::decodeSource),
+            sourceName = snapshot.sourceName,
+            isCurrentStarred = songId?.let { remoteLikes[it] ?: remoteSongs[it]?.isStarred } ?: false,
+            remoteDevice = remote.deviceName,
+        )
+        snapshot.volume?.let { _volume.value = it.coerceIn(0.0, 1.0) }
+        publishRemoteProgress()
+        if (snapshot.isPlaying) {
+            if (remoteTicker?.isActive != true) {
+                remoteTicker = scope.launch {
+                    while (true) {
+                        delay(REMOTE_PROGRESS_INTERVAL_MS)
+                        publishRemoteProgress()
+                    }
+                }
+            }
+        } else {
+            remoteTicker?.cancel()
+        }
+    }
+
+    private fun publishRemoteProgress() {
+        val remote = _remote.value ?: return
+        _progress.value = PlaybackProgress(
+            position = remote.snapshot.progressAt(SystemClock.elapsedRealtime()),
+            duration = remote.snapshot.snapshot.durationSeconds.coerceAtLeast(0.0),
+        )
+    }
+
+    /** Finds the songs the controlled device names, in the library or on the server. */
+    private fun lookUpRemoteSongs() {
+        if (remoteLookup?.isActive == true) return
+        val snapshot = _remote.value?.snapshot?.snapshot ?: return
+        val wanted = (
+            listOf(snapshot.songId) + snapshot.contextQueue + snapshot.userQueue +
+                snapshot.restorePrevious
+            )
+            .filter { it.isNotEmpty() && it !in remoteSongs && it !in unknownRemoteSongs }
+            .distinct()
+        if (wanted.isEmpty()) return
+        remoteLookup = scope.launch {
+            val found = runSuspendCatching { library.songsByIds(wanted) }.getOrNull() ?: return@launch
+            remoteSongs.putAll(found)
+            remember(found.values.toList())
+            unknownRemoteSongs.addAll(wanted.filterNot { it in found })
+            publishRemote()
+            // A snapshot that arrived meanwhile may name other songs.
+            remoteLookup = null
+            lookUpRemoteSongs()
+        }
+    }
+
+    private fun unknownSong(id: String, duration: Double, looking: Boolean) = QueueSong(
+        id = id,
+        title = strings().t(
+            if (looking) {
+                "settings.crossDevice.playback.fetchingSong"
+            } else {
+                "settings.crossDevice.playback.unknownTrack"
+            },
+        ),
+        artist = "",
+        artistId = null,
+        album = "",
+        albumId = null,
+        duration = duration,
+        coverArtId = null,
+        streamUrl = "",
+        cachedFileUri = null,
+    )
+
+    /** A source in the "type:id" form of the protocol. */
+    private fun decodeSource(raw: String): QueueSourceId? {
+        val separator = raw.indexOf(':')
+        if (separator <= 0 || separator == raw.lastIndex) return null
+        return QueueSourceId(raw.substring(0, separator), raw.substring(separator + 1))
+    }
+
+    // endregion
+
+    private fun updateLocal(transform: (PlayerState) -> PlayerState) {
+        _local.update(transform)
+        if (_remote.value == null) _state.value = _local.value
+    }
+
+    private fun setLocalProgress(progress: PlaybackProgress) {
+        _localProgress.value = progress
+        if (_remote.value == null) _progress.value = progress
+    }
+
+    private fun setLocalVolume(volume: Double) {
+        _localVolume.value = volume
+        if (_remote.value == null) _volume.value = volume
+    }
+
     private fun run(command: AudioCommand) {
         val audio = service ?: return
         scope.launch {
@@ -784,5 +1199,6 @@ class PlayerController(
         const val TAG = "PlayerController"
         const val MIN_HISTORY_PLAY_MS = 10_000L
         const val KNOWN_SONGS_CAPACITY = 2_000
+        const val REMOTE_PROGRESS_INTERVAL_MS = 250L
     }
 }

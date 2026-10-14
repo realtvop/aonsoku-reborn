@@ -2,6 +2,7 @@ package github.realtvop.aonsoku.smoke
 
 import android.app.Application
 import androidx.activity.ComponentActivity
+import androidx.activity.ComponentDialog
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
@@ -11,6 +12,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
@@ -35,6 +37,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
+import github.realtvop.aonsoku.data.coordination.HandoffPhase
 import github.realtvop.aonsoku.player.RepeatMode
 import github.realtvop.aonsoku.session.SessionState
 import github.realtvop.aonsoku.settings.LyricsSource
@@ -43,6 +46,7 @@ import github.realtvop.aonsoku.settings.ReplayGainType
 import github.realtvop.aonsoku.settings.ServerUrlSettings
 import github.realtvop.aonsoku.settings.ThemeMode
 import github.realtvop.aonsoku.ui.AonsokuApp
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -51,6 +55,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.shadows.ShadowDialog
 
 /**
  * Runs the real app (graph, native services, Room, HTTP client, Compose UI)
@@ -732,6 +737,147 @@ class AppSmokeTest {
         waitUntil("the caches to be empty") { world.graph.offline.pools.value.isEmpty }
     }
 
+    @Test
+    fun crossDeviceSettingsRegisterThisDeviceAndManageTheDevices() {
+        openSettings("Cross-Device")
+        waitForText("Connect this device")
+        snapshot("settings-cross-device-setup")
+
+        // The music server signed in to proves the account; the device names itself.
+        compose.onNode(hasContentDescription("Coordination server URL") and hasSetTextAction())
+            .performTextInput(world.coordination.url)
+        reach(hasText("Connect") and hasClickAction()).performClick()
+        waitUntil("this device to be registered") { coordination().isConnected }
+        assertEquals(world.server.url, world.coordination.registration?.getString("identityUrl"))
+        waitForText("Current device")
+        world.coordination.addDevice("device-desk", "Desk", platform = "electron")
+        world.coordination.devicesChanged()
+        scrollTo("Desk")
+        snapshot("settings-cross-device")
+
+        // This device is listed first.
+        compose.onAllNodesWithContentDescription("Rename").onFirst().performClick()
+        waitForText("Save")
+        compose.onNode(hasSetTextAction() and hasAnyAncestor(isDialog())).performTextReplacement("Pocket")
+        compose.onNodeWithText("Save").performClick()
+        waitUntil("the new name") { coordination().devices.firstOrNull()?.name == "Pocket" }
+
+        reach(hasContentDescription("Revoke")).performClick()
+        waitForText("Revoke device?")
+        compose.onNode(hasText("Revoke") and hasAnyAncestor(isDialog())).performClick()
+        waitUntil("the desk to go") { coordination().devices.none { it.name == "Desk" } }
+
+        reach(hasText("Disconnect")).performClick()
+        waitForText("Disconnect this device?")
+        compose.onNode(hasText("Disconnect this device") and hasAnyAncestor(isDialog())).performClick()
+        waitUntil("this device to be forgotten") { !coordination().isRegistered }
+        waitForText("Connect this device")
+    }
+
+    @Test
+    fun anotherDeviceIsControlledFromHere() {
+        openHomeWithDesk()
+        waitForText("Other devices playing")
+        waitForText("Polar Night")
+        snapshot("home-devices")
+
+        compose.onNodeWithText("Show Devices").performClick()
+        waitForText("Live peer devices")
+        snapshot("devices")
+
+        compose.onNodeWithContentDescription("Remote control").performClick()
+        waitUntil("remote control") { playerState().remoteDevice == "Desk" }
+        waitForText("Controlling Desk")
+        snapshot("devices-controlling")
+        backInSheet()
+        snapshot("home-remote")
+
+        expandPlayer("Polar Night")
+        waitUntil("the chip") { named("Controlling Desk") >= 1 }
+        snapshot("player-remote")
+        compose.onNodeWithContentDescription("Next").performClick()
+        waitUntil("the command") {
+            world.coordination.receivedOfType("command")
+                .any { it.getJSONObject("command").getString("type") == "next" }
+        }
+        compose.onNodeWithContentDescription("Queue").performClick()
+        waitForText("Green Sky")
+        snapshot("player-remote-queue")
+
+        // Back to this device from the player's devices button.
+        compose.onNodeWithContentDescription("Cross-Device").performClick()
+        waitForText("Live peer devices")
+        compose.onAllNodesWithContentDescription("Exit control").onFirst().performClick()
+        waitUntil("this device again") { playerState().remoteDevice == null }
+    }
+
+    @Test
+    fun theDeskIsContinuedHereAfterAskingFirst() {
+        openHomeWithDesk()
+        compose.onNodeWithText("Show Devices").performClick()
+        waitForText("Live peer devices")
+
+        // As when something plays here.
+        compose.runOnUiThread { world.graph.coordination.requestHandoff("device-desk", askFirst = true) }
+        waitForText("Continue playback here?")
+        snapshot("handoff-confirmation")
+        compose.onNode(hasText("Handoff") and hasAnyAncestor(isDialog())).performClick()
+
+        waitUntil("the request") { world.coordination.receivedOfType("handoff_candidate_request").isNotEmpty() }
+        waitForText("Preparing track...")
+        snapshot("devices-handoff")
+
+        // The desk's queue is prepared here, paused, before the server commits the handoff.
+        val handed = FakeCoordinationServer.snapshot(
+            songId = "so-al-1-2",
+            context = listOf("so-al-1-1", "so-al-1-2", "so-al-1-3", "so-al-1-4"),
+            progress = 42.0,
+            playing = false,
+        )
+        world.coordination.send(
+            "handoff_candidate",
+            JSONObject()
+                .put("transactionId", "tx-1")
+                .put("sourceDeviceId", "device-desk")
+                .put("sessionId", "session-desk")
+                .put("generation", 1)
+                .put("snapshotRevision", 1)
+                .put("snapshot", handed),
+        )
+        waitUntil("this device to be ready") { world.coordination.receivedOfType("target_ready").isNotEmpty() }
+        world.coordination.send(
+            "handoff_committed",
+            JSONObject().put("transactionId", "tx-1").put("newGeneration", 2).put("snapshot", handed),
+        )
+        waitUntil("the handoff to finish") {
+            world.graph.coordination.handoff.value.phase == HandoffPhase.Committed
+        }
+        waitForText("Handoff successful!")
+        snapshot("devices-handed-off")
+        assertEquals("so-al-1-2", world.graph.player.local.value.current?.id)
+    }
+
+    /** Signs in, registers this device, and lets a device named Desk play "Polar Night". */
+    private fun openHomeWithDesk() {
+        openHome()
+        world.await {
+            world.graph.coordination.connect(world.coordination.url, world.server.url, "Pixel")
+        }
+        waitUntil("the connection") { coordination().isConnected && coordination().devices.isNotEmpty() }
+        world.coordination.addDevice("device-desk", "Desk", platform = "electron")
+        world.coordination.devicesChanged()
+        world.coordination.projection(
+            "device-desk",
+            FakeCoordinationServer.snapshot(
+                songId = "so-al-1-2",
+                context = listOf("so-al-1-1", "so-al-1-2", "so-al-1-3", "so-al-1-4"),
+            ),
+        )
+        waitUntil("the desk's playback") { "device-desk" in coordination().snapshots }
+    }
+
+    private fun coordination() = world.graph.coordination.state.value
+
     /** Signs in and waits for the synced home page. */
     private fun openHome() {
         world.signIn()
@@ -846,6 +992,14 @@ class AppSmokeTest {
         compose.waitForIdle()
     }
 
+    /** Goes back in the sheet on top, which has a window of its own. */
+    private fun backInSheet() {
+        compose.runOnUiThread {
+            (ShadowDialog.getLatestDialog() as ComponentDialog).onBackPressedDispatcher.onBackPressed()
+        }
+        compose.waitForIdle()
+    }
+
     private fun waitForText(text: String) = waitUntil("\"$text\" on screen") {
         compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
     }
@@ -892,6 +1046,7 @@ class AppSmokeTest {
             "Content",
             "Privacy & Security",
             "Offline Experience",
+            "Cross-Device",
         )
     }
 }

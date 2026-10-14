@@ -596,6 +596,23 @@ class LibraryRepository(
 
     suspend fun localSong(id: String): Song? = library.getSong(id)?.toModel()
 
+    /** A song to show: the library's copy, or the server's when the library lacks it. */
+    suspend fun knownSong(id: String): Song? = localSong(id) ?: if (online) song(id) else null
+
+    /**
+     * The songs among [ids] that can be found, by id: from the library, and the
+     * rest from the server (at most [MAX_SONG_LOOKUPS] of them) while online.
+     */
+    suspend fun songsByIds(ids: List<String>): Map<String, Song> {
+        val found = library.getSongsByIds(ids).map { it.toModel() }.associateByTo(HashMap()) { it.id }
+        if (!online) return found
+        val fetched = ids.filterNot { it in found }.distinct().take(MAX_SONG_LOOKUPS)
+            .mapNotNull { id -> remote { api.getSong(id) } }
+        if (fetched.isNotEmpty()) library.upsertSongs(fetched.map { it.toEntity() })
+        fetched.associateByTo(found) { it.id }
+        return found
+    }
+
     /**
      * Makes sure [songs] are in the local library, so they are listed while
      * offline. A song that is there already stays as it is: the copy at hand
@@ -779,5 +796,6 @@ class LibraryRepository(
         const val SONG_PAGE_SIZE = 100
         private const val MAX_ROWS = 100_000
         private const val ALBUM_FETCH_CONCURRENCY = 6
+        private const val MAX_SONG_LOOKUPS = 50
     }
 }

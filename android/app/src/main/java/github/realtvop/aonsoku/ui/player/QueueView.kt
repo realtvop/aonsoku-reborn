@@ -224,7 +224,10 @@ fun QueueView(state: PlayerState, onShowPlaying: () -> Unit, modifier: Modifier 
 
     val reorder = rememberReorderState(
         listState = listState,
-        canMove = { from, to -> sectionOf(from) != null && sectionOf(from) == sectionOf(to) },
+        // Songs of a controlled device's queue stay where they are, as on the web.
+        canMove = { from, to ->
+            !state.isRemote && sectionOf(from) != null && sectionOf(from) == sectionOf(to)
+        },
         onMove = { from, to ->
             when (sectionOf(from)) {
                 USER_SECTION -> userOrder = userShown.moved(from, to)
@@ -361,12 +364,13 @@ fun QueueView(state: PlayerState, onShowPlaying: () -> Unit, modifier: Modifier 
                     ReorderableQueueRow(
                         entry = entry,
                         reorder = reorder,
+                        movable = !state.isRemote,
                         onClick = { playAndShow { player.playFromUserQueue(entry.index) } },
                         onLongClick = {
                             showMenu(
                                 Overlay.SongMenu(
                                     song = player.songFor(entry.song),
-                                    queueRemove = {
+                                    queueRemove = if (state.isRemote) null else ({
                                         val now = player.state.value
                                         now.userQueue
                                             .indexNear(
@@ -375,7 +379,7 @@ fun QueueView(state: PlayerState, onShowPlaying: () -> Unit, modifier: Modifier 
                                                 start = if (now.isInUserQueue) 1 else 0,
                                             )
                                             ?.let(player::removeFromUserQueue)
-                                    },
+                                    }),
                                 ),
                             )
                         },
@@ -405,12 +409,13 @@ fun QueueView(state: PlayerState, onShowPlaying: () -> Unit, modifier: Modifier 
                     ReorderableQueueRow(
                         entry = entry,
                         reorder = reorder,
+                        movable = !state.isRemote,
                         onClick = { playAndShow { player.playFromContext(entry.index) } },
                         onLongClick = {
                             showMenu(
                                 Overlay.SongMenu(
                                     song = player.songFor(entry.song),
-                                    queueRemove = {
+                                    queueRemove = if (state.isRemote) null else ({
                                         val now = player.state.value
                                         now.contextSongs
                                             .indexNear(
@@ -419,7 +424,7 @@ fun QueueView(state: PlayerState, onShowPlaying: () -> Unit, modifier: Modifier 
                                                 start = now.contextIndex + 1,
                                             )
                                             ?.let(player::removeFromContext)
-                                    },
+                                    }),
                                 ),
                             )
                         },
@@ -474,6 +479,7 @@ private fun LazyItemScope.ReorderableQueueRow(
     reorder: ReorderState,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    movable: Boolean = true,
 ) {
     QueueRow(
         title = entry.song.title,
@@ -484,7 +490,7 @@ private fun LazyItemScope.ReorderableQueueRow(
         songId = entry.song.id,
         modifier = Modifier.reorderItem(this, reorder, entry.key),
         lifted = reorder.isLifted(entry.key),
-        handle = {
+        handle = if (!movable) null else ({
             Box(
                 modifier = Modifier
                     .size(width = 48.dp, height = QueueRowHeight)
@@ -498,7 +504,7 @@ private fun LazyItemScope.ReorderableQueueRow(
                     modifier = Modifier.size(22.dp),
                 )
             }
-        },
+        }),
     )
 }
 

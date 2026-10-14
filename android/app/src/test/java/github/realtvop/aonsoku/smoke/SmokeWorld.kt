@@ -39,6 +39,9 @@ import java.time.Duration
 class SmokeWorld : TestWatcher() {
     val server = FakeSubsonicServer()
 
+    /** The coordination server of the cross-device features; nothing connects to it unasked. */
+    val coordination = FakeCoordinationServer()
+
     lateinit var graph: AppGraph
         private set
 
@@ -50,6 +53,7 @@ class SmokeWorld : TestWatcher() {
         FakeAndroidKeyStore.install()
         resetSingletons()
         server.start()
+        coordination.start()
 
         val application = ApplicationProvider.getApplicationContext<Application>()
         // The Compose rule hosts the UI in a plain activity.
@@ -87,8 +91,10 @@ class SmokeWorld : TestWatcher() {
     override fun finished(description: Description) {
         runCatching { graph.player.shutdown() }
         runCatching { playback?.destroy() }
+        runCatching { graph.coordination.end() }
         runCatching { graph.scope.cancel() }
         server.shutdown()
+        coordination.shutdown()
         SingletonImageLoader.reset()
         resetSingletons()
     }

@@ -17,18 +17,21 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Checklist
+import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Lyrics
 import androidx.compose.material.icons.rounded.Tune
@@ -37,6 +40,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -65,6 +70,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import github.realtvop.aonsoku.LocalAppGraph
@@ -185,6 +191,7 @@ fun FullscreenPlayer(
     if (!shown && offscreen) return
 
     val scope = rememberCoroutineScope()
+    val overlays = LocalOverlays.current
     val backdrop = animateColorAsState(
         targetValue = backdropColor,
         animationSpec = MaterialTheme.motionScheme.slowEffectsSpec<Color>(),
@@ -265,6 +272,9 @@ fun FullscreenPlayer(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     PlayerHeader(onClose = sheet::close)
+                    state.remoteDevice?.let { name ->
+                        RemoteDeviceChip(name = name, onClick = { overlays.show(Overlay.Devices) })
+                    }
                     val effects = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
                     AnimatedContent(
                         targetState = tab,
@@ -291,10 +301,14 @@ fun FullscreenPlayer(
                             )
                         }
                     }
-                    // A radio stream has neither a queue nor lyrics.
-                    if (!state.isRadio) {
-                        PlayerTabs(tab = tab, hasLyrics = lyrics.mayExist, onToggle = sheet::toggle)
-                    }
+                    PlayerTabs(
+                        tab = tab,
+                        hasLyrics = lyrics.mayExist,
+                        isRadio = state.isRadio,
+                        controlling = state.isRemote,
+                        onToggle = sheet::toggle,
+                        onDevices = { overlays.show(Overlay.Devices) },
+                    )
                 }
             }
         }
@@ -338,9 +352,19 @@ private fun PlayerHeader(onClose: () -> Unit) {
     }
 }
 
-/** Switches between the tabs; the selected one returns to the playing view. */
+/**
+ * Switches between the tabs, the selected one returning to the playing view,
+ * and opens the devices. A radio stream has neither lyrics nor a queue.
+ */
 @Composable
-private fun PlayerTabs(tab: PlayerTab, hasLyrics: Boolean, onToggle: (PlayerTab) -> Unit) {
+private fun PlayerTabs(
+    tab: PlayerTab,
+    hasLyrics: Boolean,
+    isRadio: Boolean,
+    controlling: Boolean,
+    onToggle: (PlayerTab) -> Unit,
+    onDevices: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth(0.75f)
@@ -348,26 +372,62 @@ private fun PlayerTabs(tab: PlayerTab, hasLyrics: Boolean, onToggle: (PlayerTab)
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (!isRadio) {
+            PlayerTabButton(
+                icon = Icons.Rounded.Lyrics,
+                label = t("fullscreen.lyrics"),
+                selected = tab == PlayerTab.Lyrics,
+                // Without lyrics there is nothing to open, but an open tab can always be left.
+                enabled = hasLyrics || tab == PlayerTab.Lyrics,
+                onClick = { onToggle(PlayerTab.Lyrics) },
+            )
+            PlayerTabButton(
+                icon = Icons.Rounded.Checklist,
+                label = t("fullscreen.selectLyrics"),
+                selected = tab == PlayerTab.LyricsSettings,
+                onClick = { onToggle(PlayerTab.LyricsSettings) },
+            )
+            PlayerTabButton(
+                icon = Icons.AutoMirrored.Rounded.QueueMusic,
+                label = t("fullscreen.queue"),
+                selected = tab == PlayerTab.Queue,
+                onClick = { onToggle(PlayerTab.Queue) },
+            )
+        }
+        // Lit while another device is controlled, like the web's device button.
         PlayerTabButton(
-            icon = Icons.Rounded.Lyrics,
-            label = t("fullscreen.lyrics"),
-            selected = tab == PlayerTab.Lyrics,
-            // Without lyrics there is nothing to open, but an open tab can always be left.
-            enabled = hasLyrics || tab == PlayerTab.Lyrics,
-            onClick = { onToggle(PlayerTab.Lyrics) },
+            icon = Icons.Rounded.Devices,
+            label = t("settings.crossDevice.title"),
+            selected = controlling,
+            onClick = onDevices,
         )
-        PlayerTabButton(
-            icon = Icons.Rounded.Checklist,
-            label = t("fullscreen.selectLyrics"),
-            selected = tab == PlayerTab.LyricsSettings,
-            onClick = { onToggle(PlayerTab.LyricsSettings) },
-        )
-        PlayerTabButton(
-            icon = Icons.AutoMirrored.Rounded.QueueMusic,
-            label = t("fullscreen.queue"),
-            selected = tab == PlayerTab.Queue,
-            onClick = { onToggle(PlayerTab.Queue) },
-        )
+    }
+}
+
+/** Says which device the player shows and controls; opens the devices. */
+@Composable
+private fun RemoteDeviceChip(name: String, onClick: () -> Unit) {
+    val palette = LocalPlayerPalette.current
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = palette.container,
+        contentColor = palette.content,
+        modifier = Modifier.padding(top = 4.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Rounded.Devices, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = t("settings.crossDevice.playback.controllingDevice", "name" to name),
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
