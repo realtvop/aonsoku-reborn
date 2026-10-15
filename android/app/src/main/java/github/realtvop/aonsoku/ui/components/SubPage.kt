@@ -83,7 +83,7 @@ fun SubPageTopBar(
     val solid = if (accent != null) background.blend(accent, 0.35f) else background
     val effects = MaterialTheme.motionScheme.defaultEffectsSpec<Color>()
     val container by animateColorAsState(
-        targetValue = if (collapsed) solid.copy(alpha = 0.96f) else solid.copy(alpha = 0f),
+        targetValue = if (collapsed) solid else solid.copy(alpha = 0f),
         animationSpec = effects,
         label = "subPageBarContainer",
     )
