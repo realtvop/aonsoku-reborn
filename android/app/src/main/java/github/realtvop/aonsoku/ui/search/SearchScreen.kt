@@ -46,6 +46,7 @@ import androidx.lifecycle.viewModelScope
 import github.realtvop.aonsoku.AppGraph
 import github.realtvop.aonsoku.LocalAppGraph
 import github.realtvop.aonsoku.data.AlbumFilters
+import github.realtvop.aonsoku.data.LibraryChange
 import github.realtvop.aonsoku.data.image.CoverArt
 import github.realtvop.aonsoku.data.model.SearchResult
 import github.realtvop.aonsoku.data.runSuspendCatching
@@ -66,6 +67,7 @@ import github.realtvop.aonsoku.ui.shell.floatingBarsContentPadding
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.mapLatest
@@ -82,6 +84,7 @@ data class SearchState(
 class SearchViewModel(private val graph: AppGraph) : ViewModel() {
     private val _state = MutableStateFlow(SearchState())
     private val submitted = MutableStateFlow("")
+    private val synced = MutableStateFlow(0)
 
     val state: StateFlow<SearchState> = _state.asStateFlow()
 
@@ -90,6 +93,8 @@ class SearchViewModel(private val graph: AppGraph) : ViewModel() {
             submitted
                 .debounce { if (it.isEmpty()) 0L else DEBOUNCE_MS }
                 .distinctUntilChanged()
+                // A sync that finished may have changed what the query finds.
+                .combine(synced) { query, _ -> query }
                 .mapLatest { query ->
                     val result = if (isSearchable(query)) {
                         runSuspendCatching { graph.library.search(query, RESULT_COUNT) }.getOrNull()
@@ -101,6 +106,9 @@ class SearchViewModel(private val graph: AppGraph) : ViewModel() {
                 .collect { (query, result) ->
                     _state.update { it.copy(searched = query, result = result) }
                 }
+        }
+        viewModelScope.launch {
+            graph.library.changes.collect { if (it == LibraryChange.Library) synced.update { it + 1 } }
         }
     }
 

@@ -584,7 +584,10 @@ App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
   sorted) and fall back to the server while the library is empty; detail
   pages emit the local copy first and then the server copy (`Loadable`), and
   everything read online is written through to Room. Server-ordered album
-  lists (recently/most played) prefer the server when online.
+  lists (recently/most played) prefer the server when online. Search reads
+  Room once the first sync has finished and asks the server before that (or
+  when nothing local matches), and the search page searches again after a
+  sync.
   `NetworkMonitor` defines "online" as an authenticated ping to a configured
   URL succeeding (plus metered detection); `LibrarySyncCoordinator` runs the
   startup sync and the throttled foreground incremental sync.
@@ -830,7 +833,8 @@ LRCLIB and a custom lyrics server (`SmokeWorld` passes its address to
 `smoke/LyricsRepositoryTest` and `smoke/OfflineManagerTest` use the same
 world without a UI. For downloads the fake server has `throttleStreams`
 (switch it off, or a download takes as long as playing the song),
-`failStreams`, and `starredPlaylists`, and `SmokeWorld.metered(...)` sets
+`failStreams`, and `starredPlaylists`; `holdSongSync` keeps the first sync
+from finishing. `SmokeWorld.metered(...)` sets
 whether the shadow network is metered (unmetered unless a test says so;
 Robolectric's own default counts as metered, which holds smart downloads and
 automatic syncs back). Two things

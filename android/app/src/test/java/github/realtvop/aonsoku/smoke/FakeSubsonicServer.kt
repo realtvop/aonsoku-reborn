@@ -76,6 +76,13 @@ class FakeSubsonicServer {
     @Volatile
     var failStreams = false
 
+    /**
+     * While set, the library sync's listing of every song waits, as the first
+     * sync of a large library keeps it busy for a while.
+     */
+    @Volatile
+    var holdSongSync = false
+
     val url: String get() = server.url("/").toString().trimEnd('/')
 
     /** The server also stands in for LRCLIB and for a custom lyrics server. */
@@ -97,6 +104,7 @@ class FakeSubsonicServer {
     }
 
     fun shutdown() {
+        holdSongSync = false
         runCatching { server.shutdown() }
     }
 
@@ -225,6 +233,8 @@ class FakeSubsonicServer {
             )
             "search3" -> {
                 val query = param("query").orEmpty().trim('"').lowercase()
+                // The library sync lists every song with an empty query.
+                while (holdSongSync && query.isEmpty()) Thread.sleep(HOLD_STEP_MS)
                 fun <T> List<T>.matching(name: (T) -> String) =
                     filter { query.isEmpty() || name(it).lowercase().contains(query) }
                 ok(
@@ -511,6 +521,7 @@ class FakeSubsonicServer {
 
     private companion object {
         const val STREAM_BYTES_PER_SECOND = 2_048L
+        const val HOLD_STEP_MS = 20L
 
         /** Positions in [songs]. */
         const val LOW_TIDE = 7

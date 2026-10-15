@@ -474,7 +474,9 @@ class LibraryRepository(
             album = local.albums.map { it.toModel() },
             song = local.songs.map { it.toModel() },
         )
-        if (!result.isEmpty || !online) return result
+        // Until the first sync has finished, the local library is only part of it.
+        val synced = library.isDataAvailableOffline() != null
+        if (!online || (synced && !result.isEmpty)) return result
         val found = remote {
             api.search(query, artistCount = count, albumCount = count, songCount = count)
         } ?: return result

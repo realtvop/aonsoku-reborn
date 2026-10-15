@@ -285,6 +285,18 @@ class AppSmokeTest {
     }
 
     @Test
+    fun searchAsksTheServerUntilTheLibraryHasSynced() {
+        // The first sync is still listing the songs; only the server knows them all.
+        world.server.holdSongSync = true
+        openHome()
+        compose.onNodeWithContentDescription("Search").performClick()
+        compose.onNode(hasSetTextAction()).performTextInput("tid")
+        waitForText("Tidal Hours")
+        waitForText("Low Tide")
+        world.server.holdSongSync = false
+    }
+
+    @Test
     fun tappingASongLoadsItIntoThePlayer() {
         openLibrary()
         compose.onNodeWithText("Albums").performClick()
