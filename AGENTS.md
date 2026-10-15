@@ -537,6 +537,13 @@ contain `capacitor-android` branches used for capability typing.
 - `versionCode`/`versionName` in `android/app/build.gradle.kts` are rewritten
   by `capacitor-set-version` in `create-tag.yml`; keep exactly one occurrence
   of each name in that file.
+- Release builds run R8 with resource shrinking. A resource is kept only when
+  code refers to it, so refer to resources as `R.*` constants, never by name
+  through `Resources.getIdentifier`; `:core` keeps the drawables its playback
+  notification uses in its own `res/`. Library consumer rules cover the
+  reflection the app relies on (kotlinx.serialization, Room, media3, OkHttp);
+  check `app/build/outputs/mapping/release/` after adding a dependency that
+  needs more.
 - Existing installs upgrade in place: the application id, encrypted
   credential store, DataStore preferences (`pref.*`, `queue_state`), Room
   library database, and audio/image cache directories are unchanged.
