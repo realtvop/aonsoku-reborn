@@ -547,6 +547,9 @@ contain `capacitor-android` branches used for capability typing.
 - Existing installs upgrade in place: the application id, encrypted
   credential store, DataStore preferences (`pref.*`, `queue_state`), Room
   library database, and audio/image cache directories are unchanged.
+- `docs/android-native-parity.md` records where the native app deliberately
+  differs from the web app, what it adds, and what only a device can check.
+  Keep it current when a difference is introduced or removed.
 
 App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
 
