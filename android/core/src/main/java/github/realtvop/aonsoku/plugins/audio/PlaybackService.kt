@@ -45,6 +45,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import github.realtvop.aonsoku.plugins.debug.NativeLogger
 import github.realtvop.aonsoku.plugins.error.AonsokuNativeError
 import github.realtvop.aonsoku.plugins.AppServices
+import github.realtvop.aonsoku.plugins.R
 import github.realtvop.aonsoku.plugins.preferences.PreferencesService
 import github.realtvop.aonsoku.plugins.bridge.AuthenticationService
 import github.realtvop.aonsoku.plugins.data.db.AonsokuDatabase
@@ -193,15 +194,9 @@ class PlaybackService : MediaSessionService(), AudioService {
     }
 
     private fun getCustomLayoutButtons(): List<CommandButton> {
-        val shuffleIconName = if (effectiveShuffleActive()) "ic_shuffle_on" else "ic_shuffle"
-        val shuffleIconResId = resources.getIdentifier(shuffleIconName, "drawable", packageName)
-        val shuffleIcon = if (shuffleIconResId != 0) shuffleIconResId else android.R.drawable.ic_menu_share
-
-        val likeIconName = if (currentItemLiked) "ic_favorite" else "ic_favorite_border"
-        val likeIconResId = resources.getIdentifier(likeIconName, "drawable", packageName)
-        val likeIcon = if (likeIconResId != 0) likeIconResId else android.R.drawable.btn_star
-
-        android.util.Log.d("AonsokuNotification", "getCustomLayoutButtons: pkg=$packageName, shuffleName=$shuffleIconName, shuffleId=$shuffleIconResId, likeName=$likeIconName, likeId=$likeIconResId")
+        // Referenced directly: resource shrinking keeps only what code refers to.
+        val shuffleIcon = if (effectiveShuffleActive()) R.drawable.ic_shuffle_on else R.drawable.ic_shuffle
+        val likeIcon = if (currentItemLiked) R.drawable.ic_favorite else R.drawable.ic_favorite_border
 
         val shuffleButton = CommandButton.Builder()
             .setSessionCommand(CUSTOM_COMMAND_TOGGLE_SHUFFLE)
@@ -1894,16 +1889,9 @@ class PlaybackService : MediaSessionService(), AudioService {
         val playPauseIcon = if (effectiveIsPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
         val playPauseLabel = if (effectiveIsPlaying) "Pause" else "Play"
 
-        val shuffleIconName = if (effectiveShuffleActive()) "ic_shuffle_on" else "ic_shuffle"
-        val shuffleIconResId = resources.getIdentifier(shuffleIconName, "drawable", packageName)
-        val shuffleIcon = if (shuffleIconResId != 0) shuffleIconResId else android.R.drawable.ic_menu_share
-
-        val likeIconName = if (currentItemLiked) "ic_favorite" else "ic_favorite_border"
-        val likeIconResId = resources.getIdentifier(likeIconName, "drawable", packageName)
-        val likeIcon = if (likeIconResId != 0) likeIconResId else android.R.drawable.btn_star
-
-        val iconResId = resources.getIdentifier("icon_transparent", "drawable", packageName)
-        val icon = if (iconResId != 0) iconResId else android.R.drawable.ic_menu_info_details
+        val shuffleIcon = if (effectiveShuffleActive()) R.drawable.ic_shuffle_on else R.drawable.ic_shuffle
+        val likeIcon = if (currentItemLiked) R.drawable.ic_favorite else R.drawable.ic_favorite_border
+        val icon = R.drawable.icon_transparent
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(icon)
