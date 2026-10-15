@@ -357,6 +357,12 @@ class PlaybackService : MediaSessionService(), AudioService {
         return override.seconds
     }
 
+    /** Plays, from the start again when [player] has played to its end: an ended player ignores play(). */
+    private fun resume(player: Player) {
+        if (player.playbackState == Player.STATE_ENDED) player.seekToDefaultPosition()
+        player.play()
+    }
+
     private fun forceSnapshotProgress(songId: String?, seconds: Double) {
         snapshotProgressOverride = SnapshotProgressOverride(
             songId,
@@ -823,7 +829,7 @@ class PlaybackService : MediaSessionService(), AudioService {
                         savedRestoreTime = null
                         queueEngine.clearRestoredFlag()
                         requestAudioFocus()
-                        currentPlayer?.play()
+                        currentPlayer?.let(::resume)
                     }
                     AudioCommand.Pause -> {
                         currentPlayer?.pause()
@@ -837,7 +843,7 @@ class PlaybackService : MediaSessionService(), AudioService {
                             savedRestoreTime = null
                             queueEngine.clearRestoredFlag()
                             requestAudioFocus()
-                            currentPlayer?.play()
+                            currentPlayer?.let(::resume)
                         }
                     }
                     AudioCommand.Stop -> {
@@ -1417,7 +1423,12 @@ class PlaybackService : MediaSessionService(), AudioService {
                 if (playbackState == Player.STATE_ENDED) {
                     if (sleepTimerMode == "endOfTrack") {
                         sleepTimerMode = "duration"
+                        // As on the web, the song stays, back at its start,
+                        // so that Play plays it again.
+                        handleScrobbleSongEnded()
                         player?.pause()
+                        player?.seekTo(0)
+                        forceSnapshotProgress(queueEngine.currentSong?.id, 0.0)
                         emitPlaybackState("paused")
                         emitSleepTimerFired("endOfTrack")
                         return
@@ -2062,7 +2073,7 @@ class PlaybackService : MediaSessionService(), AudioService {
                 if (currentPlayer.isPlaying) {
                     currentPlayer.pause()
                 } else {
-                    currentPlayer.play()
+                    resume(currentPlayer)
                 }
                 updateNotification()
             }
