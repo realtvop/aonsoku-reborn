@@ -651,7 +651,10 @@ App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
   floating navigation bar (`FloatingNavBar`: Home/Library pill plus a detached
   Search button), with the floating `ui/player/MiniPlayer` above it once
   something is loaded. Scrolling pages add `LocalFloatingBarsPadding` to
-  their content padding.
+  their content padding. Going back, the page on top shrinks and then fades
+  away while the page below stays as it is, so a predictive back gesture
+  shows where it leads; this relies on every page being drawn on the app
+  background, which `page<Route>` in `AppDestinations.kt` does.
 - `ui/player/`: tapping `MiniPlayer` opens `FullscreenPlayer`, a sheet that
   `MainShell` draws over the pages and the floating bars. It slides up,
   follows a downward drag and a predictive back gesture, closes on back, and
@@ -690,11 +693,12 @@ App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
   `Modifier.moveActions` instead, as in `ReorderableColumn`.
   `AppNavigator.onOpen` runs whenever a page is requested and closes the
   player, so a link followed from one of its menus is not hidden behind it.
-- Screens: each page is a `@Composable XScreen()` registered in
-  `ui/navigation/AppDestinations.kt` and backed by a `ViewModel` obtained
-  with `graphViewModel { XViewModel(it) }` (`ui/components/GraphViewModel.kt`),
-  which builds it from `AppGraph` and scopes it to the navigation entry, so
-  page state survives while the page stays on a back stack. View models read
+- Screens: each page is a `@Composable XScreen()` registered with
+  `page<XRoute>` in `ui/navigation/AppDestinations.kt` and backed by a
+  `ViewModel` obtained with `graphViewModel { XViewModel(it) }`
+  (`ui/components/GraphViewModel.kt`), which builds it from `AppGraph` and
+  scopes it to the navigation entry, so page state survives while the page
+  stays on a back stack. View models read
   through `LibraryRepository`; `LoadableSource` wraps its cached-then-fresh
   `Loadable` flows, and pages reload on `LibraryRepository.changes`
   (`LibraryChange`) and when `NetworkMonitor` reports the server reachable

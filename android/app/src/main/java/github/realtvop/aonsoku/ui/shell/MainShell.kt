@@ -8,14 +8,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -144,8 +144,8 @@ fun MainShell() {
                     modifier = Modifier.fillMaxSize(),
                     enterTransition = { forwardEnter(spatial, effects) },
                     exitTransition = { forwardExit(effects) },
-                    popEnterTransition = { backEnter(effects) },
-                    popExitTransition = { backExit(spatial, effects) },
+                    popEnterTransition = { EnterTransition.None },
+                    popExitTransition = { backExit() },
                 ) {
                     appDestinations()
                 }
@@ -240,10 +240,14 @@ private fun forwardEnter(
 private fun forwardExit(effects: FiniteAnimationSpec<Float>): ExitTransition =
     fadeOut(effects) + scaleOut(effects, targetScale = 0.98f)
 
-private fun backEnter(effects: FiniteAnimationSpec<Float>): EnterTransition =
-    fadeIn(effects) + scaleIn(effects, initialScale = 0.98f)
+/**
+ * Going back, the page on top shrinks and then fades away while the page below
+ * stays as it is, so a back gesture shows where it leads. A back gesture moves
+ * through this transition as it goes, so it uses tweens, which never overshoot.
+ */
+private fun backExit(): ExitTransition =
+    scaleOut(tween(BACK_MS, easing = FastOutSlowInEasing), targetScale = 0.9f) +
+        fadeOut(tween(BACK_FADE_MS, delayMillis = BACK_MS - BACK_FADE_MS))
 
-private fun backExit(
-    spatial: FiniteAnimationSpec<IntOffset>,
-    effects: FiniteAnimationSpec<Float>,
-): ExitTransition = slideOutHorizontally(spatial) { it / 8 } + fadeOut(effects)
+private const val BACK_MS = 350
+private const val BACK_FADE_MS = 120
