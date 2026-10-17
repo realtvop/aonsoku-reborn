@@ -1,13 +1,15 @@
+import { rm } from "node:fs/promises";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   stores: new Map<string, Record<string, unknown>>(),
   request: vi.fn(),
   downloadBinary: vi.fn(),
+  testRoot: `/tmp/aonsoku-native-data-test-${process.pid}`,
 }));
 
 vi.mock("electron", () => ({
-  app: { getPath: () => "/tmp/aonsoku-native-data-test" },
+  app: { getPath: () => mocks.testRoot },
 }));
 
 vi.mock("../../core/store", () => ({
@@ -34,7 +36,8 @@ function response(data: Record<string, unknown>) {
 }
 
 describe("DesktopNativeDataService", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await rm(mocks.testRoot, { recursive: true, force: true });
     mocks.stores.clear();
     mocks.request.mockReset();
     mocks.downloadBinary.mockReset();
@@ -115,8 +118,88 @@ describe("DesktopNativeDataService", () => {
 
     const uri = service.resolveCoverFileUri("mpris-cover");
     expect(uri).toMatch(/^file:\/\//);
-    expect(uri).toContain("/aonsoku-native-data-test/CoverCache/");
+    expect(uri).toContain(`${mocks.testRoot}/CoverCache/`);
     expect(service.resolveCoverFileUri("missing-cover")).toBeUndefined();
+  });
+
+  it("deduplicates cover downloads and upgrades behind a smaller request", async () => {
+    const downloads: Array<{
+      resolve: (value: { data: Buffer; contentType: string }) => void;
+    }> = [];
+    mocks.downloadBinary.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          downloads.push({ resolve });
+        }),
+    );
+    const service = new DesktopNativeDataService(
+      { downloadBinary: mocks.downloadBinary } as never,
+      () => {},
+    );
+
+    const small = service.downloadCoverImage({
+      coverArtId: "shared-cover",
+      size: "100",
+    });
+    await vi.waitFor(() => expect(downloads).toHaveLength(1));
+    const large = service.downloadCoverImage({
+      coverArtId: "shared-cover",
+      size: "700",
+    });
+    downloads[0].resolve({
+      data: Buffer.from("small"),
+      contentType: "image/jpeg",
+    });
+    await small;
+    await vi.waitFor(() => expect(downloads).toHaveLength(2));
+
+    const medium = service.downloadCoverImage({
+      coverArtId: "shared-cover",
+      size: "300",
+    });
+    downloads[1].resolve({
+      data: Buffer.from("large"),
+      contentType: "image/jpeg",
+    });
+    const [largeResult, mediumResult] = await Promise.all([large, medium]);
+    await service.storeCoverImage({
+      coverArtId: "shared-cover",
+      dataBase64: Buffer.from("late small").toString("base64"),
+      contentType: "image/jpeg",
+      coverSize: "100",
+    });
+
+    expect(mocks.downloadBinary).toHaveBeenCalledTimes(2);
+    expect(largeResult.file?.coverSize).toBe("700");
+    expect(mediumResult.file?.coverSize).toBe("700");
+    await expect(
+      service.readCoverWithMeta("shared-cover"),
+    ).resolves.toMatchObject({
+      data: Buffer.from("large"),
+      coverSize: "700",
+    });
+  });
+
+  it("releases a failed cover download so the next request can retry", async () => {
+    mocks.downloadBinary
+      .mockRejectedValueOnce(new Error("network failed"))
+      .mockResolvedValueOnce({
+        data: Buffer.from("retry"),
+        contentType: "image/png",
+      });
+    const service = new DesktopNativeDataService(
+      { downloadBinary: mocks.downloadBinary } as never,
+      () => {},
+    );
+
+    await expect(
+      service.downloadCoverImage({ coverArtId: "retry-cover", size: "300" }),
+    ).rejects.toThrow("network failed");
+    await expect(
+      service.downloadCoverImage({ coverArtId: "retry-cover", size: "300" }),
+    ).resolves.toMatchObject({ file: { coverSize: "300" } });
+
+    expect(mocks.downloadBinary).toHaveBeenCalledTimes(2);
   });
 
   it("downloads covers when native sync receives cover options", async () => {
