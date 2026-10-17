@@ -52,12 +52,15 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
 import github.realtvop.aonsoku.LocalAppGraph
 import github.realtvop.aonsoku.ui.navigation.AppNavigator
 import github.realtvop.aonsoku.ui.navigation.HomeRoute
+import github.realtvop.aonsoku.ui.navigation.LibraryRoute
 import github.realtvop.aonsoku.ui.navigation.LocalNavigator
+import github.realtvop.aonsoku.ui.navigation.SearchRoute
 import github.realtvop.aonsoku.ui.navigation.TopLevelTab
 import github.realtvop.aonsoku.ui.navigation.appDestinations
 import github.realtvop.aonsoku.ui.overlays.LocalOverlays
@@ -142,8 +145,20 @@ fun MainShell() {
                     navController = navController,
                     startDestination = HomeRoute,
                     modifier = Modifier.fillMaxSize(),
-                    enterTransition = { forwardEnter(spatial, effects) },
-                    exitTransition = { forwardExit(effects) },
+                    enterTransition = {
+                        if (targetState.destination.isBottomNavigationDestination()) {
+                            EnterTransition.None
+                        } else {
+                            forwardEnter(spatial, effects)
+                        }
+                    },
+                    exitTransition = {
+                        if (targetState.destination.isBottomNavigationDestination()) {
+                            ExitTransition.None
+                        } else {
+                            forwardExit(effects)
+                        }
+                    },
                     popEnterTransition = { EnterTransition.None },
                     popExitTransition = { backExit() },
                 ) {
@@ -239,6 +254,9 @@ private fun forwardEnter(
 
 private fun forwardExit(effects: FiniteAnimationSpec<Float>): ExitTransition =
     fadeOut(effects) + scaleOut(effects, targetScale = 0.98f)
+
+private fun androidx.navigation.NavDestination.isBottomNavigationDestination(): Boolean =
+    hasRoute<HomeRoute>() || hasRoute<LibraryRoute>() || hasRoute<SearchRoute>()
 
 /**
  * Going back, the page on top shrinks and then fades away while the page below
