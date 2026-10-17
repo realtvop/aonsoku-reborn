@@ -26,18 +26,18 @@ interface UseCoverArtCacheLookupOptions {
   autoCache?: boolean;
 }
 
-export async function selectCachedCoverUrl(
+async function selectCachedCover(
   cacheKeys: string[],
   cacheArtSize: string,
   allowLowerResolution: boolean,
-): Promise<string | null> {
+): Promise<{ key: string; url: string } | null> {
   async function findCachedUrl(allowLowerResolutionForLookup = false) {
     for (const key of cacheKeys) {
       try {
         const url = await cacheManager.getCachedCoverUrl(key, cacheArtSize, {
           allowLowerResolution: allowLowerResolutionForLookup,
         });
-        if (url) return url;
+        if (url) return { key, url };
       } catch (err) {
         console.warn(`[useCoverArtCacheLookup] cache error: key=${key}`, err);
       }
@@ -49,6 +49,17 @@ export async function selectCachedCoverUrl(
   // fallback. Online lookups stay strict so auto-cache can fetch an upgrade.
   const exactUrl = await findCachedUrl();
   return exactUrl ?? (allowLowerResolution ? await findCachedUrl(true) : null);
+}
+
+export async function selectCachedCoverUrl(
+  cacheKeys: string[],
+  cacheArtSize: string,
+  allowLowerResolution: boolean,
+): Promise<string | null> {
+  return (
+    (await selectCachedCover(cacheKeys, cacheArtSize, allowLowerResolution))
+      ?.url ?? null
+  );
 }
 
 function useCoverArtCacheLookup({
@@ -66,6 +77,7 @@ function useCoverArtCacheLookup({
   const isOffline = useIsOfflineMode();
   const cacheVersion = useCoverCacheVersion(cacheKeys);
   const [cachedUrl, setCachedUrl] = useState<string | null>(null);
+  const [cachedKey, setCachedKey] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const pendingAutoCache = useRef<string | null>(null);
   const prevObjectUrl = useRef<string | null>(null);
@@ -79,6 +91,7 @@ function useCoverArtCacheLookup({
   useEffect(() => {
     if (cacheKeys.length === 0) {
       setCachedUrl(null);
+      setCachedKey(null);
       setIsLoading(false);
       return;
     }
@@ -89,24 +102,27 @@ function useCoverArtCacheLookup({
 
     async function loadCache(allowAutoCache = autoCache, showLoading = true) {
       if (showLoading) setIsLoading(true);
-      const url = await selectCachedCoverUrl(
+      const selected = await selectCachedCover(
         cacheKeys,
         cacheArtSize,
         isOffline,
       );
-      if (url) {
+      if (selected) {
+        const { key, url } = selected;
         if (cancelled) {
           URL.revokeObjectURL(url);
           return;
         }
         objectUrl = url;
         setCachedUrl(url);
+        setCachedKey(key);
         setIsLoading(false);
         return;
       }
 
       if (!cancelled) {
         setCachedUrl(null);
+        setCachedKey(null);
         setIsLoading(false);
         if (
           allowAutoCache &&
@@ -161,7 +177,7 @@ function useCoverArtCacheLookup({
     };
   }, []);
 
-  return { cachedUrl, isOffline, isLoading };
+  return { cachedKey, cachedUrl, isOffline, isLoading };
 }
 
 export function useCachedCoverUrl(
@@ -216,6 +232,7 @@ export function CachedImage({
     size: coverArtSize,
   });
   const {
+    cachedKey,
     cachedUrl: cachedSrc,
     isOffline,
     isLoading,
@@ -233,6 +250,9 @@ export function CachedImage({
   const [retryNonce, setRetryNonce] = useState(0);
   const [retryAttempt, setRetryAttempt] = useState(0);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const invalidatingCachedSrc = useRef<string | null>(null);
+  const rejectedCachedKey = useRef<string | null>(null);
+  const cacheRecoveryScope = useRef(0);
 
   const cacheKeys = useMemo(
     () => resolveCacheKeys(coverArtId, coverArtType, albumId),
@@ -242,6 +262,9 @@ export function CachedImage({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset local failure state when the effective cover or connectivity changes
   useEffect(() => {
+    cacheRecoveryScope.current++;
+    invalidatingCachedSrc.current = null;
+    rejectedCachedKey.current = null;
     setFailedNetworkSrc(null);
     setCachedSrcFailed(false);
     setRetryAttempt(0);
@@ -254,13 +277,15 @@ export function CachedImage({
 
   useEffect(() => {
     if (!cachedSrc) return;
+    if (cachedKey && rejectedCachedKey.current === cachedKey) return;
     setCachedSrcFailed(false);
     setFailedNetworkSrc(null);
     setRetryAttempt(0);
-  }, [cachedSrc]);
+  }, [cachedKey, cachedSrc]);
 
   useEffect(() => {
     return () => {
+      cacheRecoveryScope.current++;
       if (retryTimer.current) clearTimeout(retryTimer.current);
     };
   }, []);
@@ -303,7 +328,37 @@ export function CachedImage({
     const currentSrc = resolvedSrc;
     if (currentSrc) {
       if (currentSrc === cachedSrc) {
-        setCachedSrcFailed(true);
+        if (
+          cachedKey &&
+          invalidatingCachedSrc.current !== currentSrc &&
+          rejectedCachedKey.current !== cachedKey
+        ) {
+          const recoveryScope = cacheRecoveryScope.current;
+          invalidatingCachedSrc.current = currentSrc;
+          cacheManager
+            .invalidateCachedCover(cachedKey, currentSrc)
+            .then((invalidated) => {
+              if (invalidated && cacheRecoveryScope.current === recoveryScope) {
+                rejectedCachedKey.current = cachedKey;
+                setCachedSrcFailed(true);
+              }
+            })
+            .catch((err) => {
+              if (cacheRecoveryScope.current === recoveryScope) {
+                rejectedCachedKey.current = cachedKey;
+                setCachedSrcFailed(true);
+              }
+              console.warn(
+                `[CachedImage] failed to invalidate corrupt cache: key=${cachedKey}`,
+                err,
+              );
+            })
+            .finally(() => {
+              if (invalidatingCachedSrc.current === currentSrc) {
+                invalidatingCachedSrc.current = null;
+              }
+            });
+        }
       } else if (currentSrc !== failedNetworkSrc) {
         setFailedNetworkSrc(currentSrc);
         if (

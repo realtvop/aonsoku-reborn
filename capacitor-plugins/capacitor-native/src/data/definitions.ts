@@ -343,6 +343,7 @@ export interface AonsokuNativeDataPlugin extends Plugin {
   }): Promise<NativeCoverImageSizeResult>;
   deleteCoverImage(options: {
     coverArtId: string;
+    expectedRevision?: string;
   }): Promise<NativeDeleteCoverImageResult>;
   clearCoverImages(): Promise<NativeClearCoverImagesResult>;
   downloadCoverImage(

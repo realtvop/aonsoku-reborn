@@ -86,6 +86,10 @@ function normalizedCoverSize(size: string | undefined): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
+function legacyCoverRevision(info: { mtimeMs: number; size: number }): string {
+  return `${Math.trunc(info.mtimeMs)}-${info.size}`;
+}
+
 interface CoverGeneration {
   cache: number;
   entry: number;
@@ -615,12 +619,11 @@ export class DesktopNativeDataService {
     for (let attempt = 0; meta && attempt < 2; attempt++) {
       try {
         const info = await stat(join(this.coverDirectory(), meta.fileName));
-        const revision =
-          meta.revision ?? `${Math.trunc(info.mtimeMs)}-${info.size}`;
+        const revision = meta.revision ?? legacyCoverRevision(info);
         return {
           file: {
             coverArtId,
-            uri: `aonsoku-media://cached?id=${encodeURIComponent(coverArtId)}&v=${encodeURIComponent(revision)}`,
+            uri: this.cachedCoverUri(coverArtId, revision),
             contentType: meta.contentType,
             sizeBytes: info.size,
             coverSize: meta.coverSize,
@@ -659,15 +662,41 @@ export class DesktopNativeDataService {
     };
   }
 
-  async deleteCoverImage({ coverArtId }: { coverArtId: string }) {
-    this.coverGenerations.set(
-      coverArtId,
-      (this.coverGenerations.get(coverArtId) ?? 0) + 1,
-    );
+  async deleteCoverImage({
+    coverArtId,
+    expectedRevision,
+  }: {
+    coverArtId: string;
+    expectedRevision?: string;
+  }) {
     return this.withCoverPublicationLock(async () => {
       const files = { ...this.store.get("coverFiles") };
       const meta = files[coverArtId];
-      if (!meta) return { deleted: false };
+      if (!meta) {
+        if (expectedRevision !== undefined) return { deleted: false };
+        this.coverGenerations.set(
+          coverArtId,
+          (this.coverGenerations.get(coverArtId) ?? 0) + 1,
+        );
+        return { deleted: false };
+      }
+      let currentRevision = meta.revision;
+      if (!currentRevision && expectedRevision !== undefined) {
+        try {
+          const info = await stat(join(this.coverDirectory(), meta.fileName));
+          currentRevision = legacyCoverRevision(info);
+        } catch {}
+      }
+      if (
+        expectedRevision !== undefined &&
+        currentRevision !== expectedRevision
+      ) {
+        return { deleted: false };
+      }
+      this.coverGenerations.set(
+        coverArtId,
+        (this.coverGenerations.get(coverArtId) ?? 0) + 1,
+      );
       await rm(join(this.coverDirectory(), meta.fileName), { force: true });
       delete files[coverArtId];
       this.store.set("coverFiles", files);
@@ -874,6 +903,12 @@ export class DesktopNativeDataService {
       cache: this.coverCacheGeneration,
       entry: this.coverGenerations.get(coverArtId) ?? 0,
     };
+  }
+
+  private cachedCoverUri(coverArtId: string, revision?: string): string {
+    const query = new URLSearchParams({ id: coverArtId });
+    if (revision) query.set("v", revision);
+    return `aonsoku-media://cached?${query}`;
   }
 
   private isCurrentCoverGeneration(

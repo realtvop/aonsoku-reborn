@@ -216,6 +216,38 @@ describe("DesktopNativeDataService", () => {
     expect(mocks.downloadBinary).toHaveBeenCalledTimes(2);
   });
 
+  it("does not let a late image error delete a newer cover revision", async () => {
+    const service = new DesktopNativeDataService(
+      { request: mocks.request } as never,
+      () => {},
+    );
+    const first = await service.storeCoverImage({
+      coverArtId: "revision-guard",
+      dataBase64: Buffer.from("old cover").toString("base64"),
+      contentType: "image/jpeg",
+      coverSize: "300",
+    });
+    const second = await service.storeCoverImage({
+      coverArtId: "revision-guard",
+      dataBase64: Buffer.from("new cover").toString("base64"),
+      contentType: "image/jpeg",
+      coverSize: "300",
+    });
+
+    await expect(
+      service.deleteCoverImage({
+        coverArtId: "revision-guard",
+        expectedRevision: first.file?.revision,
+      }),
+    ).resolves.toEqual({ deleted: false });
+    await expect(
+      service.readCoverWithMeta("revision-guard"),
+    ).resolves.toMatchObject({
+      data: Buffer.from("new cover"),
+      revision: second.file?.revision,
+    });
+  });
+
   it("downloads covers when native sync receives cover options", async () => {
     mocks.request.mockImplementation(async ({ path }: { path: string }) => {
       if (path.includes("getGenres"))
