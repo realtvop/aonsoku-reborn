@@ -320,7 +320,15 @@ Electron follows the same renderer/native ownership boundary as Capacitor:
   lyrics metadata, and cover/avatar downloads. Its `syncAll` and
   `syncIncremental` paths honor `includeCoverArt`, `coverArtConcurrency`, and
   `useAlbumCoverForSongs`, downloading the required cover IDs into the main
-  process `CoverCache`.
+  process `CoverCache`. Display misses, renderer auto-cache, and native sync
+  share the data service's per-ID/size download coordinator: a larger in-flight
+  request satisfies smaller callers, while a larger request queued behind a
+  smaller one upgrades after rechecking the cache. Cover files are published
+  through unique temporary files and atomic renames under a final size guard;
+  delete/clear generations prevent stale downloads from restoring invalidated
+  entries. Each publication carries a stable content revision and emits
+  `coverCacheChanged`; the renderer mirrors that revision into its cache index
+  so mounted images refresh after native sync or a cache upgrade.
 - `electron/main/native/preferences/` owns Electron desktop preference
   persistence exposed through `AonsokuNativePreferences`; renderer-side
   Zustand/UI preference stores should use `src/store/native-storage.ts` instead
@@ -334,12 +342,13 @@ Electron follows the same renderer/native ownership boundary as Capacitor:
   `AsyncLimiter` (`electron/main/native/concurrency.ts`, concurrency 6), serves
   disk-cached covers first via `DesktopNativeDataService.readCoverWithMeta`
   (skipping the network when the cached copy is at least the requested size),
-  and applies a 15s stall timeout (`AbortSignal.any([request.signal,
-  AbortSignal.timeout(15_000)])`). `stream` stays on Node's default global
+  and delegates misses to the data service's shared cache download. Its 15s
+  stall timeout and renderer cancellation stop only that display request's
+  wait, not the shared cache work. `stream` stays on Node's default global
   `fetch` (no body timeout, so buffered-playout backpressure never aborts it);
   it is separated from the image flood because images/metadata no longer use
   the default agent. Bridge `downloadBinary`/`performRequest` and the
-  `media-protocol` image proxy go through a dedicated undici `Agent`
+  media protocol's startup fallback go through a dedicated undici `Agent`
   (`electron/main/native/bridge/http-agent.ts`, 16 connections per origin,
   `headersTimeout`/`bodyTimeout` set) via `subsonicFetch`, so image and
   metadata traffic shares one raised connection ceiling instead of saturating

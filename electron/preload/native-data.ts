@@ -8,7 +8,7 @@ function invoke<T>(method: string, options?: unknown): Promise<T> {
   return ipcRenderer.invoke(DESKTOP_NATIVE_DATA_CHANNEL, method, options);
 }
 
-type Listener = (payload: never) => void;
+type Listener = (payload: unknown) => void;
 const listeners = new Map<string, Set<Listener>>();
 ipcRenderer.on(DESKTOP_NATIVE_DATA_EVENT_CHANNEL, (_event, name, payload) => {
   for (const listener of listeners.get(name) ?? []) listener(payload);

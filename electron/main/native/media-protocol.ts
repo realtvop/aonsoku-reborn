@@ -36,6 +36,20 @@ function isCoverSizeAtLeast(
   return cached >= requested;
 }
 
+function waitForSharedImage<T>(
+  promise: Promise<T>,
+  signal: AbortSignal,
+): Promise<T> {
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise((resolve, reject) => {
+    const aborted = () => reject(signal.reason);
+    signal.addEventListener("abort", aborted, { once: true });
+    promise.then(resolve, reject).finally(() => {
+      signal.removeEventListener("abort", aborted);
+    });
+  });
+}
+
 export function registerDesktopMediaScheme(): void {
   protocol.registerSchemesAsPrivileged([
     {
@@ -123,8 +137,11 @@ export function setupDesktopMediaProtocol(): void {
  *
  * 1. Try the disk cache (`readCoverWithMeta`). If present and large enough,
  *    return it directly — no network, no connection-pool slot consumed.
- * 2. Otherwise fetch from the server through the dedicated Subsonic
- *    dispatcher, with a stall timeout layered on top of `request.signal`.
+ * 2. Otherwise ask `DesktopNativeDataService` for the image. The service owns
+ *    cross-caller dedupe, size upgrades and atomic cache publication, so the
+ *    display request shares work with renderer auto-cache and native sync.
+ * 3. Only the display wait observes `request.signal` and the stall timeout.
+ *    Cancelling one `<img>` request must not abort shared cache population.
  */
 async function proxyImage(
   operation: "getcoverart" | "getavatar",
@@ -146,8 +163,32 @@ async function proxyImage(
     } catch {
       // Cache read failure — fall through to the network path.
     }
+
+    const timeoutSignal = AbortSignal.any([
+      request.signal,
+      AbortSignal.timeout(IMAGE_PROXY_TIMEOUT_MS),
+    ]);
+    const download =
+      operation === "getcoverart"
+        ? dataService.downloadCoverImage({
+            coverArtId: cacheKey,
+            size: requestedSize ?? "",
+          })
+        : dataService.downloadAvatar({
+            username: cacheKey,
+            size: requestedSize ?? "",
+          });
+    await waitForSharedImage(download, timeoutSignal);
+    const cached = await dataService.readCoverWithMeta(cacheKey);
+    if (!cached) throw new Error("Downloaded media was not published");
+    return new Response(new Uint8Array(cached.data), {
+      status: 200,
+      headers: { "Content-Type": cached.contentType },
+    });
   }
 
+  // Startup can briefly precede native-data IPC setup. Keep the direct proxy
+  // as a no-cache fallback for that window only.
   const path =
     operation === "getcoverart" ? "/getCoverArt.view" : "/getAvatar.view";
   const timeoutSignal = AbortSignal.any([

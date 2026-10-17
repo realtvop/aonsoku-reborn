@@ -27,6 +27,8 @@ const mocks = vi.hoisted(() => {
     mockAddListener,
     mockInvalidateQueries: vi.fn(),
     mockUpdateSyncState: vi.fn(),
+    mockAddCacheItem: vi.fn(),
+    mockRemoveCacheItem: vi.fn(),
     listenerCallbacks,
   };
 });
@@ -57,6 +59,14 @@ vi.mock("@/store/cache.store", () => ({
   },
 }));
 
+vi.mock("@/store/cache-index.store", () => ({
+  getCacheIndexItems: () => ({}),
+  getCacheIndexActions: () => ({
+    addItem: mocks.mockAddCacheItem,
+    removeItem: mocks.mockRemoveCacheItem,
+  }),
+}));
+
 const { nativeSyncAdapter } = await import("./native-sync-adapter");
 
 describe("NativeSyncAdapter", () => {
@@ -67,16 +77,19 @@ describe("NativeSyncAdapter", () => {
     mocks.mockCancelSync.mockClear();
     mocks.mockInvalidateQueries.mockClear();
     mocks.mockUpdateSyncState.mockClear();
+    mocks.mockAddCacheItem.mockClear();
+    mocks.mockRemoveCacheItem.mockClear();
   });
 
-  it("registers both listeners on construction", () => {
-    expect(mocks.mockAddListener).toHaveBeenCalledTimes(2);
+  it("registers native data listeners on construction", () => {
+    expect(mocks.mockAddListener).toHaveBeenCalledTimes(3);
   });
 
-  it("registers syncStateChanged and dataChanged listeners", () => {
+  it("registers sync, data, and cover-cache listeners", () => {
     const events = mocks.listenerCallbacks.map((l) => l.event);
     expect(events).toContain("syncStateChanged");
     expect(events).toContain("dataChanged");
+    expect(events).toContain("coverCacheChanged");
   });
 
   it("calls native initialize on first syncAll", async () => {
@@ -169,6 +182,33 @@ describe("NativeSyncAdapter", () => {
     expect(mocks.mockInvalidateQueries).toHaveBeenCalledWith({
       queryKey: ["favorites", "list"],
     });
+  });
+
+  it("mirrors native cover publications into the renderer cache index", () => {
+    const coverCb = mocks.listenerCallbacks.find(
+      (listener) => listener.event === "coverCacheChanged",
+    );
+
+    coverCb!.cb({
+      coverArtId: "cover-1",
+      file: {
+        coverArtId: "cover-1",
+        uri: "aonsoku-media://cached?id=cover-1&v=revision-2",
+        coverSize: "700",
+        sizeBytes: 42,
+        revision: "revision-2",
+      },
+    });
+
+    expect(mocks.mockAddCacheItem).toHaveBeenCalledWith(
+      "cover:cover-1",
+      expect.objectContaining({
+        id: "cover-1",
+        coverSize: "700",
+        sizeBytes: 42,
+        revision: "revision-2",
+      }),
+    );
   });
 
   it("calls cancelSync on cancel", () => {

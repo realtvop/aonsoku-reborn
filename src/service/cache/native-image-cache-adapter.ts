@@ -25,7 +25,10 @@ export interface NativeImageCacheAdapter {
   getCoverImageSize(
     coverArtId: string,
   ): Promise<{ sizeBytes: number | null; coverSize: string | null }>;
-  deleteCoverImage(coverArtId: string): Promise<boolean>;
+  deleteCoverImage(
+    coverArtId: string,
+    expectedRevision?: string,
+  ): Promise<boolean>;
   clearCoverImages(): Promise<void>;
 }
 
@@ -126,8 +129,14 @@ export class IosNativeImageCacheAdapter implements NativeImageCacheAdapter {
     };
   }
 
-  async deleteCoverImage(coverArtId: string): Promise<boolean> {
-    const result = await this.plugin.deleteCoverImage({ coverArtId });
+  async deleteCoverImage(
+    coverArtId: string,
+    expectedRevision?: string,
+  ): Promise<boolean> {
+    const result = await this.plugin.deleteCoverImage({
+      coverArtId,
+      expectedRevision,
+    });
     return result.deleted;
   }
 

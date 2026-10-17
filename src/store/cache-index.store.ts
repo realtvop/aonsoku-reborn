@@ -291,6 +291,26 @@ export const useIsPlaylistCached = (playlistId: string) =>
 export const useIsCoverCached = (coverArtId: string) =>
   useCacheIndexStore((state) => coverKey(coverArtId) in state.items);
 
+function coverCacheVersion(meta: CachedItemMeta | undefined): string {
+  if (!meta) return "missing";
+  if (meta.revision) return `revision:${meta.revision}`;
+  return ["legacy", meta.coverSize ?? "", meta.sizeBytes, meta.cachedAt].join(
+    ":",
+  );
+}
+
+/**
+ * Subscribe only to content metadata for the requested covers. Access-time
+ * touches intentionally do not change this value, so reading a cached URL
+ * cannot trigger a lookup loop.
+ */
+export const useCoverCacheVersion = (coverArtIds: string[]) =>
+  useCacheIndexStore((state) =>
+    coverArtIds
+      .map((coverArtId) => coverCacheVersion(state.items[coverKey(coverArtId)]))
+      .join("|"),
+  );
+
 export const useIsAvatarCached = (username: string) =>
   useCacheIndexStore((state) => avatarKey(username) in state.items);
 

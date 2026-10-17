@@ -36,6 +36,8 @@ export interface CachedItemMeta {
   triggers?: string[];
   /** For cover entries: the resolution (e.g. "700") that was requested. */
   coverSize?: string;
+  /** Stable content revision for a cached cover. Changes only on publication. */
+  revision?: string;
   sizeBytes: number;
   cachedAt: number;
   lastAccessedAt: number;
