@@ -231,12 +231,6 @@ jobs:
         with:
           ref: main
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-          run_install: false
-
       - name: Setup node
         uses: actions/setup-node@v4
         with:
@@ -253,17 +247,8 @@ jobs:
         with:
           packages: platform-tools
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
       - name: Inject nightly version
         run: node -e "const p=require('./package.json'); p.version='${{ needs.check-changes.outputs.nightly_version }}'; require('fs').writeFileSync('package.json', JSON.stringify(p, null, 2))"
-
-      - name: Build mobile web assets
-        run: pnpm run build:mobile
-
-      - name: Sync Capacitor Android
-        run: pnpm exec cap sync android
 
       - name: Restore Android release keystore
         env:

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Window theme behind the Compose UI. Colors come from the Compose theme. -->
+    <style name="Theme.Aonsoku" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/startup_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+
+    <style name="Theme.Aonsoku.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/startup_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_icon</item>
+        <item name="postSplashScreenTheme">@style/Theme.Aonsoku</item>
+    </style>
+
+    <style name="DebugTheme" parent="Theme.Material3.DayNight.NoActionBar" />
+</resources>

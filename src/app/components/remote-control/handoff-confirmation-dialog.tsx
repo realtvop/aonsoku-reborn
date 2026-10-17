@@ -177,7 +177,8 @@ export function HandoffConfirmationDialog({
             <div className="flex flex-col min-w-0 text-left flex-1">
               <span className="text-[10px] font-bold text-primary uppercase tracking-wider">
                 {t("settings.crossDevice.playback.willContinue", {
-                  defaultValue: `Will continue from ${pendingDevice?.device.name || "peer device"}`,
+                  defaultValue: "Will continue from {{name}}",
+                  name: pendingDevice?.device.name || "peer device",
                 })}
               </span>
               <span className="text-xs font-semibold truncate text-foreground leading-snug mt-0.5">

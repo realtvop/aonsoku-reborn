@@ -11,7 +11,7 @@ Inventory date: 2026-10-04.
 
 - Android: 25 Kotlin/Java test files and 142 `@Test` cases across
   `android/app/src/{test,androidTest}` and
-  `capacitor-plugins/capacitor-native/android/src/{test,androidTest}`.
+  `android/core/src/{test,androidTest}`.
 - iOS before this parity pass: 6 XCTest files and 11 `test*` methods.
 - iOS after this parity pass: 20 XCTest files and 85 `test*` methods in
   `capacitor-plugins/capacitor-native/ios/Tests/AonsokuNativePluginTests`.
@@ -29,7 +29,7 @@ Inventory date: 2026-10-04.
 | Debug gesture | `DebugShakeDetectorTest` (6): sensor filtering, expiry, cooldown, fallback | iOS uses the OS shake gesture and has no custom detector algorithm | N/A |
 | Playback service manifest | `PlaybackServiceManifestTest` (4): service, permissions, intent filter | iOS has no Android service/manifest contract; background modes are an App packaging/device concern | N/A |
 | Audio cache naming | `AudioCacheUtilsTest` (2): stable safe id and MIME extension | `DownloadTests`: cache identity and content-type extension behavior | Covered |
-| Remote command allowlist | `AudioPluginRemoteCommandTest` (2): supported and rejected commands | `AudioAdapterTests`: exact coordination allowlist, rejection, selected IDs and positions | Covered |
+| Remote command allowlist | `RemoteControlCommandSupportTest` (2): supported and rejected commands | `AudioAdapterTests`: exact coordination allowlist, rejection, selected IDs and positions | Covered |
 | Handoff queue decoding | `HandoffPlaybackStateTest` (5): full, user-only, malformed, inconsistent and legacy snapshots | `HandoffTests` (5) plus `NativeIntegrationTests`: decode compatibility, fencing, injected-library resolution, missing-song rejection and queue restoration | Covered |
 | Capacitor audio payload parsing | `NativeAudioSourceParserTest` (7): all source kinds and metadata/null handling | `AudioAdapterTests` (5): all source kinds, invalid payloads, numeric metadata and command payloads | Covered |
 | Downloads and cancellation | `NativeDownloadManagerTest` (3): initialization, listener lifecycle and inactive cancellation | `DownloadTests` (8): auth/transcoding URL, missing credentials, active cancel/cancel-all, completion file and metadata finalization, stable background identifier and relaunch completion ownership, all without real network | Covered |
@@ -40,7 +40,7 @@ Inventory date: 2026-10-04.
 | Subsonic authentication | `SubsonicAuthBuilderTest` (5): token/hash, encoded password, query modes and version | `AuthenticationTests` (4): token salt/hash, encoded password, mutually exclusive query modes and numeric version parsing | Covered |
 | Subsonic HTTP | `SubsonicHttpClientTest` (2): REST/auth URL and existing query | `HTTPClientTests` (3): injected `URLSession`/`URLProtocol`, URL preservation, count/payload parsing and auth failure mapping | Covered |
 | Coordination lifecycle and reconnect | `AonsokuNativeCoordinationLifecycleTest` (9): Android service/socket ownership and disconnect paths | Android foreground-service attachment is platform-only; shared risks are covered by `CoordinationTests.testReconnectPolicyBacksOffCapsAndStopsForManualOrBackgroundState`, `LifecycleTests` and AppServices integration | Covered |
-| Coordination envelopes and snapshots | `AonsokuNativeCoordinationPluginTest` (18): hello/heartbeat/ACK/handoff, snapshots, JSON and ticket URL | `CoordinationTests` (11) and `HandoffTests`: protocol shapes, fencing data, empty snapshot rejection, JSON rejection and reserved-character ticket encoding | Covered |
+| Coordination envelopes and snapshots | `CoordinationRuntimeTest` (18): hello/heartbeat/ACK/handoff, snapshots, JSON and ticket URL | `CoordinationTests` (11) and `HandoffTests`: protocol shapes, fencing data, empty snapshot rejection, JSON rejection and reserved-character ticket encoding | Covered |
 | Coordination deduplication and sequence | `CoordinationDedupSeqTest` (14): bounded idempotence, sequence and extraction | `CoordinationTests`: bounded eviction/idempotence, clear, monotonic/reset sequence and numeric/string/absent extraction | Covered |
 | Data event contract | `EventEmitterContractTest` (4): exact events, terminal flush and coalescing | `EventEmitterTests` (3): public event names/payloads, terminal immediate flush and intermediate coalescing | Covered |
 | Image cache behavior | `ImageCacheUtilsTest` (11): ids, MIME mapping, lookup and deletion | `ImageCacheTests` (3): stable/distinct safe ids, compatible extensions, known-extension lookup and multi-extension deletion | Covered |

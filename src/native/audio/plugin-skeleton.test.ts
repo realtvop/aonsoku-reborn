@@ -94,7 +94,7 @@ function readPackageJson(filePath: string): PackageJson {
 }
 
 describe("Aonsoku native audio plugin skeleton", () => {
-  it("is declared as a dual-platform (iOS + Android) Capacitor plugin package", () => {
+  it("is declared as an iOS-only Capacitor plugin package", () => {
     const manifest = readPackageJson(path.join(pluginRoot, "package.json"));
 
     expect(manifest).toMatchObject({
@@ -106,11 +106,10 @@ describe("Aonsoku native audio plugin skeleton", () => {
         ios: {
           src: "ios",
         },
-        android: {
-          src: "android",
-        },
       },
     });
+    // The Android app is native (android/) and does not use Capacitor.
+    expect(manifest.capacitor?.android).toBeUndefined();
   });
 
   it("is included by the app through a local file dependency", () => {
