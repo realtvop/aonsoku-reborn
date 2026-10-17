@@ -232,7 +232,9 @@ describe("cacheManager", () => {
     expect(cacheStorageMock.get).toHaveBeenCalledWith("cover:cover-high");
   });
 
-  it("does not satisfy higher-size requests with smaller cached covers", async () => {
+  it("only returns smaller cached covers when explicitly allowed", async () => {
+    const blob = new Blob(["cover"], { type: "image/jpeg" });
+    cacheStorageMock.get.mockResolvedValue(blob);
     useCacheIndexStore.setState({
       items: {
         "cover:cover-small": {
@@ -253,6 +255,15 @@ describe("cacheManager", () => {
 
     expect(url).toBeNull();
     expect(cacheStorageMock.get).not.toHaveBeenCalled();
+
+    const fallbackUrl = await cacheManager.getCachedCoverUrl(
+      "cover-small",
+      "700",
+      { allowLowerResolution: true },
+    );
+
+    expect(fallbackUrl).toBeTruthy();
+    expect(cacheStorageMock.get).toHaveBeenCalledWith("cover:cover-small");
   });
 
   it("returns cached cover URL even when index is empty (blob exists in Cache API)", async () => {

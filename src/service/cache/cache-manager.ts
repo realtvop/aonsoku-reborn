@@ -134,6 +134,11 @@ function normalizeCoverSize(size: string | undefined): number {
   return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
+export interface CachedCoverLookupOptions {
+  /** Return an existing lower-resolution cover when the requested size is unavailable. */
+  allowLowerResolution?: boolean;
+}
+
 class AsyncLimiter {
   private active = 0;
   private queue: Array<() => void> = [];
@@ -177,7 +182,11 @@ class CacheManager {
   >();
   private nativeCoverUrlInflight = new Map<
     string,
-    { requestedSize: number; promise: Promise<string | null> }
+    {
+      requestedSize: number;
+      allowLowerResolution: boolean;
+      promise: Promise<string | null>;
+    }
   >();
   private coverDownloadLimiter = new AsyncLimiter(4);
 
@@ -388,7 +397,8 @@ class CacheManager {
 
   /**
    * Resolve a cached cover art blob to a local URL for <img> elements.
-   * Returns `null` when the cover is not in the cache.
+   * Returns `null` when the cover is absent or smaller than `requestedSize`.
+   * Callers may explicitly allow a lower-resolution result for offline use.
    *
    * **Callers must call `URL.revokeObjectURL()` on the returned string
    * when they are done with it to avoid leaking memory.**
@@ -396,12 +406,18 @@ class CacheManager {
   async getCachedCoverUrl(
     coverArtId: string,
     requestedSize?: string,
+    options: CachedCoverLookupOptions = {},
   ): Promise<string | null> {
     const key = coverKey(coverArtId);
+    const allowLowerResolution = options.allowLowerResolution === true;
 
     if (isNativeImageCacheAdapterAvailable()) {
       const cachedUrl = this.nativeCoverUrlCache.get(coverArtId);
-      if (cachedUrl && isCoverSizeAtLeast(cachedUrl.coverSize, requestedSize)) {
+      if (
+        cachedUrl &&
+        (allowLowerResolution ||
+          isCoverSizeAtLeast(cachedUrl.coverSize, requestedSize))
+      ) {
         getCacheIndexActions().touchItem(key);
         return cachedUrl.url;
       }
@@ -409,14 +425,20 @@ class CacheManager {
       const inflight = this.nativeCoverUrlInflight.get(coverArtId);
       const requestedSizeNumber = normalizeCoverSize(requestedSize);
       if (inflight) {
-        if (inflight.requestedSize >= requestedSizeNumber) {
+        if (
+          !allowLowerResolution &&
+          !inflight.allowLowerResolution &&
+          inflight.requestedSize >= requestedSizeNumber
+        ) {
           return inflight.promise;
         }
-        // Re-check after a low-size resolve so a concurrent high-size caller
-        // can observe a later cache upgrade instead of inheriting null/low
-        // quality metadata from the first caller.
-        return inflight.promise.then(() =>
-          this.getCachedCoverUrl(coverArtId, requestedSize),
+        // Re-check after an incompatible resolve. A strict caller cannot
+        // inherit a lower-resolution result, while a permissive caller must
+        // retry when a strict resolve rejected the usable smaller file.
+        return inflight.promise.then((url) =>
+          allowLowerResolution && url
+            ? url
+            : this.getCachedCoverUrl(coverArtId, requestedSize, options),
         );
       }
 
@@ -424,6 +446,7 @@ class CacheManager {
         coverArtId,
         key,
         requestedSize,
+        allowLowerResolution,
       ).finally(() => {
         if (this.nativeCoverUrlInflight.get(coverArtId)?.promise === resolve) {
           this.nativeCoverUrlInflight.delete(coverArtId);
@@ -431,6 +454,7 @@ class CacheManager {
       });
       this.nativeCoverUrlInflight.set(coverArtId, {
         requestedSize: requestedSizeNumber,
+        allowLowerResolution,
         promise: resolve,
       });
       return resolve;
@@ -444,6 +468,7 @@ class CacheManager {
     if (
       loaded &&
       isCoverCached(coverArtId) &&
+      !allowLowerResolution &&
       !isCoverSizeAtLeast(indexedCoverSize, requestedSize)
     ) {
       return null;
@@ -500,6 +525,7 @@ class CacheManager {
     coverArtId: string,
     key: string,
     requestedSize?: string,
+    allowLowerResolution = false,
   ): Promise<string | null> {
     const adapter = getNativeImageCacheAdapter();
     const result = await adapter.resolveCoverImage(coverArtId);
@@ -512,7 +538,10 @@ class CacheManager {
     }
 
     const coverSize = result.coverSize ?? getCacheIndexItems()[key]?.coverSize;
-    if (!isCoverSizeAtLeast(coverSize, requestedSize)) {
+    if (
+      !allowLowerResolution &&
+      !isCoverSizeAtLeast(coverSize, requestedSize)
+    ) {
       return null;
     }
 

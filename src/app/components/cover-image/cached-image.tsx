@@ -26,6 +26,31 @@ interface UseCoverArtCacheLookupOptions {
   autoCache?: boolean;
 }
 
+export async function selectCachedCoverUrl(
+  cacheKeys: string[],
+  cacheArtSize: string,
+  allowLowerResolution: boolean,
+): Promise<string | null> {
+  async function findCachedUrl(allowLowerResolutionForLookup = false) {
+    for (const key of cacheKeys) {
+      try {
+        const url = await cacheManager.getCachedCoverUrl(key, cacheArtSize, {
+          allowLowerResolution: allowLowerResolutionForLookup,
+        });
+        if (url) return url;
+      } catch (err) {
+        console.warn(`[useCoverArtCacheLookup] cache error: key=${key}`, err);
+      }
+    }
+    return null;
+  }
+
+  // Check every candidate at the requested size before accepting a smaller
+  // fallback. Online lookups stay strict so auto-cache can fetch an upgrade.
+  const exactUrl = await findCachedUrl();
+  return exactUrl ?? (allowLowerResolution ? await findCachedUrl(true) : null);
+}
+
 function useCoverArtCacheLookup({
   coverArtId,
   coverArtType,
@@ -64,22 +89,20 @@ function useCoverArtCacheLookup({
 
     async function loadCache(allowAutoCache = autoCache, showLoading = true) {
       if (showLoading) setIsLoading(true);
-      for (const key of cacheKeys) {
-        try {
-          const url = await cacheManager.getCachedCoverUrl(key, cacheArtSize);
-          if (url) {
-            if (cancelled) {
-              URL.revokeObjectURL(url);
-              return;
-            }
-            objectUrl = url;
-            setCachedUrl(url);
-            setIsLoading(false);
-            return;
-          }
-        } catch (err) {
-          console.warn(`[useCoverArtCacheLookup] cache error: key=${key}`, err);
+      const url = await selectCachedCoverUrl(
+        cacheKeys,
+        cacheArtSize,
+        isOffline,
+      );
+      if (url) {
+        if (cancelled) {
+          URL.revokeObjectURL(url);
+          return;
         }
+        objectUrl = url;
+        setCachedUrl(url);
+        setIsLoading(false);
+        return;
       }
 
       if (!cancelled) {
