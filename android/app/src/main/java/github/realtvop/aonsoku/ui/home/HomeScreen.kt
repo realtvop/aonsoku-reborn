@@ -23,7 +23,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.LibraryMusic
@@ -227,29 +226,6 @@ private fun HomeCarousel(albums: List<Album>, onAlbum: (Album) -> Unit) {
         ) { page ->
             val album = albums[page % albums.size]
             CarouselCard(album = album, onClick = { onAlbum(album) })
-        }
-        if (looping) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                val current = pagerState.currentPage % albums.size
-                repeat(albums.size) { index ->
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 3.dp)
-                            .size(width = if (index == current) 16.dp else 6.dp, height = 6.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (index == current) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.outlineVariant
-                                },
-                            ),
-                    )
-                }
-            }
         }
     }
 }
