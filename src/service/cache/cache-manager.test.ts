@@ -328,11 +328,12 @@ describe("cacheManager", () => {
       uri: "aonsoku-media://cached?id=native-cover-1",
       sizeBytes: 123,
       coverSize: "700",
+      revision: "rev-1",
     });
 
     await expect(Promise.all([first, second])).resolves.toEqual([
-      "converted:aonsoku-media://cached?id=native-cover-1",
-      "converted:aonsoku-media://cached?id=native-cover-1",
+      "converted:aonsoku-media://cached?id=native-cover-1&v=rev-1",
+      "converted:aonsoku-media://cached?id=native-cover-1&v=rev-1",
     ]);
   });
 
@@ -346,6 +347,7 @@ describe("cacheManager", () => {
       uri: "aonsoku-media://cached?id=native-cover-2",
       sizeBytes: 456,
       coverSize: "700",
+      revision: "rev-1",
     });
 
     useCacheIndexStore.setState({
@@ -367,10 +369,68 @@ describe("cacheManager", () => {
     const first = await cacheManager.getCachedCoverUrl("native-cover-2");
     const second = await cacheManager.getCachedCoverUrl("native-cover-2");
 
-    expect(first).toBe("converted:aonsoku-media://cached?id=native-cover-2");
+    expect(first).toBe(
+      "converted:aonsoku-media://cached?id=native-cover-2&v=rev-1",
+    );
     expect(second).toBe(first);
     expect(nativeImageCacheAdapterMock.resolveCoverImage).toHaveBeenCalledTimes(
       1,
+    );
+  });
+
+  it("re-resolves a memoized native cover when its revision changes", async () => {
+    const nativeImageCacheModule = await import("./native-image-cache-adapter");
+    vi.mocked(
+      nativeImageCacheModule.isNativeImageCacheAdapterAvailable,
+    ).mockReturnValue(true);
+    nativeImageCacheAdapterMock.resolveCoverImage
+      .mockResolvedValueOnce({
+        coverArtId: "native-cover-refresh",
+        uri: "aonsoku-media://cached?id=native-cover-refresh&v=rev-1",
+        sizeBytes: 456,
+        coverSize: "700",
+        revision: "rev-1",
+      })
+      .mockResolvedValueOnce({
+        coverArtId: "native-cover-refresh",
+        uri: "aonsoku-media://cached?id=native-cover-refresh&v=rev-2",
+        sizeBytes: 456,
+        coverSize: "700",
+        revision: "rev-2",
+      });
+    useCacheIndexStore.setState({
+      items: {
+        "cover:native-cover-refresh": {
+          id: "native-cover-refresh",
+          type: "cover",
+          source: "explicit",
+          coverSize: "700",
+          revision: "rev-1",
+          sizeBytes: 456,
+          cachedAt: 1,
+          lastAccessedAt: 1,
+        },
+      },
+      loaded: true,
+    });
+
+    const { cacheManager } = await import("./cache-manager");
+    const first = await cacheManager.getCachedCoverUrl("native-cover-refresh");
+
+    const current =
+      useCacheIndexStore.getState().items["cover:native-cover-refresh"]!;
+    useCacheIndexStore
+      .getState()
+      .actions.addItem("cover:native-cover-refresh", {
+        ...current,
+        revision: "rev-2",
+      });
+    const second = await cacheManager.getCachedCoverUrl("native-cover-refresh");
+
+    expect(first).toContain("v=rev-1");
+    expect(second).toContain("v=rev-2");
+    expect(nativeImageCacheAdapterMock.resolveCoverImage).toHaveBeenCalledTimes(
+      2,
     );
   });
 

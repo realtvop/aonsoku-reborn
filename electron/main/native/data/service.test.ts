@@ -105,9 +105,10 @@ describe("DesktopNativeDataService", () => {
   });
 
   it("resolves stored covers to local file URIs", async () => {
+    const events: Array<{ event: string; payload: unknown }> = [];
     const service = new DesktopNativeDataService(
       { request: mocks.request } as never,
-      () => {},
+      (event, payload) => events.push({ event, payload }),
     );
     await service.storeCoverImage({
       coverArtId: "mpris-cover",
@@ -120,6 +121,19 @@ describe("DesktopNativeDataService", () => {
     expect(uri).toMatch(/^file:\/\//);
     expect(uri).toContain(`${mocks.testRoot}/CoverCache/`);
     expect(service.resolveCoverFileUri("missing-cover")).toBeUndefined();
+
+    const resolved = await service.resolveCoverImage({
+      coverArtId: "mpris-cover",
+    });
+    expect(resolved.file?.revision).toBeTruthy();
+    expect(resolved.file?.uri).toContain(`&v=${resolved.file?.revision}`);
+    expect(events).toContainEqual({
+      event: "coverCacheChanged",
+      payload: {
+        coverArtId: "mpris-cover",
+        file: resolved.file,
+      },
+    });
   });
 
   it("deduplicates cover downloads and upgrades behind a smaller request", async () => {

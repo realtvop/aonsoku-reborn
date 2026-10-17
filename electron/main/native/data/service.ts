@@ -49,7 +49,12 @@ interface DataState {
   lastSyncedAt?: number;
   coverFiles: Record<
     string,
-    { fileName: string; contentType: string; coverSize: string }
+    {
+      fileName: string;
+      contentType: string;
+      coverSize: string;
+      revision?: string;
+    }
   >;
 }
 
@@ -610,13 +615,16 @@ export class DesktopNativeDataService {
     for (let attempt = 0; meta && attempt < 2; attempt++) {
       try {
         const info = await stat(join(this.coverDirectory(), meta.fileName));
+        const revision =
+          meta.revision ?? `${Math.trunc(info.mtimeMs)}-${info.size}`;
         return {
           file: {
             coverArtId,
-            uri: `aonsoku-media://cached?id=${encodeURIComponent(coverArtId)}`,
+            uri: `aonsoku-media://cached?id=${encodeURIComponent(coverArtId)}&v=${encodeURIComponent(revision)}`,
             contentType: meta.contentType,
             sizeBytes: info.size,
             coverSize: meta.coverSize,
+            revision,
           },
         };
       } catch {
@@ -663,6 +671,7 @@ export class DesktopNativeDataService {
       await rm(join(this.coverDirectory(), meta.fileName), { force: true });
       delete files[coverArtId];
       this.store.set("coverFiles", files);
+      this.emit("coverCacheChanged", { coverArtId, file: null });
       return { deleted: true };
     });
   }
@@ -673,6 +682,7 @@ export class DesktopNativeDataService {
     this.coverCacheGeneration++;
     return this.withCoverPublicationLock(async () => {
       const directory = this.coverDirectory();
+      const coverArtIds = Object.keys(this.store.get("coverFiles"));
       let deletedCount = 0;
       try {
         const files = await readdir(directory);
@@ -682,6 +692,9 @@ export class DesktopNativeDataService {
         );
       } catch {}
       this.store.set("coverFiles", {});
+      for (const coverArtId of coverArtIds) {
+        this.emit("coverCacheChanged", { coverArtId, file: null });
+      }
       return { deletedCount };
     });
   }
@@ -830,22 +843,26 @@ export class DesktopNativeDataService {
           return (await this.resolveCoverImage({ coverArtId })).file;
         }
 
+        const revision = publicationId;
+        const file: NativeCachedCoverImageFile = {
+          coverArtId,
+          uri: `aonsoku-media://cached?id=${encodeURIComponent(coverArtId)}&v=${encodeURIComponent(revision)}`,
+          contentType,
+          sizeBytes: data.byteLength,
+          coverSize,
+          revision,
+        };
         this.store.set("coverFiles", {
           ...files,
-          [coverArtId]: { fileName, contentType, coverSize },
+          [coverArtId]: { fileName, contentType, coverSize, revision },
         });
+        this.emit("coverCacheChanged", { coverArtId, file });
         if (current?.fileName && current.fileName !== fileName) {
           await rm(join(directory, current.fileName), { force: true }).catch(
             () => {},
           );
         }
-        return {
-          coverArtId,
-          uri: `aonsoku-media://cached?id=${encodeURIComponent(coverArtId)}`,
-          contentType,
-          sizeBytes: data.byteLength,
-          coverSize,
-        };
+        return file;
       } finally {
         await rm(tempPath, { force: true }).catch(() => {});
       }
@@ -910,6 +927,7 @@ export class DesktopNativeDataService {
     data: Buffer;
     contentType: string;
     coverSize: string;
+    revision?: string;
   } | null> {
     const stored = await this.readStoredCover(coverArtId);
     return stored
@@ -917,6 +935,7 @@ export class DesktopNativeDataService {
           data: stored.data,
           contentType: stored.meta.contentType,
           coverSize: stored.meta.coverSize,
+          revision: stored.meta.revision,
         }
       : null;
   }

@@ -295,7 +295,9 @@ Electron follows the same renderer/native ownership boundary as Capacitor:
   smaller one upgrades after rechecking the cache. Cover files are published
   through unique temporary files and atomic renames under a final size guard;
   delete/clear generations prevent stale downloads from restoring invalidated
-  entries.
+  entries. Each publication carries a stable content revision and emits
+  `coverCacheChanged`; the renderer mirrors that revision into its cache index
+  so mounted images refresh after native sync or a cache upgrade.
 - `electron/main/native/preferences/` owns Electron desktop preference
   persistence exposed through `AonsokuNativePreferences`; renderer-side
   Zustand/UI preference stores should use `src/store/native-storage.ts` instead

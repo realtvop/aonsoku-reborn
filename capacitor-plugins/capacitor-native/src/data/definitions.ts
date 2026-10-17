@@ -246,6 +246,13 @@ export interface NativeCachedCoverImageFile {
   contentType?: string;
   sizeBytes?: number;
   coverSize?: string;
+  /** Stable content revision. Changes only when a new file is published. */
+  revision?: string;
+}
+
+export interface NativeCoverCacheChangedEvent {
+  coverArtId: string;
+  file: NativeCachedCoverImageFile | null;
 }
 
 export interface NativeResolveCoverImageResult {

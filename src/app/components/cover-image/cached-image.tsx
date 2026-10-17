@@ -8,7 +8,7 @@ import {
 import { LazyLoadImage } from "react-lazy-load-image-component";
 import { cacheManager } from "@/service/cache";
 import { useIsOfflineMode } from "@/store/cache.store";
-import { useIsCoverCached } from "@/store/cache-index.store";
+import { useCoverCacheVersion } from "@/store/cache-index.store";
 import { CoverArt } from "@/types/coverArtType";
 import {
   resolveCacheKeys,
@@ -64,7 +64,7 @@ function useCoverArtCacheLookup({
   );
   const primaryCacheKey = cacheKeys[0];
   const isOffline = useIsOfflineMode();
-  const isPrimaryCached = useIsCoverCached(primaryCacheKey ?? "__none__");
+  const cacheVersion = useCoverCacheVersion(cacheKeys);
   const [cachedUrl, setCachedUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const pendingAutoCache = useRef<string | null>(null);
@@ -75,7 +75,7 @@ function useCoverArtCacheLookup({
     pendingAutoCache.current = null;
   }, [primaryCacheKey]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: isPrimaryCached triggers re-run when auto-cache completes; primaryCacheKey derives from cacheKeys
+  // biome-ignore lint/correctness/useExhaustiveDependencies: cacheVersion triggers re-run when relevant cover content changes; primaryCacheKey derives from cacheKeys
   useEffect(() => {
     if (cacheKeys.length === 0) {
       setCachedUrl(null);
@@ -147,7 +147,7 @@ function useCoverArtCacheLookup({
   }, [
     cacheKeys,
     isOffline,
-    isPrimaryCached,
+    cacheVersion,
     primaryCacheKey,
     cacheArtSize,
     autoCache,

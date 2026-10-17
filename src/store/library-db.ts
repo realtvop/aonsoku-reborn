@@ -49,6 +49,8 @@ export interface CacheMetaRow {
   triggers?: string[];
   /** For cover entries: the resolution (e.g. "700") that was requested. */
   coverSize?: string;
+  /** Stable content revision for a cached cover. */
+  revision?: string;
   sizeBytes: number;
   cachedAt: number;
   lastAccessedAt: number;

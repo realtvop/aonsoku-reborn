@@ -1,7 +1,15 @@
-import type { NativeSyncOptions } from "@aonsoku/capacitor-native/data";
+import type {
+  NativeCoverCacheChangedEvent,
+  NativeSyncOptions,
+} from "@aonsoku/capacitor-native/data";
 import { queryClient } from "@/lib/queryClient";
 import { AonsokuNativeData } from "@/native/data/facade";
+import { coverKey } from "@/service/cache/cache-keys";
 import { useCacheStore } from "@/store/cache.store";
+import {
+  getCacheIndexActions,
+  getCacheIndexItems,
+} from "@/store/cache-index.store";
 import type { SyncState } from "@/types/cache";
 
 class NativeSyncAdapter {
@@ -48,6 +56,31 @@ class NativeSyncAdapter {
       },
     );
     this.listenerHandles.push(dataHandle);
+
+    const coverHandle = await AonsokuNativeData.addListener(
+      "coverCacheChanged",
+      (event: NativeCoverCacheChangedEvent) => {
+        const key = coverKey(event.coverArtId);
+        if (!event.file) {
+          getCacheIndexActions().removeItem(key);
+          return;
+        }
+
+        const previous = getCacheIndexItems()[key];
+        const now = Date.now();
+        getCacheIndexActions().addItem(key, {
+          id: event.coverArtId,
+          type: "cover",
+          source: previous?.source ?? "explicit",
+          coverSize: event.file.coverSize ?? previous?.coverSize,
+          revision: event.file.revision,
+          sizeBytes: event.file.sizeBytes ?? previous?.sizeBytes ?? 0,
+          cachedAt: Math.max(now, (previous?.cachedAt ?? 0) + 1),
+          lastAccessedAt: now,
+        });
+      },
+    );
+    this.listenerHandles.push(coverHandle);
   }
 
   async initialize(): Promise<void> {
