@@ -4,6 +4,7 @@ import { isAudioCached, useCacheIndexStore } from "@/store/cache-index.store";
 import { cacheIndexStore } from "@/store/idb";
 import { _resetLibraryDbForTests, libraryDb } from "@/store/library-db";
 import { Priority } from "@/types/cache";
+import type { NativeImageCacheAdapter } from "./native-image-cache-adapter";
 
 const cacheStorageMock = {
   clear: vi.fn(),
@@ -36,7 +37,9 @@ const nativeImageCacheAdapterMock = {
   getCoverImageSize: vi.fn(() =>
     Promise.resolve({ sizeBytes: null, coverSize: null }),
   ),
-  resolveCoverImage: vi.fn(() => Promise.resolve(null)),
+  resolveCoverImage: vi.fn<NativeImageCacheAdapter["resolveCoverImage"]>(() =>
+    Promise.resolve(null),
+  ),
   storeCoverImage: vi.fn(() => Promise.resolve(null)),
 };
 
@@ -432,6 +435,52 @@ describe("cacheManager", () => {
     expect(nativeImageCacheAdapterMock.resolveCoverImage).toHaveBeenCalledTimes(
       2,
     );
+  });
+
+  it("adopts a newer native cover when the persisted index has an older revision", async () => {
+    const nativeImageCacheModule = await import("./native-image-cache-adapter");
+    vi.mocked(
+      nativeImageCacheModule.isNativeImageCacheAdapterAvailable,
+    ).mockReturnValue(true);
+    const coverArtId = "cover-missed-publication";
+    nativeImageCacheAdapterMock.resolveCoverImage.mockImplementation(
+      async () => ({
+        coverArtId,
+        uri: `aonsoku-media://cached?id=${coverArtId}&v=current`,
+        sizeBytes: 700,
+        coverSize: "700",
+        revision: "current",
+      }),
+    );
+    useCacheIndexStore.setState({
+      items: {
+        [`cover:${coverArtId}`]: {
+          id: coverArtId,
+          type: "cover",
+          source: "explicit",
+          coverSize: "100",
+          revision: "persisted-old",
+          sizeBytes: 100,
+          cachedAt: 1,
+          lastAccessedAt: 1,
+        },
+      },
+      loaded: true,
+    });
+    const { cacheManager } = await import("./cache-manager");
+
+    await expect(
+      cacheManager.getCachedCoverUrl(coverArtId, "700"),
+    ).resolves.toContain("v=current");
+    expect(nativeImageCacheAdapterMock.resolveCoverImage).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(
+      useCacheIndexStore.getState().items[`cover:${coverArtId}`],
+    ).toMatchObject({
+      revision: "current",
+      coverSize: "700",
+    });
   });
 
   it("invalidates the exact corrupt native cover and preserves IDs containing colons", async () => {

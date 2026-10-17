@@ -601,7 +601,24 @@ class CacheManager {
     retryOnStale = true,
   ): Promise<string | null> {
     const adapter = getNativeImageCacheAdapter();
+    const lookupVersion = coverContentVersion(getCacheIndexItems()[key]);
     const result = await adapter.resolveCoverImage(coverArtId);
+    const currentMeta = getCacheIndexItems()[key];
+    if (
+      coverContentVersion(currentMeta) !== lookupVersion &&
+      (!result || nativeCoverRevision(result) !== currentMeta?.revision)
+    ) {
+      this.nativeCoverUrlCache.delete(coverArtId);
+      return retryOnStale
+        ? this.resolveNativeCachedCoverUrl(
+            coverArtId,
+            key,
+            requestedSize,
+            allowLowerResolution,
+            false,
+          )
+        : null;
+    }
     if (!result) {
       this.nativeCoverUrlCache.delete(coverArtId);
       if (isCoverCached(coverArtId)) {
@@ -652,9 +669,8 @@ class CacheManager {
 
     const latestMeta = getCacheIndexItems()[key];
     if (
-      resultRevision &&
-      latestMeta?.revision &&
-      latestMeta.revision !== resultRevision
+      coverContentVersion(latestMeta) !== lookupVersion &&
+      resultRevision !== latestMeta?.revision
     ) {
       this.nativeCoverUrlCache.delete(coverArtId);
       return retryOnStale
