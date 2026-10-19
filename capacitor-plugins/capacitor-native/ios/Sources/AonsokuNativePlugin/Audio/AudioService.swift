@@ -1481,11 +1481,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     private func configureAudioSession() throws {
-        try audioSession.setCategory(
-            .playback,
-            mode: .default,
-            options: [.allowAirPlay, .allowBluetoothA2DP]
-        )
+        try audioSession.setCategory(.playback, mode: .default)
     }
 
     private func activateAudioSession() throws {
