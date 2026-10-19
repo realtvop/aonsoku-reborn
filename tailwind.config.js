@@ -149,8 +149,6 @@ module.exports = {
         "1/8": "12.5%",
       },
       maskImage: {
-        "marquee-fade":
-          "linear-gradient(270deg, transparent 0%, rgb(0, 0, 0) 3%, rgb(0, 0, 0) 97%, transparent 100%)",
         "marquee-fade-finished":
           "linear-gradient(270deg, transparent 0%, rgb(0, 0, 0) 3%, rgb(0, 0, 0) 100%, transparent 100%)",
       },

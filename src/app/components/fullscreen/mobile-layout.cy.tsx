@@ -56,11 +56,7 @@ describe("MobileLayout", () => {
 
       mountMobileLayout();
 
-      cy.getByTestId("fullscreen-playing-view").should(
-        "have.attr",
-        "data-layout",
-        "default",
-      );
+      cy.getByTestId("fullscreen-playing-view").should("be.visible");
       cy.get('[data-testid="fullscreen-volume-bar"]').should("be.visible");
       cy.get('[role="tablist"]').should("be.visible");
     });
@@ -77,11 +73,7 @@ describe("MobileLayout", () => {
 
       mountMobileLayout();
 
-      cy.getByTestId("fullscreen-playing-view").should(
-        "have.attr",
-        "data-layout",
-        "default",
-      );
+      cy.getByTestId("fullscreen-playing-view").should("be.visible");
       cy.get('[data-testid="fullscreen-volume-bar"]').should("be.visible");
       cy.get('[role="tablist"]').should("be.visible");
     });

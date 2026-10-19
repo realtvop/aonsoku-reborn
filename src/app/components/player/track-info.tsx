@@ -13,8 +13,8 @@ import { useTranslation } from "react-i18next";
 import { Link, type LinkProps } from "react-router-dom";
 
 import { CachedImage } from "@/app/components/cover-image/cached-image";
-import { MarqueeTitle } from "@/app/components/fullscreen/marquee-title";
 import FullscreenMode from "@/app/components/fullscreen/page";
+import { ScrollingText } from "@/app/components/scrolling-text/scrolling-text";
 
 import { useIsMobile } from "@/app/hooks/use-mobile";
 import { cn } from "@/lib/utils";
@@ -188,7 +188,7 @@ export function TrackInfo({ song }: { song: ISong | undefined }) {
         </FullscreenMode>
       </div>
       <div className="flex flex-col justify-center w-full overflow-hidden ml-1">
-        <MarqueeTitle gap="mr-2">
+        <ScrollingText loop={2} pauseOnHover>
           {isMobile ? (
             <span
               className="text-xs md:text-sm font-medium"
@@ -212,7 +212,7 @@ export function TrackInfo({ song }: { song: ISong | undefined }) {
               </span>
             </TouchGuardedLink>
           )}
-        </MarqueeTitle>
+        </ScrollingText>
         <TrackInfoArtistsLinks disableNavigation={isMobile} song={song} />
       </div>
     </Fragment>

@@ -2,10 +2,10 @@ import { clsx } from "clsx";
 import { AnimatePresence, motion } from "framer-motion";
 import { memo } from "react";
 import { useRemotePlaybackProjection } from "@/app/components/remote-control/use-remote-playback-projection";
+import { ScrollingText } from "@/app/components/scrolling-text/scrolling-text";
 import { usePlayerStore } from "@/store/player.store";
 import { ISong } from "@/types/responses/song";
 import { ALBUM_ARTISTS_MAX_NUMBER } from "@/utils/multipleArtists";
-import { ScrollingTitle } from "./scrolling-title";
 import { CompactSongArtwork } from "./song-artwork";
 
 const TEXT_TRANSITION = { duration: 0.25, ease: [0.4, 0, 0.2, 1] } as const;
@@ -34,13 +34,13 @@ export const SongInfo = memo(function SongInfo() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
           transition={TEXT_TRANSITION}
-          className="w-full min-w-0 overflow-hidden"
+          className="w-full min-w-0"
         >
-          <ScrollingTitle>
+          <ScrollingText>
             <h2 className="font-bold tracking-tight text-2xl md:text-3xl">
               {displaySong.title}
             </h2>
-          </ScrollingTitle>
+          </ScrollingText>
         </motion.div>
       </AnimatePresence>
       <AnimatePresence mode="wait">
@@ -50,13 +50,13 @@ export const SongInfo = memo(function SongInfo() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
           transition={TEXT_TRANSITION_DELAYED}
-          className="w-full min-w-0 overflow-hidden"
+          className="w-full min-w-0"
         >
-          <ScrollingTitle>
+          <ScrollingText>
             <div className="text-sm text-foreground/70">
               <ArtistNames song={displaySong} />
             </div>
-          </ScrollingTitle>
+          </ScrollingText>
         </motion.div>
       </AnimatePresence>
     </div>
@@ -85,14 +85,11 @@ export const AlbumName = memo(function AlbumName({
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 8 }}
         transition={TEXT_TRANSITION}
-        className={clsx(
-          "w-full min-w-0 overflow-hidden text-center",
-          className,
-        )}
+        className={clsx("w-full min-w-0 text-center", className)}
       >
-        <ScrollingTitle>
+        <ScrollingText>
           <p className="text-sm text-foreground/70">{displaySong.album}</p>
-        </ScrollingTitle>
+        </ScrollingText>
       </motion.div>
     </AnimatePresence>
   );
