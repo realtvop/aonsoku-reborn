@@ -8,6 +8,7 @@ public final class AppServices: @unchecked Sendable {
     public let lifecycle: AppLifecycleService
     public let authentication: AuthenticationService
     public let preferences: PreferencesService
+    public let coordination: CoordinationService
 
     private convenience init() {
         self.init(audio: AudioService(), library: LibraryService())
@@ -18,6 +19,7 @@ public final class AppServices: @unchecked Sendable {
         library: LibraryService,
         authentication: AuthenticationService = .shared,
         preferences: PreferencesService = .shared,
+        coordination: CoordinationService = .shared,
         lifecycleFactory: (AudioService) -> AppLifecycleService = {
             AppLifecycleService(audio: $0)
         }
@@ -26,6 +28,7 @@ public final class AppServices: @unchecked Sendable {
         self.library = library
         self.authentication = authentication
         self.preferences = preferences
+        self.coordination = coordination
         self.lifecycle = lifecycleFactory(audio)
     }
 }
