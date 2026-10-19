@@ -75,13 +75,13 @@ struct CoordinationLifecycleActions {
 
     static let live = CoordinationLifecycleActions(
         didEnterBackground: {
-            AonsokuNativeCoordinationPlugin.applicationDidEnterBackground()
+            CoordinationService.shared.didEnterBackground()
         },
         willEnterForeground: {
-            AonsokuNativeCoordinationPlugin.applicationWillEnterForeground()
+            CoordinationService.shared.willEnterForeground()
         },
         willTerminate: {
-            AonsokuNativeCoordinationPlugin.applicationWillTerminate()
+            CoordinationService.shared.willTerminate()
         }
     )
 }

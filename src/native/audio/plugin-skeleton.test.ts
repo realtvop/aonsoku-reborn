@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -22,7 +22,7 @@ const appLifecycleServicePath = path.join(
 );
 const nativeCoordinationServicePath = path.join(
   kitSourcesRoot,
-  "Coordination/AonsokuNativeCoordinationPlugin.swift",
+  "Coordination/CoordinationRealtime.swift",
 );
 
 const iosAudioServiceMethods = [
@@ -274,7 +274,7 @@ describe("Aonsoku native audio packages", () => {
       expect(audioServiceSwift).toContain(command);
     }
     expect(audioServiceSwift).toContain(
-      "AonsokuNativeCoordinationPlugin.sendCommandFromActive(",
+      "CoordinationService.shared.sendCommandFromActive(",
     );
 
     expect(audioServiceSwift).toContain(
@@ -406,5 +406,37 @@ describe("Aonsoku native audio packages", () => {
       "PRODUCT_BUNDLE_IDENTIFIER = github.realtvop.aonsoku;",
     );
     expect(project).not.toContain("Capacitor");
+  });
+
+  it("ensures no AonsokuKit sources import Capacitor", () => {
+    function walkDir(dir: string, callback: (filePath: string) => void) {
+      const files = readdirSync(dir);
+      for (const file of files) {
+        const filePath = path.join(dir, file);
+        const stat = statSync(filePath);
+        if (stat.isDirectory()) {
+          walkDir(filePath, callback);
+        } else if (file.endsWith(".swift")) {
+          callback(filePath);
+        }
+      }
+    }
+
+    const sourceRoots = [
+      kitSourcesRoot,
+      path.join(process.cwd(), "ios/Aonsoku"),
+    ];
+
+    const importCapacitorPattern = /^import (Capacitor|Cordova)\b/m;
+
+    for (const root of sourceRoots) {
+      walkDir(root, (filePath: string) => {
+        const content = readText(filePath);
+        expect(
+          content,
+          `File ${filePath} should not import Capacitor or Cordova`,
+        ).not.toMatch(importCapacitorPattern);
+      });
+    }
   });
 });

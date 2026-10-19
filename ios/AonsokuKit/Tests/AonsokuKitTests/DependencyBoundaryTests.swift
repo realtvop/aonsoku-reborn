@@ -24,17 +24,12 @@ final class DependencyBoundaryTests: XCTestCase {
         service.clear()
     }
 
-    func testOnlyCoordinationPluginImportsCapacitor() {
-        // This test verifies the architecture boundary: AonsokuKit services
-        // do not depend on Capacitor. Only AonsokuNativeCoordinationPlugin
-        // (which bridges to the WebView) imports Capacitor.
-        // If this test fails, check that:
-        // - AuthenticationService, PreferencesService, and other services
-        //   do not import Capacitor
-        // - AudioPayloadCodec and AudioCoordinationBridge do not import
-        //   Capacitor (they are Capacitor-free codecs)
-        // - EventEmitter does not import Capacitor
-        // - Only AonsokuNativeCoordinationPlugin and adapters still import it
+    func testAonsokuKitDoesNotDependOnCapacitor() {
+        // This test verifies the architecture boundary: AonsokuKit source code
+        // does not import Capacitor or Cordova. All coordination is managed
+        // internally by CoordinationRealtime and CoordinationService.
+        // If this test fails, check that no file under ios/AonsokuKit/Sources
+        // and ios/Aonsoku has an import Capacitor or import Cordova statement.
 
         // Verify core services can be instantiated without Capacitor ceremony
         _ = AuthenticationService.shared

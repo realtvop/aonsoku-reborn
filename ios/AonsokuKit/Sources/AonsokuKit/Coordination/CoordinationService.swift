@@ -16,6 +16,7 @@ public final class CoordinationService: @unchecked Sendable {
     private let lock = NSLock()
     private var currentState = CoordinationState()
     private var observers: [UUID: @Sendable (CoordinationEvent) -> Void] = [:]
+    private let realtime = CoordinationRealtime()
 
     init() {}
 
@@ -53,11 +54,17 @@ public final class CoordinationService: @unchecked Sendable {
     /// registered. Safe to call more than once.
     public func start() {}
 
-    public func didEnterBackground() {}
+    public func didEnterBackground() {
+        realtime.didEnterBackground()
+    }
 
-    public func willEnterForeground() {}
+    public func willEnterForeground() {
+        realtime.willEnterForeground()
+    }
 
-    public func willTerminate() {}
+    public func willTerminate() {
+        realtime.willTerminate()
+    }
 
     // MARK: - Registration and connection
 
@@ -136,5 +143,27 @@ public final class CoordinationService: @unchecked Sendable {
     /// as `.handoffCommitted` or `.handoffFailed`.
     public func requestHandoffCandidateFromCache(sourceDeviceId: String) throws {
         throw CoordinationError(code: CoordinationErrorCode.notConnected)
+    }
+
+    // MARK: - Internal Audio Service Integration
+
+    /// Send a command from the active audio service to a remote device.
+    /// Main-thread only. Returns true if sent, false if coordination is not connected.
+    func sendCommandFromActive(
+        targetDeviceId: String,
+        expectedGeneration: Int?,
+        command: [String: Any]
+    ) -> Bool {
+        realtime.sendCommandFromNative(
+            targetDeviceId: targetDeviceId,
+            expectedGeneration: expectedGeneration,
+            command: command
+        )
+    }
+
+    /// Publish a playback snapshot from the active audio service.
+    /// Main-thread only. Returns true if sent, false otherwise.
+    func publishSnapshotFromActiveAudioState() -> Bool {
+        realtime.publishNativePlaybackSnapshot()
     }
 }

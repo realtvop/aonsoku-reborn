@@ -1,6 +1,5 @@
 import Foundation
 import AVFoundation
-import Capacitor
 import UIKit
 
 private struct PendingNativeCommand {
@@ -38,23 +37,21 @@ struct CoordinationReconnectPolicy: Equatable {
     }
 }
 
-/// Native coordination plugin for iOS — maintains a WebSocket
-/// connection to the coordination server, bridging remote commands and
-/// handoff events to the native queue controller (design §8, §9, §10, §11).
+/// Real-time WebSocket transport for coordination — maintains a connection
+/// to the coordination server, bridging remote commands and handoff events
+/// to the audio service (design §8, §9, §10, §11).
 ///
 /// iOS may suspend or close WebSockets in the background even while audio is
 /// active. The app lifecycle therefore stops foreground heartbeats on
 /// background entry and validates the transport with a ping on foreground
 /// entry. A missing transport repeatedly requests a fresh ticket using capped
-/// exponential backoff until the WebView reconnects or the user disconnects.
+/// exponential backoff.
 ///
-/// Multi-stack consistency: the plugin receives the same RemoteCommand types
-/// as the Web/Electron observer and dispatches them through the native audio
-/// plugin's queue engine. The WebView-side CoordinationManager delegates to
-/// this plugin when running on capacitor-ios.
-@objc(AonsokuNativeCoordination)
-public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDelegate, URLSessionDelegate {
-    private static weak var activeInstance: AonsokuNativeCoordinationPlugin?
+/// All methods must be called on the main thread; all callbacks are delivered
+/// on the main thread.
+///
+/// Owned by CoordinationService; iOS lifecycle is managed by AppLifecycleService.
+final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSessionDelegate {
     internal var reconnectPolicy = CoordinationReconnectPolicy()
     internal var sessionFactory: (
         URLSessionConfiguration,
@@ -63,40 +60,25 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         URLSession(
             configuration: configuration,
             delegate: delegate,
-            delegateQueue: nil
+            delegateQueue: OperationQueue.main
         )
     }
 
-    public static func applicationDidEnterBackground() {
-        activeInstance?.handleApplicationDidEnterBackground()
-    }
+    /// Called when the connection state changes (connecting, connected, disconnected, etc).
+    /// Invoked on the main thread with the state string.
+    var onStateChange: ((String) -> Void)?
 
-    public static func applicationWillEnterForeground() {
-        activeInstance?.handleApplicationWillEnterForeground()
-    }
+    /// Called when an envelope is received or sent.
+    /// Invoked on the main thread with the raw envelope JSON string.
+    var onEnvelope: ((String) -> Void)?
 
-    public static func applicationWillTerminate() {
-        activeInstance?.handleApplicationWillTerminate()
-    }
+    /// Called when a command acknowledgment is received.
+    /// Invoked on the main thread with (messageId, resultJson).
+    var onCommandAck: ((String, String) -> Void)?
 
-    internal static func sendCommandFromActive(
-        targetDeviceId: String,
-        expectedGeneration: Int?,
-        command: [String: Any]
-    ) -> Bool {
-        guard let instance = activeInstance else {
-            return false
-        }
-        return instance.sendCommandFromNative(
-            targetDeviceId: targetDeviceId,
-            expectedGeneration: expectedGeneration,
-            command: command
-        )
-    }
-
-    internal static func publishSnapshotFromActiveAudioState() -> Bool {
-        activeInstance?.publishNativePlaybackSnapshot() ?? false
-    }
+    /// Called when reconnection is needed.
+    /// Invoked on the main thread with the attempt number.
+    var onReconnectNeeded: ((Int) -> Void)?
 
     internal static func buildHeartbeatEnvelope(
         protocolVersion: Int
@@ -272,7 +254,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     /// True after an explicit `disconnect()`. Prevents the auto-reconnect path
     /// from firing for a user-initiated close.
     private var manualDisconnect = false
-    private var deviceId: String?
+    private(set) var deviceId: String?
     private var capabilities: Int = 0
     private var protocolVersion: Int = 1
     private var currentTicket: String?
@@ -291,7 +273,6 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     private var heartbeatTimer: Timer?
     private var snapshotHeartbeatTimer: Timer?
     private var reconnectWorkItem: DispatchWorkItem?
-    private var keychainService = "aonsoku-coordination"
     /// §9.1 dedup cache for incoming envelopes.
     private var dedupCache = CoordinationDedup(max: 200)
     /// §9.2 sequence tracker — highest server seq processed.
@@ -306,167 +287,38 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
     private var audioStateDidChangeObserver: NSObjectProtocol?
     private var isAppInBackground = false
 
-    // MARK: - Plugin Lifecycle
+    // MARK: - Lifecycle
 
-    public override func load() {
-        super.load()
-        Self.activeInstance = self
-        isAppInBackground = UIApplication.shared.applicationState == .background
+    override init() {
+        super.init()
+        isAppInBackground = Thread.isMainThread ? UIApplication.shared.applicationState == .background : false
         registerAudioSessionObservers()
     }
 
     deinit {
-        if Self.activeInstance === self {
-            Self.activeInstance = nil
-        }
         removeAudioSessionObservers()
-    }
-
-    // MARK: - Token & Config Storage
-
-    @objc func storeTokens(_ call: CAPPluginCall) {
-        guard let accessToken = call.getString("accessToken"),
-              let refreshToken = call.getString("refreshToken"),
-              let deviceId = call.getString("deviceId"),
-              let accountId = call.getString("accountId") else {
-            call.reject("missing token fields")
-            return
-        }
-        let historyLimit = call.getInt("historyLimit") ?? 100
-        let accessTokenExpiresAt = call.getDouble("accessTokenExpiresAt") ?? 0
-
-        KeychainManager.set(accessToken, forKey: "coord_access_token", service: keychainService)
-        KeychainManager.set(refreshToken, forKey: "coord_refresh_token", service: keychainService)
-        KeychainManager.set(
-            String(accessTokenExpiresAt),
-            forKey: "coord_access_token_expires_at",
-            service: keychainService
-        )
-        KeychainManager.set(deviceId, forKey: "coord_device_id", service: keychainService)
-        KeychainManager.set(accountId, forKey: "coord_account_id", service: keychainService)
-        KeychainManager.set(String(historyLimit), forKey: "coord_history_limit", service: keychainService)
-
-        call.resolve()
-    }
-
-    @objc func loadTokens(_ call: CAPPluginCall) {
-        guard let accessToken = KeychainManager.get("coord_access_token", service: keychainService),
-              let refreshToken = KeychainManager.get("coord_refresh_token", service: keychainService),
-              let deviceId = KeychainManager.get("coord_device_id", service: keychainService),
-              let accountId = KeychainManager.get("coord_account_id", service: keychainService) else {
-            call.resolve()
-            return
-        }
-        let historyLimitStr = KeychainManager.get("coord_history_limit", service: keychainService) ?? "100"
-        let accessTokenExpiresAtStr = KeychainManager.get(
-            "coord_access_token_expires_at",
-            service: keychainService
-        ) ?? "0"
-        call.resolve([
-            "accessToken": accessToken,
-            "refreshToken": refreshToken,
-            "accessTokenExpiresAt": Double(accessTokenExpiresAtStr) ?? 0,
-            "deviceId": deviceId,
-            "accountId": accountId,
-            "historyLimit": Int(historyLimitStr) ?? 100,
-        ])
-    }
-
-    @objc func clearTokens(_ call: CAPPluginCall) {
-        KeychainManager.delete("coord_access_token", service: keychainService)
-        KeychainManager.delete("coord_refresh_token", service: keychainService)
-        KeychainManager.delete("coord_access_token_expires_at", service: keychainService)
-        KeychainManager.delete("coord_device_id", service: keychainService)
-        KeychainManager.delete("coord_account_id", service: keychainService)
-        KeychainManager.delete("coord_history_limit", service: keychainService)
-        call.resolve()
-    }
-
-    @objc func storeConfig(_ call: CAPPluginCall) {
-        guard let serverUrl = call.getString("serverUrl"),
-              let identityUrl = call.getString("identityUrl") else {
-            call.reject("missing config fields")
-            return
-        }
-        UserDefaults.standard.set(serverUrl, forKey: "coord_server_url")
-        UserDefaults.standard.set(identityUrl, forKey: "coord_identity_url")
-        call.resolve()
-    }
-
-    @objc func loadConfig(_ call: CAPPluginCall) {
-        guard let serverUrl = UserDefaults.standard.string(forKey: "coord_server_url"),
-              let identityUrl = UserDefaults.standard.string(forKey: "coord_identity_url") else {
-            call.resolve()
-            return
-        }
-        call.resolve(["serverUrl": serverUrl, "identityUrl": identityUrl])
-    }
-
-    @objc func request(_ call: CAPPluginCall) {
-        guard let rawUrl = call.getString("url"),
-              let url = URL(string: rawUrl) else {
-            call.reject("missing or invalid url")
-            return
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = call.getString("method") ?? "GET"
-        if let headers = call.getObject("headers") {
-            for (key, value) in headers {
-                request.setValue("\(value)", forHTTPHeaderField: key)
-            }
-        }
-        if let body = call.getString("body") {
-            request.httpBody = body.data(using: .utf8)
-        }
-
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error = error {
-                call.reject("native coordination request failed: \(error.localizedDescription)")
-                return
-            }
-            guard let httpResponse = response as? HTTPURLResponse else {
-                call.reject("native coordination request failed: no HTTP response")
-                return
-            }
-            let body = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
-            call.resolve([
-                "status": httpResponse.statusCode,
-                "statusText": HTTPURLResponse.localizedString(
-                    forStatusCode: httpResponse.statusCode
-                ),
-                "body": body,
-            ])
-        }.resume()
     }
 
     // MARK: - WebSocket Connection
 
-    @objc func connect(_ call: CAPPluginCall) {
-        guard let wsUrl = call.getString("wsUrl"),
-              let ticket = call.getString("ticket"),
-              let deviceId = call.getString("deviceId") else {
-            call.reject("missing connect fields")
-            return
-        }
-        let capabilities = call.getInt("capabilities") ?? 0
-        let protocolVersion = call.getInt("protocolVersion") ?? 1
-        // §9.2: the client submits the highest seq it has processed so the
-        // server can skip already-delivered messages. When the caller omits
-        // lastSeq (first-ever connect), default to 0.
-        let lastSeqValue = call.getInt("lastSeq") ?? 0
-
+    /// Connect to the coordination server with the given ticket.
+    func connect(
+        wsUrl: String,
+        ticket: String,
+        deviceId: String,
+        capabilities: Int,
+        protocolVersion: Int,
+        lastSeq: Int
+    ) throws {
         // Do not create a second socket when lifecycle validation finds the
         // existing connection healthy.
         if let task = self.webSocketTask, !self.isConnecting, task.state == .running {
-            call.resolve()
             return
         }
 
         let urlWithTicket = CoordinationURL.buildTicketUrl(wsUrl, ticket: ticket)
         guard let url = URL(string: urlWithTicket) else {
-            call.reject("invalid URL")
-            return
+            throw CoordinationError(code: CoordinationErrorCode.badMessage, reason: "invalid URL")
         }
 
         self.manualDisconnect = false
@@ -475,9 +327,9 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         self.currentTicket = ticket
         self.capabilities = capabilities
         self.protocolVersion = protocolVersion
-        self.connectLastSeq = lastSeqValue
+        self.connectLastSeq = lastSeq
         self.seqTracker = CoordinationSeqTracker()
-        self.seqTracker.observe(Int64(lastSeqValue))
+        self.seqTracker.observe(Int64(lastSeq))
         // The dedup cache is per-connection; clear it so a reconnect does
         // not falsely skip messages from the new connection.
         self.dedupCache.clear()
@@ -495,100 +347,68 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
 
         self.isConnecting = true
         self.notifyState("connecting")
-
-        call.resolve()
     }
 
-    @objc func disconnect(_ call: CAPPluginCall) {
+    /// Disconnect from the coordination server.
+    func disconnect() {
         self.manualDisconnect = true
         self.disconnectInternal()
-        call.resolve()
     }
 
-    @objc func getState(_ call: CAPPluginCall) {
-        let state: String
+    /// Current connection state description: "disconnected", "connecting", "connected", "reconnecting", or "interrupted".
+    var connectionStateDescription: String {
         if self.webSocketTask == nil {
-            state = "disconnected"
+            return "disconnected"
         } else if self.isConnecting {
-            state = "connecting"
+            return "connecting"
         } else {
-            state = "connected"
+            return "connected"
         }
-        call.resolve(["state": state, "deviceId": self.deviceId ?? NSNull()])
     }
 
-    @objc func publishSnapshot(_ call: CAPPluginCall) {
-        guard let snapshotJson = call.getString("snapshotJson") else {
-            call.reject("missing snapshotJson")
-            return
-        }
-        let env: [String: Any] = [
-            "version": self.protocolVersion,
-            "messageId": UUID().uuidString,
-            "type": "snapshot",
-            "sessionId": call.getString("sessionId") ?? "",
-            "generation": call.getInt("generation") ?? 0,
-            "snapshotRevision": call.getInt("snapshotRevision") ?? 0,
-            "snapshot": JSONUtilities.parse(snapshotJson) ?? [:],
-        ]
-        sendEnvelope(env)
-        call.resolve()
-    }
-
-    @objc func sendCommand(_ call: CAPPluginCall) {
-        guard let commandJson = call.getString("commandJson"),
-              let targetDeviceId = call.getString("targetDeviceId") else {
-            call.reject("missing command fields")
-            return
-        }
+    /// Send a command to a target device.
+    func sendCommand(
+        _ command: [String: Any],
+        targetDeviceId: String,
+        expectedGeneration: Int,
+        messageId: String?
+    ) {
         // §9.1: the caller may supply a messageId to match the command to a
         // pending-ack promise. Fall back to a generated UUID.
         activeRemoteControlTargetDeviceId = targetDeviceId
-        let suppliedMessageId = call.getString("messageId")
-        let messageId = suppliedMessageId ?? UUID().uuidString
-        let command = JSONUtilities.parse(commandJson) ?? [:]
+        let suppliedMessageId = messageId
+        let finalMessageId = suppliedMessageId ?? UUID().uuidString
         if suppliedMessageId == nil {
-            pendingNativeCommands[messageId] = PendingNativeCommand(
+            pendingNativeCommands[finalMessageId] = PendingNativeCommand(
                 targetDeviceId: targetDeviceId,
                 command: command,
                 attemptedStaleRetry: false
             )
         }
         sendCommandEnvelope(
-            messageId: messageId,
+            messageId: finalMessageId,
             targetDeviceId: targetDeviceId,
-            expectedGeneration: call.getInt("expectedGeneration") ?? 0,
+            expectedGeneration: expectedGeneration,
             command: command
         )
-        call.resolve()
     }
 
-    @objc func sendActiveControlCommand(_ call: CAPPluginCall) {
-        guard let commandJson = call.getString("commandJson") else {
-            call.reject("missing commandJson")
-            return
-        }
+    /// Send a command from the active control session.
+    func sendActiveControlCommand(_ command: [String: Any]) throws {
         guard let targetDeviceId = activeRemoteControlTargetDeviceId else {
-            call.reject("missing active target")
-            return
+            throw CoordinationError(code: CoordinationErrorCode.notConnected, reason: "no active control session")
         }
-        let command = JSONUtilities.parse(commandJson) ?? [:]
-        guard Self.sendCommandFromActive(
+        guard sendCommandFromNative(
             targetDeviceId: targetDeviceId,
             expectedGeneration: deviceGenerations[targetDeviceId],
             command: command
         ) else {
-            call.reject("native coordination is not connected")
-            return
+            throw CoordinationError(code: CoordinationErrorCode.notConnected, reason: "native coordination is not connected")
         }
-        call.resolve()
     }
 
-    @objc func sendControlSessionBegin(_ call: CAPPluginCall) {
-        guard let targetDeviceId = call.getString("targetDeviceId") else {
-            call.reject("missing targetDeviceId")
-            return
-        }
+    /// Begin a remote control session with a target device.
+    func sendControlSessionBegin(targetDeviceId: String) {
         activeRemoteControlTargetDeviceId = targetDeviceId
         let env: [String: Any] = [
             "version": self.protocolVersion,
@@ -597,10 +417,10 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
             "targetDeviceId": targetDeviceId,
         ]
         sendEnvelope(env)
-        call.resolve()
     }
 
-    @objc func sendControlSessionEnd(_ call: CAPPluginCall) {
+    /// End the remote control session.
+    func sendControlSessionEnd() {
         activeRemoteControlTargetDeviceId = nil
         AudioCoordinationBridge.clearRemotePlaybackProjection()
         let env: [String: Any] = [
@@ -609,91 +429,126 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
             "type": "control_session_end",
         ]
         sendEnvelope(env)
-        call.resolve()
     }
 
-    @objc func requestHandoffCandidate(_ call: CAPPluginCall) {
-        guard let sourceDeviceId = call.getString("sourceDeviceId") else {
-            call.reject("missing sourceDeviceId")
-            return
-        }
-        let env: [String: Any] = [
-            "version": self.protocolVersion,
-            "messageId": UUID().uuidString,
-            "type": "handoff_candidate_request",
-            "sourceDeviceId": sourceDeviceId,
-            "expectedGeneration": call.getInt("expectedGeneration") ?? 0,
-            "expectedSnapshotRevision": call.getInt("expectedSnapshotRevision") ?? 0,
-        ]
-        sendEnvelope(env)
-        call.resolve()
-    }
-
-    @objc func requestHandoffCandidateFromCache(_ call: CAPPluginCall) {
-        guard let sourceDeviceId = call.getString("sourceDeviceId") else {
-            call.reject("missing sourceDeviceId")
-            return
-        }
+    /// Request a handoff candidate from cache for the given source device.
+    func requestHandoffCandidateFromCache(sourceDeviceId: String) throws {
         guard sendHandoffCandidateRequestFromCache(sourceDeviceId: sourceDeviceId) else {
-            call.reject("missing cached handoff snapshot")
-            return
+            throw CoordinationError(code: CoordinationErrorCode.snapshotExpired, reason: "missing cached handoff snapshot")
         }
         pendingNativeHandoffSourceDeviceId = sourceDeviceId
         pendingNativeHandoffRetryWaitingForSnapshot = false
         pendingNativeHandoffRetryCount = 0
-        call.resolve()
     }
 
-    @objc func sendTargetReady(_ call: CAPPluginCall) {
-        guard let transactionId = call.getString("transactionId"),
-              let sourceDeviceId = call.getString("sourceDeviceId"),
-              let sessionId = call.getString("sessionId") else {
-            call.reject("missing target_ready fields")
-            return
-        }
-        let env: [String: Any] = [
-            "version": self.protocolVersion,
-            "messageId": UUID().uuidString,
-            "type": "target_ready",
-            "transactionId": transactionId,
-            "generation": call.getInt("generation") ?? 0,
-            "snapshotRevision": call.getInt("snapshotRevision") ?? 0,
-            "sourceDeviceId": sourceDeviceId,
-            "sessionId": sessionId,
-        ]
-        sendEnvelope(env)
-        call.resolve()
-    }
-
-    @objc func sendRelinquishAck(_ call: CAPPluginCall) {
-        guard let transactionId = call.getString("transactionId"),
-              let snapshotJson = call.getString("snapshotJson") else {
-            call.reject("missing relinquish fields")
-            return
-        }
-        let env: [String: Any] = [
-            "version": self.protocolVersion,
-            "messageId": UUID().uuidString,
-            "type": "relinquish_ack",
-            "transactionId": transactionId,
-            "snapshot": JSONUtilities.parse(snapshotJson) ?? [:],
-        ]
-        sendEnvelope(env)
-        call.resolve()
-    }
-
-    @objc func requestSnapshots(_ call: CAPPluginCall) {
-        requestSnapshots()
-        call.resolve()
-    }
-
-    private func requestSnapshots() {
+    /// Request snapshots from all connected devices.
+    func requestSnapshots() {
         let env: [String: Any] = [
             "version": self.protocolVersion,
             "messageId": UUID().uuidString,
             "type": "request_snapshots",
         ]
         sendEnvelope(env)
+    }
+
+    /// Get the active remote control target device ID.
+    var activeControlTargetDeviceId: String? {
+        activeRemoteControlTargetDeviceId
+    }
+
+    /// Get the generation for a given device ID.
+    func generation(for deviceId: String) -> Int? {
+        deviceGenerations[deviceId]
+    }
+
+    /// Get the snapshot revision for a given device ID.
+    func snapshotRevision(for deviceId: String) -> Int? {
+        deviceSnapshotRevisions[deviceId]
+    }
+
+    // MARK: - Lifecycle Handlers (called by AppLifecycleService)
+
+    /// Called when the app enters the background.
+    func didEnterBackground() {
+        DispatchQueue.main.async {
+            self.handleApplicationDidEnterBackground()
+        }
+    }
+
+    /// Called when the app will enter the foreground.
+    func willEnterForeground() {
+        DispatchQueue.main.async {
+            self.handleApplicationWillEnterForeground()
+        }
+    }
+
+    /// Called when the app will terminate.
+    func willTerminate() {
+        DispatchQueue.main.async {
+            self.handleApplicationWillTerminate()
+        }
+    }
+
+    // MARK: - Public command dispatch (called by AudioService)
+
+    /// Send a command from the active audio service.
+    /// Returns true if the command was sent, false if coordination is not connected.
+    internal func sendCommandFromNative(
+        targetDeviceId: String,
+        expectedGeneration: Int?,
+        command: [String: Any]
+    ) -> Bool {
+        guard self.webSocketTask != nil else {
+            return false
+        }
+        guard let generation = expectedGeneration ?? deviceGenerations[targetDeviceId] else {
+            return false
+        }
+
+        let messageId = UUID().uuidString
+        pendingNativeCommands[messageId] = PendingNativeCommand(
+            targetDeviceId: targetDeviceId,
+            command: command,
+            attemptedStaleRetry: false
+        )
+        sendCommandEnvelope(
+            messageId: messageId,
+            targetDeviceId: targetDeviceId,
+            expectedGeneration: generation,
+            command: command
+        )
+        return true
+    }
+
+    /// Publish a native playback snapshot.
+    /// Returns true if the snapshot was sent, false otherwise.
+    internal func publishNativePlaybackSnapshot(onlyWhenPlaying: Bool = false) -> Bool {
+        if handoffPreparing { return false }
+        guard self.webSocketTask != nil,
+              let audioState = AudioCoordinationBridge.getFullState(),
+              let snapshot = Self.buildPlaybackSnapshot(
+                sessionId: nativeSessionId,
+                audioState: audioState,
+                sampledAtSeconds: Date().timeIntervalSince1970
+              ) else {
+            return false
+        }
+
+        if onlyWhenPlaying && (audioState["isPlaying"] as? Bool != true) {
+            return false
+        }
+
+        nativeSnapshotRevision += 1
+        sendEnvelope([
+            "version": protocolVersion,
+            "messageId": UUID().uuidString,
+            "type": "snapshot",
+            "sessionId": nativeSessionId,
+            "generation": nativeGeneration,
+            "snapshotRevision": nativeSnapshotRevision,
+            "snapshot": snapshot,
+        ])
+        return true
     }
 
     private func sendHandoffCandidateRequestFromCache(sourceDeviceId: String) -> Bool {
@@ -782,13 +637,18 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         }
 
         if audioStateDidChangeObserver == nil {
+            // AudioService posts this from its state queue while the main
+            // thread may be waiting on that queue, so the observer runs on
+            // the posting thread and only schedules the publish on main.
             audioStateDidChangeObserver = center.addObserver(
                 forName: .aonsokuAudioStateDidChange,
                 object: nil,
-                queue: .main
+                queue: nil
             ) { [weak self] notification in
                 guard notification.object is AudioService else { return }
-                _ = self?.publishNativePlaybackSnapshot()
+                DispatchQueue.main.async { [weak self] in
+                    _ = self?.publishNativePlaybackSnapshot()
+                }
             }
         }
 
@@ -1034,13 +894,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
                         result = "{}"
                     }
                     DispatchQueue.main.async {
-                        self.notifyListeners(
-                            "coordinationAck",
-                            data: [
-                                "messageId": messageId,
-                                "resultJson": result,
-                            ]
-                        )
+                        self.onCommandAck?(messageId, result)
                     }
                 }
             }
@@ -1151,7 +1005,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
                        if prepared {
                            DispatchQueue.main.async {
                                _ = self.publishNativePlaybackSnapshot()
-                               self.notifyListeners("coordinationEvent", data: ["envelopeJson": json])
+                               self.onEnvelope?(json)
                            }
                        } else {
                            AudioCoordinationBridge.rollbackHandoffPlayback()
@@ -1163,7 +1017,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
                            if let data = try? JSONSerialization.data(withJSONObject: failure),
                               let failureJson = String(data: data, encoding: .utf8) {
                                DispatchQueue.main.async {
-                                   self.notifyListeners("coordinationEvent", data: ["envelopeJson": failureJson])
+                                   self.onEnvelope?(failureJson)
                                }
                            }
                        }
@@ -1193,7 +1047,7 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
             }
         }
         DispatchQueue.main.async {
-            self.notifyListeners("coordinationEvent", data: ["envelopeJson": json])
+            self.onEnvelope?(json)
         }
     }
 
@@ -1203,61 +1057,6 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
         self.webSocketTask?.send(.string(string)) { _ in }
     }
 
-    private func publishNativePlaybackSnapshot(onlyWhenPlaying: Bool = false) -> Bool {
-        if handoffPreparing { return false }
-        guard self.webSocketTask != nil,
-              let audioState = AudioCoordinationBridge.getFullState(),
-              let snapshot = Self.buildPlaybackSnapshot(
-                sessionId: nativeSessionId,
-                audioState: audioState,
-                sampledAtSeconds: Date().timeIntervalSince1970
-              ) else {
-            return false
-        }
-
-        if onlyWhenPlaying && (audioState["isPlaying"] as? Bool != true) {
-            return false
-        }
-
-        nativeSnapshotRevision += 1
-        sendEnvelope([
-            "version": protocolVersion,
-            "messageId": UUID().uuidString,
-            "type": "snapshot",
-            "sessionId": nativeSessionId,
-            "generation": nativeGeneration,
-            "snapshotRevision": nativeSnapshotRevision,
-            "snapshot": snapshot,
-        ])
-        return true
-    }
-
-    private func sendCommandFromNative(
-        targetDeviceId: String,
-        expectedGeneration: Int?,
-        command: [String: Any]
-    ) -> Bool {
-        guard self.webSocketTask != nil else {
-            return false
-        }
-        guard let generation = expectedGeneration ?? deviceGenerations[targetDeviceId] else {
-            return false
-        }
-
-        let messageId = UUID().uuidString
-        pendingNativeCommands[messageId] = PendingNativeCommand(
-            targetDeviceId: targetDeviceId,
-            command: command,
-            attemptedStaleRetry: false
-        )
-        sendCommandEnvelope(
-            messageId: messageId,
-            targetDeviceId: targetDeviceId,
-            expectedGeneration: generation,
-            command: command
-        )
-        return true
-    }
 
     private func sendCommandEnvelope(
         messageId: String,
@@ -1332,19 +1131,13 @@ public class AonsokuNativeCoordinationPlugin: CAPPlugin, URLSessionWebSocketDele
 
     private func notifyReconnectNeeded(attempt: Int) {
         DispatchQueue.main.async {
-            self.notifyListeners(
-                "coordinationReconnectNeeded",
-                data: ["attempt": attempt],
-            )
+            self.onReconnectNeeded?(attempt)
         }
     }
 
     private func notifyState(_ state: String) {
         DispatchQueue.main.async {
-            self.notifyListeners("coordinationStateChange", data: [
-                "state": state,
-                "deviceId": self.deviceId ?? NSNull(),
-            ])
+            self.onStateChange?(state)
         }
     }
 }

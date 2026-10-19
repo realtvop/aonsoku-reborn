@@ -29,7 +29,7 @@ final class HandoffTests: XCTestCase {
     }
 
     func testTargetReadyEnvelopeCarriesFencingState() {
-        let envelope = AonsokuNativeCoordinationPlugin.buildTargetReadyEnvelope(
+        let envelope = CoordinationRealtime.buildTargetReadyEnvelope(
             protocolVersion: 1,
             transactionId: "tx",
             generation: 7,

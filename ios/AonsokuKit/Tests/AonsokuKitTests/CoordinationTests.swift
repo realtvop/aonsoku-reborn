@@ -3,10 +3,10 @@ import XCTest
 
 final class CoordinationTests: XCTestCase {
     func testHeartbeatEnvelopeHasVersionTypeAndUniqueMessageId() throws {
-        let first = AonsokuNativeCoordinationPlugin.buildHeartbeatEnvelope(
+        let first = CoordinationRealtime.buildHeartbeatEnvelope(
             protocolVersion: 2
         )
-        let second = AonsokuNativeCoordinationPlugin.buildHeartbeatEnvelope(
+        let second = CoordinationRealtime.buildHeartbeatEnvelope(
             protocolVersion: 2
         )
 
@@ -17,7 +17,7 @@ final class CoordinationTests: XCTestCase {
     }
 
     func testHelloEnvelopeCarriesResumeHandshake() {
-        let envelope = AonsokuNativeCoordinationPlugin.buildHelloEnvelope(
+        let envelope = CoordinationRealtime.buildHelloEnvelope(
             protocolVersion: 1,
             capabilities: 15,
             deviceId: "device-1",
@@ -34,7 +34,7 @@ final class CoordinationTests: XCTestCase {
     }
 
     func testAcknowledgementAndHandoffEnvelopesPreserveFencingData() {
-        let command = AonsokuNativeCoordinationPlugin.buildCommandAckEnvelope(
+        let command = CoordinationRealtime.buildCommandAckEnvelope(
             protocolVersion: 1,
             messageId: "message-1"
         )
@@ -45,7 +45,7 @@ final class CoordinationTests: XCTestCase {
             "ok"
         )
 
-        let relinquish = AonsokuNativeCoordinationPlugin.buildRelinquishAckEnvelope(
+        let relinquish = CoordinationRealtime.buildRelinquishAckEnvelope(
             protocolVersion: 1,
             transactionId: "tx-1",
             snapshot: ["songId": "song-1"]
@@ -56,7 +56,7 @@ final class CoordinationTests: XCTestCase {
             "song-1"
         )
 
-        let failed = AonsokuNativeCoordinationPlugin.buildHandoffFailedEnvelope(
+        let failed = CoordinationRealtime.buildHandoffFailedEnvelope(
             protocolVersion: 1,
             transactionId: "tx-1",
             code: "source_pause_timeout"
@@ -67,7 +67,7 @@ final class CoordinationTests: XCTestCase {
 
     func testPlaybackSnapshotMapsQueueStateToProtocolShape() throws {
         let snapshot = try XCTUnwrap(
-            AonsokuNativeCoordinationPlugin.buildPlaybackSnapshot(
+            CoordinationRealtime.buildPlaybackSnapshot(
                 sessionId: "session-1",
                 audioState: [
                     "currentSongId": "song-2",
@@ -109,7 +109,7 @@ final class CoordinationTests: XCTestCase {
     }
 
     func testPlaybackSnapshotRequiresCurrentSong() {
-        XCTAssertNil(AonsokuNativeCoordinationPlugin.buildPlaybackSnapshot(
+        XCTAssertNil(CoordinationRealtime.buildPlaybackSnapshot(
             sessionId: "session-1",
             audioState: ["isPlaying": false],
             sampledAtSeconds: 123

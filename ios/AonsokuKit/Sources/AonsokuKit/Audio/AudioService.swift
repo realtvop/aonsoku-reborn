@@ -1667,7 +1667,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     ) -> MPRemoteCommandHandlerStatus {
         if let projection = remoteProjection {
             guard let targetDeviceId = projection.targetDeviceId,
-                  AonsokuNativeCoordinationPlugin.sendCommandFromActive(
+                  CoordinationService.shared.sendCommandFromActive(
                       targetDeviceId: targetDeviceId,
                       expectedGeneration: projection.expectedGeneration,
                       command: command
