@@ -1,0 +1,208 @@
+import Foundation
+
+/// Stateless codecs for encoding/decoding audio-related payloads between native and coordination layers.
+public enum AudioPayloadCodec {
+    // MARK: - Source Codec
+
+    public static func decodeSource(_ object: [String: Any]?) -> AudioSource? {
+        guard let object, let kind = object["kind"] as? String else { return nil }
+        let songId = object["songId"] as? String
+        switch kind {
+        case "stream":
+            guard let url = object["url"] as? String else { return nil }
+            return .stream(url: url, songId: songId)
+        case "blob":
+            guard let url = object["url"] as? String else { return nil }
+            return .blob(url: url, songId: songId)
+        case "native-file":
+            guard let uri = object["uri"] as? String else { return nil }
+            return .nativeFile(uri: uri, songId: songId)
+        case "radio":
+            guard let url = object["url"] as? String else { return nil }
+            return .radio(url: url, radioId: object["radioId"] as? String)
+        default: return nil
+        }
+    }
+
+    // MARK: - Metadata Codec
+
+    public static func decodeMetadata(_ object: [String: Any]?) -> AudioMetadata {
+        AudioMetadata(
+            title: object?["title"] as? String,
+            artist: object?["artist"] as? String,
+            album: object?["album"] as? String,
+            duration: number(object?["duration"]),
+            artworkUrl: object?["artworkUrl"] as? String,
+            coverArtId: object?["coverArtId"] as? String
+        )
+    }
+
+    // MARK: - Command Codec
+
+    public static func decodeRemoteControlCommand(_ object: [String: Any]) -> AudioCommand? {
+        guard let type = object["type"] as? String else { return nil }
+        switch type {
+        case "play": return .play
+        case "pause": return .pause
+        case "toggle_play_pause": return .togglePlayPause
+        case "stop": return .stop
+        case "previous": return .previous
+        case "next": return .next
+        case "seek": return .seek(number(object["seconds"]) ?? 0)
+        case "set_shuffle": return .setShuffle(object["enabled"] as? Bool ?? false)
+        case "set_repeat":
+            return .setRepeat(AudioRepeatMode(rawValue: object["mode"] as? String ?? "off") ?? .off)
+        case "set_volume": return .setVolume(number(object["volume"]) ?? 0.5)
+        case "play_song":
+            guard let id = object["song_id"] as? String else { return nil }
+            return .playSong(id)
+        case "play_album":
+            guard let id = object["album_id"] as? String else { return nil }
+            return .playAlbum(
+                id: id,
+                index: object["index"] as? Int ?? 0,
+                shuffle: object["shuffle"] as? Bool ?? false
+            )
+        case "play_playlist":
+            guard let id = object["playlist_id"] as? String else { return nil }
+            return .playPlaylist(
+                id: id,
+                index: object["index"] as? Int ?? 0,
+                shuffle: object["shuffle"] as? Bool ?? false
+            )
+        case "play_at_index":
+            return .playAtIndex(
+                songIds: object["song_ids"] as? [String] ?? [],
+                index: object["index"] as? Int ?? 0
+            )
+        case "add_to_queue_next", "add_to_queue_last":
+            return .addToQueue(
+                songIds: object["song_ids"] as? [String] ?? [],
+                position: type == "add_to_queue_next" ? "next" : "last"
+            )
+        case "remove_from_queue":
+            return .removeFromQueue(songIds: object["song_ids"] as? [String] ?? [])
+        case "reorder_queue":
+            return .reorderQueue(
+                from: object["from"] as? Int ?? -1,
+                to: object["to"] as? Int ?? -1
+            )
+        case "clear_queue": return .clearQueue
+        case "toggle_like": return .toggleLike
+        default: return nil
+        }
+    }
+
+    public static func isSupportedRemoteControlCommand(_ type: String) -> Bool {
+        decodeRemoteControlCommand(["type": type]) != nil || [
+            "play_song", "play_album", "play_playlist", "play_at_index",
+            "add_to_queue_next", "add_to_queue_last", "remove_from_queue",
+            "reorder_queue",
+        ].contains(type)
+    }
+
+    // MARK: - Handoff Snapshot Codec
+
+    public static func decodeHandoffSnapshot(_ object: [String: Any]) -> AudioHandoffSnapshot? {
+        guard let songId = object["songId"] as? String, !songId.isEmpty else {
+            return nil
+        }
+        var contextQueue = object["contextQueue"] as? [String] ?? []
+        let userQueue = object["userQueue"] as? [String] ?? []
+        let inUserQueue = object["inUserQueue"] as? Bool ?? false
+        var contextIndex = object["contextIndex"] as? Int ?? 0
+        if contextQueue.isEmpty, userQueue.isEmpty {
+            contextQueue = [songId]
+            contextIndex = 0
+        }
+        let sourceId: AudioQueueSource?
+        if let raw = object["sourceId"] as? String,
+           let separator = raw.firstIndex(of: ":") {
+            sourceId = AudioQueueSource(
+                type: String(raw[..<separator]),
+                id: String(raw[raw.index(after: separator)...])
+            )
+        } else {
+            sourceId = nil
+        }
+        return AudioHandoffSnapshot(
+            songId: songId,
+            progressSeconds: number(object["progressSeconds"]) ?? 0,
+            contextQueue: contextQueue,
+            contextIndex: contextIndex,
+            userQueue: userQueue,
+            inUserQueue: inUserQueue,
+            restorePrevious: object["restorePrevious"] as? [String] ?? [],
+            shuffle: object["shuffle"] as? Bool ?? false,
+            repeatMode: AudioRepeatMode(rawValue: object["repeat"] as? String ?? "off") ?? .off,
+            sourceId: sourceId,
+            sourceName: object["sourceName"] as? String,
+            volume: number(object["volume"])
+        )
+    }
+
+    // MARK: - Queue Snapshot Codec
+
+    public static func encodeQueueSnapshot(_ snapshot: AudioQueueSnapshot) -> [String: Any] {
+        let source: Any = snapshot.sourceId.map {
+            ["type": $0.type, "id": $0.id] as [String: Any]
+        } ?? NSNull()
+        return [
+            "contextQueue": [
+                "songs": snapshot.contextSongs.map(encodeSong),
+                "currentIndex": snapshot.currentIndex,
+                "sourceId": source,
+                "sourceName": snapshot.sourceName ?? NSNull(),
+            ],
+            "userQueue": snapshot.userQueue.map(encodeSong),
+            "originalContextSongs": snapshot.originalContextSongs.map(encodeSong),
+            "originalUserSongs": snapshot.originalUserSongs.map(encodeSong),
+            "shuffleHistory": snapshot.shuffleHistory,
+            "shuffleStartHistory": snapshot.shuffleStartHistory,
+            "playedUserQueueHistory": snapshot.playedUserQueueHistory.map(encodeSong),
+            "isInUserQueue": snapshot.isInUserQueue,
+            "isShuffleActive": snapshot.isShuffleActive,
+            "loopState": snapshot.loopState.rawValue,
+            "isPlaying": snapshot.isPlaying,
+            "currentTime": snapshot.currentTime,
+            "duration": snapshot.duration,
+            "currentSongId": snapshot.currentSongId ?? NSNull(),
+            "isRestored": snapshot.isRestored,
+        ]
+    }
+
+    // MARK: - Cached File Codec
+
+    public static func encodeCachedFile(_ file: CachedAudioFile) -> [String: Any] {
+        var object: [String: Any] = ["songId": file.songId, "uri": file.uri]
+        object["contentType"] = file.contentType
+        object["sizeBytes"] = file.sizeBytes.map(NSNumber.init(value:))
+        object["lastModifiedAt"] = file.lastModifiedAt
+        return object
+    }
+
+    // MARK: - Private Helpers
+
+    private static func encodeSong(_ song: QueueSong) -> [String: Any] {
+        var object: [String: Any] = [
+            "id": song.id, "title": song.title, "artist": song.artist,
+            "album": song.album, "duration": song.duration,
+            "streamUrl": song.streamUrl,
+        ]
+        object["artistId"] = song.artistId
+        object["albumId"] = song.albumId
+        object["coverArtId"] = song.coverArtId
+        object["cachedFileUri"] = song.cachedFileUri
+        return object
+    }
+
+    private static func number(_ value: Any?) -> Double? {
+        switch value {
+        case let value as Double: return value
+        case let value as Float: return Double(value)
+        case let value as Int: return Double(value)
+        case let value as NSNumber: return value.doubleValue
+        default: return nil
+        }
+    }
+}

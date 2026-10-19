@@ -1,32 +1,51 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { NATIVE_AUDIO_PLUGIN_NAME } from ".";
 
 const pluginRoot = path.join(
   process.cwd(),
   "capacitor-plugins/capacitor-native",
 );
-const nativeAudioPluginPath = path.join(
-  pluginRoot,
-  "ios/Sources/AonsokuNativePlugin/Audio/AonsokuNativeAudioPlugin.swift",
-);
+const kitRoot = path.join(process.cwd(), "ios/AonsokuKit");
+const kitSourcesRoot = path.join(kitRoot, "Sources/AonsokuKit");
 const nativeAudioServicePath = path.join(
-  pluginRoot,
-  "ios/Sources/AonsokuNativePlugin/Audio/AudioService.swift",
+  kitSourcesRoot,
+  "Audio/AudioService.swift",
 );
 const nativeAudioServiceModelsPath = path.join(
-  pluginRoot,
-  "ios/Sources/AonsokuNativePlugin/Audio/AudioServiceModels.swift",
+  kitSourcesRoot,
+  "Audio/AudioServiceModels.swift",
 );
 const appLifecycleServicePath = path.join(
-  pluginRoot,
-  "ios/Sources/AonsokuNativePlugin/AppLifecycleService.swift",
+  kitSourcesRoot,
+  "AppLifecycleService.swift",
 );
 const nativeCoordinationServicePath = path.join(
-  pluginRoot,
-  "ios/Sources/AonsokuNativePlugin/Coordination/AonsokuNativeCoordinationPlugin.swift",
+  kitSourcesRoot,
+  "Coordination/AonsokuNativeCoordinationPlugin.swift",
 );
+
+const iosAudioServiceMethods = [
+  "load",
+  "play",
+  "pause",
+  "stop",
+  "seek",
+  "setRepeatMode",
+  "setShuffle",
+  "setQueue",
+  "skipToNext",
+  "skipToPrevious",
+  "updateMetadata",
+  "clear",
+  "storeAudioFile",
+  "resolveAudioFile",
+  "deleteAudioFile",
+  "clearAudioFiles",
+  "setSystemVolume",
+  "setVolumeHUDEnabled",
+  "setLikeActive",
+] as const;
 
 const nativeAudioMethods = [
   "load",
@@ -78,9 +97,7 @@ interface PackageJson {
   dependencies?: Record<string, string>;
   peerDependencies?: Record<string, string>;
   capacitor?: {
-    ios?: {
-      src?: string;
-    };
+    ios?: unknown;
     android?: unknown;
   };
 }
@@ -93,8 +110,8 @@ function readPackageJson(filePath: string): PackageJson {
   return JSON.parse(readText(filePath)) as PackageJson;
 }
 
-describe("Aonsoku native audio plugin skeleton", () => {
-  it("is declared as a dual-platform (iOS + Android) Capacitor plugin package", () => {
+describe("Aonsoku native audio packages", () => {
+  it("is declared as an Android-only Capacitor plugin package", () => {
     const manifest = readPackageJson(path.join(pluginRoot, "package.json"));
 
     expect(manifest).toMatchObject({
@@ -103,14 +120,12 @@ describe("Aonsoku native audio plugin skeleton", () => {
         "@capacitor/core": ">=8.0.0",
       },
       capacitor: {
-        ios: {
-          src: "ios",
-        },
         android: {
           src: "android",
         },
       },
     });
+    expect(manifest.capacitor?.ios).toBeUndefined();
   });
 
   it("is included by the app through a local file dependency", () => {
@@ -121,59 +136,39 @@ describe("Aonsoku native audio plugin skeleton", () => {
     );
   });
 
-  it("declares an iOS Swift package without Android targets", () => {
-    const packageSwift = readText(path.join(pluginRoot, "Package.swift"));
+  it("declares the iOS AonsokuKit Swift package without Android targets", () => {
+    const packageSwift = readText(path.join(kitRoot, "Package.swift"));
 
-    expect(packageSwift).toContain('name: "AonsokuCapacitorNative"');
-    expect(packageSwift).toContain("platforms: [.iOS(.v15)]");
-    expect(packageSwift).toContain('name: "AonsokuNativePlugin"');
-    expect(packageSwift).toContain('path: "ios/Sources/AonsokuNativePlugin"');
+    expect(packageSwift).toContain('name: "AonsokuKit"');
+    expect(packageSwift).toContain("platforms: [.iOS(.v26)]");
+    expect(packageSwift).toContain('path: "Sources/AonsokuKit"');
     expect(packageSwift).not.toContain("Android");
   });
 
-  it("bridges and implements the expected native methods", () => {
-    const pluginSwift = readText(nativeAudioPluginPath);
+  it("implements native iOS playback directly in AudioService", () => {
     const audioServiceSwift = readText(nativeAudioServicePath);
 
-    expect(pluginSwift).toContain("import Capacitor");
-    expect(pluginSwift).toContain(
-      "public final class AonsokuNativeAudioPlugin: CAPPlugin, CAPBridgedPlugin",
-    );
-    expect(pluginSwift).toContain("@objc(AonsokuNativeAudioPlugin)");
-    expect(pluginSwift).toContain(
-      `public let jsName = "${NATIVE_AUDIO_PLUGIN_NAME}"`,
-    );
-    expect(pluginSwift).toContain(
-      "private let service = AppServices.shared.audio",
-    );
-    expect(pluginSwift).toContain("service.subscribe");
+    expect(audioServiceSwift).not.toContain("import Capacitor");
     expect(audioServiceSwift).toContain("import AVFoundation");
     expect(audioServiceSwift).toContain("import MediaPlayer");
     expect(audioServiceSwift).toContain("private var player: AVPlayer?");
     expect(audioServiceSwift).toContain(
       "private let audioSession = AVAudioSession.sharedInstance()",
     );
-    expect(pluginSwift).not.toContain("rejectNotImplemented");
-    expect(pluginSwift).not.toContain("not_implemented");
 
-    for (const method of nativeAudioMethods) {
-      expect(pluginSwift).toContain(`CAPPluginMethod(name: "${method}"`);
-      expect(pluginSwift).toContain(
-        `@objc func ${method}(_ call: CAPPluginCall)`,
-      );
+    for (const method of iosAudioServiceMethods) {
+      expect(audioServiceSwift).toContain(`public func ${method}(`);
     }
   });
 
-  it("emits the shared playback backend event names from native iOS", () => {
-    const pluginSwift = readText(nativeAudioPluginPath);
+  it("models the shared playback backend events in native iOS", () => {
+    const audioServiceModelsSwift = readText(nativeAudioServiceModelsPath);
 
-    expect(pluginSwift).toContain(
-      "private func forward(_ event: AudioServiceEvent)",
+    expect(audioServiceModelsSwift).toContain(
+      "public enum AudioServiceEvent: Sendable",
     );
-    expect(pluginSwift).toContain("notifyListeners(name, data: data)");
-
     for (const eventName of nativeAudioEventNames) {
-      expect(pluginSwift).toContain(`name = "${eventName}"`);
+      expect(audioServiceModelsSwift).toContain(`case ${eventName}`);
     }
   });
 
@@ -194,7 +189,7 @@ describe("Aonsoku native audio plugin skeleton", () => {
     expect(setVolumeHUDEnabled).toContain("view.alpha = 0.001");
   });
 
-  it("keeps the app facade and plugin package contracts in parity", () => {
+  it("keeps the app facade, plugin package, and iOS event contracts in parity", () => {
     const appTypes = readText(
       path.join(process.cwd(), "src/native/audio/types.ts"),
     );
@@ -204,7 +199,6 @@ describe("Aonsoku native audio plugin skeleton", () => {
     const packageDefinitions = readText(
       path.join(pluginRoot, "src/audio/definitions.ts"),
     );
-    const pluginSwift = readText(nativeAudioPluginPath);
     const audioServiceModelsSwift = readText(nativeAudioServiceModelsPath);
 
     expect(appTypes).toContain('export * from "@aonsoku/audio-contract"');
@@ -216,12 +210,10 @@ describe("Aonsoku native audio plugin skeleton", () => {
 
     for (const method of nativeAudioMethods) {
       expect(audioContract).toContain(`${method}(`);
-      expect(pluginSwift).toContain(`CAPPluginMethod(name: "${method}"`);
     }
 
     for (const eventName of nativeAudioEventNames) {
       expect(audioContract).toContain(`${eventName}:`);
-      expect(pluginSwift).toContain(`name = "${eventName}"`);
       expect(audioServiceModelsSwift).toContain(`case ${eventName}`);
     }
 
@@ -232,7 +224,7 @@ describe("Aonsoku native audio plugin skeleton", () => {
 
   it("enables iOS background audio and native audio session handling", () => {
     const infoPlist = readText(
-      path.join(process.cwd(), "ios/App/App/Info.plist"),
+      path.join(process.cwd(), "ios/Aonsoku/Resources/Info.plist"),
     );
     const audioServiceSwift = readText(nativeAudioServicePath);
     const lifecycleSwift = readText(appLifecycleServicePath);
@@ -296,11 +288,17 @@ describe("Aonsoku native audio plugin skeleton", () => {
       "MPNowPlayingInfoPropertyElapsedPlaybackTime",
     );
     expect(audioServiceSwift).toContain("MPNowPlayingInfoPropertyPlaybackRate");
-    expect(audioServiceSwift).toContain("MPMediaItemArtwork(boundsSize: image.size)");
-    expect(audioServiceSwift).toContain("imageCache.resolveCoverImage(coverArtId:");
+    expect(audioServiceSwift).toContain(
+      "MPMediaItemArtwork(boundsSize: image.size)",
+    );
+    expect(audioServiceSwift).toContain(
+      "imageCache.resolveCoverImage(coverArtId:",
+    );
     expect(audioServiceSwift).toContain("imageCache.downloadCoverImage(");
     expect(audioServiceSwift).toContain("forName: .aonsokuCoverImageCached");
-    expect(audioServiceSwift).toContain("cachedCoverArtId == currentNowPlayingCoverArtId()");
+    expect(audioServiceSwift).toContain(
+      "cachedCoverArtId == currentNowPlayingCoverArtId()",
+    );
   });
 
   it("bridges native audio changes into coordination snapshots", () => {
@@ -310,12 +308,8 @@ describe("Aonsoku native audio plugin skeleton", () => {
     expect(audioServiceSwift).toContain(
       "NotificationCenter.default.post(name: .aonsokuAudioStateDidChange",
     );
-    expect(coordinationSwift).toContain(
-      "forName: .aonsokuAudioStateDidChange",
-    );
-    expect(coordinationSwift).toContain(
-      "publishNativePlaybackSnapshot()",
-    );
+    expect(coordinationSwift).toContain("forName: .aonsokuAudioStateDidChange");
+    expect(coordinationSwift).toContain("publishNativePlaybackSnapshot()");
   });
 
   it("refreshes native playback state and volume on foreground entry", () => {
@@ -330,10 +324,7 @@ describe("Aonsoku native audio plugin skeleton", () => {
 
   it("announces native cover images after caching", () => {
     const imageCacheSwift = readText(
-      path.join(
-        pluginRoot,
-        "ios/Sources/AonsokuNativePlugin/Image/ImageCacheManager.swift",
-      ),
+      path.join(kitSourcesRoot, "Image/ImageCacheManager.swift"),
     );
 
     expect(imageCacheSwift).toContain("aonsokuCoverImageCached");
@@ -364,7 +355,6 @@ describe("Aonsoku native audio plugin skeleton", () => {
   });
 
   it("stores and resolves iOS native cached audio files", () => {
-    const pluginSwift = readText(nativeAudioPluginPath);
     const audioServiceSwift = readText(nativeAudioServicePath);
 
     for (const method of [
@@ -373,21 +363,12 @@ describe("Aonsoku native audio plugin skeleton", () => {
       "deleteAudioFile",
       "clearAudioFiles",
     ]) {
-      expect(pluginSwift).toContain(
-        `@objc func ${method}(_ call: CAPPluginCall)`,
-      );
       expect(audioServiceSwift).toContain(`public func ${method}(`);
     }
-    expect(pluginSwift).toContain(
-      "@objc func getAudioFileSize(_ call: CAPPluginCall)",
-    );
-    expect(pluginSwift).toContain(
-      "service.resolveAudioFile(songId: songId)?.sizeBytes",
-    );
     expect(audioServiceSwift).toContain(
       "AudioCacheUtils.cacheDirectoryURL(createIfNeeded: true)",
     );
-    expect(audioServiceSwift).toContain("let prefix = \"\\(cacheId).\"");
+    expect(audioServiceSwift).toContain('let prefix = "\\(cacheId)."');
     expect(audioServiceSwift).toContain("applicationSupportDirectory");
     expect(audioServiceSwift).toContain("NativeCachedAudioFileMetadata(");
     expect(audioServiceSwift).toContain("Data(contentsOf: metadataURL)");
@@ -395,14 +376,12 @@ describe("Aonsoku native audio plugin skeleton", () => {
   });
 
   it("guards native lifecycle events against stale source changes", () => {
-    const pluginSwift = readText(nativeAudioPluginPath);
     const audioServiceSwift = readText(nativeAudioServicePath);
 
     expect(audioServiceSwift).toContain(
       "private var currentRequestId: String?",
     );
     expect(audioServiceSwift).toContain("private var playbackGeneration = 0");
-    expect(pluginSwift).toContain('requestId: call.getString("requestId")');
     expect(audioServiceSwift).toContain(
       "self.currentRequestId = request.requestId",
     );
@@ -415,16 +394,17 @@ describe("Aonsoku native audio plugin skeleton", () => {
     expect(audioServiceSwift).toContain("timeObserver = nil");
   });
 
-  it("is wired into the generated Capacitor iOS Swift package", () => {
-    const packageSwift = readText(
-      path.join(process.cwd(), "ios/App/CapApp-SPM/Package.swift"),
+  it("links AonsokuKit into the native SwiftUI app target", () => {
+    const project = readText(
+      path.join(process.cwd(), "ios/Aonsoku.xcodeproj/project.pbxproj"),
     );
 
-    expect(packageSwift).toContain(
-      '.package(name: "AonsokuCapacitorNative", path: "../../../node_modules/@aonsoku/capacitor-native")',
+    expect(project).toContain('XCLocalSwiftPackageReference "AonsokuKit"');
+    expect(project).toContain("relativePath = AonsokuKit;");
+    expect(project).toContain("productName = AonsokuKit;");
+    expect(project).toContain(
+      "PRODUCT_BUNDLE_IDENTIFIER = github.realtvop.aonsoku;",
     );
-    expect(packageSwift).toContain(
-      '.product(name: "AonsokuCapacitorNative", package: "AonsokuCapacitorNative")',
-    );
+    expect(project).not.toContain("Capacitor");
   });
 });
