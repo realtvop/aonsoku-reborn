@@ -1,0 +1,59 @@
+{
+  "native": {
+    "generic": {
+      "retry": "Tentar novamente"
+    },
+    "explicit": "Explícito",
+    "error": {
+      "title": "Algo correu mal"
+    },
+    "home": {
+      "empty": {
+        "title": "A sua biblioteca está vazia",
+        "description": "Os álbuns do seu servidor aparecerão aqui depois de serem analisados."
+      }
+    },
+    "search": {
+      "description": "Procure álbuns, músicas e artistas na sua biblioteca."
+    },
+    "sort": {
+      "label": "Ordenar",
+      "order": "Ordem"
+    },
+    "songs": {
+      "empty": "Sem músicas"
+    },
+    "artists": {
+      "empty": "Sem artistas",
+      "search": "Procurar artistas…"
+    },
+    "artist": {
+      "latestRelease": "Lançamento mais recente"
+    },
+    "favorites": {
+      "noAlbums": "Ainda não há álbuns favoritos",
+      "noArtists": "Ainda não há artistas favoritos"
+    },
+    "downloads": {
+      "noAlbums": "Sem álbuns descarregados",
+      "noPlaylists": "Sem playlists descarregadas",
+      "noSongs": "Sem músicas descarregadas",
+      "description": "Os álbuns, playlists e músicas descarregados podem ser reproduzidos sem ligação."
+    },
+    "playlist": {
+      "added": "Adicionado a “{{name}}”",
+      "alreadyAdded": "Já está em “{{name}}”",
+      "addedSkipped": "Adicionado a “{{name}}”. As músicas que já lá estavam foram ignoradas.",
+      "addFailed": "Não foi possível adicionar à playlist"
+    },
+    "player": {
+      "volume": "Volume"
+    },
+    "settings": {
+      "autoOpenNowPlaying": {
+        "label": "Abrir “A reproduzir” automaticamente",
+        "info": "Mostra “A reproduzir” quando começa a reproduzir um álbum, uma playlist ou uma música."
+      }
+    }
+  }
+}

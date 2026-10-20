@@ -1,0 +1,59 @@
+{
+  "native": {
+    "generic": {
+      "retry": "Riprova"
+    },
+    "explicit": "Esplicito",
+    "error": {
+      "title": "Si è verificato un problema"
+    },
+    "home": {
+      "empty": {
+        "title": "La tua libreria è vuota",
+        "description": "Gli album del tuo server appariranno qui dopo la scansione."
+      }
+    },
+    "search": {
+      "description": "Cerca album, brani e artisti nella tua libreria."
+    },
+    "sort": {
+      "label": "Ordina",
+      "order": "Ordine"
+    },
+    "songs": {
+      "empty": "Nessun brano"
+    },
+    "artists": {
+      "empty": "Nessun artista",
+      "search": "Cerca artisti…"
+    },
+    "artist": {
+      "latestRelease": "Ultima uscita"
+    },
+    "favorites": {
+      "noAlbums": "Ancora nessun album preferito",
+      "noArtists": "Ancora nessun artista preferito"
+    },
+    "downloads": {
+      "noAlbums": "Nessun album scaricato",
+      "noPlaylists": "Nessuna playlist scaricata",
+      "noSongs": "Nessun brano scaricato",
+      "description": "Album, playlist e brani scaricati si possono ascoltare senza connessione."
+    },
+    "playlist": {
+      "added": "Aggiunto a “{{name}}”",
+      "alreadyAdded": "Già in “{{name}}”",
+      "addedSkipped": "Aggiunto a “{{name}}”. I brani già presenti sono stati saltati.",
+      "addFailed": "Impossibile aggiungere alla playlist"
+    },
+    "player": {
+      "volume": "Volume"
+    },
+    "settings": {
+      "autoOpenNowPlaying": {
+        "label": "Apri “In riproduzione” automaticamente",
+        "info": "Mostra “In riproduzione” quando avvii un album, una playlist o un brano."
+      }
+    }
+  }
+}

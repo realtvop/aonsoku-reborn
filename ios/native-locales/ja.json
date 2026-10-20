@@ -1,0 +1,59 @@
+{
+  "native": {
+    "generic": {
+      "retry": "再試行"
+    },
+    "explicit": "露骨な表現",
+    "error": {
+      "title": "問題が発生しました"
+    },
+    "home": {
+      "empty": {
+        "title": "ライブラリは空です",
+        "description": "サーバーのスキャンが完了すると、アルバムがここに表示されます。"
+      }
+    },
+    "search": {
+      "description": "ライブラリ内のアルバム、曲、アーティストを検索します。"
+    },
+    "sort": {
+      "label": "並べ替え",
+      "order": "順序"
+    },
+    "songs": {
+      "empty": "曲はありません"
+    },
+    "artists": {
+      "empty": "アーティストはいません",
+      "search": "アーティストを検索…"
+    },
+    "artist": {
+      "latestRelease": "最新リリース"
+    },
+    "favorites": {
+      "noAlbums": "お気に入りのアルバムはまだありません",
+      "noArtists": "お気に入りのアーティストはまだいません"
+    },
+    "downloads": {
+      "noAlbums": "ダウンロード済みのアルバムはありません",
+      "noPlaylists": "ダウンロード済みのプレイリストはありません",
+      "noSongs": "ダウンロード済みの曲はありません",
+      "description": "ダウンロードしたアルバム、プレイリスト、曲はオフラインでも再生できます。"
+    },
+    "playlist": {
+      "added": "「{{name}}」に追加しました",
+      "alreadyAdded": "すでに「{{name}}」にあります",
+      "addedSkipped": "「{{name}}」に追加しました。すでにある曲はスキップしました。",
+      "addFailed": "プレイリストに追加できませんでした"
+    },
+    "player": {
+      "volume": "音量"
+    },
+    "settings": {
+      "autoOpenNowPlaying": {
+        "label": "「再生中」を自動的に開く",
+        "info": "アルバム、プレイリスト、曲の再生を始めると「再生中」を表示します。"
+      }
+    }
+  }
+}

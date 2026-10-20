@@ -1,0 +1,59 @@
+{
+  "native": {
+    "generic": {
+      "retry": "Spróbuj ponownie"
+    },
+    "explicit": "Treści dla dorosłych",
+    "error": {
+      "title": "Coś poszło nie tak"
+    },
+    "home": {
+      "empty": {
+        "title": "Twoja biblioteka jest pusta",
+        "description": "Albumy z Twojego serwera pojawią się tutaj po zakończeniu skanowania."
+      }
+    },
+    "search": {
+      "description": "Szukaj albumów, utworów i wykonawców w swojej bibliotece."
+    },
+    "sort": {
+      "label": "Sortuj",
+      "order": "Kolejność"
+    },
+    "songs": {
+      "empty": "Brak utworów"
+    },
+    "artists": {
+      "empty": "Brak wykonawców",
+      "search": "Szukaj wykonawców…"
+    },
+    "artist": {
+      "latestRelease": "Najnowsze wydanie"
+    },
+    "favorites": {
+      "noAlbums": "Brak ulubionych albumów",
+      "noArtists": "Brak ulubionych wykonawców"
+    },
+    "downloads": {
+      "noAlbums": "Brak pobranych albumów",
+      "noPlaylists": "Brak pobranych playlist",
+      "noSongs": "Brak pobranych utworów",
+      "description": "Pobrane albumy, playlisty i utwory odtworzysz bez połączenia."
+    },
+    "playlist": {
+      "added": "Dodano do „{{name}}”",
+      "alreadyAdded": "Już jest w „{{name}}”",
+      "addedSkipped": "Dodano do „{{name}}”. Pominięto utwory, które już tam były.",
+      "addFailed": "Nie udało się dodać do playlisty"
+    },
+    "player": {
+      "volume": "Głośność"
+    },
+    "settings": {
+      "autoOpenNowPlaying": {
+        "label": "Automatycznie otwieraj „Teraz odtwarzane”",
+        "info": "Pokazuje „Teraz odtwarzane”, gdy zaczniesz odtwarzać album, playlistę lub utwór."
+      }
+    }
+  }
+}

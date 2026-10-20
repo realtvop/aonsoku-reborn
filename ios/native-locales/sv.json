@@ -1,0 +1,59 @@
+{
+  "native": {
+    "generic": {
+      "retry": "Försök igen"
+    },
+    "explicit": "Explicit",
+    "error": {
+      "title": "Något gick fel"
+    },
+    "home": {
+      "empty": {
+        "title": "Ditt bibliotek är tomt",
+        "description": "Album på din server visas här när den har skannat dem."
+      }
+    },
+    "search": {
+      "description": "Hitta album, sånger och artister i ditt bibliotek."
+    },
+    "sort": {
+      "label": "Sortera",
+      "order": "Ordning"
+    },
+    "songs": {
+      "empty": "Inga sånger"
+    },
+    "artists": {
+      "empty": "Inga artister",
+      "search": "Sök artister…"
+    },
+    "artist": {
+      "latestRelease": "Senaste utgåvan"
+    },
+    "favorites": {
+      "noAlbums": "Inga favoritalbum än",
+      "noArtists": "Inga favoritartister än"
+    },
+    "downloads": {
+      "noAlbums": "Inga nedladdade album",
+      "noPlaylists": "Inga nedladdade spellistor",
+      "noSongs": "Inga nedladdade sånger",
+      "description": "Album, spellistor och sånger du laddar ned kan spelas utan anslutning."
+    },
+    "playlist": {
+      "added": "Lades till i ”{{name}}”",
+      "alreadyAdded": "Finns redan i ”{{name}}”",
+      "addedSkipped": "Lades till i ”{{name}}”. Sånger som redan fanns hoppades över.",
+      "addFailed": "Det gick inte att lägga till i spellistan"
+    },
+    "player": {
+      "volume": "Volym"
+    },
+    "settings": {
+      "autoOpenNowPlaying": {
+        "label": "Öppna Spelas nu automatiskt",
+        "info": "Visar Spelas nu när du börjar spela ett album, en spellista eller en sång."
+      }
+    }
+  }
+}

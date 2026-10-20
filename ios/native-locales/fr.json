@@ -1,0 +1,59 @@
+{
+  "native": {
+    "generic": {
+      "retry": "Réessayer"
+    },
+    "explicit": "Explicite",
+    "error": {
+      "title": "Un problème est survenu"
+    },
+    "home": {
+      "empty": {
+        "title": "Votre bibliothèque est vide",
+        "description": "Les albums de votre serveur apparaîtront ici une fois analysés."
+      }
+    },
+    "search": {
+      "description": "Recherchez des albums, des titres et des artistes dans votre bibliothèque."
+    },
+    "sort": {
+      "label": "Trier",
+      "order": "Ordre"
+    },
+    "songs": {
+      "empty": "Aucun titre"
+    },
+    "artists": {
+      "empty": "Aucun artiste",
+      "search": "Rechercher des artistes…"
+    },
+    "artist": {
+      "latestRelease": "Dernière sortie"
+    },
+    "favorites": {
+      "noAlbums": "Aucun album favori pour l’instant",
+      "noArtists": "Aucun artiste favori pour l’instant"
+    },
+    "downloads": {
+      "noAlbums": "Aucun album téléchargé",
+      "noPlaylists": "Aucune liste de lecture téléchargée",
+      "noSongs": "Aucun titre téléchargé",
+      "description": "Les albums, listes de lecture et titres téléchargés sont lisibles sans connexion."
+    },
+    "playlist": {
+      "added": "Ajouté à « {{name}} »",
+      "alreadyAdded": "Déjà dans « {{name}} »",
+      "addedSkipped": "Ajouté à « {{name}} ». Les titres déjà présents ont été ignorés.",
+      "addFailed": "Impossible d’ajouter à la liste de lecture"
+    },
+    "player": {
+      "volume": "Volume"
+    },
+    "settings": {
+      "autoOpenNowPlaying": {
+        "label": "Ouvrir « À l’écoute » automatiquement",
+        "info": "Affiche « À l’écoute » lorsque vous lancez la lecture d’un album, d’une liste de lecture ou d’un titre."
+      }
+    }
+  }
+}

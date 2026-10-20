@@ -1,0 +1,59 @@
+{
+  "native": {
+    "generic": {
+      "retry": "Erneut versuchen"
+    },
+    "explicit": "Explizit",
+    "error": {
+      "title": "Etwas ist schiefgelaufen"
+    },
+    "home": {
+      "empty": {
+        "title": "Ihre Bibliothek ist leer",
+        "description": "Alben auf Ihrem Server erscheinen hier, sobald er sie gescannt hat."
+      }
+    },
+    "search": {
+      "description": "Finden Sie Alben, Lieder und Künstler in Ihrer Bibliothek."
+    },
+    "sort": {
+      "label": "Sortieren",
+      "order": "Reihenfolge"
+    },
+    "songs": {
+      "empty": "Keine Lieder"
+    },
+    "artists": {
+      "empty": "Keine Künstler",
+      "search": "Künstler suchen …"
+    },
+    "artist": {
+      "latestRelease": "Neueste Veröffentlichung"
+    },
+    "favorites": {
+      "noAlbums": "Noch keine Lieblingsalben",
+      "noArtists": "Noch keine Lieblingskünstler"
+    },
+    "downloads": {
+      "noAlbums": "Keine geladenen Alben",
+      "noPlaylists": "Keine geladenen Wiedergabelisten",
+      "noSongs": "Keine geladenen Lieder",
+      "description": "Geladene Alben, Wiedergabelisten und Lieder lassen sich ohne Verbindung abspielen."
+    },
+    "playlist": {
+      "added": "Zu „{{name}}“ hinzugefügt",
+      "alreadyAdded": "Bereits in „{{name}}“",
+      "addedSkipped": "Zu „{{name}}“ hinzugefügt. Bereits enthaltene Lieder wurden übersprungen.",
+      "addFailed": "Konnte nicht zur Wiedergabeliste hinzugefügt werden"
+    },
+    "player": {
+      "volume": "Lautstärke"
+    },
+    "settings": {
+      "autoOpenNowPlaying": {
+        "label": "„Jetzt läuft“ automatisch öffnen",
+        "info": "Zeigt „Jetzt läuft“, wenn Sie ein Album, eine Wiedergabeliste oder ein Lied abspielen."
+      }
+    }
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "native": {
+    "generic": {
+      "retry": "Tentar novamente"
+    },
+    "explicit": "Explícito",
+    "error": {
+      "title": "Algo deu errado"
+    },
+    "home": {
+      "empty": {
+        "title": "Sua biblioteca está vazia",
+        "description": "Os álbuns do seu servidor aparecerão aqui depois que ele os escanear."
+      }
+    },
+    "search": {
+      "description": "Encontre álbuns, músicas e artistas na sua biblioteca."
+    },
+    "sort": {
+      "label": "Ordenar",
+      "order": "Ordem"
+    },
+    "songs": {
+      "empty": "Nenhuma música"
+    },
+    "artists": {
+      "empty": "Nenhum artista",
+      "search": "Buscar artistas…"
+    },
+    "artist": {
+      "latestRelease": "Lançamento mais recente"
+    },
+    "favorites": {
+      "noAlbums": "Nenhum álbum favorito ainda",
+      "noArtists": "Nenhum artista favorito ainda"
+    },
+    "downloads": {
+      "noAlbums": "Nenhum álbum baixado",
+      "noPlaylists": "Nenhuma playlist baixada",
+      "noSongs": "Nenhuma música baixada",
+      "description": "Álbuns, playlists e músicas baixados tocam sem conexão."
+    },
+    "playlist": {
+      "added": "Adicionado a “{{name}}”",
+      "alreadyAdded": "Já está em “{{name}}”",
+      "addedSkipped": "Adicionado a “{{name}}”. Músicas que já estavam nela foram ignoradas.",
+      "addFailed": "Não foi possível adicionar à playlist"
+    },
+    "player": {
+      "volume": "Volume"
+    },
+    "settings": {
+      "autoOpenNowPlaying": {
+        "label": "Abrir “Tocando agora” automaticamente",
+        "info": "Mostra “Tocando agora” quando você começa a tocar um álbum, uma playlist ou uma música."
+      }
+    }
+  }
+}
