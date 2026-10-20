@@ -1,0 +1,50 @@
+{
+  "native": {
+    "generic": {
+      "retry": "Try Again"
+    },
+    "explicit": "Explicit",
+    "error": {
+      "title": "Something Went Wrong"
+    },
+    "home": {
+      "empty": {
+        "title": "Your Library Is Empty",
+        "description": "Albums on your server will appear here once it has scanned them."
+      }
+    },
+    "search": {
+      "description": "Find albums, songs and artists in your library."
+    },
+    "sort": {
+      "label": "Sort",
+      "order": "Order"
+    },
+    "songs": {
+      "empty": "No Songs"
+    },
+    "artists": {
+      "empty": "No Artists",
+      "search": "Search artists…"
+    },
+    "artist": {
+      "latestRelease": "Latest Release"
+    },
+    "favorites": {
+      "noAlbums": "No Favorite Albums Yet",
+      "noArtists": "No Favorite Artists Yet"
+    },
+    "downloads": {
+      "noAlbums": "No Downloaded Albums",
+      "noPlaylists": "No Downloaded Playlists",
+      "noSongs": "No Downloaded Songs",
+      "description": "Albums, playlists and songs you download play without a connection."
+    },
+    "playlist": {
+      "added": "Added to “{{name}}”",
+      "alreadyAdded": "Already in “{{name}}”",
+      "addedSkipped": "Added to “{{name}}”. Skipped songs already in it.",
+      "addFailed": "Couldn't add to the playlist"
+    }
+  }
+}

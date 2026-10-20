@@ -9,11 +9,13 @@
 /* Begin PBXBuildFile section */
 		4E5A00000000000000000101 /* AonsokuKit in Frameworks */ = {isa = PBXBuildFile; productRef = 4E5A00000000000000000901 /* AonsokuKit */; };
 		4E5A00000000000000000102 /* locales in Resources */ = {isa = PBXBuildFile; fileRef = 4E5A00000000000000000202 /* locales */; };
+		4E5A00000000000000000103 /* native-locales in Resources */ = {isa = PBXBuildFile; fileRef = 4E5A00000000000000000203 /* native-locales */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		4E5A00000000000000000201 /* Aonsoku.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Aonsoku.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4E5A00000000000000000202 /* locales */ = {isa = PBXFileReference; lastKnownFileType = folder; name = locales; path = ../src/i18n/locales; sourceTree = "<group>"; };
+		4E5A00000000000000000203 /* native-locales */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "native-locales"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -54,6 +56,7 @@
 			children = (
 				4E5A00000000000000000301 /* Aonsoku */,
 				4E5A00000000000000000202 /* locales */,
+				4E5A00000000000000000203 /* native-locales */,
 				4E5A00000000000000000002 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -135,6 +138,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				4E5A00000000000000000102 /* locales in Resources */,
+				4E5A00000000000000000103 /* native-locales in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

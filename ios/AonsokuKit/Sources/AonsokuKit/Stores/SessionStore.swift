@@ -92,6 +92,17 @@ public final class SessionStore {
         throw SubsonicAPIError.unsupported
     }
 
+    /// Whether the server speaks Subsonic 1.15.0 or later, as the web login
+    /// checks before saving. A server that does not answer counts as
+    /// compatible, so the sign-in itself reports the failure.
+    public func isCompatible(serverUrl: String) async -> Bool {
+        let info = await authentication.queryServerInfo(baseUrl: serverUrl)
+        let parts = info.protocolVersion.split(separator: ".").map { Int($0) }
+        guard !parts.isEmpty, parts.allSatisfy({ $0 != nil }) else { return true }
+        let version = parts.compactMap { $0 } + [0, 0, 0]
+        return version.prefix(3).lexicographicallyPrecedes([1, 15, 0]) == false
+    }
+
     /// Reloads `user`; keeps the previous value on failure.
     public func refreshUser() async {}
 

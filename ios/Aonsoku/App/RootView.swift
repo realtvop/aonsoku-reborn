@@ -1,11 +1,30 @@
+import AonsokuKit
 import SwiftUI
 
+/// Sign-in or the tabs, following the session.
 struct RootView: View {
-    var body: some View {
-        ContentUnavailableView("Aonsoku", systemImage: "music.note")
-    }
-}
+    @Environment(SessionStore.self) private var session
+    @Environment(Router.self) private var router
 
-#Preview {
-    RootView()
+    var body: some View {
+        ZStack {
+            switch session.state {
+            case .restoring:
+                Color(.systemBackground)
+                    .ignoresSafeArea()
+            case .signedOut:
+                LoginView()
+                    .transition(.opacity)
+            case .signedIn:
+                MainTabView()
+                    .transition(.opacity)
+            }
+        }
+        .animation(.smooth, value: session.isSignedIn)
+        .onChange(of: session.isSignedIn) { _, isSignedIn in
+            if !isSignedIn {
+                router.reset()
+            }
+        }
+    }
 }

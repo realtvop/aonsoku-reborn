@@ -74,9 +74,10 @@ cd android && ./gradlew assembleRelease
 ./scripts/test-ios-native.sh
 IOS_TEST_RESULT_BUNDLE=/tmp/AonsokuNativeTests.xcresult ./scripts/test-ios-native.sh
 
-# iOS native core
-cd ios/App && xcodebuild -project App.xcodeproj -scheme App \
+# iOS SwiftUI app
+xcodebuild -project ios/Aonsoku.xcodeproj -scheme Aonsoku \
   -destination 'generic/platform=iOS Simulator' build
+node scripts/check-ios-strings.mjs # Every translation key the app uses exists
 
 # Electron desktop native audio
 pnpm native-audio:build   # Build the Node-API libmpv addon

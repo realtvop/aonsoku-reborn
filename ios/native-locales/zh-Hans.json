@@ -1,0 +1,50 @@
+{
+  "native": {
+    "generic": {
+      "retry": "重试"
+    },
+    "explicit": "含露骨内容",
+    "error": {
+      "title": "出错了"
+    },
+    "home": {
+      "empty": {
+        "title": "资料库为空",
+        "description": "服务器扫描完成后，专辑会显示在这里。"
+      }
+    },
+    "search": {
+      "description": "在资料库中查找专辑、歌曲和艺术家。"
+    },
+    "sort": {
+      "label": "排序",
+      "order": "顺序"
+    },
+    "songs": {
+      "empty": "没有歌曲"
+    },
+    "artists": {
+      "empty": "没有艺术家",
+      "search": "搜索艺术家…"
+    },
+    "artist": {
+      "latestRelease": "最新发行"
+    },
+    "favorites": {
+      "noAlbums": "还没有收藏的专辑",
+      "noArtists": "还没有收藏的艺术家"
+    },
+    "downloads": {
+      "noAlbums": "没有已下载的专辑",
+      "noPlaylists": "没有已下载的播放列表",
+      "noSongs": "没有已下载的歌曲",
+      "description": "下载的专辑、播放列表和歌曲无需联网即可播放。"
+    },
+    "playlist": {
+      "added": "已添加到“{{name}}”",
+      "alreadyAdded": "已在“{{name}}”中",
+      "addedSkipped": "已添加到“{{name}}”，并跳过了其中已有的歌曲。",
+      "addFailed": "无法添加到播放列表"
+    }
+  }
+}
