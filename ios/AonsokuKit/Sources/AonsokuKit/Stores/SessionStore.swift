@@ -38,29 +38,6 @@ public struct ServerAccount: Codable, Hashable, Sendable {
     public var isLMS: Bool { serverType.lowercased() == "lms" }
 }
 
-/// What the server reports about itself (web About dialog).
-public struct ServerInfo: Hashable, Sendable {
-    /// `navidrome`, `lms`, `subsonic`, ...
-    public var type: String
-    /// The server software's own version, such as `0.53.3`.
-    public var serverVersion: String?
-    /// The Subsonic API version, such as `1.16.1`.
-    public var protocolVersion: String
-    public var isOpenSubsonic: Bool
-
-    public init(
-        type: String,
-        serverVersion: String? = nil,
-        protocolVersion: String,
-        isOpenSubsonic: Bool = false
-    ) {
-        self.type = type
-        self.serverVersion = serverVersion
-        self.protocolVersion = protocolVersion
-        self.isOpenSubsonic = isOpenSubsonic
-    }
-}
-
 public enum SessionState: Hashable, Sendable {
     /// Reading stored credentials at launch.
     case restoring

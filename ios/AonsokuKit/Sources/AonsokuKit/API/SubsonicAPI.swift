@@ -225,7 +225,8 @@ public struct SubsonicStructuredLyrics: Hashable, Sendable {
 /// The Subsonic calls the app makes. Every method throws `SubsonicAPIError`.
 public protocol SubsonicAPI: Sendable {
     // System
-    func ping() async throws
+    /// `ping`, with what the envelope says about the server.
+    func ping() async throws -> ServerInfo
     func user(username: String) async throws -> SubsonicUser
     func scanStatus() async throws -> ScanStatus
     func startScan() async throws -> ScanStatus
@@ -294,7 +295,7 @@ public struct LiveSubsonicAPI: SubsonicAPI {
         self.transport = transport
     }
 
-    public func ping() async throws { throw SubsonicAPIError.unsupported }
+    public func ping() async throws -> ServerInfo { throw SubsonicAPIError.unsupported }
 
     public func user(username: String) async throws -> SubsonicUser {
         throw SubsonicAPIError.unsupported
