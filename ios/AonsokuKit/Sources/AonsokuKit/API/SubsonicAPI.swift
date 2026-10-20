@@ -295,13 +295,21 @@ public struct LiveSubsonicAPI: SubsonicAPI {
         self.transport = transport
     }
 
+    private func decodeEnvelope(_ data: Data) throws -> [String: Any] {
+        do {
+            return try SubsonicJSON.envelope(data)
+        } catch SubsonicAPIError.http(let status) where status == 404 || status == 501 {
+            throw SubsonicAPIError.unsupported
+        }
+    }
+
     public func ping() async throws -> ServerInfo {
         let data = try await transport.send(SubsonicRequest("ping.view"))
-        let response = try decodeSubsonicEnvelope(data)
-        let type = toString(response["type"]) ?? "subsonic"
-        let serverVersion = toString(response["serverVersion"])
-        let protocolVersion = toString(response["version"]) ?? "1.16.1"
-        let isOpenSubsonic = toBool(response["openSubsonic"])
+        let response = try decodeEnvelope(data)
+        let type = SubsonicJSON.string(response["type"]) ?? "subsonic"
+        let serverVersion = SubsonicJSON.string(response["serverVersion"])
+        let protocolVersion = SubsonicJSON.string(response["version"]) ?? "1.16.1"
+        let isOpenSubsonic = SubsonicJSON.bool(response["openSubsonic"])
         return ServerInfo(
             type: type,
             serverVersion: serverVersion,
@@ -316,23 +324,23 @@ public struct LiveSubsonicAPI: SubsonicAPI {
             query: [URLQueryItem(name: "username", value: username)]
         )
         let data = try await transport.send(request)
-        let response = try decodeSubsonicEnvelope(data)
+        let response = try decodeEnvelope(data)
         let user = response["user"] as? [String: Any] ?? [:]
-        return parseSubsonicUser(user) ?? SubsonicUser(username: username)
+        return SubsonicJSON.user(user) ?? SubsonicUser(username: username)
     }
 
     public func scanStatus() async throws -> ScanStatus {
         let data = try await transport.send(SubsonicRequest("getScanStatus.view"))
-        let response = try decodeSubsonicEnvelope(data)
+        let response = try decodeEnvelope(data)
         let status = response["scanStatus"] as? [String: Any] ?? [:]
-        return parseScanStatus(status)
+        return SubsonicJSON.scanStatus(status)
     }
 
     public func startScan() async throws -> ScanStatus {
         let data = try await transport.send(SubsonicRequest("startScan.view"))
-        let response = try decodeSubsonicEnvelope(data)
+        let response = try decodeEnvelope(data)
         let status = response["scanStatus"] as? [String: Any] ?? [:]
-        return parseScanStatus(status)
+        return SubsonicJSON.scanStatus(status)
     }
 
     public func albumList(
@@ -361,10 +369,10 @@ public struct LiveSubsonicAPI: SubsonicAPI {
         }
 
         let data = try await transport.send(SubsonicRequest("getAlbumList2.view", query: query))
-        let response = try decodeSubsonicEnvelope(data)
+        let response = try decodeEnvelope(data)
         let list = response["albumList2"] as? [String: Any] ?? [:]
-        return toArray(list["album"]) { dict in
-            parseAlbum(dict)
+        return SubsonicJSON.list(list["album"]) { dict in
+            SubsonicJSON.album(dict)
         }
     }
 
@@ -372,13 +380,13 @@ public struct LiveSubsonicAPI: SubsonicAPI {
         let data = try await transport.send(
             SubsonicRequest("getAlbum.view", query: [URLQueryItem(name: "id", value: id)])
         )
-        let response = try decodeSubsonicEnvelope(data)
+        let response = try decodeEnvelope(data)
         let albumDict = response["album"] as? [String: Any] ?? [:]
-        guard let album = parseAlbum(albumDict) else {
+        guard let album = SubsonicJSON.album(albumDict) else {
             throw SubsonicAPIError.invalidResponse("Missing album")
         }
-        let songs = toArray(albumDict["song"]) { dict in
-            parseSong(dict)
+        let songs = SubsonicJSON.list(albumDict["song"]) { dict in
+            SubsonicJSON.song(dict)
         }
         return AlbumDetail(album: album, songs: songs)
     }
@@ -387,20 +395,20 @@ public struct LiveSubsonicAPI: SubsonicAPI {
         let data = try await transport.send(
             SubsonicRequest("getAlbumInfo2.view", query: [URLQueryItem(name: "id", value: id)])
         )
-        let response = try decodeSubsonicEnvelope(data)
+        let response = try decodeEnvelope(data)
         let info = response["albumInfo"] as? [String: Any] ?? [:]
-        return parseAlbumInfo(info)
+        return SubsonicJSON.albumInfo(info)
     }
 
     public func artists() async throws -> [Artist] {
         let data = try await transport.send(SubsonicRequest("getArtists.view"))
-        let response = try decodeSubsonicEnvelope(data)
+        let response = try decodeEnvelope(data)
         let artists = response["artists"] as? [String: Any] ?? [:]
         let indices = artists["index"] as? [[String: Any]] ?? []
         var result: [Artist] = []
         for indexDict in indices {
-            let artistsInIndex = toArray(indexDict["artist"]) { dict in
-                parseArtist(dict)
+            let artistsInIndex = SubsonicJSON.list(indexDict["artist"]) { dict in
+                SubsonicJSON.artist(dict)
             }
             result.append(contentsOf: artistsInIndex)
         }
@@ -411,13 +419,13 @@ public struct LiveSubsonicAPI: SubsonicAPI {
         let data = try await transport.send(
             SubsonicRequest("getArtist.view", query: [URLQueryItem(name: "id", value: id)])
         )
-        let response = try decodeSubsonicEnvelope(data)
+        let response = try decodeEnvelope(data)
         let artistDict = response["artist"] as? [String: Any] ?? [:]
-        guard let artist = parseArtist(artistDict) else {
+        guard let artist = SubsonicJSON.artist(artistDict) else {
             throw SubsonicAPIError.invalidResponse("Missing artist")
         }
-        let albums = toArray(artistDict["album"]) { dict in
-            parseAlbum(dict)
+        let albums = SubsonicJSON.list(artistDict["album"]) { dict in
+            SubsonicJSON.album(dict)
         }
         return ArtistDetail(artist: artist, albums: albums)
     }
@@ -426,9 +434,9 @@ public struct LiveSubsonicAPI: SubsonicAPI {
         let data = try await transport.send(
             SubsonicRequest("getArtistInfo.view", query: [URLQueryItem(name: "id", value: id)])
         )
-        let response = try decodeSubsonicEnvelope(data)
+        let response = try decodeEnvelope(data)
         let info = response["artistInfo2"] as? [String: Any] ?? response["artistInfo"] as? [String: Any] ?? [:]
-        return parseArtistInfo(info)
+        return SubsonicJSON.artistInfo(info)
     }
 
     public func topSongs(artistName: String, count: Int) async throws -> [Song] {
@@ -437,10 +445,10 @@ public struct LiveSubsonicAPI: SubsonicAPI {
             URLQueryItem(name: "count", value: String(count))
         ]
         let data = try await transport.send(SubsonicRequest("getTopSongs.view", query: query))
-        let response = try decodeSubsonicEnvelope(data)
+        let response = try decodeEnvelope(data)
         let topSongs = response["topSongs"] as? [String: Any] ?? [:]
-        return toArray(topSongs["song"]) { dict in
-            parseSong(dict)
+        return SubsonicJSON.list(topSongs["song"]) { dict in
+            SubsonicJSON.song(dict)
         }
     }
 
@@ -448,9 +456,9 @@ public struct LiveSubsonicAPI: SubsonicAPI {
         let data = try await transport.send(
             SubsonicRequest("getSong.view", query: [URLQueryItem(name: "id", value: id)])
         )
-        let response = try decodeSubsonicEnvelope(data)
+        let response = try decodeEnvelope(data)
         let songDict = response["song"] as? [String: Any] ?? [:]
-        guard let song = parseSong(songDict) else {
+        guard let song = SubsonicJSON.song(songDict) else {
             throw SubsonicAPIError.invalidResponse("Missing song")
         }
         return song
@@ -476,39 +484,39 @@ public struct LiveSubsonicAPI: SubsonicAPI {
         }
 
         let data = try await transport.send(SubsonicRequest("getRandomSongs.view", query: query))
-        let response = try decodeSubsonicEnvelope(data)
+        let response = try decodeEnvelope(data)
         let randomSongs = response["randomSongs"] as? [String: Any] ?? [:]
-        return toArray(randomSongs["song"]) { dict in
-            parseSong(dict)
+        return SubsonicJSON.list(randomSongs["song"]) { dict in
+            SubsonicJSON.song(dict)
         }
     }
 
     public func genres() async throws -> [Genre] {
         let data = try await transport.send(SubsonicRequest("getGenres.view"))
-        let response = try decodeSubsonicEnvelope(data)
+        let response = try decodeEnvelope(data)
         let genres = response["genres"] as? [String: Any] ?? [:]
-        return toArray(genres["genre"]) { dict in
-            guard let name = toString(dict["value"]) else { return nil }
+        return SubsonicJSON.list(genres["genre"]) { dict in
+            guard let name = SubsonicJSON.string(dict["value"]) else { return nil }
             return Genre(
                 name: name,
-                songCount: toInt(dict["songCount"]) ?? 0,
-                albumCount: toInt(dict["albumCount"]) ?? 0
+                songCount: SubsonicJSON.int(dict["songCount"]) ?? 0,
+                albumCount: SubsonicJSON.int(dict["albumCount"]) ?? 0
             )
         }
     }
 
     public func starred() async throws -> SearchResults {
         let data = try await transport.send(SubsonicRequest("getStarred2.view"))
-        let response = try decodeSubsonicEnvelope(data)
+        let response = try decodeEnvelope(data)
         let starred = response["starred2"] as? [String: Any] ?? [:]
-        let artists = toArray(starred["artist"]) { dict in
-            parseArtist(dict)
+        let artists = SubsonicJSON.list(starred["artist"]) { dict in
+            SubsonicJSON.artist(dict)
         }
-        let albums = toArray(starred["album"]) { dict in
-            parseAlbum(dict)
+        let albums = SubsonicJSON.list(starred["album"]) { dict in
+            SubsonicJSON.album(dict)
         }
-        let songs = toArray(starred["song"]) { dict in
-            parseSong(dict)
+        let songs = SubsonicJSON.list(starred["song"]) { dict in
+            SubsonicJSON.song(dict)
         }
         return SearchResults(artists: artists, albums: albums, songs: songs)
     }
@@ -524,26 +532,26 @@ public struct LiveSubsonicAPI: SubsonicAPI {
             URLQueryItem(name: "songOffset", value: String(page.songOffset))
         ]
         let data = try await transport.send(SubsonicRequest("search3.view", query: queryItems))
-        let response = try decodeSubsonicEnvelope(data)
+        let response = try decodeEnvelope(data)
         let result = response["searchResult3"] as? [String: Any] ?? [:]
-        let artists = toArray(result["artist"]) { dict in
-            parseArtist(dict)
+        let artists = SubsonicJSON.list(result["artist"]) { dict in
+            SubsonicJSON.artist(dict)
         }
-        let albums = toArray(result["album"]) { dict in
-            parseAlbum(dict)
+        let albums = SubsonicJSON.list(result["album"]) { dict in
+            SubsonicJSON.album(dict)
         }
-        let songs = toArray(result["song"]) { dict in
-            parseSong(dict)
+        let songs = SubsonicJSON.list(result["song"]) { dict in
+            SubsonicJSON.song(dict)
         }
         return SearchResults(artists: artists, albums: albums, songs: songs)
     }
 
     public func playlists() async throws -> [Playlist] {
         let data = try await transport.send(SubsonicRequest("getPlaylists.view"))
-        let response = try decodeSubsonicEnvelope(data)
+        let response = try decodeEnvelope(data)
         let playlists = response["playlists"] as? [String: Any] ?? [:]
-        return toArray(playlists["playlist"]) { dict in
-            parsePlaylist(dict)
+        return SubsonicJSON.list(playlists["playlist"]) { dict in
+            SubsonicJSON.playlist(dict)
         }
     }
 
@@ -551,13 +559,13 @@ public struct LiveSubsonicAPI: SubsonicAPI {
         let data = try await transport.send(
             SubsonicRequest("getPlaylist.view", query: [URLQueryItem(name: "id", value: id)])
         )
-        let response = try decodeSubsonicEnvelope(data)
+        let response = try decodeEnvelope(data)
         let playlistDict = response["playlist"] as? [String: Any] ?? [:]
-        guard let playlist = parsePlaylist(playlistDict) else {
+        guard let playlist = SubsonicJSON.playlist(playlistDict) else {
             throw SubsonicAPIError.invalidResponse("Missing playlist")
         }
-        let songs = toArray(playlistDict["entry"]) { dict in
-            parseSong(dict)
+        let songs = SubsonicJSON.list(playlistDict["entry"]) { dict in
+            SubsonicJSON.song(dict)
         }
         return PlaylistDetail(playlist: playlist, songs: songs)
     }
@@ -570,13 +578,13 @@ public struct LiveSubsonicAPI: SubsonicAPI {
         let data = try await transport.send(
             SubsonicRequest("createPlaylist.view", query: query)
         )
-        let response = try decodeSubsonicEnvelope(data)
+        let response = try decodeEnvelope(data)
         let playlistDict = response["playlist"] as? [String: Any]
-        guard let playlistDict, let playlist = parsePlaylist(playlistDict) else {
+        guard let playlistDict, let playlist = SubsonicJSON.playlist(playlistDict) else {
             return nil
         }
-        let songs = toArray(playlistDict["entry"]) { dict in
-            parseSong(dict)
+        let songs = SubsonicJSON.list(playlistDict["entry"]) { dict in
+            SubsonicJSON.song(dict)
         }
         return PlaylistDetail(playlist: playlist, songs: songs)
     }
@@ -661,10 +669,10 @@ public struct LiveSubsonicAPI: SubsonicAPI {
 
     public func radioStations() async throws -> [RadioStation] {
         let data = try await transport.send(SubsonicRequest("getInternetRadioStations.view"))
-        let response = try decodeSubsonicEnvelope(data)
+        let response = try decodeEnvelope(data)
         let stations = response["internetRadioStations"] as? [String: Any] ?? [:]
-        return toArray(stations["internetRadioStation"]) { dict in
-            parseRadioStation(dict)
+        return SubsonicJSON.list(stations["internetRadioStation"]) { dict in
+            SubsonicJSON.radioStation(dict)
         }
     }
 
@@ -711,16 +719,16 @@ public struct LiveSubsonicAPI: SubsonicAPI {
             URLQueryItem(name: "title", value: title)
         ]
         let data = try await transport.send(SubsonicRequest("getLyrics.view", query: query))
-        let response = try decodeSubsonicEnvelope(data)
+        let response = try decodeEnvelope(data)
         let lyrics = response["lyrics"] as? [String: Any]
         guard let lyrics, !lyrics.isEmpty else { return nil }
 
-        let value = toString(lyrics["value"]) ?? ""
+        let value = SubsonicJSON.string(lyrics["value"]) ?? ""
         guard !value.isEmpty else { return nil }
 
         return SubsonicPlainLyrics(
-            artist: toString(lyrics["artist"]),
-            title: toString(lyrics["title"]),
+            artist: SubsonicJSON.string(lyrics["artist"]),
+            title: SubsonicJSON.string(lyrics["title"]),
             value: value
         )
     }
@@ -731,97 +739,13 @@ public struct LiveSubsonicAPI: SubsonicAPI {
         )
 
         do {
-            let response = try decodeSubsonicEnvelope(data)
+            let response = try decodeEnvelope(data)
             let lyricsList = response["lyricsList"] as? [String: Any] ?? [:]
-            return toArray(lyricsList["structuredLyrics"]) { dict in
-                parseStructuredLyrics(dict)
-            }
-        } catch SubsonicJSONError.failedStatus {
-            throw SubsonicAPIError.unsupported
-        } catch let error as SubsonicJSONError {
-            switch error {
-            case .unsupported:
-                throw SubsonicAPIError.unsupported
-            default:
-                throw SubsonicAPIError.invalidResponse("Invalid lyrics response")
+            return SubsonicJSON.list(lyricsList["structuredLyrics"]) { dict in
+                SubsonicJSON.structuredLyrics(dict)
             }
         }
     }
-}
-
-// MARK: - Parsing helpers
-
-private func parseSubsonicUser(_ dict: [String: Any]?) -> SubsonicUser? {
-    guard let dict, let username = toString(dict["username"]) else { return nil }
-    return SubsonicUser(
-        username: username,
-        email: toString(dict["email"]),
-        scrobblingEnabled: toBool(dict["scrobblingEnabled"]),
-        adminRole: toBool(dict["adminRole"]),
-        settingsRole: toBool(dict["settingsRole"]),
-        downloadRole: toBool(dict["downloadRole"]),
-        uploadRole: toBool(dict["uploadRole"]),
-        playlistRole: toBool(dict["playlistRole"]),
-        coverArtRole: toBool(dict["coverArtRole"]),
-        commentRole: toBool(dict["commentRole"]),
-        podcastRole: toBool(dict["podcastRole"]),
-        streamRole: toBool(dict["streamRole"]),
-        jukeboxRole: toBool(dict["jukeboxRole"]),
-        shareRole: toBool(dict["shareRole"])
-    )
-}
-
-private func parseScanStatus(_ dict: [String: Any]) -> ScanStatus {
-    ScanStatus(
-        scanning: toBool(dict["scanning"]),
-        count: toInt(dict["count"]),
-        folderCount: toInt(dict["folderCount"]),
-        lastScan: toDate(dict["lastScan"])
-    )
-}
-
-private func parseAlbumInfo(_ dict: [String: Any]) -> AlbumInfo {
-    AlbumInfo(
-        notes: toString(dict["notes"]),
-        musicBrainzId: toString(dict["musicBrainzId"]),
-        lastFmUrl: toString(dict["lastFmUrl"]),
-        smallImageUrl: toString(dict["smallImageUrl"]),
-        mediumImageUrl: toString(dict["mediumImageUrl"]),
-        largeImageUrl: toString(dict["largeImageUrl"])
-    )
-}
-
-private func parseArtistInfo(_ dict: [String: Any]) -> ArtistInfo {
-    let similarArtists = toArray(dict["similarArtist"]) { d in
-        parseArtist(d)
-    }
-    return ArtistInfo(
-        biography: toString(dict["biography"]),
-        musicBrainzId: toString(dict["musicBrainzId"]),
-        lastFmUrl: toString(dict["lastFmUrl"]),
-        smallImageUrl: toString(dict["smallImageUrl"]),
-        mediumImageUrl: toString(dict["mediumImageUrl"]),
-        largeImageUrl: toString(dict["largeImageUrl"]),
-        similarArtists: similarArtists
-    )
-}
-
-private func parseStructuredLyrics(_ dict: [String: Any]?) -> SubsonicStructuredLyrics? {
-    guard let dict else { return nil }
-    let lines = toArray(dict["line"]) { d in
-        SubsonicStructuredLyrics.Line(
-            start: toInt(d["start"]),
-            value: toString(d["value"]) ?? ""
-        )
-    }
-    return SubsonicStructuredLyrics(
-        lang: toString(dict["lang"]) ?? "xxx",
-        synced: toBool(dict["synced"]),
-        offset: toInt(dict["offset"]) ?? 0,
-        displayArtist: toString(dict["displayArtist"]),
-        displayTitle: toString(dict["displayTitle"]),
-        lines: lines
-    )
 }
 
 /// Signs requests with the stored credentials through
