@@ -11,6 +11,8 @@ public struct QueueSong: Codable, Equatable, Sendable {
     public let coverArtId: String?
     public let streamUrl: String
     public let cachedFileUri: String?
+    /// Loudness tags for ReplayGain; nil when the server sent none.
+    public let replayGain: AudioReplayGain?
 
     public init(
         id: String,
@@ -22,7 +24,8 @@ public struct QueueSong: Codable, Equatable, Sendable {
         duration: Double,
         coverArtId: String? = nil,
         streamUrl: String,
-        cachedFileUri: String? = nil
+        cachedFileUri: String? = nil,
+        replayGain: AudioReplayGain? = nil
     ) {
         self.id = id
         self.title = title
@@ -34,6 +37,7 @@ public struct QueueSong: Codable, Equatable, Sendable {
         self.coverArtId = coverArtId
         self.streamUrl = streamUrl
         self.cachedFileUri = cachedFileUri
+        self.replayGain = replayGain
     }
 
     init(from dict: [String: Any]) {
@@ -47,6 +51,7 @@ public struct QueueSong: Codable, Equatable, Sendable {
         self.coverArtId = dict["coverArtId"] as? String
         self.streamUrl = dict["streamUrl"] as? String ?? ""
         self.cachedFileUri = dict["cachedFileUri"] as? String
+        self.replayGain = (dict["replayGain"] as? [String: Any]).flatMap(AudioReplayGain.init(from:))
     }
 
     func toDict() -> [String: Any] {
@@ -62,6 +67,7 @@ public struct QueueSong: Codable, Equatable, Sendable {
         if let albumId = albumId { dict["albumId"] = albumId }
         if let coverArtId = coverArtId { dict["coverArtId"] = coverArtId }
         if let cachedFileUri = cachedFileUri { dict["cachedFileUri"] = cachedFileUri }
+        if let replayGain = replayGain { dict["replayGain"] = replayGain.toDict() }
         return dict
     }
 }

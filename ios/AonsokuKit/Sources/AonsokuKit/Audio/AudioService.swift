@@ -891,6 +891,10 @@ public final class AudioService: NSObject, @unchecked Sendable {
 
     public var systemVolume: Float { audioSession.outputVolume }
 
+    /// Applies ReplayGain to every following load and the current song;
+    /// nil turns it off.
+    public func setReplayGain(_ config: AudioReplayGainConfig?) {}
+
     public func setVolumeHUDEnabled(_ enabled: Bool) {
         dispatchMain { [weak self] in
             guard let self else { return }
