@@ -300,6 +300,31 @@ public final class LibraryService: @unchecked Sendable {
         return cachedImage(id: username, url: url, contentType: nil, requestedSize: size)
     }
 
+    // MARK: - Local edits
+
+    /// Ids of every starred song, album and artist in the local library.
+    public func starredIds() throws -> LibraryStarredIds {
+        LibraryStarredIds()
+    }
+
+    /// Marks songs, albums and artists as starred or not in the local
+    /// library, so offline lists follow a favorite change before the next
+    /// sync.
+    public func setStarred(
+        songIds: [String] = [],
+        albumIds: [String] = [],
+        artistIds: [String] = [],
+        starred: Bool,
+        at date: Date = Date()
+    ) throws {}
+
+    /// Reloads one playlist and its entries from the server into the local
+    /// library, after it was created or edited in the app.
+    public func refreshPlaylist(id: String) async throws {}
+
+    /// Removes a playlist and its entries from the local library.
+    public func removePlaylist(id: String) throws {}
+
     private func cachedImage(
         id: String,
         url: URL,

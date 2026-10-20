@@ -205,6 +205,22 @@ public struct LibraryCacheStats: Equatable, Sendable {
     public let coverCount: Int
 }
 
+public struct LibraryStarredIds: Equatable, Sendable {
+    public var songIds: Set<String>
+    public var albumIds: Set<String>
+    public var artistIds: Set<String>
+
+    public init(
+        songIds: Set<String> = [],
+        albumIds: Set<String> = [],
+        artistIds: Set<String> = []
+    ) {
+        self.songIds = songIds
+        self.albumIds = albumIds
+        self.artistIds = artistIds
+    }
+}
+
 public struct LibraryAvailability: Equatable, Sendable {
     public let available: Bool
     public let lastSyncedAt: Int?
