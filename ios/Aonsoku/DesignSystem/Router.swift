@@ -35,6 +35,11 @@ enum GlobalSheet: Identifiable {
     case createPlaylist(songs: [Song])
     case editPlaylist(Playlist)
     case radioEditor(RadioStation?)
+    /// Cross-device playback: this device, devices to control and playback
+    /// to continue here.
+    case devices
+    /// Lyrics choice, offset and visibility for the playing song.
+    case lyricsSettings
 
     var id: String {
         switch self {
@@ -43,8 +48,25 @@ enum GlobalSheet: Identifiable {
         case .createPlaylist: "createPlaylist"
         case let .editPlaylist(playlist): "editPlaylist:\(playlist.id)"
         case let .radioEditor(station): "radioEditor:\(station?.id ?? "new")"
+        case .devices: "devices"
+        case .lyricsSettings: "lyricsSettings"
         }
     }
+}
+
+/// Pages of the account sheet's settings.
+enum SettingsPage: Hashable {
+    case server
+    case appearance
+    case language
+    case playback
+    case lyrics
+    case content
+    case storage
+    case cacheManager
+    case crossDevice
+    case privacy
+    case about
 }
 
 /// Playlist entries waiting for the user to confirm removing them.
@@ -71,6 +93,8 @@ final class Router {
     var homePath: [AppRoute] = []
     var libraryPath: [AppRoute] = []
     var searchPath: [AppRoute] = []
+    /// Settings pages pushed in the account sheet.
+    var accountPath: [SettingsPage] = []
     var isNowPlayingPresented = false
     var isAccountPresented = false
     var sheet: GlobalSheet?
@@ -104,6 +128,14 @@ final class Router {
 
     func present(_ sheet: GlobalSheet) {
         self.sheet = sheet
+    }
+
+    /// Opens the account sheet, at `page` when given.
+    func openSettings(_ page: SettingsPage? = nil) {
+        sheet = nil
+        isNowPlayingPresented = false
+        accountPath = page.map { [$0] } ?? []
+        isAccountPresented = true
     }
 
     /// Pops every tab back to before the first route matching `isRemoved`,
@@ -141,6 +173,7 @@ final class Router {
         homePath.removeAll()
         libraryPath.removeAll()
         searchPath.removeAll()
+        accountPath.removeAll()
         selectedTab = .home
     }
 }
@@ -327,6 +360,10 @@ private struct GlobalSheetView: View {
             PlaylistEditorView(mode: .edit(playlist))
         case let .radioEditor(station):
             RadioEditorView(station: station)
+        case .devices:
+            DevicesView()
+        case .lyricsSettings:
+            LyricsSettingsView()
         }
     }
 }

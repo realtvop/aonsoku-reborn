@@ -6,6 +6,8 @@ import SwiftUI
 /// Music, and becomes a sidebar on iPad.
 struct MainTabView: View {
     @Environment(Router.self) private var router
+    @Environment(PlayerStore.self) private var player
+    @Environment(SettingsStore.self) private var settings
     @Environment(Localizer.self) private var t
     @Namespace private var playerNamespace
 
@@ -33,6 +35,18 @@ struct MainTabView: View {
         }
         .tabViewStyle(.sidebarAdaptable)
         .tabBarMinimizeBehavior(.onScrollDown)
+        .tabViewBottomAccessory {
+            MiniPlayer()
+        }
+        .fullScreenCover(isPresented: $router.isNowPlayingPresented) {
+            NowPlayingView()
+                .navigationTransition(.zoom(sourceID: NowPlayingView.transitionID, in: playerNamespace))
+        }
+        .onChange(of: player.playbackStarts) {
+            if settings.settings.playback.autoOpenNowPlaying, router.topLayer == .root {
+                router.presentNowPlaying()
+            }
+        }
         .environment(\.playerNamespace, playerNamespace)
         .globalPresentations(.root)
     }

@@ -45,6 +45,9 @@
       "alreadyAdded": "Already in “{{name}}”",
       "addedSkipped": "Added to “{{name}}”. Skipped songs already in it.",
       "addFailed": "Couldn't add to the playlist"
+    },
+    "player": {
+      "volume": "Volume"
     }
   }
 }

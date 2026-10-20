@@ -68,15 +68,22 @@ public struct AppearanceSettings: Codable, Hashable, Sendable {
     public var themeMode: ThemeMode = .system
     public var lightTheme: AppTheme = .light
     public var darkTheme: AppTheme = .dark
+    /// Strength of the cover colors behind Now Playing, 0.3...1 (web
+    /// `player_store` `settings.colors.currentSongColorIntensity`).
+    public var nowPlayingColorIntensity = 0.65
+
+    public static let colorIntensityRange: ClosedRange<Double> = 0.3...1
 
     public init(
         themeMode: ThemeMode = .system,
         lightTheme: AppTheme = .light,
-        darkTheme: AppTheme = .dark
+        darkTheme: AppTheme = .dark,
+        nowPlayingColorIntensity: Double = 0.65
     ) {
         self.themeMode = themeMode
         self.lightTheme = lightTheme
         self.darkTheme = darkTheme
+        self.nowPlayingColorIntensity = nowPlayingColorIntensity
     }
 
     public init(from decoder: Decoder) throws {
@@ -85,6 +92,10 @@ public struct AppearanceSettings: Codable, Hashable, Sendable {
         themeMode = c.value(.themeMode, default: d.themeMode)
         lightTheme = c.value(.lightTheme, default: d.lightTheme)
         darkTheme = c.value(.darkTheme, default: d.darkTheme)
+        nowPlayingColorIntensity = c.value(
+            .nowPlayingColorIntensity,
+            default: d.nowPlayingColorIntensity
+        )
     }
 }
 

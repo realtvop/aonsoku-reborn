@@ -1,0 +1,358 @@
+import AVKit
+import AonsokuKit
+import SwiftUI
+
+// MARK: - Scrubber
+
+/// The position in the song: a bar to drag, the time played and the time
+/// left, and the audio quality between them. Radio shows that it is live.
+struct PlaybackScrubber: View {
+    @Environment(PlayerStore.self) private var player
+    @Environment(Localizer.self) private var t
+
+    /// 0...1 while dragging.
+    @State private var dragProgress: Double?
+    /// Where the drag started, so the bar moves with the finger instead of
+    /// jumping to it.
+    @State private var dragStart: Double?
+    /// The position just sought to, shown until playback reports it.
+    @State private var pendingSeek: (position: TimeInterval, at: Date)?
+
+    var body: some View {
+        if player.isRadio {
+            live
+        } else {
+            TimelineView(.animation(minimumInterval: 0.1, paused: !player.isPlaying || dragProgress != nil)) { _ in
+                scrubber(position: displayedPosition, duration: player.clock.duration)
+            }
+        }
+    }
+
+    private var displayedPosition: TimeInterval {
+        let duration = player.clock.duration
+        if let dragProgress {
+            return dragProgress * duration
+        }
+        let position = player.clock.position()
+        if let pendingSeek, Date.now.timeIntervalSince(pendingSeek.at) < 1.5,
+           abs(position - pendingSeek.position) > 1 {
+            return pendingSeek.position
+        }
+        return position
+    }
+
+    private func scrubber(position: TimeInterval, duration: TimeInterval) -> some View {
+        let progress = duration > 0 ? min(max(position / duration, 0), 1) : 0
+        return VStack(spacing: 6) {
+            GeometryReader { proxy in
+                ProgressBar(progress: progress, isActive: dragProgress != nil)
+                    .frame(maxHeight: .infinity)
+                    .contentShape(.rect)
+                    .gesture(drag(width: proxy.size.width, current: progress, duration: duration))
+            }
+            .frame(height: 24)
+            HStack {
+                Text(Formatters.clock(position))
+                Spacer()
+                if let quality = player.currentSong.flatMap({ Formatters.quality(of: $0) }) {
+                    Text(quality)
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.white.opacity(0.12), in: .capsule)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Text("-\(Formatters.clock(max(duration - position, 0)))")
+            }
+            .font(.caption.weight(.medium))
+            .monospacedDigit()
+            .foregroundStyle(.white.opacity(0.6))
+        }
+        .animation(.spring(duration: 0.3), value: dragProgress != nil)
+        .haptic(.impact(weight: .light), trigger: dragProgress != nil)
+        .accessibilityElement()
+        .accessibilityLabel(t("player.tooltips.progress"))
+        .accessibilityValue("\(Formatters.clock(position)) / \(Formatters.clock(duration))")
+        .accessibilityAdjustableAction { direction in
+            let step: TimeInterval = direction == .increment ? 10 : -10
+            seek(to: min(max(position + step, 0), duration))
+        }
+    }
+
+    private func drag(width: CGFloat, current: Double, duration: TimeInterval) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let start = dragStart ?? current
+                dragStart = start
+                dragProgress = min(max(start + value.translation.width / max(width, 1), 0), 1)
+            }
+            .onEnded { _ in
+                if let dragProgress, duration > 0 {
+                    seek(to: dragProgress * duration)
+                }
+                dragProgress = nil
+                dragStart = nil
+            }
+    }
+
+    private func seek(to position: TimeInterval) {
+        pendingSeek = (position, .now)
+        player.seek(to: position)
+    }
+
+    /// Radio has no position: a full bar and the station.
+    private var live: some View {
+        VStack(spacing: 6) {
+            ProgressBar(progress: 1, isActive: false)
+                .opacity(0.35)
+                .frame(height: 24)
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(.red)
+                    .frame(width: 7, height: 7)
+                Text(t("radios.label"))
+                    .textCase(.uppercase)
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.white.opacity(0.6))
+        }
+    }
+}
+
+/// A rounded track and its filled part, thicker while being dragged.
+struct ProgressBar: View {
+    let progress: Double
+    let isActive: Bool
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(.white.opacity(0.22))
+                Capsule()
+                    .fill(.white.opacity(isActive ? 1 : 0.8))
+                    .frame(width: max(proxy.size.width * progress, 0))
+            }
+        }
+        .frame(height: isActive ? 12 : 7)
+    }
+}
+
+// MARK: - Transport
+
+/// Previous, Play/Pause and Next, as large symbols that light a circle
+/// while pressed.
+struct TransportControls: View {
+    var scale: CGFloat = 1
+
+    @Environment(PlayerStore.self) private var player
+    @Environment(Localizer.self) private var t
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Spacer(minLength: 0)
+            TransportButton(
+                symbol: "backward.fill",
+                size: 28 * scale,
+                label: t("player.tooltips.previous")
+            ) {
+                player.previous()
+            }
+            Spacer(minLength: 0)
+            TransportButton(
+                symbol: player.isPlaying ? "pause.fill" : "play.fill",
+                size: 42 * scale,
+                label: t(player.isPlaying ? "player.tooltips.pause" : "player.tooltips.play")
+            ) {
+                player.togglePlayPause()
+            }
+            Spacer(minLength: 0)
+            TransportButton(
+                symbol: "forward.fill",
+                size: 28 * scale,
+                label: t("player.tooltips.next")
+            ) {
+                player.next()
+            }
+            Spacer(minLength: 0)
+        }
+        .disabled(!player.hasMedia)
+        .opacity(player.hasMedia ? 1 : 0.4)
+    }
+}
+
+private struct TransportButton: View {
+    let symbol: String
+    let size: CGFloat
+    let label: String
+    let action: () -> Void
+
+    @State private var taps = 0
+
+    var body: some View {
+        Button {
+            taps += 1
+            action()
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: size))
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: size * 1.9, height: size * 1.9)
+                .contentShape(.circle)
+        }
+        .buttonStyle(TransportButtonStyle())
+        .accessibilityLabel(label)
+        .haptic(.impact(weight: .light), trigger: taps)
+    }
+}
+
+private struct TransportButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(.white)
+            .background {
+                Circle()
+                    .fill(.white.opacity(configuration.isPressed ? 0.16 : 0))
+            }
+            .scaleEffect(configuration.isPressed ? 0.86 : 1)
+            .animation(.spring(duration: 0.25), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Volume
+
+/// The output volume, or the controlled device's.
+struct VolumeSlider: View {
+    @Environment(PlayerStore.self) private var player
+    @Environment(Localizer.self) private var t
+
+    @State private var dragValue: Double?
+    @State private var dragStart: Double?
+
+    var body: some View {
+        let value = dragValue ?? player.volume
+        HStack(spacing: 12) {
+            Image(systemName: "speaker.fill")
+            GeometryReader { proxy in
+                ProgressBar(progress: value, isActive: dragValue != nil)
+                    .frame(maxHeight: .infinity)
+                    .contentShape(.rect)
+                    .gesture(drag(width: proxy.size.width, current: value))
+            }
+            .frame(height: 24)
+            Image(systemName: "speaker.wave.3.fill")
+        }
+        .font(.caption)
+        .foregroundStyle(.white.opacity(0.6))
+        .animation(.spring(duration: 0.3), value: dragValue != nil)
+        .accessibilityElement()
+        .accessibilityLabel(t("native.player.volume"))
+        .accessibilityValue(value.formatted(.percent.precision(.fractionLength(0))))
+        .accessibilityAdjustableAction { direction in
+            let step = direction == .increment ? 0.1 : -0.1
+            player.setVolume(min(max(value + step, 0), 1))
+        }
+    }
+
+    private func drag(width: CGFloat, current: Double) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { gesture in
+                let start = dragStart ?? current
+                dragStart = start
+                let value = min(max(start + gesture.translation.width / max(width, 1), 0), 1)
+                // Small steps are enough and spare remote devices a command
+                // per frame.
+                if abs(value - (dragValue ?? -1)) >= 0.01 {
+                    dragValue = value
+                    player.setVolume(value)
+                }
+            }
+            .onEnded { _ in
+                if let dragValue {
+                    player.setVolume(dragValue)
+                }
+                dragValue = nil
+                dragStart = nil
+            }
+    }
+}
+
+// MARK: - AirPlay
+
+/// The system AirPlay and Bluetooth route picker.
+struct AudioRoutePicker: UIViewRepresentable {
+    func makeUIView(context: Context) -> AVRoutePickerView {
+        let view = AVRoutePickerView()
+        view.tintColor = UIColor.white.withAlphaComponent(0.65)
+        view.activeTintColor = .white
+        view.prioritizesVideoDevices = false
+        view.backgroundColor = .clear
+        return view
+    }
+
+    func updateUIView(_ view: AVRoutePickerView, context: Context) {}
+}
+
+// MARK: - Sleep timer
+
+/// Pauses after a number of minutes or at the end of the song.
+struct SleepTimerMenu<Label: View>: View {
+    @ViewBuilder let label: Label
+
+    @Environment(PlayerStore.self) private var player
+    @Environment(Localizer.self) private var t
+
+    var body: some View {
+        Menu {
+            if player.sleepTimer.isActive {
+                Button(role: .destructive) {
+                    player.cancelSleepTimer()
+                } label: {
+                    SwiftUI.Label(t("player.sleepTimer.cancel"), systemImage: "xmark.circle")
+                }
+            }
+            Section(t("player.sleepTimer.title")) {
+                ForEach(SleepTimerState.presetMinutes, id: \.self) { minutes in
+                    Button(t("player.sleepTimer.minutes", ["count": String(minutes)])) {
+                        player.setSleepTimer(minutes: minutes)
+                    }
+                }
+                Button {
+                    player.setSleepTimerEndOfTrack()
+                } label: {
+                    if player.sleepTimer == .endOfTrack {
+                        SwiftUI.Label(t("player.sleepTimer.endOfTrack"), systemImage: "checkmark")
+                    } else {
+                        Text(t("player.sleepTimer.endOfTrack"))
+                    }
+                }
+            }
+        } label: {
+            label
+        }
+    }
+}
+
+/// What the sleep timer will do: the time left, or the end of the song.
+struct SleepTimerStatus: View {
+    @Environment(PlayerStore.self) private var player
+    @Environment(Localizer.self) private var t
+
+    var body: some View {
+        switch player.sleepTimer {
+        case .off:
+            EmptyView()
+        case .endOfTrack:
+            Text(t("player.sleepTimer.endOfTrack"))
+        case let .countdown(endsAt):
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                Text(t(
+                    "player.sleepTimer.remaining",
+                    ["time": Formatters.clock(max(endsAt.timeIntervalSince(context.date), 0))]
+                ))
+                .monospacedDigit()
+            }
+        }
+    }
+}

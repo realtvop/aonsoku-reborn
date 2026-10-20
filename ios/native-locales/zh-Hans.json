@@ -45,6 +45,9 @@
       "alreadyAdded": "已在“{{name}}”中",
       "addedSkipped": "已添加到“{{name}}”，并跳过了其中已有的歌曲。",
       "addFailed": "无法添加到播放列表"
+    },
+    "player": {
+      "volume": "音量"
     }
   }
 }

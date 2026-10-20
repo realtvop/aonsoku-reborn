@@ -1,0 +1,522 @@
+import AonsokuKit
+import SwiftUI
+
+/// Now Playing, modeled on Apple Music: the cover over its own colors,
+/// shrinking while paused, the song with Favorite and More, the scrubber,
+/// transport and volume, and a bar for lyrics, AirPlay, Aonsoku devices
+/// and the queue. Lyrics and the queue move the cover into a compact
+/// header; on a wide iPad they open beside it.
+struct NowPlayingView: View {
+    static let transitionID = "nowPlaying"
+
+    enum Panel: Hashable {
+        case lyrics
+        case queue
+    }
+
+    @State private var panel: Panel?
+    @State private var palette: ArtworkPalette?
+    @Namespace private var artworkSpace
+
+    @Environment(PlayerStore.self) private var player
+    @Environment(LyricsStore.self) private var lyrics
+    @Environment(SettingsStore.self) private var settings
+    @Environment(Localizer.self) private var t
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        GeometryReader { proxy in
+            let isWide = sizeClass == .regular && proxy.size.width > proxy.size.height
+                && proxy.size.width >= 900
+            Group {
+                if isWide {
+                    wideLayout
+                } else {
+                    compactLayout
+                        .frame(maxWidth: 600)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .animation(.spring(duration: 0.5, bounce: 0.15), value: panel)
+        }
+        .foregroundStyle(.white)
+        .background {
+            NowPlayingBackground(
+                palette: palette,
+                intensity: settings.settings.appearance.nowPlayingColorIntensity,
+                isAnimating: player.isPlaying
+            )
+        }
+        .environment(\.colorScheme, .dark)
+        .artworkPalette(coverArtId, into: $palette)
+        .task(id: player.currentSong?.id) {
+            await lyrics.load(for: player.currentSong)
+        }
+        .onChange(of: player.hasMedia) { _, hasMedia in
+            if !hasMedia {
+                dismiss()
+            }
+        }
+        .onChange(of: player.isRadio) { _, isRadio in
+            if isRadio {
+                panel = nil
+            }
+        }
+        .accessibilityAction(.escape) {
+            dismiss()
+        }
+        .globalPresentations(.nowPlaying)
+    }
+
+    private var coverArtId: String? {
+        guard let song = player.currentSong else { return nil }
+        return song.coverArtId(preferAlbum: settings.settings.playback.useAlbumCoverForSongs)
+    }
+
+    // MARK: - Layouts
+
+    private var compactLayout: some View {
+        VStack(spacing: 0) {
+            grabber
+            statusCapsules
+            if let panel {
+                compactHeader
+                    .padding(.horizontal, 24)
+                    .padding(.top, 8)
+                panelContent(panel)
+                    .frame(maxHeight: .infinity)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                controls
+                    .padding(.top, 8)
+            } else {
+                largeArtwork
+                    .padding(.horizontal, 30)
+                    .padding(.vertical, 12)
+                    .frame(maxHeight: .infinity)
+                titleRow
+                    .padding(.horizontal, 30)
+                controls
+                    .padding(.top, 14)
+            }
+            bottomBar
+        }
+    }
+
+    private var wideLayout: some View {
+        HStack(spacing: 56) {
+            VStack(spacing: 0) {
+                grabber
+                statusCapsules
+                largeArtwork
+                    .padding(.vertical, 20)
+                    .frame(maxHeight: .infinity)
+                titleRow
+                controls
+                    .padding(.top, 14)
+                bottomBar
+            }
+            .frame(maxWidth: 500)
+            if let panel {
+                panelContent(panel)
+                    .frame(maxWidth: 620, maxHeight: .infinity)
+                    .padding(.vertical, 40)
+                    .transition(.opacity.combined(with: .move(edge: .trailing)))
+            }
+        }
+        .padding(.horizontal, 48)
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Pieces
+
+    private var grabber: some View {
+        Capsule()
+            .fill(.white.opacity(0.35))
+            .frame(width: 38, height: 5)
+            .padding(.top, 8)
+            .padding(.bottom, 6)
+            .accessibilityHidden(true)
+    }
+
+    /// Remote control and the sleep timer, when they apply.
+    @ViewBuilder
+    private var statusCapsules: some View {
+        if player.target.isRemote || player.sleepTimer.isActive {
+            HStack(spacing: 8) {
+                RemoteControlCapsule()
+                if player.sleepTimer.isActive {
+                    SleepTimerMenu {
+                        Label {
+                            SleepTimerStatus()
+                        } icon: {
+                            Image(systemName: "moon.zzz.fill")
+                        }
+                        .font(.footnote.weight(.semibold))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .glassEffect(.regular, in: .capsule)
+                    }
+                }
+            }
+            .padding(.top, 4)
+            .transition(.opacity.combined(with: .scale(scale: 0.9)))
+        }
+    }
+
+    private var largeArtwork: some View {
+        PlayerArtwork(cornerRadius: 14, size: .large)
+            .matchedGeometryEffect(id: "artwork", in: artworkSpace)
+            .shadow(color: .black.opacity(0.35), radius: 26, y: 14)
+            .scaleEffect(player.isPlaying || !player.hasMedia ? 1 : 0.8)
+            .animation(.spring(duration: 0.55, bounce: 0.3), value: player.isPlaying)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityHidden(true)
+    }
+
+    private var titleRow: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                MarqueeText(text: NowPlayingText.title(player, t))
+                    .font(.title3.weight(.bold))
+                    .accessibilityAddTraits(.isHeader)
+                ArtistMenu()
+            }
+            Spacer(minLength: 0)
+            songButtons
+        }
+    }
+
+    /// The small cover, song and buttons above lyrics or the queue. The
+    /// cover returns to the large one.
+    private var compactHeader: some View {
+        HStack(spacing: 14) {
+            Button {
+                panel = nil
+            } label: {
+                PlayerArtwork(cornerRadius: 8, size: .medium)
+                    .matchedGeometryEffect(id: "artwork", in: artworkSpace)
+                    .frame(width: 64, height: 64)
+                    .shadow(color: .black.opacity(0.3), radius: 10, y: 5)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(t("fullscreen.playing"))
+            VStack(alignment: .leading, spacing: 2) {
+                MarqueeText(text: NowPlayingText.title(player, t))
+                    .font(.headline)
+                ArtistMenu()
+                    .font(.subheadline)
+            }
+            Spacer(minLength: 0)
+            songButtons
+        }
+    }
+
+    @ViewBuilder
+    private var songButtons: some View {
+        HStack(spacing: 10) {
+            if let song = player.currentSong {
+                FavoriteToolbarButton(kind: .song, id: song.id)
+                    .font(.body.weight(.semibold))
+                    .frame(width: 34, height: 34)
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .buttonStyle(.plain)
+            }
+            Menu {
+                NowPlayingMenuItems()
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.body.weight(.semibold))
+                    .frame(width: 34, height: 34)
+                    .glassEffect(.regular.interactive(), in: .circle)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(t("playlist.buttons.options", ["name": NowPlayingText.title(player, t)]))
+            .disabled(!player.hasMedia)
+        }
+    }
+
+    private var controls: some View {
+        VStack(spacing: 0) {
+            PlaybackScrubber()
+            TransportControls(scale: panel == nil ? 1 : 0.85)
+                .padding(.vertical, panel == nil ? 16 : 6)
+            VolumeSlider()
+        }
+        .padding(.horizontal, 30)
+    }
+
+    private var bottomBar: some View {
+        HStack(spacing: 0) {
+            panelButton(.lyrics, symbol: "quote.bubble", label: t("fullscreen.lyrics"))
+                .disabled(player.isRadio)
+            Spacer(minLength: 0)
+            if player.target.isRemote {
+                Color.clear
+                    .frame(width: 44, height: 44)
+            } else {
+                AudioRoutePicker()
+                    .frame(width: 44, height: 44)
+            }
+            Spacer(minLength: 0)
+            DevicesButton()
+            Spacer(minLength: 0)
+            panelButton(.queue, symbol: "list.bullet", label: t("fullscreen.queue"))
+                .disabled(player.isRadio)
+        }
+        .padding(.horizontal, 44)
+        .padding(.top, 18)
+        .padding(.bottom, 10)
+    }
+
+    private func panelButton(_ target: Panel, symbol: String, label: String) -> some View {
+        let isOn = panel == target
+        return Button {
+            panel = isOn ? nil : target
+        } label: {
+            Image(systemName: symbol)
+                .font(.title3.weight(.medium))
+                .foregroundStyle(isOn ? .black : .white.opacity(0.7))
+                .frame(width: 44, height: 44)
+                .background(.white.opacity(isOn ? 0.92 : 0), in: .circle)
+                .contentShape(.circle)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+        .haptic(.selection, trigger: isOn)
+    }
+
+    @ViewBuilder
+    private func panelContent(_ panel: Panel) -> some View {
+        switch panel {
+        case .lyrics:
+            LyricsPanel()
+        case .queue:
+            QueuePanel()
+        }
+    }
+}
+
+// MARK: - Title pieces
+
+/// The artist line, opening a menu that goes to the artist or the album.
+private struct ArtistMenu: View {
+    @Environment(PlayerStore.self) private var player
+    @Environment(Router.self) private var router
+    @Environment(Localizer.self) private var t
+
+    var body: some View {
+        let subtitle = NowPlayingText.subtitle(player, t) ?? ""
+        if let song = player.currentSong, song.artistId != nil || song.albumId != nil {
+            Menu {
+                if let artistId = song.artistId {
+                    Button {
+                        router.navigate(to: .artist(id: artistId, name: song.artist))
+                    } label: {
+                        Label(t("options.goto.artist"), systemImage: "music.mic")
+                    }
+                }
+                if let albumId = song.albumId {
+                    Button {
+                        router.navigate(to: .album(id: albumId, preview: nil))
+                    } label: {
+                        Label(t("options.goto.album"), systemImage: "square.stack")
+                    }
+                }
+            } label: {
+                MarqueeText(text: subtitle)
+                    .foregroundStyle(.white.opacity(0.65))
+            }
+            .buttonStyle(.plain)
+        } else {
+            MarqueeText(text: subtitle)
+                .foregroundStyle(.white.opacity(0.65))
+        }
+    }
+}
+
+/// The current song's actions, like the web player menu: add to a
+/// playlist, favorite, download, the sleep timer, lyrics settings, the
+/// artist and album, and the song's details.
+private struct NowPlayingMenuItems: View {
+    @Environment(PlayerStore.self) private var player
+    @Environment(DownloadsStore.self) private var downloads
+    @Environment(Router.self) private var router
+    @Environment(Localizer.self) private var t
+
+    var body: some View {
+        if let song = player.currentSong {
+            Section {
+                Button {
+                    router.present(.addToPlaylist([song]))
+                } label: {
+                    Label(t("options.playlist.add"), systemImage: "text.badge.plus")
+                }
+                FavoriteButton(kind: .song, id: song.id)
+                downloadButton(song)
+            }
+        }
+        Section {
+            SleepTimerMenu {
+                Label(t("player.sleepTimer.title"), systemImage: "moon.zzz")
+            }
+            if player.currentSong != nil {
+                Button {
+                    router.present(.lyricsSettings)
+                } label: {
+                    Label(t("fullscreen.selectLyrics"), systemImage: "quote.bubble")
+                }
+            }
+        }
+        if let song = player.currentSong {
+            Section {
+                if let artistId = song.artistId {
+                    Button {
+                        router.navigate(to: .artist(id: artistId, name: song.artist))
+                    } label: {
+                        Label(t("options.goto.artist"), systemImage: "music.mic")
+                    }
+                }
+                if let albumId = song.albumId {
+                    Button {
+                        router.navigate(to: .album(id: albumId, preview: nil))
+                    } label: {
+                        Label(t("options.goto.album"), systemImage: "square.stack")
+                    }
+                }
+                Button {
+                    router.present(.songInfo(song))
+                } label: {
+                    Label(t("options.info"), systemImage: "info.circle")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func downloadButton(_ song: Song) -> some View {
+        let _ = downloads.revision
+        switch downloads.state(ofSong: song.id) {
+        case .cached(.explicit, _), .downloading:
+            Button(role: .destructive) {
+                Task { await downloads.remove(songIds: [song.id]) }
+            } label: {
+                Label(t("options.removeDownload"), systemImage: "trash")
+            }
+        default:
+            Button {
+                Task { await downloads.download(songs: [song]) }
+            } label: {
+                Label(t("options.download"), systemImage: "arrow.down.circle")
+            }
+        }
+    }
+}
+
+// MARK: - Remote control and devices
+
+/// Which device is being controlled, with a way back to this one.
+private struct RemoteControlCapsule: View {
+    @Environment(PlayerStore.self) private var player
+    @Environment(CoordinationStore.self) private var coordination
+    @Environment(Localizer.self) private var t
+
+    var body: some View {
+        if case let .remote(_, deviceName) = player.target {
+            HStack(spacing: 10) {
+                Label(
+                    t("settings.crossDevice.playback.controllingDevice", ["name": deviceName]),
+                    systemImage: "hifispeaker.fill"
+                )
+                .lineLimit(1)
+                Button(t("settings.crossDevice.playback.exitControl")) {
+                    coordination.stopControlling()
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.tint)
+            }
+            .font(.footnote.weight(.semibold))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .glassEffect(.regular, in: .capsule)
+        }
+    }
+}
+
+/// Opens the devices sheet; lit while another device is controlled.
+private struct DevicesButton: View {
+    @Environment(PlayerStore.self) private var player
+    @Environment(Router.self) private var router
+    @Environment(Localizer.self) private var t
+
+    var body: some View {
+        let isRemote = player.target.isRemote
+        Button {
+            router.present(.devices)
+        } label: {
+            Image(systemName: isRemote ? "hifispeaker.and.homepod.fill" : "hifispeaker.and.homepod")
+                .font(.title3.weight(.medium))
+                .foregroundStyle(isRemote ? AnyShapeStyle(.tint) : AnyShapeStyle(.white.opacity(0.7)))
+                .frame(width: 44, height: 44)
+                .contentShape(.circle)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(t("settings.crossDevice.title"))
+    }
+}
+
+// MARK: - Background
+
+/// The cover's colors in a slowly moving mesh, as behind Apple Music's Now
+/// Playing. `intensity` is the color strength setting.
+struct NowPlayingBackground: View {
+    let palette: ArtworkPalette?
+    let intensity: Double
+    var isAnimating = true
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack {
+            Color.black
+            TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion || !isAnimating)) { context in
+                MeshGradient(
+                    width: 3,
+                    height: 3,
+                    points: Self.points(at: context.date.timeIntervalSinceReferenceDate),
+                    colors: colors
+                )
+            }
+            .opacity(opacity)
+        }
+        .ignoresSafeArea()
+        .animation(.smooth(duration: 0.8), value: palette)
+    }
+
+    private var colors: [Color] {
+        palette?.meshColors ?? Array(repeating: Color(white: 0.2), count: 9)
+    }
+
+    /// 0.5 at the weakest setting, fully opaque at the strongest.
+    private var opacity: Double {
+        let range = AppearanceSettings.colorIntensityRange
+        let normalized = (intensity - range.lowerBound) / (range.upperBound - range.lowerBound)
+        return 0.5 + 0.5 * min(max(normalized, 0), 1)
+    }
+
+    /// The middle points drift on slow, offset sine waves; the edges stay put.
+    nonisolated static func points(at time: TimeInterval) -> [SIMD2<Float>] {
+        let t = Float(time.truncatingRemainder(dividingBy: 10_000))
+        func drift(_ phase: Float, _ amount: Float) -> Float {
+            sin(t * 0.22 + phase) * amount
+        }
+        return [
+            SIMD2(0, 0), SIMD2(0.5 + drift(0, 0.12), 0), SIMD2(1, 0),
+            SIMD2(0, 0.5 + drift(1.3, 0.12)),
+            SIMD2(0.5 + drift(2.1, 0.16), 0.5 + drift(0.7, 0.16)),
+            SIMD2(1, 0.5 + drift(2.9, 0.12)),
+            SIMD2(0, 1), SIMD2(0.5 + drift(1.7, 0.12), 1), SIMD2(1, 1),
+        ]
+    }
+}

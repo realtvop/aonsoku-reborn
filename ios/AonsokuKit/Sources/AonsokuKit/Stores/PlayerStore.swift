@@ -119,6 +119,11 @@ public final class PlayerStore {
     /// A play request waiting for the user to confirm replacing the songs
     /// they queued. The UI shows a dialog and calls `resolveReplacement`.
     public private(set) var pendingReplacement: QueueReplacementRequest?
+    /// Counts selections that started playing here or on the controlled
+    /// device (a song, album, playlist, artist or station), so the UI can
+    /// open Now Playing when `PlaybackSettings.autoOpenNowPlaying` is on.
+    /// Queue navigation and resuming do not count.
+    public private(set) var playbackStarts = 0
 
     @ObservationIgnored public weak var remote: (any RemotePlaybackSource)?
     /// Toggles the current song's favorite (lock screen Like and the player

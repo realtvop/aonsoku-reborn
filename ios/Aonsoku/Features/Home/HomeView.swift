@@ -1,9 +1,10 @@
 import AonsokuKit
 import SwiftUI
 
-/// Home, after Apple Music's Home: a carousel of featured albums, the
-/// albums and playlists the user pinned, then shelves for what they played
-/// recently and most, what was added and a random pick.
+/// Home, after Apple Music's Home: what other devices are playing, a
+/// carousel of featured albums, the albums and playlists the user pinned,
+/// then shelves for what they played recently and most, what was added and
+/// a random pick.
 struct HomeView: View {
     @Environment(HomeStore.self) private var home
     @Environment(PinnedHomeStore.self) private var pinned
@@ -14,6 +15,7 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: Layout.sectionSpacing) {
+                OtherDevicesShelf()
                 if !home.carousel.isEmpty {
                     FeaturedCarousel(albums: home.carousel)
                 }
@@ -86,6 +88,63 @@ struct HomeView: View {
                     systemImage: "music.note.house",
                     description: t("native.home.empty.description")
                 )
+            }
+        }
+    }
+}
+
+// MARK: - Other devices
+
+/// Playback on the user's other devices, like the web Home overview. A tap
+/// opens the devices sheet to control it or continue it here.
+private struct OtherDevicesShelf: View {
+    @Environment(CoordinationStore.self) private var coordination
+    @Environment(Router.self) private var router
+    @Environment(Localizer.self) private var t
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    var body: some View {
+        let devices = coordination.groups.live + coordination.groups.offlineSnapshots
+        if !devices.isEmpty {
+            let isRegular = sizeClass == .regular
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(t("settings.crossDevice.playback.otherDevices"))
+                        .font(.title2.bold())
+                        .lineLimit(1)
+                        .accessibilityAddTraits(.isHeader)
+                    Spacer(minLength: 8)
+                    Button(t("settings.crossDevice.playback.showDevices")) {
+                        router.present(.devices)
+                    }
+                    .font(.subheadline.weight(.semibold))
+                }
+                .pageMargins()
+                ScrollView(.horizontal) {
+                    LazyHStack(spacing: Layout.shelfSpacing) {
+                        ForEach(devices) { summary in
+                            Button {
+                                router.present(.devices)
+                            } label: {
+                                DevicePlaybackRow(summary: summary)
+                                    .padding(12)
+                                    .background(.fill.quinary, in: .rect(cornerRadius: 16, style: .continuous))
+                            }
+                            .buttonStyle(.pressable)
+                            .containerRelativeFrame(
+                                .horizontal,
+                                count: isRegular ? 3 : 10,
+                                span: isRegular ? 1 : 8,
+                                spacing: Layout.shelfSpacing
+                            )
+                        }
+                    }
+                    .scrollTargetLayout()
+                }
+                .scrollTargetBehavior(.viewAligned)
+                .scrollIndicators(.hidden)
+                .scrollClipDisabled()
+                .contentMargins(.horizontal, Layout.margin(sizeClass), for: .scrollContent)
             }
         }
     }

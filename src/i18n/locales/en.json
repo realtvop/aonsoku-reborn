@@ -731,7 +731,15 @@
         "remoteControl": "Remote control",
         "relay": "Handoff",
         "peerDevice": "remote device",
-        "controllingDevice": "Controlling {{name}}"
+        "controllingDevice": "Controlling {{name}}",
+        "thisDevice": "This Device",
+        "liveDevices": "Live peer devices",
+        "offlineSnapshots": "Continue from offline playback",
+        "otherDevices": "Other devices playing",
+        "showDevices": "Show Devices",
+        "continue": "Continue",
+        "continueConfirmTitle": "Continue playback here?",
+        "continueConfirmDesc": "This will replace the active local playback on this device."
       }
     },
     "server": {
