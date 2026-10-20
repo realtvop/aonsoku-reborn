@@ -38,6 +38,29 @@ public struct ServerAccount: Codable, Hashable, Sendable {
     public var isLMS: Bool { serverType.lowercased() == "lms" }
 }
 
+/// What the server reports about itself (web About dialog).
+public struct ServerInfo: Hashable, Sendable {
+    /// `navidrome`, `lms`, `subsonic`, ...
+    public var type: String
+    /// The server software's own version, such as `0.53.3`.
+    public var serverVersion: String?
+    /// The Subsonic API version, such as `1.16.1`.
+    public var protocolVersion: String
+    public var isOpenSubsonic: Bool
+
+    public init(
+        type: String,
+        serverVersion: String? = nil,
+        protocolVersion: String,
+        isOpenSubsonic: Bool = false
+    ) {
+        self.type = type
+        self.serverVersion = serverVersion
+        self.protocolVersion = protocolVersion
+        self.isOpenSubsonic = isOpenSubsonic
+    }
+}
+
 public enum SessionState: Hashable, Sendable {
     /// Reading stored credentials at launch.
     case restoring
@@ -75,6 +98,14 @@ public final class SessionStore {
 
     public var isSignedIn: Bool { account != nil }
 
+    /// The fallback address answered at sign-in or after the last change.
+    public var isUsingFallback: Bool {
+        guard let account, let fallback = account.fallbackUrl, !fallback.isEmpty else {
+            return false
+        }
+        return account.activeUrl == fallback && account.activeUrl != account.primaryUrl
+    }
+
     /// Reads stored credentials and the saved account. Without an account
     /// record (data from the Capacitor app), it is rebuilt from the Keychain
     /// credentials. Never touches the network.
@@ -105,6 +136,18 @@ public final class SessionStore {
 
     /// Reloads `user`; keeps the previous value on failure.
     public func refreshUser() async {}
+
+    /// Saves new server addresses (web `saveServerUrls`): the primary is
+    /// tried first, then the fallback, with the stored credentials, and the
+    /// one that answers becomes active. Throws when neither answers and
+    /// keeps the previous addresses.
+    public func updateServerUrls(primaryUrl: String, fallbackUrl: String?) async throws {
+        throw SubsonicAPIError.unsupported
+    }
+
+    /// Pings the active server for its type and versions; nil when it does
+    /// not answer.
+    public func serverInfo() async -> ServerInfo? { nil }
 
     /// Removes credentials and the account record.
     public func signOut() {}

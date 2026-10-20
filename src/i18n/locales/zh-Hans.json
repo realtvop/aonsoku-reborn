@@ -480,11 +480,16 @@
       },
       "queue": {
         "colors": {
-          "info": "Si activé, l'application utilisera la couleur dominante de la pochette de l'album actuel comme couleur de fond.",
-          "label": "Activer la couleur de fond dynamique"
+          "info": "启用后，应用将使用当前专辑封面的主色作为背景颜色。",
+          "label": "启用动态背景颜色"
         },
-        "description": "Personnaliser la page de la file d'attente et des paroles.",
-        "group": "File d'attente et paroles"
+        "description": "自定义队列和歌词页面。",
+        "group": "队列和歌词"
+      },
+      "colors": {
+        "queue": {
+          "intensity": "颜色强度"
+        }
       }
     },
     "audio": {

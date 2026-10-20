@@ -42,6 +42,9 @@ struct MainTabView: View {
             NowPlayingView()
                 .navigationTransition(.zoom(sourceID: NowPlayingView.transitionID, in: playerNamespace))
         }
+        .sheet(isPresented: $router.isAccountPresented) {
+            AccountView()
+        }
         .onChange(of: player.playbackStarts) {
             if settings.settings.playback.autoOpenNowPlaying, router.topLayer == .root {
                 router.presentNowPlaying()

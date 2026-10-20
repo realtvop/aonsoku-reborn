@@ -29,6 +29,12 @@ enum Formatters {
         bytes.formatted(.byteCount(style: .file).locale(locale))
     }
 
+    /// Cache sizes and quotas in binary units, so a 1 GiB quota reads
+    /// "1 GB" as on the web.
+    static func cacheSize(_ bytes: Int64, locale: Locale) -> String {
+        bytes.formatted(.byteCount(style: .memory).locale(locale))
+    }
+
     static func relative(_ date: Date, locale: Locale) -> String {
         date.formatted(.relative(presentation: .named).locale(locale))
     }

@@ -41,6 +41,7 @@ struct LibraryView: View {
         .offlineBanner()
         .themedBackground()
         .navigationTitle(t("sidebar.library"))
+        .accountToolbar()
         .refreshable {
             await home.refresh()
             if network.isOnline, !sync.isSyncing {

@@ -48,6 +48,12 @@
     },
     "player": {
       "volume": "Volume"
+    },
+    "settings": {
+      "autoOpenNowPlaying": {
+        "label": "Open Now Playing Automatically",
+        "info": "Shows Now Playing when you start playing an album, playlist or song."
+      }
     }
   }
 }

@@ -48,6 +48,12 @@
     },
     "player": {
       "volume": "音量"
+    },
+    "settings": {
+      "autoOpenNowPlaying": {
+        "label": "自动打开正在播放",
+        "info": "开始播放专辑、播放列表或歌曲时显示正在播放。"
+      }
     }
   }
 }

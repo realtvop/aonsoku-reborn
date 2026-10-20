@@ -51,6 +51,7 @@ struct HomeView: View {
         .offlineBanner()
         .themedBackground()
         .navigationTitle(t("sidebar.home"))
+        .accountToolbar()
         .refreshable {
             await home.refresh()
             await pinned.resolve()

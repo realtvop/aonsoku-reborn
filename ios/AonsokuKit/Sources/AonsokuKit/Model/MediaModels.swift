@@ -597,11 +597,16 @@ public struct SubsonicUser: Hashable, Sendable {
 
 public struct ScanStatus: Hashable, Sendable {
     public var scanning: Bool
+    /// Songs in the library.
     public var count: Int?
+    public var folderCount: Int?
+    public var lastScan: Date?
 
-    public init(scanning: Bool, count: Int? = nil) {
+    public init(scanning: Bool, count: Int? = nil, folderCount: Int? = nil, lastScan: Date? = nil) {
         self.scanning = scanning
         self.count = count
+        self.folderCount = folderCount
+        self.lastScan = lastScan
     }
 }
 
