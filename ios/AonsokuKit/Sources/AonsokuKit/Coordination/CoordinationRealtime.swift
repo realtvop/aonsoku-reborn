@@ -2,6 +2,48 @@ import Foundation
 import AVFoundation
 import UIKit
 
+protocol CoordinationRealtimeTransport: AnyObject {
+    var onStateChange: ((String) -> Void)? { get set }
+    var onEnvelope: ((String) -> Void)? { get set }
+    var onCommandAck: ((String, String) -> Void)? { get set }
+    var onReconnectNeeded: ((Int) -> Void)? { get set }
+    var onRemoteCommandExecuted: (([String: Any], String?) -> Void)? { get set }
+
+    func connect(
+        wsUrl: String,
+        ticket: String,
+        deviceId: String,
+        capabilities: Int,
+        protocolVersion: Int,
+        lastSeq: Int
+    ) throws
+
+    func disconnect()
+    func scheduleReconnect()
+    func sendCommand(
+        _ command: [String: Any],
+        targetDeviceId: String,
+        expectedGeneration: Int,
+        messageId: String?
+    )
+    func sendControlSessionBegin(targetDeviceId: String)
+    func sendControlSessionEnd()
+    func requestSnapshots()
+    func requestHandoffCandidateFromCache(sourceDeviceId: String) throws
+    func generation(for: String) -> Int?
+    var lastSeq: Int { get }
+    func resetSequence()
+    func didEnterBackground()
+    func willEnterForeground()
+    func willTerminate()
+    func sendCommandFromNative(
+        targetDeviceId: String,
+        expectedGeneration: Int?,
+        command: [String: Any]
+    ) -> Bool
+    func publishNativePlaybackSnapshot(onlyWhenPlaying: Bool) -> Bool
+}
+
 private struct PendingNativeCommand {
     let targetDeviceId: String
     let command: [String: Any]
@@ -51,7 +93,7 @@ struct CoordinationReconnectPolicy: Equatable {
 /// on the main thread.
 ///
 /// Owned by CoordinationService; iOS lifecycle is managed by AppLifecycleService.
-final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSessionDelegate {
+final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSessionDelegate, CoordinationRealtimeTransport {
     internal var reconnectPolicy = CoordinationReconnectPolicy()
     internal var sessionFactory: (
         URLSessionConfiguration,
@@ -79,6 +121,10 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
     /// Called when reconnection is needed.
     /// Invoked on the main thread with the attempt number.
     var onReconnectNeeded: ((Int) -> Void)?
+
+    /// Called when a remote command is executed on this device.
+    /// Invoked on the main thread with the command dict and source device id.
+    var onRemoteCommandExecuted: (([String: Any], String?) -> Void)?
 
     internal static func buildHeartbeatEnvelope(
         protocolVersion: Int
@@ -259,6 +305,7 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
     private var protocolVersion: Int = 1
     private var currentTicket: String?
     private var connectLastSeq: Int = 0
+    private var resumeSeq: Int64 = 0
     private var nativeSessionId = UUID().uuidString
     private var nativeGeneration = 1
     private var handoffPreparing = false
@@ -322,12 +369,15 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
         }
 
         self.manualDisconnect = false
+        let savedReconnectAttempts = self.reconnectAttempts
         self.disconnectInternal()
+        self.reconnectAttempts = savedReconnectAttempts
         self.deviceId = deviceId
         self.currentTicket = ticket
         self.capabilities = capabilities
         self.protocolVersion = protocolVersion
         self.connectLastSeq = lastSeq
+        self.resumeSeq = Int64(lastSeq)
         self.seqTracker = CoordinationSeqTracker()
         self.seqTracker.observe(Int64(lastSeq))
         // The dedup cache is per-connection; clear it so a reconnect does
@@ -353,6 +403,12 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
     func disconnect() {
         self.manualDisconnect = true
         self.disconnectInternal()
+        self.reconnectAttempts = 0
+    }
+
+    /// Schedule a reconnection attempt (internal).
+    func scheduleReconnect() {
+        scheduleReconnectInternal()
     }
 
     /// Current connection state description: "disconnected", "connecting", "connected", "reconnecting", or "interrupted".
@@ -464,6 +520,16 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
     /// Get the snapshot revision for a given device ID.
     func snapshotRevision(for deviceId: String) -> Int? {
         deviceSnapshotRevisions[deviceId]
+    }
+
+    /// Get the last sequence number seen (for resume-friendly reconnects).
+    var lastSeq: Int {
+        Int(resumeSeq)
+    }
+
+    /// Reset the sequence tracker for a fresh connection.
+    func resetSequence() {
+        resumeSeq = 0
     }
 
     // MARK: - Lifecycle Handlers (called by AppLifecycleService)
@@ -758,17 +824,17 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
         self.stopSnapshotHeartbeat()
         self.reconnectWorkItem?.cancel()
         self.reconnectWorkItem = nil
-        self.reconnectAttempts = 0
         self.webSocketTask?.cancel()
         self.webSocketTask = nil
         self.session?.invalidateAndCancel()
         self.session = nil
         self.isConnecting = false
         self.currentTicket = nil
-        // §9.1/§9.2: clear the dedup cache and reset the seq tracker so a
-        // reconnect starts clean. The next `connect()` call supplies the
-        // lastSeq option again.
+        // §9.1: clear the dedup cache so a reconnect does not falsely skip
+        // messages from the new connection.
         self.dedupCache.clear()
+        // §9.2: reset the seq tracker but NOT resumeSeq, so resumeSeq
+        // survives reconnects when the connection is recovered.
         self.seqTracker.reset()
     }
 
@@ -837,7 +903,10 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
         // to the WebView so it can re-parse into the full Envelope type.
         if let dict = JSONUtilities.parse(json) {
             // §9.2: track the incoming seq on every envelope.
-            self.seqTracker.observe(CoordinationEnvelope.seq(dict))
+            if let seq = CoordinationEnvelope.seq(dict) {
+                self.seqTracker.observe(seq)
+                self.resumeSeq = max(self.resumeSeq, seq)
+            }
             // §9.1: dedup command/snapshot_projection envelopes by messageId.
             if let type = dict["type"] as? String,
                type == "snapshot_projection",
@@ -907,6 +976,10 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
                         protocolVersion: self.protocolVersion,
                         messageId: messageId
                     ))
+                }
+                let sourceDeviceId = dict["sourceDeviceId"] as? String
+                DispatchQueue.main.async {
+                    self.onRemoteCommandExecuted?(command, sourceDeviceId)
                 }
                 return
             }
@@ -1043,7 +1116,6 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
                 nativeGeneration = 1
                 nativeSnapshotRevision = 0
                 _ = AudioCoordinationBridge.executeRemoteControlCommand(["type": "pause"])
-                return
             }
         }
         DispatchQueue.main.async {
@@ -1105,7 +1177,7 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
         return true
     }
 
-    private func scheduleReconnect() {
+    private func scheduleReconnectInternal() {
         guard reconnectPolicy.permitsReconnect(
             manualDisconnect: manualDisconnect,
             isAppInBackground: isAppInBackground
