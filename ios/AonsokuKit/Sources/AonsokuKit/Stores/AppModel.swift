@@ -48,7 +48,10 @@ public final class AppModel {
         repository = LibraryRepository(
             api: api,
             library: services.library,
-            connectivity: network.connectivity
+            connectivity: network.connectivity,
+            serverType: { [authentication = services.authentication] in
+                authentication.getCredentials()?.serverType
+            }
         )
         artwork = ArtworkProvider(library: services.library)
         session = SessionStore(

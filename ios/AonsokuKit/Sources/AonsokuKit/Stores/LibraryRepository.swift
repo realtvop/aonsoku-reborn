@@ -42,15 +42,20 @@ public final class LibraryRepository: @unchecked Sendable {
     public let api: any SubsonicAPI
     public let library: LibraryService
     public let connectivity: any Connectivity
+    /// The signed-in server type (`navidrome`, `lms`, ...), read from any
+    /// thread. Navidrome needs `""` to list everything through `search3`.
+    public let serverType: @Sendable () -> String?
 
     public init(
         api: any SubsonicAPI,
         library: LibraryService = AppServices.shared.library,
-        connectivity: any Connectivity
+        connectivity: any Connectivity,
+        serverType: @escaping @Sendable () -> String? = { nil }
     ) {
         self.api = api
         self.library = library
         self.connectivity = connectivity
+        self.serverType = serverType
     }
 
     // MARK: - Lists
