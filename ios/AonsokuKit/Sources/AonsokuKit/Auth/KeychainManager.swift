@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-public struct ServerCredentials: Codable {
+public struct ServerCredentials: Codable, Sendable {
     public let serverUrl: String
     public let username: String
     public let password: String

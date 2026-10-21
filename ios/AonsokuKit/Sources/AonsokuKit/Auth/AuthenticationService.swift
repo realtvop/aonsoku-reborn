@@ -39,6 +39,7 @@ public final class AuthenticationService: @unchecked Sendable {
         username: String,
         rawPassword: String
     ) async -> LoginResult {
+        var probeErrors: [String] = []
         // Try primary URL with both auth types
         for authType in ["token", "password"] {
             let hashedPassword = SubsonicAuthBuilder.hashPasswordForStorage(
@@ -84,6 +85,7 @@ public final class AuthenticationService: @unchecked Sendable {
                     password: hashedPassword
                 )
             }
+            if let error = result.error { probeErrors.append(error) }
         }
 
         // Try fallback URL with both auth types
@@ -132,10 +134,16 @@ public final class AuthenticationService: @unchecked Sendable {
                         password: hashedPassword
                     )
                 }
+                if let error = result.error { probeErrors.append(error) }
             }
         }
 
-        return LoginResult(success: false, error: "auth_failed")
+        return LoginResult(
+            success: false,
+            error: probeErrors.contains("auth_failed")
+                ? "auth_failed"
+                : "network_unreachable"
+        )
     }
 
     /// Verify a server is reachable with given credentials.
@@ -214,7 +222,7 @@ public final class AuthenticationService: @unchecked Sendable {
 
 // MARK: - Result Types
 
-public struct LoginResult {
+public struct LoginResult: Sendable {
     public let success: Bool
     public let authType: String?
     public let protocolVersion: String?

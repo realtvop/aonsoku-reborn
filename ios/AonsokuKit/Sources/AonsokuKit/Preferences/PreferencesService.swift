@@ -4,14 +4,26 @@ import GRDB
 public final class PreferencesService: @unchecked Sendable {
     public static let shared = PreferencesService()
 
-    private let prefs = PreferencesManager.shared
+    private let prefs: PreferencesManager
     private let playHistory: PlayHistoryStore
     private let db: DatabasePool
     private let observers = PreferencesObserverRegistry()
 
-    private init() {
-        self.db = DatabaseManager.shared.dbPool
-        self.playHistory = PlayHistoryStore(db: db)
+    private convenience init() {
+        self.init(db: DatabaseManager.shared.dbPool)
+    }
+
+    /// Creates an isolated service for package tests and previews.
+    init(
+        db: DatabasePool,
+        now: @escaping () -> Date = Date.init,
+        historyNow: @escaping () -> Int = {
+            Int(Date().timeIntervalSince1970 * 1000)
+        }
+    ) {
+        self.db = db
+        self.prefs = PreferencesManager(db: db, now: now)
+        self.playHistory = PlayHistoryStore(db: db, now: historyNow)
     }
 
     // MARK: - String Preferences

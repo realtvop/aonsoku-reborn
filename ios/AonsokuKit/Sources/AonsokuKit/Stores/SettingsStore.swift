@@ -11,14 +11,16 @@ public final class SettingsStore {
     @ObservationIgnored public let preferences: PreferencesService
     @ObservationIgnored private var handlers: [@MainActor (AppSettings, AppSettings) -> Void] = []
 
-    public static let storageKey = "settings.v1"
+    nonisolated public static let storageKey = "settings.v1"
 
     public init(preferences: PreferencesService) {
         self.preferences = preferences
     }
 
     /// Reads the stored settings. Call once at start, after migration.
-    public func load() {}
+    public func load() {
+        settings = preferences.getJSON(Self.storageKey, as: AppSettings.self) ?? AppSettings()
+    }
 
     /// Changes settings, saves them and notifies `onChange` handlers when
     /// something changed.
@@ -48,5 +50,7 @@ public final class SettingsStore {
         handlers.append(handler)
     }
 
-    private func persist() {}
+    private func persist() {
+        try? preferences.setJSON(settings, for: Self.storageKey)
+    }
 }
