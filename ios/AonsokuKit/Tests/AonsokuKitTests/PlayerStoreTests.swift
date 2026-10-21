@@ -253,6 +253,34 @@ final class PlayerStoreTests: XCTestCase {
         fixture.audio.shutdown()
     }
 
+    func testStartAdoptsQueueRestoredAfterTheStoreSubscribes() async throws {
+        let fixture = try PlayerStoreTestFixture()
+        let engine = NativeQueueEngine()
+        engine.setContextQueue(
+            songs: [fixture.queueSong("restored-late")],
+            currentIndex: 0,
+            autoplay: false,
+            startTime: nil
+        )
+        try PlaybackStateRepository(db: fixture.database.manager.dbPool).save(
+            PlaybackPersistState(from: engine, currentTime: 42)
+        )
+        let store = fixture.store()
+
+        // The SwiftUI composition root can subscribe before AppDelegate
+        // starts AudioService. Restoration still has to reach that subscriber.
+        store.start()
+        fixture.audio.start()
+
+        let restored = await waitForPlayerStoreTest {
+            store.localSong?.id == "restored-late"
+                && abs(store.localClock.position() - 42) < 0.1
+        }
+        XCTAssertTrue(restored)
+        XCTAssertEqual(store.localQueue.current?.song.id, "restored-late")
+        fixture.audio.shutdown()
+    }
+
     func testStartingPlaybackAdoptsTheNewQueueForTheUI() async throws {
         let fixture = try PlayerStoreTestFixture()
         let store = fixture.store()

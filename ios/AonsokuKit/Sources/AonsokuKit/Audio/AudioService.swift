@@ -167,7 +167,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
 
     public func applicationDidEnterBackground() {
         isInForeground = false
-        persistence.flushNow()
+        persistence.flushNow(wait: true)
         recoveryController.setBackground(true)
         scrobbleSubmitter.submitPending(buffer: scrobbleBuffer)
     }
@@ -1361,11 +1361,32 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     private func restorePlaybackState(_ state: PlaybackPersistState) {
-        stateQueue.sync {
+        let song = stateQueue.sync {
             queueEngine.restoreState(from: state)
             isQueueActive = true
             savedRestoreTime = state.currentTime > 0 ? state.currentTime : nil
+            return queueEngine.currentSong
         }
+        if let song {
+            metadata = AudioMetadata(
+                title: song.title,
+                artist: song.artist,
+                album: song.album,
+                duration: song.duration,
+                artworkUrl: song.coverArtId.map {
+                    "aonsoku-media://getCoverArt?id=\($0)&size=800"
+                },
+                coverArtId: song.coverArtId
+            )
+            loadedDuration = song.duration
+        }
+        playbackState = .paused
+        emit(.queueContentsChanged(reason: "restore"))
+        publishStateUpdate()
+        NotificationCenter.default.post(
+            name: .aonsokuAudioStateDidChange,
+            object: self
+        )
     }
 
     private func migrateFromLegacyQueueState() -> PlaybackPersistState? {
@@ -1968,7 +1989,8 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     private var currentTime: Double {
-        let seconds = player?.currentTime().seconds ?? 0
+        guard let player else { return savedRestoreTime ?? 0 }
+        let seconds = player.currentTime().seconds
         return seconds.isFinite && seconds >= 0 ? seconds : 0
     }
 
