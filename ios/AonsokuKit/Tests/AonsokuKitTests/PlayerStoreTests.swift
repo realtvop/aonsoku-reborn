@@ -1,0 +1,441 @@
+import AVFoundation
+import Foundation
+import XCTest
+
+@testable import AonsokuKit
+
+@MainActor
+final class PlayerStoreTests: XCTestCase {
+    func testQueueSnapshotMapsTiersIndexesSourceAndCurrentUser() {
+        let context = [makeSong("a"), makeSong("b"), makeSong("c")]
+        let users = [makeSong("u1"), makeSong("u2")]
+        let regular = makePlayerSnapshot(
+            context: context,
+            currentIndex: 1,
+            userQueue: users,
+            source: AudioQueueSource(type: "album", id: "album-1")
+        )
+
+        let queue = PlayerStore.playerQueue(from: regular)
+        XCTAssertEqual(queue.history.map(\.song.id), ["a"])
+        XCTAssertEqual(queue.current?.song.id, "b")
+        XCTAssertEqual(queue.current?.index, 1)
+        XCTAssertEqual(queue.userQueue.map(\.song.id), ["u1", "u2"])
+        XCTAssertEqual(queue.userQueue.map(\.index), [0, 1])
+        XCTAssertEqual(queue.upNext.map(\.song.id), ["c"])
+        XCTAssertEqual(queue.upNext.map(\.index), [2])
+        XCTAssertEqual(queue.source, .album("album-1"))
+
+        let playingUser = makePlayerSnapshot(
+            context: context,
+            currentIndex: 1,
+            userQueue: users,
+            isInUserQueue: true
+        )
+        let userQueue = PlayerStore.playerQueue(from: playingUser)
+        XCTAssertEqual(userQueue.history.map(\.song.id), ["a", "b"])
+        XCTAssertEqual(userQueue.current?.song.id, "u1")
+        XCTAssertEqual(userQueue.current?.tier, .user)
+        XCTAssertEqual(userQueue.userQueue.map(\.song.id), ["u2"])
+        XCTAssertEqual(userQueue.userQueue.map(\.index), [1])
+        XCTAssertEqual(userQueue.upNext.map(\.song.id), ["c"])
+    }
+
+    func testReplacementConfirmationCancelPlayNextReplaceAndStaleTarget() async throws {
+        let fixture = try PlayerStoreTestFixture()
+        let remote = PlayerRemoteSpy()
+        remote.remoteNowPlaying = RemoteNowPlaying(
+            deviceId: "remote-1",
+            deviceName: "Living Room",
+            song: mediaSong("current"),
+            queue: PlayerQueue(
+                current: QueueEntry(song: mediaSong("current"), tier: .context, index: 0),
+                userQueue: [QueueEntry(song: mediaSong("queued"), tier: .user, index: 0)]
+            ),
+            isPlaying: true
+        )
+        let store = fixture.store(remote: remote)
+
+        store.play([mediaSong("new-1"), mediaSong("new-2")], startingAt: 0)
+        XCTAssertNotNil(store.pendingReplacement)
+        XCTAssertEqual(store.pendingReplacement?.targetDeviceId, "remote-1")
+        store.resolveReplacement(.cancel)
+        XCTAssertNil(store.pendingReplacement)
+        XCTAssertTrue(remote.commands.isEmpty)
+
+        store.play([mediaSong("new-1"), mediaSong("new-2")], startingAt: 1)
+        store.resolveReplacement(.playNext)
+        let playedNext = await waitForPlayerStoreTest { remote.commands.count == 2 }
+        XCTAssertTrue(playedNext)
+        XCTAssertEqual(remote.commandTypes, ["add_to_queue_next", "next"])
+
+        remote.commands = []
+        store.play([mediaSong("replacement")])
+        store.resolveReplacement(.replace)
+        let replaced = await waitForPlayerStoreTest { remote.commands.count == 2 }
+        XCTAssertTrue(replaced)
+        XCTAssertEqual(remote.commandTypes, ["clear_queue", "play_at_index"])
+        XCTAssertEqual(store.playbackStarts, 1)
+
+        remote.commands = []
+        store.play([mediaSong("stale")])
+        XCTAssertNotNil(store.pendingReplacement)
+        remote.remoteNowPlaying = nil
+        store.resolveReplacement(.replace)
+        try await Task.sleep(for: .milliseconds(30))
+        XCTAssertTrue(remote.commands.isEmpty)
+        XCTAssertEqual(store.playbackStarts, 1)
+    }
+
+    func testAlbumPlaylistArtistAndTransportRouteToRemote() async throws {
+        let fixture = try PlayerStoreTestFixture()
+        let albumSong = mediaSong("album-song")
+        let playlistSong = mediaSong("playlist-song")
+        let artistSong = mediaSong("artist-song")
+        fixture.api.albumHandler = { id in
+            if id == "artist-album" {
+                return AlbumDetail(
+                    album: Album(id: id, name: "Artist Album"),
+                    songs: [artistSong]
+                )
+            }
+            return AlbumDetail(album: Album(id: id, name: "Album"), songs: [albumSong])
+        }
+        fixture.api.playlistHandler = { id in
+            PlaylistDetail(
+                playlist: Playlist(id: id, name: "Playlist"),
+                songs: [playlistSong]
+            )
+        }
+        fixture.api.artistHandler = { id in
+            ArtistDetail(
+                artist: Artist(id: id, name: "Artist"),
+                albums: [Album(id: "artist-album", name: "Artist Album")]
+            )
+        }
+        let remote = PlayerRemoteSpy()
+        remote.remoteNowPlaying = RemoteNowPlaying(
+            deviceId: "remote-1",
+            deviceName: "Living Room"
+        )
+        let store = fixture.store(remote: remote)
+
+        await store.playAlbum(id: "album", startingAt: 0, shuffle: true)
+        await store.playPlaylist(id: "playlist", startingAt: 0)
+        await store.playArtist(id: "artist", name: "Artist", shuffle: true)
+        let startedSelections = await waitForPlayerStoreTest { remote.commands.count == 4 }
+        XCTAssertTrue(startedSelections)
+        XCTAssertEqual(
+            remote.commandTypes,
+            ["play_album", "play_playlist", "play_at_index", "set_shuffle"]
+        )
+        XCTAssertEqual(store.playbackStarts, 3)
+
+        remote.commands = []
+        store.togglePlayPause()
+        store.pause()
+        store.next()
+        store.previous()
+        store.seek(to: 12)
+        store.toggleShuffle()
+        store.cycleRepeat()
+        store.setVolume(2)
+        let routedTransport = await waitForPlayerStoreTest { remote.commands.count == 8 }
+        XCTAssertTrue(routedTransport)
+        XCTAssertEqual(
+            Set(remote.commandTypes),
+            Set([
+                "toggle_play_pause", "pause", "next", "previous", "seek",
+                "set_shuffle", "set_repeat", "set_volume",
+            ])
+        )
+        let volume = remote.commands.compactMap { $0.jsonObject["volume"] as? Double }.last
+        XCTAssertEqual(volume, 1)
+    }
+
+    func testLocalEnqueueMoveRemoveAndCoverReplayGainConversion() async throws {
+        let fixture = try PlayerStoreTestFixture()
+        fixture.settings.update { $0.playback.useAlbumCoverForSongs = true }
+        let audio = fixture.audio
+        audio.setContextQueue(
+            songs: [fixture.queueSong("a"), fixture.queueSong("b"), fixture.queueSong("c")],
+            currentIndex: 0,
+            autoplay: false
+        )
+        let queueLoaded = await waitForPlayerStoreTest { audio.fullState() != nil }
+        XCTAssertTrue(queueLoaded)
+        let store = fixture.store()
+        store.start()
+        let storeStarted = await waitForPlayerStoreTest {
+            store.localQueue.current?.song.id == "a"
+        }
+        XCTAssertTrue(storeStarted)
+
+        let first = mediaSong(
+            "u1",
+            albumId: "album-u1",
+            coverArt: "song-cover",
+            replayGain: ReplayGainInfo(trackGain: -4, trackPeak: 0.8)
+        )
+        let second = mediaSong("u2")
+        store.enqueue([first, second], position: .last)
+        let enqueued = await waitForPlayerStoreTest { store.localQueue.userQueue.count == 2 }
+        XCTAssertTrue(enqueued)
+        var snapshot = try XCTUnwrap(audio.fullState())
+        XCTAssertEqual(snapshot.userQueue.map(\.id), ["u1", "u2"])
+        XCTAssertEqual(snapshot.userQueue.first?.coverArtId, "album-u1")
+        XCTAssertEqual(snapshot.userQueue.first?.replayGain?.trackGain, -4)
+
+        store.move(in: .user, from: IndexSet(integer: 0), to: 2)
+        let movedUser = await waitForPlayerStoreTest {
+            audio.fullState()?.userQueue.map(\.id) == ["u2", "u1"]
+        }
+        XCTAssertTrue(movedUser)
+
+        store.move(in: .context, from: IndexSet(integer: 0), to: 2)
+        let movedContext = await waitForPlayerStoreTest {
+            audio.fullState()?.contextSongs.map(\.id) == ["a", "c", "b"]
+        }
+        XCTAssertTrue(movedContext)
+        let refreshedMove = await waitForPlayerStoreTest {
+            store.localQueue.upNext.first?.song.id == "c"
+        }
+        XCTAssertTrue(refreshedMove)
+        store.remove(entries: [try XCTUnwrap(store.localQueue.upNext.first)])
+        let removedContext = await waitForPlayerStoreTest {
+            audio.fullState()?.contextSongs.map(\.id) == ["a", "b"]
+        }
+        XCTAssertTrue(removedContext)
+
+        snapshot = try XCTUnwrap(audio.fullState())
+        XCTAssertEqual(snapshot.currentSongId, "a")
+        store.clearQueue()
+        let cleared = await waitForPlayerStoreTest {
+            let current = audio.fullState()
+            return current?.contextSongs.map(\.id) == ["a"]
+                && current?.userQueue.isEmpty == true
+        }
+        XCTAssertTrue(cleared)
+        audio.shutdown()
+    }
+
+    func testStartEnrichesRestoredQueueSongsFromRepository() async throws {
+        let fixture = try PlayerStoreTestFixture()
+        try SongRepository(db: fixture.database.manager.dbPool).upsert(
+            makeSongRecord("restored", title: "Enriched title")
+        )
+        fixture.audio.setContextQueue(
+            songs: [
+                QueueSong(
+                    id: "restored",
+                    title: "Restored title",
+                    artist: "Artist",
+                    album: "Album",
+                    duration: 180,
+                    streamUrl: "https://example.test/restored"
+                )
+            ],
+            currentIndex: 0,
+            autoplay: false
+        )
+        let restoredQueueLoaded = await waitForPlayerStoreTest {
+            fixture.audio.fullState() != nil
+        }
+        XCTAssertTrue(restoredQueueLoaded)
+        let store = fixture.store()
+        store.start()
+
+        let enriched = await waitForPlayerStoreTest {
+            store.localSong?.title == "Enriched title"
+        }
+        XCTAssertTrue(enriched)
+        XCTAssertEqual(store.localQueue.current?.song.title, "Enriched title")
+        fixture.audio.shutdown()
+    }
+
+    func testRadioWrapsWithoutCountingNavigationAndSleepTimerTracksState() throws {
+        let fixture = try PlayerStoreTestFixture()
+        let store = fixture.store()
+        let stations = [
+            RadioStation(id: "one", name: "One", streamUrl: "https://radio.test/one"),
+            RadioStation(id: "two", name: "Two", streamUrl: "https://radio.test/two"),
+        ]
+
+        store.playRadio(stations, index: 1)
+        XCTAssertEqual(store.radio?.current?.id, "two")
+        XCTAssertEqual(store.playbackStarts, 1)
+        store.next()
+        XCTAssertEqual(store.radio?.current?.id, "one")
+        store.previous()
+        XCTAssertEqual(store.radio?.current?.id, "two")
+        XCTAssertEqual(store.playbackStarts, 1)
+
+        store.setSleepTimer(minutes: 5)
+        guard case .countdown = store.sleepTimer else {
+            return XCTFail("Expected a countdown timer")
+        }
+        store.setSleepTimerEndOfTrack()
+        XCTAssertEqual(store.sleepTimer, .endOfTrack)
+        store.cancelSleepTimer()
+        XCTAssertEqual(store.sleepTimer, .off)
+        fixture.audio.shutdown()
+    }
+}
+
+@MainActor
+final class PlayerStoreTestFixture {
+    let database: TemporaryDatabase
+    let api: FakeSubsonicAPI
+    let repository: LibraryRepository
+    let settings: SettingsStore
+    let audio: AudioService
+
+    init() throws {
+        database = try TemporaryDatabase()
+        api = FakeSubsonicAPI()
+        repository = LibraryRepository(
+            api: api,
+            library: LibraryService(dbManager: database.manager),
+            connectivity: FixedConnectivity()
+        )
+        settings = SettingsStore(
+            preferences: PreferencesService(db: database.manager.dbPool)
+        )
+        audio = Self.buildAudio(database: database)
+    }
+
+    func makeAudio(
+        playerFactory: @escaping AudioService.PlayerFactory = { AVPlayer(playerItem: $0) }
+    ) -> AudioService {
+        Self.buildAudio(database: database, playerFactory: playerFactory)
+    }
+
+    func store(remote: PlayerRemoteSpy? = nil) -> PlayerStore {
+        let store = PlayerStore(
+            audio: audio,
+            repository: repository,
+            settings: settings,
+            authentication: .shared,
+            streamURL: { URL(string: "https://example.test/stream/\($0)") }
+        )
+        store.remote = remote
+        return store
+    }
+
+    func queueSong(_ id: String, replayGain: AudioReplayGain? = nil) -> QueueSong {
+        QueueSong(
+            id: id,
+            title: "Song \(id)",
+            artist: "Artist",
+            album: "Album",
+            duration: 180,
+            streamUrl: "https://example.test/stream/\(id)",
+            replayGain: replayGain
+        )
+    }
+
+    private static func buildAudio(
+        database: TemporaryDatabase,
+        playerFactory: @escaping AudioService.PlayerFactory = { AVPlayer(playerItem: $0) }
+    ) -> AudioService {
+        let resolver = NativeSourceResolver(
+            cacheDirectories: [database.directory],
+            credentialsProvider: { nil }
+        )
+        let downloads = NativeDownloadManager(
+            sessionFactory: { delegate in
+                URLSession(
+                    configuration: .ephemeral,
+                    delegate: delegate,
+                    delegateQueue: nil
+                )
+            },
+            credentialsProvider: { nil },
+            cacheDirectoryProvider: { _ in database.directory }
+        )
+        return AudioService(
+            databaseManager: database.manager,
+            sourceResolver: resolver,
+            downloadManager: downloads,
+            playerFactory: playerFactory
+        )
+    }
+}
+
+@MainActor
+final class PlayerRemoteSpy: RemotePlaybackSource {
+    var remoteNowPlaying: RemoteNowPlaying?
+    var commands: [CoordinationRemoteCommand] = []
+    var error: Error?
+
+    var commandTypes: [String] {
+        commands.compactMap { $0.jsonObject["type"] as? String }
+    }
+
+    func send(_ command: CoordinationRemoteCommand) async throws {
+        if let error { throw error }
+        commands.append(command)
+    }
+}
+
+func makePlayerSnapshot(
+    context: [QueueSong],
+    currentIndex: Int,
+    userQueue: [QueueSong] = [],
+    isInUserQueue: Bool = false,
+    source: AudioQueueSource? = nil
+) -> AudioQueueSnapshot {
+    AudioQueueSnapshot(
+        contextSongs: context,
+        currentIndex: currentIndex,
+        sourceId: source,
+        sourceName: "Source",
+        userQueue: userQueue,
+        originalContextSongs: [],
+        originalUserSongs: [],
+        shuffleHistory: [],
+        shuffleStartHistory: [],
+        playedUserQueueHistory: [],
+        isInUserQueue: isInUserQueue,
+        isShuffleActive: false,
+        loopState: .off,
+        isPlaying: false,
+        currentTime: 0,
+        duration: 180,
+        currentSongId: isInUserQueue ? userQueue.first?.id : context[currentIndex].id,
+        isRestored: false
+    )
+}
+
+func mediaSong(
+    _ id: String,
+    albumId: String? = "album",
+    coverArt: String? = nil,
+    replayGain: ReplayGainInfo? = nil
+) -> Song {
+    Song(
+        id: id,
+        title: "Song \(id)",
+        album: "Album",
+        albumId: albumId,
+        artist: "Artist",
+        artistId: "artist",
+        coverArt: coverArt,
+        duration: 180,
+        replayGain: replayGain
+    )
+}
+
+@MainActor
+func waitForPlayerStoreTest(
+    timeout: Duration = .seconds(2),
+    condition: @escaping @MainActor () -> Bool
+) async -> Bool {
+    let clock = ContinuousClock()
+    let deadline = clock.now + timeout
+    while clock.now < deadline {
+        if condition() { return true }
+        try? await Task.sleep(for: .milliseconds(10))
+    }
+    return condition()
+}

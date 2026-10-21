@@ -64,21 +64,37 @@ public struct AudioReplayGainConfig: Equatable, Sendable {
     }
 
     /// Linear volume factor for a song: `10^((gain + preAmp) / 20)`, capped
-    /// at `1 / peak` so the peak does not clip. Missing tags use the
-    /// default gain and a peak of 1.
+    /// at `1 / peak` so the peak does not clip. A missing gain falls back to
+    /// the other mode's tag, then to `defaultGain`.
     public func volumeScale(for tags: AudioReplayGain?) -> Double {
         let gain: Double
-        let peak: Double
+        let peak: Double?
         switch mode {
         case .track:
-            gain = tags?.trackGain ?? defaultGain
-            peak = tags?.trackPeak ?? 1
+            if let trackGain = tags?.trackGain {
+                gain = trackGain
+                peak = tags?.trackPeak
+            } else if let albumGain = tags?.albumGain {
+                gain = albumGain
+                peak = tags?.albumPeak
+            } else {
+                gain = defaultGain
+                peak = tags?.trackPeak ?? tags?.albumPeak
+            }
         case .album:
-            gain = tags?.albumGain ?? defaultGain
-            peak = tags?.albumPeak ?? 1
+            if let albumGain = tags?.albumGain {
+                gain = albumGain
+                peak = tags?.albumPeak
+            } else if let trackGain = tags?.trackGain {
+                gain = trackGain
+                peak = tags?.trackPeak
+            } else {
+                gain = defaultGain
+                peak = tags?.albumPeak ?? tags?.trackPeak
+            }
         }
         let base = pow(10, (gain + preAmp) / 20)
-        guard peak > 0 else { return base }
+        guard let peak, peak > 0 else { return base }
         return min(base, 1 / peak)
     }
 }

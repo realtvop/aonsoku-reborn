@@ -50,6 +50,9 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private var volumeView: MPVolumeView?
     private weak var volumeHostView: UIView?
     private var isVolumeHUDEnabled = true
+    private let replayGainLock = NSLock()
+    private var replayGainConfig: AudioReplayGainConfig?
+    private var currentReplayGain: AudioReplayGain?
     private var metadata = AudioMetadata()
     private var nowPlayingRevision = 0
     private var artworkTask: URLSessionDataTask?
@@ -255,6 +258,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     kind: self.currentSourceKind,
                     songId: Self.songId(request.source)
                 )
+                self.applyReplayGain(nil)
                 self.recoveryController.startProgressMonitoring(
                     generation: self.playbackGeneration,
                     sourceKind: self.recoverySourceKind()
@@ -893,7 +897,10 @@ public final class AudioService: NSObject, @unchecked Sendable {
 
     /// Applies ReplayGain to every following load and the current song;
     /// nil turns it off.
-    public func setReplayGain(_ config: AudioReplayGainConfig?) {}
+    public func setReplayGain(_ config: AudioReplayGainConfig?) {
+        replayGainLock.withLock { replayGainConfig = config }
+        dispatchMain { [weak self] in self?.applyCurrentReplayGain() }
+    }
 
     public func setVolumeHUDEnabled(_ enabled: Bool) {
         dispatchMain { [weak self] in
@@ -1245,6 +1252,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     kind: resolved.kind,
                     songId: song.id
                 )
+                self.applyReplayGain(song.replayGain)
                 self.recoveryController.startProgressMonitoring(
                     generation: self.playbackGeneration,
                     sourceKind: self.recoverySourceKind()
@@ -1273,6 +1281,27 @@ public final class AudioService: NSObject, @unchecked Sendable {
                 )
             }
         }
+    }
+
+    private func applyReplayGain(_ tags: AudioReplayGain?) {
+        let scale = replayGainLock.withLock {
+            currentReplayGain = tags
+            return replayGainConfig?.volumeScale(for: tags) ?? 1
+        }
+        applyReplayGainScale(scale)
+    }
+
+    private func applyCurrentReplayGain() {
+        let scale = replayGainLock.withLock {
+            replayGainConfig?.volumeScale(for: currentReplayGain) ?? 1
+        }
+        applyReplayGainScale(scale)
+    }
+
+    private func applyReplayGainScale(_ scale: Double) {
+        player?.volume = Float(
+            max(0, min(scale, Double(Float.greatestFiniteMagnitude)))
+        )
     }
 
     private func makeQueueSnapshot() -> AudioQueueSnapshot {
