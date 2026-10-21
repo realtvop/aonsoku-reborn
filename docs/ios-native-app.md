@@ -55,12 +55,16 @@ the shake-to-open native debug controller, and it never imports Capacitor.
 
 The app target owns presentation only: views, navigation, animation,
 haptics, and presentation state (selected tab, sheet routing, scroll
-positions, list filters). A view never talks to a service directly when a
-store exists for that area; it calls the store and renders its state.
+positions, list filters). A view calls the store for product behavior and
+renders its state. The album-list views persist their presentation-only sort
+preference through the shared `PreferencesService`; they do not perform
+library, network, playback, or coordination work directly.
 
 Long-lived services are created once by `AppServices` and stores by
 `AppModel` (the composition root), which the app injects into the SwiftUI
-environment.
+environment. The app renders a lightweight branded launch view before creating
+the service graph off the main actor, so database migration and service
+construction never leave the first frame blank.
 
 ## Services (AonsokuKit)
 
@@ -73,11 +77,13 @@ environment.
 | `CoordinationService` | Coordination token/config storage, HTTP requests, realtime WebSocket transport, heartbeats, reconnect policy, native snapshot publication, remote command execution, and handoff transactions against `AudioService`. |
 | `AppLifecycleService` | App/scene lifecycle fan-out to audio, coordination, and background URL sessions. |
 
-## Stores (UI contract)
+## Stores and UI contracts
 
-Stores are `@MainActor @Observable public final class` types. Views read
-their properties and call their async methods; stores translate service
-callbacks into main-actor state.
+Stateful stores are `@MainActor @Observable public final class` types. Views
+read their properties and call their async methods; stores translate service
+callbacks into main-actor state. `LibraryRepository` and `ArtworkProvider` are
+thread-safe helper classes shared by those stores and the presentation layer;
+they do not expose observable state.
 
 | Store | State and actions |
 | --- | --- |
@@ -178,4 +184,13 @@ xcodebuild -project ios/Aonsoku.xcodeproj -scheme Aonsoku \
 
 # Translation keys used by the Swift sources
 node scripts/check-ios-strings.mjs
+
+# Repository lint (also runs from the pre-commit hook)
+pnpm run lint
 ```
+
+`.github/workflows/build-ios.yml` runs the same tests and strings check on an
+Xcode 26 runner, archives `ios/Aonsoku.xcodeproj` with the short commit hash in
+`AonsokuBuildHash`, and publishes an unsigned `Aonsoku-unsigned.ipa`. Release
+versioning updates `MARKETING_VERSION` in the native Xcode project; Capacitor
+versioning remains Android-only.

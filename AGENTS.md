@@ -6,10 +6,10 @@ repository.
 ## Project Overview
 
 Aonsoku is a multi-runtime music streaming client for Navidrome/Subsonic
-servers. It targets the web, Electron desktop, and Capacitor iOS/Android. It
-supports synchronized lyrics, radio streaming, Discord RPC, offline
-library/cache features, and cross-device coordination with remote control and
-handoff.
+servers. It targets the web, Electron desktop, Capacitor Android, and a fully
+native SwiftUI app for iOS 26. It supports synchronized lyrics, radio
+streaming, Discord RPC, offline library/cache features, and cross-device
+coordination with remote control and handoff.
 
 ## Architecture Change Hygiene
 
@@ -27,10 +27,10 @@ pnpm run electron:dev     # Electron desktop dev
 
 # Build
 pnpm run build            # Production web build (tsc + vite)
-pnpm run build:mobile     # Capacitor bundle with automatic fine-grained chunks
+pnpm run build:mobile     # Capacitor Android bundle with fine-grained chunks
 pnpm run electron:build   # Electron renderer/main/preload build
 pnpm run make             # Create Electron distributable packages
-pnpm exec cap sync        # Copy the preceding build into Android/iOS
+pnpm exec cap sync android # Copy the preceding mobile build into Android
 
 # Lint & Format (Biome)
 pnpm run lint             # Check only
@@ -67,10 +67,10 @@ cd android && ./gradlew :aonsoku-capacitor-native:testDebugUnitTest
 # Nightly/tag release workflows restore the same keystore from GitHub Secrets.
 cd android && ./gradlew assembleRelease
 
-# iOS native plugin. Selects the first available iPhone Simulator; override
-# with IOS_SIMULATOR_ID=<uuid>. Fails when no simulator is available, when no
-# XCTest executes, or when any test fails. The optional result path must not
-# already exist.
+# Native iOS AonsokuKit. Selects the first available iPhone Simulator;
+# override with IOS_SIMULATOR_ID=<uuid>. Fails when no simulator is available,
+# when no XCTest executes, or when any test fails. The optional result path
+# must not already exist.
 ./scripts/test-ios-native.sh
 IOS_TEST_RESULT_BUNDLE=/tmp/AonsokuNativeTests.xcresult ./scripts/test-ios-native.sh
 
@@ -113,10 +113,15 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   is not part of the shared `src/` SPA, so web/Capacitor builds never bundle
   it. `tailwind.config.js` scans `electron/renderer/**` for its utility
   classes, and `tsconfig.electron-renderer.json` type-checks it.
-- **Capacitor iOS/Android**: `capacitor.config.ts` points native hosts at
+- **Capacitor Android**: `capacitor.config.ts` points the Android host at
   `dist`. The custom native plugin lives in
   `capacitor-plugins/capacitor-native` and is included through pnpm workspace
   package `@aonsoku/capacitor-native`.
+- **Native iOS**: `ios/Aonsoku.xcodeproj` builds the iOS 26 SwiftUI app and
+  links the local `ios/AonsokuKit` Swift package. The app does not load the
+  shared `src/` SPA or Capacitor. SwiftUI owns presentation; `AonsokuKit` owns
+  networking, persistence, playback, sync, downloads, coordination, settings,
+  and observable stores. See `docs/ios-native-app.md`.
 - Android native pages use the application-scoped
   `github.realtvop.aonsoku.plugins.data.LibraryService` for Room queries,
   metadata sync, lyrics, and image-cache ownership. It is created with the
@@ -170,21 +175,16 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
 - Native UI service boundaries, binding/lifecycle rules, adapter duties, and
   the remaining TypeScript/WebView responsibilities are documented in
   `docs/android-native-services.md`.
-- The iOS host owns long-lived native services through
-  `AonsokuNativePlugin.AppServices`. `AudioService` owns AVPlayer, queue,
-  downloads, scrobbling, playback persistence, and system media controls;
-  direct streams retain background cache downloads and the staged
-  `PlaybackRecoveryController` seek/reload fallback inside that service;
-  `AonsokuNativeAudioPlugin` is only the Capacitor payload/event adapter. New
-  native UI surfaces must call the typed service rather than locating a plugin
-  through `CAPBridgeProtocol`. `AudioCommand`, `AudioPlaybackSnapshot`, and
-  `AudioQueueSnapshot` are the native command/state contract; SwiftUI clients
-  can use `observeState` or `stateUpdates()` without depending on Capacitor.
+- The iOS app owns long-lived native services through
+  `AonsokuKit.AppServices`. `AudioService` owns AVPlayer, the queue, downloads,
+  scrobbling, playback persistence, system media controls, direct-stream
+  background caching, and staged `PlaybackRecoveryController` seek/reload
+  fallback. SwiftUI reads `@Observable` stores created by `AppModel`; views do
+  not locate services through a bridge or open the database directly.
 - `LibraryService` is the public iOS library boundary for native UI. It owns
   GRDB repository access, metadata sync/scheduling, typed library queries, and
   cover/avatar caching through `AppServices.library`; native UI must not open
-  `DatabaseManager` or construct repository types directly. The Capacitor data
-  plugin reuses this same service and adapts its typed events for the WebView.
+  `DatabaseManager` or construct repository types directly.
 - `AppLifecycleService` is the App/Scene lifecycle boundary shared by the iOS
   host and `AppServices`. It starts/restores audio once, flushes playback state
   on background/termination, validates coordination with a foreground ping and
@@ -192,12 +192,13 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   relaunch callbacks to the audio download manager. WebSockets use a normal
   URLSession because iOS background sessions are reserved for transfer tasks;
   downloads use `github.realtvop.aonsoku.audio.downloads` and survive relaunch.
-  The Swift package owns `AonsokuNativePluginTests`, which exercises queue and
+  The Swift package owns `AonsokuKitTests`, which exercises queue and
   shuffle behavior, staged playback recovery and persistence, source/cache and
   download behavior, scrobbling, handoff and coordination contracts, auth and
   HTTP behavior, preferences, event contracts, typed library queries/sync,
-  lifecycle transitions, the `AppServices` graph, and Capacitor adapters. The
-  tests use injectable AVPlayer, URLSession, time, file-system, database, and
+  lifecycle transitions, the `AppServices` graph, stores, and legacy payload
+  compatibility. The tests use injectable AVPlayer, URLSession, time,
+  file-system, database, and
   lifecycle boundaries and do not require real network access. The test script
   parses its `.xcresult` and requires a non-zero executed test count;
   `build-ios.yml` preserves that result bundle before packaging.
@@ -222,10 +223,11 @@ and IndexedDB helpers in `src/store/idb.ts`. Offline-capable UI paths generally
 go through `src/lib/offlineQueryClient.ts`, which tries IDB/native data before
 network when an offline function is available.
 
-Playback state restore is owned by the runtime that owns playback. When the
-native playback backend is active (`shouldUseNativePlaybackBackend()`, i.e.
-Capacitor iOS/Android or Electron with the desktop native-audio bridge), the
-native layer is the single source of truth for the restored queue and progress:
+Playback state restore is owned by the runtime that owns playback. In the
+shared TypeScript app, when the native playback backend is active
+(`shouldUseNativePlaybackBackend()`, i.e. Capacitor Android or Electron with
+the desktop native-audio bridge), the native layer is the single source of
+truth for the restored queue and progress:
 `src/store/player/persistence.ts` skips the renderer-side IDB songlist rehydrate
 so `syncFromNative()` (`src/player/queue-controller/native-controller.ts`) sees an
 empty renderer songlist, takes the cold-start branch, sets
@@ -246,7 +248,9 @@ isolated from playback. The desktop singleton defers restore until
 and calls the service's idempotent `ready()` lifecycle, so a restored uncached
 `aonsoku-media://stream` source is translated before libmpv loads it. The
 web/Electron-fallback path still rehydrates the songlist from IDB and drives
-`load()` + `pendingResumePosition` from the renderer.
+`load()` + `pendingResumePosition` from the renderer. Native iOS restores its
+queue, paused state and progress directly in `AonsokuKit.AudioService`; the
+SwiftUI `PlayerStore` observes that authoritative snapshot.
 
 ### Sync Architecture
 
@@ -259,11 +263,14 @@ Metadata/library sync is runtime-specific:
   the main thread.
 - **Worker fallback**: if Web Workers are unavailable, sync falls back to
   `src/service/cache/metadata-sync.ts` on the main thread.
-- **Electron, Capacitor iOS/Android**: sync uses
+- **Electron and Capacitor Android**: sync uses
   `src/native/data/native-sync-adapter.ts` and the runtime's
   `AonsokuNativeData` implementation. Electron implements the bridge in
-  `electron/main/native/data/`; mobile uses the Capacitor plugin. Native
+  `electron/main/native/data/`; Android uses the Capacitor plugin. These
   runtimes do not fall back to the browser Worker/IndexedDB sync path.
+- **Native iOS**: `AonsokuKit.LibraryService` owns GRDB-backed queries and
+  `SyncEngine`/`SyncScheduler`; `LibrarySyncStore` exposes sync state to
+  SwiftUI. It does not use the TypeScript adapter or IndexedDB.
 
 ### Data Flow
 
@@ -375,8 +382,11 @@ the device drawer outside fullscreen, so home-page device links also work before
 local playback begins; fullscreen owns its own drawer while open.
 
 - Web uses the TypeScript WebSocket client (`src/coordination/wsClient.ts`).
-- Electron, iOS, and Android use `src/native/coordination/facade.ts` and their
+- Electron and Android use `src/native/coordination/facade.ts` and their
   runtime-native coordination implementations.
+- Native iOS uses `AonsokuKit.CoordinationService` and `CoordinationStore`
+  directly. The service owns HTTP, WebSocket reconnects, snapshots, remote
+  commands, and handoff transactions against `AudioService`.
 - Electron native playback coordination is executed by
   `electron/main/native/coordination/playback.ts`: it publishes native queue
   snapshots, executes and acknowledges remote commands, prepares full queues
@@ -462,11 +472,11 @@ Dark mode is class-based.
 
 Normal Web (`pnpm run build`) and Electron renderer builds use
 `manual-chunks.ts` to preserve the established larger `pages`, `core-vendor`,
-and `heavy-vendor` bundles. Capacitor builds use `pnpm run build:mobile`
+and `heavy-vendor` bundles. Capacitor Android builds use `pnpm run build:mobile`
 (`vite --mode mobile`), which leaves chunk ownership to Rollup so lazy modules
 stay separate instead of collapsing every page and dependency into startup
-chunks. Android/iOS CI and release workflows must use `build:mobile` before
-`cap sync`; do not use the normal Web build for a native package.
+chunks. Android CI and release workflows must use `build:mobile` before
+`cap sync android`; the native iOS app never builds or embeds these assets.
 
 The HTML boot shell and its inline styles load without the application
 stylesheet; `src/main.tsx` restores native preferences before dynamically
@@ -486,9 +496,9 @@ route chunks or application CSS.
 - **TypeScript**: strict mode, path alias `@/` -> `src/`.
 - **Rust**: coordination server is a separate Cargo project under
   `coordination-server/`.
-- **Native**: Android host lives under `android/`; iOS host lives under `ios/`;
-  shared Capacitor plugin source lives under
-  `capacitor-plugins/capacitor-native/`.
+- **Native**: the Capacitor Android host lives under `android/`; the native
+  SwiftUI iOS app and `AonsokuKit` live under `ios/`; the Android Capacitor
+  plugin source lives under `capacitor-plugins/capacitor-native/`.
 - **Git hooks**: Husky is configured (`.husky/`) and pre-commit runs
   `pnpm lint`.
 
@@ -522,7 +532,8 @@ interface) supporting multiple playback stacks:
 | Stack | Runtime | Implementation |
 |---|---|---|
 | Web Audio (HTMLAudioElement) | web, electron | `src/player/playback/web-backend.ts` |
-| Native audio (Capacitor plugin) | capacitor-ios, capacitor-android | `src/player/playback/native-backend.ts` |
+| Native audio (Capacitor plugin) | capacitor-android | `src/player/playback/native-backend.ts` |
+| Native SwiftUI audio | iOS 26 | `ios/AonsokuKit/Sources/AonsokuKit/Audio/AudioService.swift` |
 | Desktop native audio bridge | electron | `electron/preload/native-audio.ts` + `electron/main/native/audio/` |
 
 Key files:
@@ -743,8 +754,9 @@ feature-consistent**:
    `native-backend.ts` when the behavior applies to both.
 2. Queue logic changes -> update both `web-controller.ts` and
    `native-controller.ts`.
-3. Playback action changes -> ensure Web/Electron and Capacitor native branches
-   are covered in `playback-actions.ts`.
+3. Playback action changes -> ensure Web/Electron and Capacitor Android
+   branches are covered in `playback-actions.ts`, and mirror product behavior
+   in the native iOS `PlayerStore`/`AudioService` when applicable.
 4. New playback features -> define them in the `PlaybackBackend` interface and
    implement/degrade them in all backends.
 5. Platform capability differences (`capabilities.ts`) -> degrade gracefully
