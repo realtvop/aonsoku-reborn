@@ -253,6 +253,21 @@ final class PlayerStoreTests: XCTestCase {
         fixture.audio.shutdown()
     }
 
+    func testStartingPlaybackAdoptsTheNewQueueForTheUI() async throws {
+        let fixture = try PlayerStoreTestFixture()
+        let store = fixture.store()
+        store.start()
+
+        store.play(song: mediaSong("new-song"))
+
+        let adopted = await waitForPlayerStoreTest {
+            store.localSong?.id == "new-song"
+                && store.localQueue.current?.song.id == "new-song"
+        }
+        XCTAssertTrue(adopted)
+        fixture.audio.shutdown()
+    }
+
     func testRadioWrapsWithoutCountingNavigationAndSleepTimerTracksState() throws {
         let fixture = try PlayerStoreTestFixture()
         let store = fixture.store()

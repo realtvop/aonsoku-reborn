@@ -735,6 +735,13 @@ public final class PlayerStore {
                 duration: localClock.duration,
                 rate: localIsPlaying ? 1 : 0
             )
+            // Replacing the native queue loads its first item without a
+            // separate queue-content event. Adopt that authoritative queue
+            // when the new item starts loading so the UI does not keep the
+            // previous song (or "No song playing") until a later queue edit.
+            if state == .loading, radio == nil {
+                refreshFromAudio(enrich: true)
+            }
             if state == .playing { errorMessage = nil }
         case .progress(let currentTime, let duration, _, _):
             let now = ProcessInfo.processInfo.systemUptime
