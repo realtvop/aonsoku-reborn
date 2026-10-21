@@ -1,9 +1,52 @@
 import Foundation
 import GRDB
 
+protocol LibrarySyncHTTPClient {
+    func request(
+        baseUrl: String,
+        path: String,
+        credentials: ServerCredentials,
+        extraQuery: [String: String],
+        method: String
+    ) async throws -> SubsonicResponse
+}
+
+extension LibrarySyncHTTPClient {
+    func request(
+        baseUrl: String,
+        path: String,
+        credentials: ServerCredentials
+    ) async throws -> SubsonicResponse {
+        try await request(
+            baseUrl: baseUrl,
+            path: path,
+            credentials: credentials,
+            extraQuery: [:],
+            method: "GET"
+        )
+    }
+
+    func request(
+        baseUrl: String,
+        path: String,
+        credentials: ServerCredentials,
+        extraQuery: [String: String]
+    ) async throws -> SubsonicResponse {
+        try await request(
+            baseUrl: baseUrl,
+            path: path,
+            credentials: credentials,
+            extraQuery: extraQuery,
+            method: "GET"
+        )
+    }
+}
+
+extension SubsonicHTTPClient: LibrarySyncHTTPClient {}
+
 final class SyncEngine {
     private let db: DatabasePool
-    private let httpClient: SubsonicHTTPClient
+    private let httpClient: any LibrarySyncHTTPClient
     private let syncStateRepo: SyncStateRepository
     private let artistRepo: ArtistRepository
     private let albumRepo: AlbumRepository
@@ -11,6 +54,7 @@ final class SyncEngine {
     private let playlistRepo: PlaylistRepository
     private let genreRepo: GenreRepository
     private let cacheMetaRepo: CacheMetaRepository
+    private let credentialsProvider: @Sendable () -> ServerCredentials?
 
     private var currentTask: Task<Void, Never>?
     private var generation: Int = 0
@@ -21,7 +65,13 @@ final class SyncEngine {
     var onSyncStateChanged: (([String: Any]) -> Void)?
     var onDataChanged: (([String]) -> Void)?
 
-    init(db: DatabasePool, httpClient: SubsonicHTTPClient) {
+    init(
+        db: DatabasePool,
+        httpClient: any LibrarySyncHTTPClient,
+        credentialsProvider: @escaping @Sendable () -> ServerCredentials? = {
+            KeychainManager.retrieve()
+        }
+    ) {
         self.db = db
         self.httpClient = httpClient
         self.syncStateRepo = SyncStateRepository(db: db)
@@ -31,6 +81,7 @@ final class SyncEngine {
         self.playlistRepo = PlaylistRepository(db: db)
         self.genreRepo = GenreRepository(db: db)
         self.cacheMetaRepo = CacheMetaRepository(db: db)
+        self.credentialsProvider = credentialsProvider
     }
 
     func syncAll(includeFullSongs: Bool = true, mode: String = "full") {
@@ -60,7 +111,7 @@ final class SyncEngine {
     // MARK: - Private
 
     private func performSync(generation: Int, includeFullSongs: Bool, mode: String) async {
-        guard let credentials = KeychainManager.retrieve() else {
+        guard let credentials = credentialsProvider() else {
             emitState(phase: "error", tier: nil, processed: 0, total: 0)
             forceFlushSyncState()
             return
@@ -99,6 +150,36 @@ final class SyncEngine {
         if self.generation == generation {
             currentTask = nil
         }
+    }
+
+    func refreshPlaylist(id: String) async throws {
+        guard let credentials = credentialsProvider() else {
+            throw SubsonicAPIError.notSignedIn
+        }
+        let response = try await httpClient.request(
+            baseUrl: credentials.serverUrl,
+            path: "getPlaylist.view",
+            credentials: credentials,
+            extraQuery: ["id": id]
+        )
+        guard let detail = parsePlaylistDetail(from: response.data) else {
+            throw SubsonicAPIError.invalidResponse("Missing playlist")
+        }
+        let playlist = PlaylistRecord(
+            id: detail.id,
+            name: detail.name,
+            comment: detail.comment,
+            songCount: detail.songCount,
+            duration: detail.duration,
+            isPublic: detail.isPublic,
+            owner: detail.owner,
+            created: detail.created,
+            changed: detail.changed,
+            coverArt: detail.coverArt,
+            starred: detail.starred,
+            starredAt: detail.starredAt
+        )
+        try playlistRepo.upsert(playlist, detail: detail)
     }
 
     // MARK: - T1: Genres, Playlists, Favorites

@@ -107,13 +107,25 @@ struct SongRepository {
     }
 
     func updateStarred(ids: [String], starred: String?, starredAt: Int?) throws {
-        try db.write { db in
+        guard !ids.isEmpty else { return }
+        _ = try db.write { db in
             try SongRecord
                 .filter(ids.contains(Column("id")))
                 .updateAll(db,
                     Column("starred").set(to: starred),
                     Column("starredAt").set(to: starredAt)
                 )
+        }
+    }
+
+    func starredIds() throws -> Set<String> {
+        try db.read { db in
+            Set(try String.fetchAll(
+                db,
+                SongRecord
+                    .filter(Column("starred") != nil)
+                    .select(Column("id"))
+            ))
         }
     }
 

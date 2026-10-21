@@ -47,6 +47,20 @@ struct PlaylistRepository {
         }
     }
 
+    func upsert(_ record: PlaylistRecord, detail: PlaylistDetailRecord) throws {
+        try db.write { db in
+            try record.save(db, onConflict: .replace)
+            try detail.save(db, onConflict: .replace)
+        }
+    }
+
+    func delete(id: String) throws {
+        try db.write { db in
+            _ = try PlaylistRecord.deleteOne(db, key: id)
+            _ = try PlaylistDetailRecord.deleteOne(db, key: id)
+        }
+    }
+
     func bulkUpsertDetails(_ records: [PlaylistDetailRecord]) throws {
         try db.write { db in
             for record in records {

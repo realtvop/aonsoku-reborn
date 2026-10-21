@@ -15,10 +15,17 @@ public final class LibraryService: @unchecked Sendable {
 
     init(
         dbManager: DatabaseManager = .shared,
-        httpClient: SubsonicHTTPClient = SubsonicHTTPClient()
+        httpClient: any LibrarySyncHTTPClient = SubsonicHTTPClient(),
+        credentialsProvider: @escaping @Sendable () -> ServerCredentials? = {
+            KeychainManager.retrieve()
+        }
     ) {
         self.dbManager = dbManager
-        syncEngine = SyncEngine(db: dbManager.dbPool, httpClient: httpClient)
+        syncEngine = SyncEngine(
+            db: dbManager.dbPool,
+            httpClient: httpClient,
+            credentialsProvider: credentialsProvider
+        )
         syncScheduler = SyncScheduler(syncEngine: syncEngine)
         imageCache = ImageCacheManager(db: dbManager.dbPool)
         syncEngine.onSyncStateChanged = { [weak self] raw in
@@ -304,7 +311,11 @@ public final class LibraryService: @unchecked Sendable {
 
     /// Ids of every starred song, album and artist in the local library.
     public func starredIds() throws -> LibraryStarredIds {
-        LibraryStarredIds()
+        LibraryStarredIds(
+            songIds: try SongRepository(db: dbManager.dbPool).starredIds(),
+            albumIds: try AlbumRepository(db: dbManager.dbPool).starredIds(),
+            artistIds: try ArtistRepository(db: dbManager.dbPool).starredIds()
+        )
     }
 
     /// Marks songs, albums and artists as starred or not in the local
@@ -316,14 +327,54 @@ public final class LibraryService: @unchecked Sendable {
         artistIds: [String] = [],
         starred: Bool,
         at date: Date = Date()
-    ) throws {}
+    ) throws {
+        let starredDate: String?
+        let starredAt: Int?
+        if starred {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            starredDate = formatter.string(from: date)
+            starredAt = Int(date.timeIntervalSince1970 * 1_000)
+        } else {
+            starredDate = nil
+            starredAt = nil
+        }
+
+        try SongRepository(db: dbManager.dbPool).updateStarred(
+            ids: songIds,
+            starred: starredDate,
+            starredAt: starredAt
+        )
+        try AlbumRepository(db: dbManager.dbPool).updateStarred(
+            ids: albumIds,
+            starred: starredDate,
+            starredAt: starredAt
+        )
+        try ArtistRepository(db: dbManager.dbPool).updateStarred(
+            ids: artistIds,
+            starred: starredDate,
+            starredAt: starredAt
+        )
+
+        var tables: [String] = []
+        if !songIds.isEmpty { tables.append("songs") }
+        if !albumIds.isEmpty { tables.append("albums") }
+        if !artistIds.isEmpty { tables.append("artists") }
+        if !tables.isEmpty { emit(.dataChanged(tables: tables)) }
+    }
 
     /// Reloads one playlist and its entries from the server into the local
     /// library, after it was created or edited in the app.
-    public func refreshPlaylist(id: String) async throws {}
+    public func refreshPlaylist(id: String) async throws {
+        try await syncEngine.refreshPlaylist(id: id)
+        emit(.dataChanged(tables: ["playlists"]))
+    }
 
     /// Removes a playlist and its entries from the local library.
-    public func removePlaylist(id: String) throws {}
+    public func removePlaylist(id: String) throws {
+        try PlaylistRepository(db: dbManager.dbPool).delete(id: id)
+        emit(.dataChanged(tables: ["playlists"]))
+    }
 
     private func cachedImage(
         id: String,

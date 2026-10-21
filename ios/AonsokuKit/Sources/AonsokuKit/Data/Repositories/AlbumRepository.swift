@@ -105,6 +105,30 @@ struct AlbumRepository {
         }
     }
 
+    func starredIds() throws -> Set<String> {
+        try db.read { db in
+            Set(try String.fetchAll(
+                db,
+                AlbumRecord
+                    .filter(Column("starred") != nil)
+                    .select(Column("id"))
+            ))
+        }
+    }
+
+    func updateStarred(ids: [String], starred: String?, starredAt: Int?) throws {
+        guard !ids.isEmpty else { return }
+        _ = try db.write { db in
+            try AlbumRecord
+                .filter(ids.contains(Column("id")))
+                .updateAll(
+                    db,
+                    Column("starred").set(to: starred),
+                    Column("starredAt").set(to: starredAt)
+                )
+        }
+    }
+
     func count() throws -> Int {
         try db.read { db in
             try AlbumRecord.fetchCount(db)
