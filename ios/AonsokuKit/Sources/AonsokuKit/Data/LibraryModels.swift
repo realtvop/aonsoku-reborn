@@ -237,6 +237,23 @@ public struct LibrarySyncState: Equatable, Sendable {
     public let isSyncing: Bool
     public let processedItems: Int
     public let totalItems: Int
+    public let message: String?
+
+    public init(
+        phase: String,
+        tier: String? = nil,
+        isSyncing: Bool,
+        processedItems: Int,
+        totalItems: Int,
+        message: String? = nil
+    ) {
+        self.phase = phase
+        self.tier = tier
+        self.isSyncing = isSyncing
+        self.processedItems = processedItems
+        self.totalItems = totalItems
+        self.message = message
+    }
 }
 
 public enum LibraryEvent: Equatable, Sendable {

@@ -9,7 +9,7 @@ enum ImageCacheNotification {
     static let coverArtIdKey = "coverArtId"
 }
 
-final class ImageCacheManager {
+final class ImageCacheManager: @unchecked Sendable {
     private let db: DatabasePool
     private let session: URLSession
 

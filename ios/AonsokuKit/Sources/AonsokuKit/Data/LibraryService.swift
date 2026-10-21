@@ -21,21 +21,32 @@ public final class LibraryService: @unchecked Sendable {
         }
     ) {
         self.dbManager = dbManager
+        let imageCache = ImageCacheManager(db: dbManager.dbPool)
+        self.imageCache = imageCache
         syncEngine = SyncEngine(
             db: dbManager.dbPool,
             httpClient: httpClient,
-            credentialsProvider: credentialsProvider
+            credentialsProvider: credentialsProvider,
+            cachedCoverSize: { id in
+                imageCache.getCoverImageSize(coverArtId: id)?.coverSize
+            },
+            downloadCover: { id, size in
+                _ = try await imageCache.downloadCoverImage(
+                    coverArtId: id,
+                    size: size
+                )
+            }
         )
         syncScheduler = SyncScheduler(syncEngine: syncEngine)
-        imageCache = ImageCacheManager(db: dbManager.dbPool)
         syncEngine.onSyncStateChanged = { [weak self] raw in
             guard let self else { return }
             self.emit(.syncStateChanged(LibrarySyncState(
                 phase: raw["phase"] as? String ?? "idle",
                 tier: raw["tier"] as? String,
-                isSyncing: self.syncEngine.isSyncing,
+                isSyncing: raw["isSyncing"] as? Bool ?? self.syncEngine.isSyncing,
                 processedItems: raw["processedItems"] as? Int ?? 0,
-                totalItems: raw["totalItems"] as? Int ?? 0
+                totalItems: raw["totalItems"] as? Int ?? 0,
+                message: raw["message"] as? String
             )))
         }
         syncEngine.onDataChanged = { [weak self] tables in
@@ -73,6 +84,22 @@ public final class LibraryService: @unchecked Sendable {
     public func syncIncremental() { syncEngine.syncIncremental() }
     public func cancelSync() { syncEngine.cancel() }
     public var isSyncing: Bool { syncEngine.isSyncing }
+
+    func syncAll(with options: LibrarySyncOptions) {
+        syncEngine.syncAll(
+            includeFullSongs: options.includeFullSongs,
+            mode: "full",
+            coverArt: options.coverArt
+        )
+    }
+
+    func syncIncremental(with options: LibrarySyncOptions) {
+        syncEngine.syncAll(
+            includeFullSongs: options.includeFullSongs,
+            mode: "incremental",
+            coverArt: options.coverArt
+        )
+    }
 
     public func artists(
         limit: Int = 100,

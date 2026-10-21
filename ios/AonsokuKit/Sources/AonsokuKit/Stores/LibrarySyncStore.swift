@@ -44,30 +44,180 @@ public final class LibrarySyncStore {
     @ObservationIgnored public let library: LibraryService
     @ObservationIgnored public let settings: SettingsStore
     @ObservationIgnored public let connectivity: any Connectivity
+    @ObservationIgnored private var subscription: UUID?
+    @ObservationIgnored private var started = false
+    @ObservationIgnored private var revisionPending = false
+    @ObservationIgnored private var lastForegroundSyncAt: Date?
+    @ObservationIgnored private let operations: LibrarySyncOperations
+    @ObservationIgnored private let now: @Sendable () -> Date
 
     public init(library: LibraryService, settings: SettingsStore, connectivity: any Connectivity) {
         self.library = library
         self.settings = settings
         self.connectivity = connectivity
+        operations = LibrarySyncOperations(library: library)
+        now = { Date() }
+    }
+
+    init(
+        library: LibraryService,
+        settings: SettingsStore,
+        connectivity: any Connectivity,
+        operations: LibrarySyncOperations,
+        now: @escaping @Sendable () -> Date
+    ) {
+        self.library = library
+        self.settings = settings
+        self.connectivity = connectivity
+        self.operations = operations
+        self.now = now
     }
 
     public var isSyncing: Bool { phase.isActive }
 
     /// Subscribes to sync events and runs the startup sync. Call after
     /// sign-in.
-    public func start() {}
+    public func start() {
+        guard !started else { return }
+        started = true
+        subscription = operations.subscribe { [weak self] event in
+            Task { @MainActor [weak self] in
+                self?.handle(event)
+            }
+        }
+
+        let availability = operations.availability()
+        lastSyncedAt = availability.lastSyncedAt.map {
+            Date(timeIntervalSince1970: TimeInterval($0) / 1_000)
+        }
+        guard connectivity.isOnline, !connectivity.isMetered else { return }
+        if availability.available {
+            operations.syncIncremental(options())
+        } else {
+            operations.syncAll(options())
+        }
+    }
 
     /// Unsubscribes and cancels any sync (sign-out).
-    public func stop() {}
+    public func stop() {
+        if let subscription {
+            operations.unsubscribe(subscription)
+        }
+        subscription = nil
+        started = false
+        revisionPending = false
+        operations.cancel()
+        phase = .idle
+    }
 
     /// Full sync of every song (Settings "Sync now").
-    public func syncNow() {}
+    public func syncNow() {
+        guard connectivity.isOnline else { return }
+        operations.syncAll(options())
+    }
 
     /// Incremental sync (pull to refresh, settings changes).
-    public func syncIncremental() {}
+    public func syncIncremental() {
+        guard connectivity.isOnline else { return }
+        operations.syncIncremental(options())
+    }
 
-    public func cancel() {}
+    public func cancel() {
+        operations.cancel()
+        phase = .cancelled
+    }
 
     /// Incremental sync when the app returns to the foreground, throttled.
-    public func handleForeground() {}
+    public func handleForeground() {
+        guard connectivity.isOnline, !connectivity.isMetered, !isSyncing else { return }
+        let reference = lastForegroundSyncAt ?? lastSyncedAt
+        if let reference, now().timeIntervalSince(reference) <= 5 * 60 { return }
+        lastForegroundSyncAt = now()
+        operations.syncIncremental(options())
+    }
+
+    func handle(_ event: LibraryEvent) {
+        switch event {
+        case let .syncStateChanged(state):
+            switch state.phase {
+            case "done":
+                phase = .done
+                lastSyncedAt = now()
+                lastForegroundSyncAt = lastSyncedAt
+            case "cancelled":
+                phase = .cancelled
+            case "error":
+                phase = .failed(state.message ?? "Library sync failed")
+            case "coverArt":
+                phase = .coverArt(
+                    processed: state.processedItems,
+                    total: state.totalItems
+                )
+            default:
+                phase = state.isSyncing
+                    ? .syncing(
+                        tier: state.tier,
+                        processed: state.processedItems,
+                        total: state.totalItems
+                    )
+                    : .idle
+            }
+        case .dataChanged:
+            guard !revisionPending else { return }
+            revisionPending = true
+            Task { @MainActor [weak self] in
+                await Task.yield()
+                guard let self, revisionPending else { return }
+                revisionPending = false
+                revision += 1
+            }
+        }
+    }
+
+    private func options() -> LibrarySyncOptions {
+        let cache = settings.settings.cache
+        return LibrarySyncOptions(
+            includeFullSongs: true,
+            coverArt: cache.syncCoverArt
+                ? LibrarySyncOptions.CoverArt(
+                    concurrency: cache.coverArtConcurrency,
+                    useAlbumCoverForSongs: settings.settings.playback.useAlbumCoverForSongs
+                )
+                : nil
+        )
+    }
+}
+
+struct LibrarySyncOperations: @unchecked Sendable {
+    var availability: @Sendable () -> LibraryAvailability
+    var subscribe: @Sendable (@escaping LibraryService.EventHandler) -> UUID
+    var unsubscribe: @Sendable (UUID) -> Void
+    var syncAll: @Sendable (LibrarySyncOptions) -> Void
+    var syncIncremental: @Sendable (LibrarySyncOptions) -> Void
+    var cancel: @Sendable () -> Void
+
+    init(library: LibraryService) {
+        availability = { library.availability() }
+        subscribe = { library.subscribe($0) }
+        unsubscribe = { library.unsubscribe($0) }
+        syncAll = { library.syncAll(options: $0) }
+        syncIncremental = { library.syncIncremental(options: $0) }
+        cancel = { library.cancelSync() }
+    }
+
+    init(
+        availability: @escaping @Sendable () -> LibraryAvailability,
+        subscribe: @escaping @Sendable (@escaping LibraryService.EventHandler) -> UUID,
+        unsubscribe: @escaping @Sendable (UUID) -> Void,
+        syncAll: @escaping @Sendable (LibrarySyncOptions) -> Void,
+        syncIncremental: @escaping @Sendable (LibrarySyncOptions) -> Void,
+        cancel: @escaping @Sendable () -> Void
+    ) {
+        self.availability = availability
+        self.subscribe = subscribe
+        self.unsubscribe = unsubscribe
+        self.syncAll = syncAll
+        self.syncIncremental = syncIncremental
+        self.cancel = cancel
+    }
 }

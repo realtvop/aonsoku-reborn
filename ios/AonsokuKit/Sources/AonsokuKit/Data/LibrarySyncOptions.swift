@@ -36,11 +36,11 @@ extension LibraryService {
     /// requested. Progress arrives as `syncStateChanged` events; the cover
     /// art phase reports `phase == "coverArt"`.
     public func syncAll(options: LibrarySyncOptions) {
-        syncAll()
+        syncAll(with: options)
     }
 
     /// Syncs tiers that are no longer fresh, then cover art when requested.
     public func syncIncremental(options: LibrarySyncOptions) {
-        syncIncremental()
+        syncIncremental(with: options)
     }
 }

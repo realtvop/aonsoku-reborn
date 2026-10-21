@@ -55,6 +55,8 @@ final class SyncEngine {
     private let genreRepo: GenreRepository
     private let cacheMetaRepo: CacheMetaRepository
     private let credentialsProvider: @Sendable () -> ServerCredentials?
+    private let cachedCoverSize: @Sendable (String) -> String?
+    private let downloadCover: @Sendable (String, String) async throws -> Void
 
     private var currentTask: Task<Void, Never>?
     private var generation: Int = 0
@@ -70,7 +72,9 @@ final class SyncEngine {
         httpClient: any LibrarySyncHTTPClient,
         credentialsProvider: @escaping @Sendable () -> ServerCredentials? = {
             KeychainManager.retrieve()
-        }
+        },
+        cachedCoverSize: @escaping @Sendable (String) -> String? = { _ in nil },
+        downloadCover: @escaping @Sendable (String, String) async throws -> Void = { _, _ in }
     ) {
         self.db = db
         self.httpClient = httpClient
@@ -82,16 +86,27 @@ final class SyncEngine {
         self.genreRepo = GenreRepository(db: db)
         self.cacheMetaRepo = CacheMetaRepository(db: db)
         self.credentialsProvider = credentialsProvider
+        self.cachedCoverSize = cachedCoverSize
+        self.downloadCover = downloadCover
     }
 
-    func syncAll(includeFullSongs: Bool = true, mode: String = "full") {
+    func syncAll(
+        includeFullSongs: Bool = true,
+        mode: String = "full",
+        coverArt: LibrarySyncOptions.CoverArt? = nil
+    ) {
         let gen = generation + 1
         generation = gen
 
         currentTask?.cancel()
         currentTask = Task { [weak self] in
             guard let self else { return }
-            await self.performSync(generation: gen, includeFullSongs: includeFullSongs, mode: mode)
+            await self.performSync(
+                generation: gen,
+                includeFullSongs: includeFullSongs,
+                mode: mode,
+                coverArt: coverArt
+            )
         }
     }
 
@@ -105,15 +120,27 @@ final class SyncEngine {
     }
 
     var isSyncing: Bool {
-        currentTask != nil && !currentTask!.isCancelled
+        currentTask.map { !$0.isCancelled } ?? false
     }
 
     // MARK: - Private
 
-    private func performSync(generation: Int, includeFullSongs: Bool, mode: String) async {
+    private func performSync(
+        generation: Int,
+        includeFullSongs: Bool,
+        mode: String,
+        coverArt: LibrarySyncOptions.CoverArt?
+    ) async {
         guard let credentials = credentialsProvider() else {
-            emitState(phase: "error", tier: nil, processed: 0, total: 0)
+            emitState(
+                phase: "error",
+                tier: nil,
+                processed: 0,
+                total: 0,
+                message: "Not signed in"
+            )
             forceFlushSyncState()
+            if self.generation == generation { currentTask = nil }
             return
         }
 
@@ -123,17 +150,26 @@ final class SyncEngine {
             if !shouldSkipTier(.t1, mode: mode) {
                 try await runT1(credentials: credentials)
             }
-            guard self.generation == generation, !Task.isCancelled else { return }
+            try Task.checkCancellation()
+            guard self.generation == generation else { throw CancellationError() }
 
             if !shouldSkipTier(.t2, mode: mode) {
                 try await runT2(credentials: credentials)
             }
-            guard self.generation == generation, !Task.isCancelled else { return }
+            try Task.checkCancellation()
+            guard self.generation == generation else { throw CancellationError() }
 
             if includeFullSongs && !shouldSkipTier(.t3, mode: mode) {
                 try await runT3(credentials: credentials)
             }
-            guard self.generation == generation, !Task.isCancelled else { return }
+            try Task.checkCancellation()
+            guard self.generation == generation else { throw CancellationError() }
+
+            if let coverArt {
+                try await runCoverArt(options: coverArt, serverType: credentials.serverType)
+            }
+            try Task.checkCancellation()
+            guard self.generation == generation else { throw CancellationError() }
 
             try? syncStateRepo.recordFullSync()
             emitState(phase: "done", tier: nil, processed: 0, total: 0)
@@ -143,13 +179,132 @@ final class SyncEngine {
             forceFlushSyncState()
         } catch {
             NativeLogger.shared.error("sync failed: \(error)", source: "Sync")
-            emitState(phase: "error", tier: nil, processed: 0, total: 0)
+            emitState(
+                phase: "error",
+                tier: nil,
+                processed: 0,
+                total: 0,
+                message: error.localizedDescription
+            )
             forceFlushSyncState()
         }
 
         if self.generation == generation {
             currentTask = nil
         }
+    }
+
+    // MARK: - Cover Art
+
+    func runCoverArt(
+        options: LibrarySyncOptions.CoverArt,
+        serverType: String
+    ) async throws {
+        try Task.checkCancellation()
+        let identifiers = try coverArtIdentifiers(
+            useAlbumCoverForSongs: options.useAlbumCoverForSongs,
+            serverType: serverType
+        )
+        let total = identifiers.count
+        var processed = 0
+        var pending: [String] = []
+        pending.reserveCapacity(total)
+
+        for id in identifiers {
+            if coverSize(cachedCoverSize(id), satisfies: options.size) {
+                processed += 1
+            } else {
+                pending.append(id)
+            }
+        }
+        emitState(phase: "coverArt", tier: nil, processed: processed, total: total)
+        forceFlushSyncState()
+
+        let concurrency = min(max(options.concurrency, 1), 8)
+        for offset in stride(from: 0, to: pending.count, by: concurrency) {
+            try Task.checkCancellation()
+            let batch = Array(pending[offset..<min(offset + concurrency, pending.count)])
+            let size = options.size
+            let downloader = downloadCover
+            let failures = await withTaskGroup(of: (String, String?).self) { group in
+                for id in batch {
+                    group.addTask {
+                        do {
+                            try Task.checkCancellation()
+                            try await downloader(id, size)
+                            return (id, nil)
+                        } catch is CancellationError {
+                            return (id, "cancelled")
+                        } catch {
+                            return (id, error.localizedDescription)
+                        }
+                    }
+                }
+                var values: [(String, String?)] = []
+                for await value in group { values.append(value) }
+                return values
+            }
+            try Task.checkCancellation()
+            for (id, failure) in failures {
+                if let failure, failure != "cancelled" {
+                    NativeLogger.shared.error(
+                        "cover download failed for \(id): \(failure)",
+                        source: "Sync"
+                    )
+                }
+                processed += 1
+                emitState(
+                    phase: "coverArt",
+                    tier: nil,
+                    processed: processed,
+                    total: total
+                )
+            }
+        }
+        forceFlushSyncState()
+    }
+
+    private func coverArtIdentifiers(
+        useAlbumCoverForSongs: Bool,
+        serverType: String
+    ) throws -> [String] {
+        try db.read { db in
+            var values: [String] = []
+            values += try String.fetchAll(
+                db,
+                sql: "SELECT coverArt FROM artist WHERE coverArt IS NOT NULL AND coverArt != ''"
+            )
+            if serverType.lowercased() != "lms" {
+                values += try String.fetchAll(db, sql: "SELECT id FROM artist")
+            }
+            values += try String.fetchAll(
+                db,
+                sql: "SELECT coverArt FROM album WHERE coverArt IS NOT NULL AND coverArt != ''"
+            )
+            if useAlbumCoverForSongs {
+                values += try String.fetchAll(db, sql: "SELECT id FROM album")
+            }
+            values += try String.fetchAll(
+                db,
+                sql: "SELECT coverArt FROM playlist WHERE coverArt IS NOT NULL AND coverArt != ''"
+            )
+            if !useAlbumCoverForSongs {
+                values += try String.fetchAll(
+                    db,
+                    sql: "SELECT coverArt FROM song WHERE coverArt IS NOT NULL AND coverArt != ''"
+                )
+            }
+            var seen = Set<String>()
+            return values.filter { seen.insert($0).inserted }
+        }
+    }
+
+    private func coverSize(_ cached: String?, satisfies requested: String) -> Bool {
+        guard let cached else { return false }
+        if let cachedPixels = Int(cached), let requestedPixels = Int(requested) {
+            return cachedPixels >= requestedPixels
+        }
+        return cached == requested
     }
 
     func refreshPlaylist(id: String) async throws {
@@ -421,8 +576,14 @@ final class SyncEngine {
         return tier.isFresh(lastSyncedAtMs: lastSynced, nowMs: now)
     }
 
-    private func emitState(phase: String, tier: String?, processed: Int, total: Int) {
-        let state: [String: Any] = [
+    private func emitState(
+        phase: String,
+        tier: String?,
+        processed: Int,
+        total: Int,
+        message: String? = nil
+    ) {
+        var state: [String: Any] = [
             "phase": phase,
             "tier": tier as Any,
             "isSyncing": phase != "done" && phase != "error" && phase != "cancelled",
@@ -430,6 +591,7 @@ final class SyncEngine {
             "processedItems": processed,
             "totalItems": total,
         ]
+        if let message { state["message"] = message }
         pendingSyncState = state
         if syncStateTimer == nil {
             DispatchQueue.main.async { [weak self] in
