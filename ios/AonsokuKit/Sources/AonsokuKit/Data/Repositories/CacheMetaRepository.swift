@@ -10,6 +10,32 @@ struct CacheMetaRepository {
         }
     }
 
+    func getAll() throws -> [CacheMetaRecord] {
+        try db.read { db in
+            try CacheMetaRecord
+                .order(Column("cachedAt").desc)
+                .fetchAll(db)
+        }
+    }
+
+    func getAll(type: String) throws -> [CacheMetaRecord] {
+        try db.read { db in
+            try CacheMetaRecord
+                .filter(Column("type") == type)
+                .order(Column("cachedAt").desc)
+                .fetchAll(db)
+        }
+    }
+
+    func getAll(source: String) throws -> [CacheMetaRecord] {
+        try db.read { db in
+            try CacheMetaRecord
+                .filter(Column("source") == source)
+                .order(Column("cachedAt").desc)
+                .fetchAll(db)
+        }
+    }
+
     func getStats() throws -> (totalItems: Int, totalSizeBytes: Int, audioCount: Int, coverCount: Int) {
         try db.read { db in
             let totalItems = try CacheMetaRecord.fetchCount(db)
@@ -37,6 +63,15 @@ struct CacheMetaRepository {
     func delete(key: String) throws {
         try db.write { db in
             _ = try CacheMetaRecord.deleteOne(db, key: key)
+        }
+    }
+
+    func delete(keys: [String]) throws {
+        guard !keys.isEmpty else { return }
+        try db.write { db in
+            _ = try CacheMetaRecord
+                .filter(keys.contains(Column("key")))
+                .deleteAll(db)
         }
     }
 

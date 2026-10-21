@@ -237,6 +237,22 @@ public final class LibraryService: @unchecked Sendable {
         ))
     }
 
+    func storeImportedLyrics(
+        songId: String,
+        content: String,
+        synced: Bool,
+        cachedAt: Int,
+        lastAccessedAt: Int
+    ) throws {
+        try LyricsRepository(db: dbManager.dbPool).upsert(LyricsRecord(
+            songId: songId,
+            content: content,
+            synced: synced,
+            cachedAt: cachedAt,
+            lastAccessedAt: lastAccessedAt
+        ))
+    }
+
     public func cacheStats() throws -> LibraryCacheStats {
         let stats = try CacheMetaRepository(db: dbManager.dbPool).getStats()
         return LibraryCacheStats(
@@ -245,6 +261,24 @@ public final class LibraryService: @unchecked Sendable {
             audioCount: stats.audioCount,
             coverCount: stats.coverCount
         )
+    }
+
+    // Cache-index access stays internal so UI code cannot bypass
+    // DownloadsStore's source, quota and file-lifetime rules.
+    func cacheMetadata() throws -> [CacheMetaRecord] {
+        try CacheMetaRepository(db: dbManager.dbPool).getAll()
+    }
+
+    func upsertCacheMetadata(_ record: CacheMetaRecord) throws {
+        try CacheMetaRepository(db: dbManager.dbPool).upsert(record)
+    }
+
+    func upsertCacheMetadata(_ records: [CacheMetaRecord]) throws {
+        try CacheMetaRepository(db: dbManager.dbPool).bulkUpsert(records)
+    }
+
+    func deleteCacheMetadata(keys: [String]) throws {
+        try CacheMetaRepository(db: dbManager.dbPool).delete(keys: keys)
     }
 
     public func availability() -> LibraryAvailability {
