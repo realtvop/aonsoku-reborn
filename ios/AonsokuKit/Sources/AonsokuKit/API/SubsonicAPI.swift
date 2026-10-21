@@ -85,6 +85,26 @@ public enum SubsonicAPIError: Error, Equatable, Sendable, LocalizedError {
     }
 }
 
+extension SubsonicAPIError {
+    /// Maps a failure from a transport or `URLSession` to an API error.
+    init(mapping error: any Error) {
+        switch error {
+        case let error as SubsonicAPIError:
+            self = error
+        case is CancellationError:
+            self = .cancelled
+        case let error as URLError:
+            switch error.code {
+            case .cancelled: self = .cancelled
+            case .timedOut: self = .timedOut
+            default: self = .offline
+            }
+        default:
+            self = .invalidResponse(error.localizedDescription)
+        }
+    }
+}
+
 // MARK: - Parameters
 
 /// Changes for `updatePlaylist`. Nil fields stay unchanged.
@@ -252,10 +272,13 @@ public protocol SubsonicAPI: Sendable {
     func topSongs(artistName: String, count: Int) async throws -> [Song]
     func song(id: String) async throws -> Song
     func randomSongs(size: Int, genre: String?, fromYear: Int?, toYear: Int?) async throws -> [Song]
+    /// `getSongsByGenre`: one page of the songs in a genre.
+    func songsByGenre(_ genre: String, count: Int, offset: Int) async throws -> [Song]
     func genres() async throws -> [Genre]
     /// `getStarred2`.
     func starred() async throws -> SearchResults
-    /// `search3`. An empty query lists everything on Navidrome.
+    /// `search3`. The query is sent as is: to list everything, Navidrome
+    /// needs `""` (two double quotes) and other servers an empty string.
     func search(_ query: String, page: SearchPage) async throws -> SearchResults
 
     // Playlists
@@ -295,53 +318,63 @@ public struct LiveSubsonicAPI: SubsonicAPI {
         self.transport = transport
     }
 
-    private func decodeEnvelope(_ data: Data) throws -> [String: Any] {
+    /// Sends one call and returns its validated `subsonic-response` object.
+    /// Every endpoint goes through here, writes included, so a `failed`
+    /// status throws instead of passing as success.
+    @discardableResult
+    private func send(
+        _ path: String,
+        _ query: [URLQueryItem] = [],
+        method: SubsonicRequest.Method = .get
+    ) async throws -> [String: Any] {
+        let data: Data
         do {
-            return try SubsonicJSON.envelope(data)
-        } catch SubsonicAPIError.http(let status) where status == 404 || status == 501 {
-            throw SubsonicAPIError.unsupported
+            data = try await transport.send(SubsonicRequest(path, query: query, method: method))
+        } catch {
+            switch SubsonicAPIError(mapping: error) {
+            case let .http(status) where status == 404 || status == 501:
+                throw SubsonicAPIError.unsupported
+            case let mapped:
+                throw mapped
+            }
         }
+        return try SubsonicJSON.envelope(data)
     }
 
+    // MARK: System
+
     public func ping() async throws -> ServerInfo {
-        let data = try await transport.send(SubsonicRequest("ping.view"))
-        let response = try decodeEnvelope(data)
-        let type = SubsonicJSON.string(response["type"]) ?? "subsonic"
-        let serverVersion = SubsonicJSON.string(response["serverVersion"])
-        let protocolVersion = SubsonicJSON.string(response["version"]) ?? "1.16.1"
-        let isOpenSubsonic = SubsonicJSON.bool(response["openSubsonic"])
+        let response = try await send("ping.view")
         return ServerInfo(
-            type: type,
-            serverVersion: serverVersion,
-            protocolVersion: protocolVersion,
-            isOpenSubsonic: isOpenSubsonic
+            type: SubsonicJSON.string(response["type"]) ?? "subsonic",
+            serverVersion: SubsonicJSON.string(response["serverVersion"]),
+            protocolVersion: SubsonicJSON.string(response["version"]) ?? "1.16.1",
+            isOpenSubsonic: SubsonicJSON.bool(response["openSubsonic"])
         )
     }
 
     public func user(username: String) async throws -> SubsonicUser {
-        let request = SubsonicRequest(
+        let response = try await send(
             "getUser.view",
-            query: [URLQueryItem(name: "username", value: username)]
+            [URLQueryItem(name: "username", value: username)]
         )
-        let data = try await transport.send(request)
-        let response = try decodeEnvelope(data)
-        let user = response["user"] as? [String: Any] ?? [:]
-        return SubsonicJSON.user(user) ?? SubsonicUser(username: username)
+        guard let user = SubsonicJSON.user(response["user"] as? [String: Any]) else {
+            throw SubsonicAPIError.invalidResponse("Missing user")
+        }
+        return user
     }
 
     public func scanStatus() async throws -> ScanStatus {
-        let data = try await transport.send(SubsonicRequest("getScanStatus.view"))
-        let response = try decodeEnvelope(data)
-        let status = response["scanStatus"] as? [String: Any] ?? [:]
-        return SubsonicJSON.scanStatus(status)
+        let response = try await send("getScanStatus.view")
+        return SubsonicJSON.scanStatus(SubsonicJSON.object(response["scanStatus"]))
     }
 
     public func startScan() async throws -> ScanStatus {
-        let data = try await transport.send(SubsonicRequest("startScan.view"))
-        let response = try decodeEnvelope(data)
-        let status = response["scanStatus"] as? [String: Any] ?? [:]
-        return SubsonicJSON.scanStatus(status)
+        let response = try await send("startScan.view")
+        return SubsonicJSON.scanStatus(SubsonicJSON.object(response["scanStatus"]))
     }
+
+    // MARK: Browsing
 
     public func albumList(
         _ type: AlbumListType,
@@ -351,7 +384,7 @@ public struct LiveSubsonicAPI: SubsonicAPI {
         toYear: Int?,
         genre: String?
     ) async throws -> [Album] {
-        var query: [URLQueryItem] = [
+        var query = [
             URLQueryItem(name: "type", value: type.rawValue),
             URLQueryItem(name: "size", value: String(size)),
             URLQueryItem(name: "offset", value: String(offset))
@@ -368,97 +401,65 @@ public struct LiveSubsonicAPI: SubsonicAPI {
             query.append(URLQueryItem(name: "genre", value: genre))
         }
 
-        let data = try await transport.send(SubsonicRequest("getAlbumList2.view", query: query))
-        let response = try decodeEnvelope(data)
-        let list = response["albumList2"] as? [String: Any] ?? [:]
-        return SubsonicJSON.list(list["album"]) { dict in
-            SubsonicJSON.album(dict)
+        let response = try await send("getAlbumList2.view", query)
+        return SubsonicJSON.list(SubsonicJSON.object(response["albumList2"])["album"]) {
+            SubsonicJSON.album($0)
         }
     }
 
     public func album(id: String) async throws -> AlbumDetail {
-        let data = try await transport.send(
-            SubsonicRequest("getAlbum.view", query: [URLQueryItem(name: "id", value: id)])
-        )
-        let response = try decodeEnvelope(data)
-        let albumDict = response["album"] as? [String: Any] ?? [:]
-        guard let album = SubsonicJSON.album(albumDict) else {
+        let response = try await send("getAlbum.view", [URLQueryItem(name: "id", value: id)])
+        let payload = SubsonicJSON.object(response["album"])
+        guard let album = SubsonicJSON.album(payload) else {
             throw SubsonicAPIError.invalidResponse("Missing album")
         }
-        let songs = SubsonicJSON.list(albumDict["song"]) { dict in
-            SubsonicJSON.song(dict)
-        }
+        let songs = SubsonicJSON.list(payload["song"]) { SubsonicJSON.song($0) }
         return AlbumDetail(album: album, songs: songs)
     }
 
     public func albumInfo(id: String) async throws -> AlbumInfo {
-        let data = try await transport.send(
-            SubsonicRequest("getAlbumInfo2.view", query: [URLQueryItem(name: "id", value: id)])
-        )
-        let response = try decodeEnvelope(data)
-        let info = response["albumInfo"] as? [String: Any] ?? [:]
-        return SubsonicJSON.albumInfo(info)
+        let response = try await send("getAlbumInfo2.view", [URLQueryItem(name: "id", value: id)])
+        return SubsonicJSON.albumInfo(SubsonicJSON.object(response["albumInfo"]))
     }
 
     public func artists() async throws -> [Artist] {
-        let data = try await transport.send(SubsonicRequest("getArtists.view"))
-        let response = try decodeEnvelope(data)
-        let artists = response["artists"] as? [String: Any] ?? [:]
-        let indices = artists["index"] as? [[String: Any]] ?? []
-        var result: [Artist] = []
-        for indexDict in indices {
-            let artistsInIndex = SubsonicJSON.list(indexDict["artist"]) { dict in
-                SubsonicJSON.artist(dict)
-            }
-            result.append(contentsOf: artistsInIndex)
+        let response = try await send("getArtists.view")
+        // A library under a single index letter can arrive as one object.
+        let indexes = SubsonicJSON.list(SubsonicJSON.object(response["artists"])["index"]) { $0 }
+        return indexes.flatMap { index in
+            SubsonicJSON.list(index["artist"]) { SubsonicJSON.artist($0) }
         }
-        return result
     }
 
     public func artist(id: String) async throws -> ArtistDetail {
-        let data = try await transport.send(
-            SubsonicRequest("getArtist.view", query: [URLQueryItem(name: "id", value: id)])
-        )
-        let response = try decodeEnvelope(data)
-        let artistDict = response["artist"] as? [String: Any] ?? [:]
-        guard let artist = SubsonicJSON.artist(artistDict) else {
+        let response = try await send("getArtist.view", [URLQueryItem(name: "id", value: id)])
+        let payload = SubsonicJSON.object(response["artist"])
+        guard let artist = SubsonicJSON.artist(payload) else {
             throw SubsonicAPIError.invalidResponse("Missing artist")
         }
-        let albums = SubsonicJSON.list(artistDict["album"]) { dict in
-            SubsonicJSON.album(dict)
-        }
+        let albums = SubsonicJSON.list(payload["album"]) { SubsonicJSON.album($0) }
         return ArtistDetail(artist: artist, albums: albums)
     }
 
     public func artistInfo(id: String) async throws -> ArtistInfo {
-        let data = try await transport.send(
-            SubsonicRequest("getArtistInfo.view", query: [URLQueryItem(name: "id", value: id)])
-        )
-        let response = try decodeEnvelope(data)
-        let info = response["artistInfo2"] as? [String: Any] ?? response["artistInfo"] as? [String: Any] ?? [:]
-        return SubsonicJSON.artistInfo(info)
+        let response = try await send("getArtistInfo.view", [URLQueryItem(name: "id", value: id)])
+        let payload = response["artistInfo"] ?? response["artistInfo2"]
+        return SubsonicJSON.artistInfo(SubsonicJSON.object(payload))
     }
 
     public func topSongs(artistName: String, count: Int) async throws -> [Song] {
-        let query = [
+        let response = try await send("getTopSongs.view", [
             URLQueryItem(name: "artist", value: artistName),
             URLQueryItem(name: "count", value: String(count))
-        ]
-        let data = try await transport.send(SubsonicRequest("getTopSongs.view", query: query))
-        let response = try decodeEnvelope(data)
-        let topSongs = response["topSongs"] as? [String: Any] ?? [:]
-        return SubsonicJSON.list(topSongs["song"]) { dict in
-            SubsonicJSON.song(dict)
+        ])
+        return SubsonicJSON.list(SubsonicJSON.object(response["topSongs"])["song"]) {
+            SubsonicJSON.song($0)
         }
     }
 
     public func song(id: String) async throws -> Song {
-        let data = try await transport.send(
-            SubsonicRequest("getSong.view", query: [URLQueryItem(name: "id", value: id)])
-        )
-        let response = try decodeEnvelope(data)
-        let songDict = response["song"] as? [String: Any] ?? [:]
-        guard let song = SubsonicJSON.song(songDict) else {
+        let response = try await send("getSong.view", [URLQueryItem(name: "id", value: id)])
+        guard let song = SubsonicJSON.song(response["song"] as? [String: Any]) else {
             throw SubsonicAPIError.invalidResponse("Missing song")
         }
         return song
@@ -470,9 +471,7 @@ public struct LiveSubsonicAPI: SubsonicAPI {
         fromYear: Int?,
         toYear: Int?
     ) async throws -> [Song] {
-        var query: [URLQueryItem] = [
-            URLQueryItem(name: "size", value: String(size))
-        ]
+        var query = [URLQueryItem(name: "size", value: String(size))]
         if let genre {
             query.append(URLQueryItem(name: "genre", value: genre))
         }
@@ -483,19 +482,26 @@ public struct LiveSubsonicAPI: SubsonicAPI {
             query.append(URLQueryItem(name: "toYear", value: String(toYear)))
         }
 
-        let data = try await transport.send(SubsonicRequest("getRandomSongs.view", query: query))
-        let response = try decodeEnvelope(data)
-        let randomSongs = response["randomSongs"] as? [String: Any] ?? [:]
-        return SubsonicJSON.list(randomSongs["song"]) { dict in
-            SubsonicJSON.song(dict)
+        let response = try await send("getRandomSongs.view", query)
+        return SubsonicJSON.list(SubsonicJSON.object(response["randomSongs"])["song"]) {
+            SubsonicJSON.song($0)
+        }
+    }
+
+    public func songsByGenre(_ genre: String, count: Int, offset: Int) async throws -> [Song] {
+        let response = try await send("getSongsByGenre.view", [
+            URLQueryItem(name: "genre", value: genre),
+            URLQueryItem(name: "count", value: String(count)),
+            URLQueryItem(name: "offset", value: String(offset))
+        ])
+        return SubsonicJSON.list(SubsonicJSON.object(response["songsByGenre"])["song"]) {
+            SubsonicJSON.song($0)
         }
     }
 
     public func genres() async throws -> [Genre] {
-        let data = try await transport.send(SubsonicRequest("getGenres.view"))
-        let response = try decodeEnvelope(data)
-        let genres = response["genres"] as? [String: Any] ?? [:]
-        return SubsonicJSON.list(genres["genre"]) { dict in
+        let response = try await send("getGenres.view")
+        return SubsonicJSON.list(SubsonicJSON.object(response["genres"])["genre"]) { dict in
             guard let name = SubsonicJSON.string(dict["value"]) else { return nil }
             return Genre(
                 name: name,
@@ -506,23 +512,12 @@ public struct LiveSubsonicAPI: SubsonicAPI {
     }
 
     public func starred() async throws -> SearchResults {
-        let data = try await transport.send(SubsonicRequest("getStarred2.view"))
-        let response = try decodeEnvelope(data)
-        let starred = response["starred2"] as? [String: Any] ?? [:]
-        let artists = SubsonicJSON.list(starred["artist"]) { dict in
-            SubsonicJSON.artist(dict)
-        }
-        let albums = SubsonicJSON.list(starred["album"]) { dict in
-            SubsonicJSON.album(dict)
-        }
-        let songs = SubsonicJSON.list(starred["song"]) { dict in
-            SubsonicJSON.song(dict)
-        }
-        return SearchResults(artists: artists, albums: albums, songs: songs)
+        let response = try await send("getStarred2.view")
+        return SubsonicJSON.searchResults(SubsonicJSON.object(response["starred2"]))
     }
 
     public func search(_ query: String, page: SearchPage) async throws -> SearchResults {
-        let queryItems = [
+        let response = try await send("search3.view", [
             URLQueryItem(name: "query", value: query),
             URLQueryItem(name: "artistCount", value: String(page.artistCount)),
             URLQueryItem(name: "artistOffset", value: String(page.artistOffset)),
@@ -530,63 +525,32 @@ public struct LiveSubsonicAPI: SubsonicAPI {
             URLQueryItem(name: "albumOffset", value: String(page.albumOffset)),
             URLQueryItem(name: "songCount", value: String(page.songCount)),
             URLQueryItem(name: "songOffset", value: String(page.songOffset))
-        ]
-        let data = try await transport.send(SubsonicRequest("search3.view", query: queryItems))
-        let response = try decodeEnvelope(data)
-        let result = response["searchResult3"] as? [String: Any] ?? [:]
-        let artists = SubsonicJSON.list(result["artist"]) { dict in
-            SubsonicJSON.artist(dict)
-        }
-        let albums = SubsonicJSON.list(result["album"]) { dict in
-            SubsonicJSON.album(dict)
-        }
-        let songs = SubsonicJSON.list(result["song"]) { dict in
-            SubsonicJSON.song(dict)
-        }
-        return SearchResults(artists: artists, albums: albums, songs: songs)
+        ])
+        return SubsonicJSON.searchResults(SubsonicJSON.object(response["searchResult3"]))
     }
 
+    // MARK: Playlists
+
     public func playlists() async throws -> [Playlist] {
-        let data = try await transport.send(SubsonicRequest("getPlaylists.view"))
-        let response = try decodeEnvelope(data)
-        let playlists = response["playlists"] as? [String: Any] ?? [:]
-        return SubsonicJSON.list(playlists["playlist"]) { dict in
-            SubsonicJSON.playlist(dict)
+        let response = try await send("getPlaylists.view")
+        return SubsonicJSON.list(SubsonicJSON.object(response["playlists"])["playlist"]) {
+            SubsonicJSON.playlist($0)
         }
     }
 
     public func playlist(id: String) async throws -> PlaylistDetail {
-        let data = try await transport.send(
-            SubsonicRequest("getPlaylist.view", query: [URLQueryItem(name: "id", value: id)])
-        )
-        let response = try decodeEnvelope(data)
-        let playlistDict = response["playlist"] as? [String: Any] ?? [:]
-        guard let playlist = SubsonicJSON.playlist(playlistDict) else {
+        let response = try await send("getPlaylist.view", [URLQueryItem(name: "id", value: id)])
+        guard let detail = SubsonicJSON.playlistDetail(response["playlist"] as? [String: Any]) else {
             throw SubsonicAPIError.invalidResponse("Missing playlist")
         }
-        let songs = SubsonicJSON.list(playlistDict["entry"]) { dict in
-            SubsonicJSON.song(dict)
-        }
-        return PlaylistDetail(playlist: playlist, songs: songs)
+        return detail
     }
 
     public func createPlaylist(name: String, songIds: [String]) async throws -> PlaylistDetail? {
-        var query = [URLQueryItem(name: "name", value: name)]
-        for songId in songIds {
-            query.append(URLQueryItem(name: "songId", value: songId))
-        }
-        let data = try await transport.send(
-            SubsonicRequest("createPlaylist.view", query: query)
-        )
-        let response = try decodeEnvelope(data)
-        let playlistDict = response["playlist"] as? [String: Any]
-        guard let playlistDict, let playlist = SubsonicJSON.playlist(playlistDict) else {
-            return nil
-        }
-        let songs = SubsonicJSON.list(playlistDict["entry"]) { dict in
-            SubsonicJSON.song(dict)
-        }
-        return PlaylistDetail(playlist: playlist, songs: songs)
+        let query = [URLQueryItem(name: "name", value: name)]
+            + songIds.map { URLQueryItem(name: "songId", value: $0) }
+        let response = try await send("createPlaylist.view", query)
+        return SubsonicJSON.playlistDetail(response["playlist"] as? [String: Any])
     }
 
     public func updatePlaylist(id: String, changes: PlaylistChanges) async throws {
@@ -602,56 +566,34 @@ public struct LiveSubsonicAPI: SubsonicAPI {
         if let isPublic = changes.isPublic {
             query.append(URLQueryItem(name: "public", value: isPublic ? "true" : "false"))
         }
-        for songId in changes.songIdsToAdd {
-            query.append(URLQueryItem(name: "songIdToAdd", value: songId))
-        }
-        for index in changes.songIndexesToRemove {
-            query.append(URLQueryItem(name: "songIndexToRemove", value: String(index)))
+        query += changes.songIdsToAdd.map { URLQueryItem(name: "songIdToAdd", value: $0) }
+        query += changes.songIndexesToRemove.map {
+            URLQueryItem(name: "songIndexToRemove", value: String($0))
         }
 
-        _ = try await transport.send(SubsonicRequest("updatePlaylist.view", query: query))
+        try await send("updatePlaylist.view", query)
     }
 
     public func deletePlaylist(id: String) async throws {
-        _ = try await transport.send(
-            SubsonicRequest("deletePlaylist.view", query: [URLQueryItem(name: "id", value: id)])
-        )
+        try await send("deletePlaylist.view", [URLQueryItem(name: "id", value: id)])
     }
 
+    // MARK: Annotation
+
     public func star(_ target: StarTarget) async throws {
-        guard !target.songIds.isEmpty || !target.albumIds.isEmpty || !target.artistIds.isEmpty
-        else { return }
-
-        var query: [URLQueryItem] = []
-        for songId in target.songIds {
-            query.append(URLQueryItem(name: "id", value: songId))
-        }
-        for albumId in target.albumIds {
-            query.append(URLQueryItem(name: "albumId", value: albumId))
-        }
-        for artistId in target.artistIds {
-            query.append(URLQueryItem(name: "artistId", value: artistId))
-        }
-
-        _ = try await transport.send(SubsonicRequest("star.view", query: query))
+        try await annotate("star.view", target)
     }
 
     public func unstar(_ target: StarTarget) async throws {
-        guard !target.songIds.isEmpty || !target.albumIds.isEmpty || !target.artistIds.isEmpty
-        else { return }
+        try await annotate("unstar.view", target)
+    }
 
-        var query: [URLQueryItem] = []
-        for songId in target.songIds {
-            query.append(URLQueryItem(name: "id", value: songId))
-        }
-        for albumId in target.albumIds {
-            query.append(URLQueryItem(name: "albumId", value: albumId))
-        }
-        for artistId in target.artistIds {
-            query.append(URLQueryItem(name: "artistId", value: artistId))
-        }
-
-        _ = try await transport.send(SubsonicRequest("unstar.view", query: query))
+    private func annotate(_ path: String, _ target: StarTarget) async throws {
+        let query = target.songIds.map { URLQueryItem(name: "id", value: $0) }
+            + target.albumIds.map { URLQueryItem(name: "albumId", value: $0) }
+            + target.artistIds.map { URLQueryItem(name: "artistId", value: $0) }
+        guard !query.isEmpty else { return }
+        try await send(path, query)
     }
 
     public func scrobble(songId: String, submission: Bool, time: Date?) async throws {
@@ -664,15 +606,16 @@ public struct LiveSubsonicAPI: SubsonicAPI {
             query.append(URLQueryItem(name: "time", value: String(milliseconds)))
         }
 
-        _ = try await transport.send(SubsonicRequest("scrobble.view", query: query))
+        try await send("scrobble.view", query)
     }
 
+    // MARK: Internet radio
+
     public func radioStations() async throws -> [RadioStation] {
-        let data = try await transport.send(SubsonicRequest("getInternetRadioStations.view"))
-        let response = try decodeEnvelope(data)
-        let stations = response["internetRadioStations"] as? [String: Any] ?? [:]
-        return SubsonicJSON.list(stations["internetRadioStation"]) { dict in
-            SubsonicJSON.radioStation(dict)
+        let response = try await send("getInternetRadioStations.view")
+        let payload = SubsonicJSON.object(response["internetRadioStations"])
+        return SubsonicJSON.list(payload["internetRadioStation"]) {
+            SubsonicJSON.radioStation($0)
         }
     }
 
@@ -689,61 +632,53 @@ public struct LiveSubsonicAPI: SubsonicAPI {
             query.append(URLQueryItem(name: "homepageUrl", value: homePageUrl))
         }
 
-        _ = try await transport.send(
-            SubsonicRequest("createInternetRadioStation.view", query: query, method: .post)
-        )
+        // POST, like the web client.
+        try await send("createInternetRadioStation.view", query, method: .post)
     }
 
     public func updateRadioStation(_ station: RadioStation) async throws {
-        let query = [
+        try await send("updateInternetRadioStation.view", [
             URLQueryItem(name: "id", value: station.id),
             URLQueryItem(name: "streamUrl", value: station.streamUrl),
             URLQueryItem(name: "name", value: station.name),
             URLQueryItem(name: "homepageUrl", value: station.homePageUrl ?? "")
-        ]
-
-        _ = try await transport.send(
-            SubsonicRequest("updateInternetRadioStation.view", query: query)
-        )
+        ])
     }
 
     public func deleteRadioStation(id: String) async throws {
-        _ = try await transport.send(
-            SubsonicRequest("deleteInternetRadioStation.view", query: [URLQueryItem(name: "id", value: id)])
+        try await send(
+            "deleteInternetRadioStation.view",
+            [URLQueryItem(name: "id", value: id)]
         )
     }
 
+    // MARK: Lyrics
+
     public func lyrics(artist: String, title: String) async throws -> SubsonicPlainLyrics? {
-        let query = [
+        let response = try await send("getLyrics.view", [
             URLQueryItem(name: "artist", value: artist),
             URLQueryItem(name: "title", value: title)
-        ]
-        let data = try await transport.send(SubsonicRequest("getLyrics.view", query: query))
-        let response = try decodeEnvelope(data)
-        let lyrics = response["lyrics"] as? [String: Any]
-        guard let lyrics, !lyrics.isEmpty else { return nil }
-
-        let value = SubsonicJSON.string(lyrics["value"]) ?? ""
-        guard !value.isEmpty else { return nil }
+        ])
+        let payload = SubsonicJSON.object(response["lyrics"])
+        guard let value = SubsonicJSON.string(payload["value"]),
+              !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return nil }
 
         return SubsonicPlainLyrics(
-            artist: SubsonicJSON.string(lyrics["artist"]),
-            title: SubsonicJSON.string(lyrics["title"]),
+            artist: SubsonicJSON.string(payload["artist"]),
+            title: SubsonicJSON.string(payload["title"]),
             value: value
         )
     }
 
     public func lyricsBySongId(_ id: String) async throws -> [SubsonicStructuredLyrics] {
-        let data = try await transport.send(
-            SubsonicRequest("getLyricsBySongId.view", query: [URLQueryItem(name: "id", value: id)])
+        let response = try await send(
+            "getLyricsBySongId.view",
+            [URLQueryItem(name: "id", value: id)]
         )
-
-        do {
-            let response = try decodeEnvelope(data)
-            let lyricsList = response["lyricsList"] as? [String: Any] ?? [:]
-            return SubsonicJSON.list(lyricsList["structuredLyrics"]) { dict in
-                SubsonicJSON.structuredLyrics(dict)
-            }
+        let payload = SubsonicJSON.object(response["lyricsList"])
+        return SubsonicJSON.list(payload["structuredLyrics"]) {
+            SubsonicJSON.structuredLyrics($0)
         }
     }
 }
@@ -751,89 +686,61 @@ public struct LiveSubsonicAPI: SubsonicAPI {
 /// Signs requests with the stored credentials through
 /// `AuthenticationService.url(path:query:)` and appends repeated parameters.
 public struct AuthenticatedSubsonicTransport: SubsonicTransport {
-    private let authentication: AuthenticationService
     private let session: URLSession
     private let urlBuilder: @Sendable (String) -> URL?
 
     public init(authentication: AuthenticationService = .shared, session: URLSession = .shared) {
-        self.authentication = authentication
-        self.session = session
-        self.urlBuilder = { path in authentication.url(path: path) }
+        self.init(urlBuilder: { authentication.url(path: $0) }, session: session)
     }
 
     internal init(
         urlBuilder: @escaping @Sendable (String) -> URL?,
         session: URLSession
     ) {
-        self.authentication = .shared
         self.session = session
         self.urlBuilder = urlBuilder
     }
 
     public func send(_ request: SubsonicRequest) async throws -> Data {
-        guard let baseURL = urlBuilder(request.path) else {
+        guard let signedURL = urlBuilder(request.path) else {
             throw SubsonicAPIError.notSignedIn
         }
-
-        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
-        ?? URLComponents()
-
-        let percentEncodedItems = components.percentEncodedQueryItems ?? []
-        var allItems = percentEncodedItems
-
-        for item in request.query {
-            if let value = item.value {
-                let encoded = percentEncode(value)
-                allItems.append(URLQueryItem(name: item.name, value: encoded))
-            }
+        guard var components = URLComponents(url: signedURL, resolvingAgainstBaseURL: false) else {
+            throw SubsonicAPIError.invalidResponse("Invalid server URL")
         }
 
-        components.percentEncodedQueryItems = allItems
-
+        // Encoded by hand: `queryItems` leaves `+` as is, which servers
+        // read as a space.
+        let items = request.query.compactMap { item in
+            item.value.map { URLQueryItem(name: item.name, value: Self.percentEncode($0)) }
+        }
+        components.percentEncodedQueryItems = (components.percentEncodedQueryItems ?? []) + items
         guard let url = components.url else {
-            throw SubsonicAPIError.offline
+            throw SubsonicAPIError.invalidResponse("Invalid request URL")
         }
 
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = request.method.rawValue
         urlRequest.timeoutInterval = 30
 
+        let result: (Data, URLResponse)
         do {
-            let (data, response) = try await session.data(for: urlRequest)
-
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw SubsonicAPIError.offline
-            }
-
-            guard (200...299).contains(httpResponse.statusCode) else {
-                if httpResponse.statusCode == 404 || httpResponse.statusCode == 501 {
-                    throw SubsonicAPIError.unsupported
-                }
-                throw SubsonicAPIError.http(status: httpResponse.statusCode)
-            }
-
-            return data
-        } catch is CancellationError {
-            throw SubsonicAPIError.cancelled
-        } catch let error as URLError {
-            switch error.code {
-            case .cancelled:
-                throw SubsonicAPIError.cancelled
-            case .timedOut:
-                throw SubsonicAPIError.timedOut
-            default:
-                throw SubsonicAPIError.offline
-            }
-        } catch let error as SubsonicAPIError {
-            throw error
+            result = try await session.data(for: urlRequest)
         } catch {
+            throw SubsonicAPIError(mapping: error)
+        }
+        guard let response = result.1 as? HTTPURLResponse else {
             throw SubsonicAPIError.offline
         }
+        guard (200...299).contains(response.statusCode) else {
+            throw SubsonicAPIError.http(status: response.statusCode)
+        }
+        return result.0
     }
 
-    private func percentEncode(_ string: String) -> String {
+    private static func percentEncode(_ value: String) -> String {
         var allowed = CharacterSet.urlQueryAllowed
         allowed.remove(charactersIn: "+=&")
-        return string.addingPercentEncoding(withAllowedCharacters: allowed) ?? string
+        return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
     }
 }

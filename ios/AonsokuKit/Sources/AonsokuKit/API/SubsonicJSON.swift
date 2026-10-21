@@ -7,8 +7,8 @@ internal enum SubsonicJSON {
 
     /// Decodes a subsonic-response envelope and validates its status.
     static func envelope(_ data: Data) throws -> [String: Any] {
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let response = json["subsonic-response"] as? [String: Any] else {
+        let json = try? JSONSerialization.jsonObject(with: data)
+        guard let response = (json as? [String: Any])?["subsonic-response"] as? [String: Any] else {
             throw SubsonicAPIError.invalidResponse("Missing subsonic-response")
         }
 
@@ -36,6 +36,11 @@ internal enum SubsonicJSON {
     }
 
     // MARK: - Type Conversions
+
+    /// The object at a key, or an empty one.
+    static func object(_ value: Any?) -> [String: Any] {
+        value as? [String: Any] ?? [:]
+    }
 
     /// Safely extract strings, tolerating numbers and booleans.
     static func string(_ value: Any?) -> String? {
@@ -95,38 +100,50 @@ internal enum SubsonicJSON {
         return false
     }
 
-    /// Parse ISO 8601 dates from Subsonic responses.
-    static func date(_ value: Any?) -> Date? {
-        guard var str = string(value) else { return nil }
+    // `ISO8601DateFormatter` is thread-safe, and these are never changed
+    // after creation.
+    private static let timestampFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
 
-        // Truncate fractional seconds to 3 digits (nanoseconds → milliseconds)
-        if let dotIndex = str.firstIndex(of: ".") {
-            let fractionalStart = str.index(after: dotIndex)
-            if let zIndex = str[fractionalStart...].firstIndex(where: { $0 == "Z" || $0 == "+" || $0 == "-" }) {
-                let fractionalPart = str[fractionalStart..<zIndex]
-                if fractionalPart.count > 3 {
-                    let truncated = String(fractionalPart.prefix(3))
-                    let suffix = str[zIndex...]
-                    str = String(str[..<dotIndex]) + "." + truncated + suffix
-                }
-            }
+    private static let fullDateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withFullDate]
+        return formatter
+    }()
+
+    /// Parses Subsonic dates: RFC 3339 timestamps with any number of
+    /// fractional digits (Go servers send nanoseconds), timestamps without a
+    /// zone (read as UTC) and plain `yyyy-MM-dd` dates (UTC midnight).
+    static func date(_ value: Any?) -> Date? {
+        guard let text = string(value)?.trimmingCharacters(in: .whitespaces) else { return nil }
+        guard let separator = text.firstIndex(where: { $0 == "T" || $0 == "t" || $0 == " " }) else {
+            return fullDateFormatter.date(from: text)
         }
 
-        // Try with fractional seconds first
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = iso.date(from: str) { return date }
-
-        // Try without fractional seconds
-        let plain = ISO8601DateFormatter()
-        plain.formatOptions = [.withInternetDateTime]
-        if let date = plain.date(from: str) { return date }
-
-        // Try date-only format (yyyy-MM-dd) and treat as UTC midnight
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-        dateFormatter.timeZone = TimeZone(abbreviation: "UTC")
-        return dateFormatter.date(from: str)
+        let day = text[..<separator]
+        var time = text[text.index(after: separator)...]
+        var zone = "Z"
+        if time.last == "Z" || time.last == "z" {
+            time = time.dropLast()
+        } else if let sign = time.lastIndex(where: { $0 == "+" || $0 == "-" }) {
+            zone = String(time[sign...])
+            time = time[..<sign]
+            if zone.count == 5 {
+                zone.insert(":", at: zone.index(zone.startIndex, offsetBy: 3))
+            } else if zone.count == 3 {
+                zone += ":00"
+            }
+        }
+        var fraction = "000"
+        if let dot = time.firstIndex(where: { $0 == "." || $0 == "," }) {
+            let digits = time[time.index(after: dot)...].prefix(3)
+            fraction = digits.padding(toLength: 3, withPad: "0", startingAt: 0)
+            time = time[..<dot]
+        }
+        return timestampFormatter.date(from: "\(day)T\(time).\(fraction)\(zone)")
     }
 
     /// Extract an array from a single object or a real array.
@@ -134,8 +151,10 @@ internal enum SubsonicJSON {
         if let dict = value as? [String: Any] {
             return mapper(dict).map { [$0] } ?? []
         }
-        if let arr = value as? [[String: Any]] {
-            return arr.compactMap(mapper)
+        if let array = value as? [Any] {
+            return array.compactMap { item in
+                (item as? [String: Any]).flatMap { mapper($0) }
+            }
         }
         return []
     }
@@ -355,6 +374,19 @@ internal enum SubsonicJSON {
             coverArt: string(dict["coverArt"]),
             starred: date(dict["starred"])
         )
+    }
+
+    static func searchResults(_ dict: [String: Any]) -> SearchResults {
+        SearchResults(
+            artists: list(dict["artist"]) { artist($0) },
+            albums: list(dict["album"]) { album($0) },
+            songs: list(dict["song"]) { song($0) }
+        )
+    }
+
+    static func playlistDetail(_ dict: [String: Any]?) -> PlaylistDetail? {
+        guard let dict, let summary = playlist(dict) else { return nil }
+        return PlaylistDetail(playlist: summary, songs: list(dict["entry"]) { song($0) })
     }
 
     static func radioStation(_ dict: [String: Any]?) -> RadioStation? {
