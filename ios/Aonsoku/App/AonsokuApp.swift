@@ -1,5 +1,6 @@
 import AonsokuKit
 import SwiftUI
+import UIKit
 
 @main
 struct AonsokuApp: App {
@@ -49,6 +50,14 @@ private struct AppRoot: View {
             .themeRoot()
             .toastHost(app)
             .shakeToOpenDebugPanel()
+            .background {
+                SystemVolumeHost(
+                    hidesSystemHUD: router.isNowPlayingPresented
+                )
+                .frame(width: 1, height: 1)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
             .onReceive(
                 NotificationCenter.default.publisher(
                     for: UIApplication.didReceiveMemoryWarningNotification
@@ -57,5 +66,33 @@ private struct AppRoot: View {
                 app.didReceiveMemoryWarning()
             }
             .appEnvironment(app, router: router)
+    }
+}
+
+/// Keeps the private `MPVolumeView` used by `AudioService` in a live window.
+/// iOS only exposes output-volume writes through that view, and its presence
+/// suppresses the system HUD while Now Playing shows Aonsoku's own control.
+private struct SystemVolumeHost: UIViewRepresentable {
+    let hidesSystemHUD: Bool
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        view.backgroundColor = .clear
+        connect(view)
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        connect(uiView)
+    }
+
+    static func dismantleUIView(_ uiView: UIView, coordinator: Void) {
+        AppServices.shared.audio.setVolumeHUDEnabled(true)
+    }
+
+    private func connect(_ view: UIView) {
+        let audio = AppServices.shared.audio
+        audio.start(volumeHostView: view)
+        audio.setVolumeHUDEnabled(!hidesSystemHUD)
     }
 }

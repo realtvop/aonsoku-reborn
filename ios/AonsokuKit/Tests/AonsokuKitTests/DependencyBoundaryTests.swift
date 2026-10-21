@@ -1,7 +1,10 @@
 import AVFoundation
+import MediaPlayer
+import UIKit
 import XCTest
 @testable import AonsokuKit
 
+@MainActor
 final class DependencyBoundaryTests: XCTestCase {
     func testAudioServiceUsesInjectedPlayerFactory() throws {
         let database = try TemporaryDatabase()
@@ -35,5 +38,26 @@ final class DependencyBoundaryTests: XCTestCase {
         _ = AuthenticationService.shared
         _ = PreferencesService.shared
         _ = AppServices.shared
+    }
+
+    func testVolumeHUDControlStaysAttachedWhenTheHostChanges() throws {
+        let database = try TemporaryDatabase()
+        let service = AudioService(databaseManager: database.manager)
+        let firstHost = UIView()
+        let secondHost = UIView()
+
+        service.start(volumeHostView: firstHost)
+        service.setVolumeHUDEnabled(false)
+
+        XCTAssertEqual(firstHost.subviews.filter { $0 is MPVolumeView }.count, 1)
+
+        service.start(volumeHostView: secondHost)
+
+        XCTAssertFalse(firstHost.subviews.contains { $0 is MPVolumeView })
+        XCTAssertEqual(secondHost.subviews.filter { $0 is MPVolumeView }.count, 1)
+
+        service.setVolumeHUDEnabled(true)
+        XCTAssertFalse(secondHost.subviews.contains { $0 is MPVolumeView })
+        service.shutdown()
     }
 }

@@ -115,7 +115,14 @@ public final class AudioService: NSObject, @unchecked Sendable {
     public func start(volumeHostView: UIView? = nil) {
         dispatchMain { [weak self] in
             guard let self else { return }
-            self.volumeHostView = volumeHostView ?? self.volumeHostView
+            if let volumeHostView,
+               self.volumeHostView !== volumeHostView {
+                self.volumeHostView = volumeHostView
+                if let volumeView = self.volumeView {
+                    volumeView.removeFromSuperview()
+                    volumeHostView.addSubview(volumeView)
+                }
+            }
             guard !self.started else { return }
             self.started = true
             do {
