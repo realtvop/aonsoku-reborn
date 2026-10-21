@@ -38,10 +38,10 @@ private final class ToastWindowPresenter {
         guard window?.windowScene !== scene else { return }
         let host = UIHostingController(
             rootView: ToastLayer()
+                .themeRoot()
                 .environment(app.toasts)
                 .environment(app.localizer)
                 .environment(app.settings)
-                .themeRoot()
         )
         host.view.backgroundColor = .clear
         let window = PassthroughWindow(windowScene: scene)
