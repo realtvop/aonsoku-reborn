@@ -11,31 +11,22 @@ on:
 
 jobs:
   build-ios:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-          run_install: false
 
       - name: Setup node
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Test native iOS core
+      - name: Test AonsokuKit
         env:
           IOS_TEST_RESULT_BUNDLE: ${{ runner.temp }}/AonsokuNativeTests.xcresult
         run: ./scripts/test-ios-native.sh
 
-      - name: Upload native iOS test results
+      - name: Upload AonsokuKit test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -43,20 +34,20 @@ jobs:
           path: ${{ runner.temp }}/AonsokuNativeTests.xcresult
           if-no-files-found: warn
 
-      - name: Build mobile web assets
-        run: pnpm run build:mobile
+      - name: Check iOS strings
+        run: node scripts/check-ios-strings.mjs
 
-      - name: Sync Capacitor
-        run: pnpm exec cap sync ios
+      - name: Resolve build metadata
+        run: echo "AONSOKU_BUILD_HASH=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
 
-      - name: Build unsigned IPA
-        working-directory: ios/App
+      - name: Archive native iOS app
         run: |
           xcodebuild archive \
-            -project App.xcodeproj \
-            -scheme App \
-            -archivePath $RUNNER_TEMP/App.xcarchive \
+            -project ios/Aonsoku.xcodeproj \
+            -scheme Aonsoku \
+            -archivePath "$RUNNER_TEMP/Aonsoku.xcarchive" \
             -destination "generic/platform=iOS" \
+            AONSOKU_BUILD_HASH="$AONSOKU_BUILD_HASH" \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
@@ -65,9 +56,10 @@ jobs:
 
       - name: Create unsigned IPA
         run: |
-          mkdir -p $RUNNER_TEMP/Payload
-          cp -r $RUNNER_TEMP/App.xcarchive/Products/Applications/App.app $RUNNER_TEMP/Payload/
-          cd $RUNNER_TEMP
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$RUNNER_TEMP/Aonsoku.xcarchive/Products/Applications/Aonsoku.app" \
+            "$RUNNER_TEMP/Payload/"
+          cd "$RUNNER_TEMP"
           zip -r Aonsoku-unsigned.ipa Payload
 
       - name: Upload IPA artifact
