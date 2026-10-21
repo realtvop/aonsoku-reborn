@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import Observation
 
 /// Network status readable from any thread, for repositories and sync.
@@ -35,13 +36,73 @@ public final class NetworkMonitor {
     public var isMetered: Bool { isExpensive || isConstrained }
 
     public nonisolated let connectivity: any Connectivity
+    @ObservationIgnored private nonisolated let sharedConnectivity: LockedConnectivity
+    @ObservationIgnored private nonisolated let queue = DispatchQueue(
+        label: "github.realtvop.aonsoku.network-monitor"
+    )
+    @ObservationIgnored private var monitor: NWPathMonitor?
+    @ObservationIgnored private var generation = UUID()
 
     public init() {
-        connectivity = FixedConnectivity()
+        let sharedConnectivity = LockedConnectivity(isOnline: true, isMetered: false)
+        self.sharedConnectivity = sharedConnectivity
+        connectivity = sharedConnectivity
     }
 
     /// Starts monitoring. Calling it again has no effect.
-    public func start() {}
+    public func start() {
+        guard monitor == nil else { return }
+        let monitor = NWPathMonitor()
+        let generation = UUID()
+        self.generation = generation
+        self.monitor = monitor
+        let sharedConnectivity = sharedConnectivity
+        monitor.pathUpdateHandler = { [weak self] path in
+            let online = path.status == .satisfied
+            let expensive = path.isExpensive
+            let constrained = path.isConstrained
+            sharedConnectivity.update(
+                isOnline: online,
+                isMetered: expensive || constrained
+            )
+            Task { @MainActor [weak self] in
+                guard let self, self.generation == generation else { return }
+                self.isOnline = online
+                self.isExpensive = expensive
+                self.isConstrained = constrained
+            }
+        }
+        monitor.start(queue: queue)
+    }
 
-    public func stop() {}
+    public func stop() {
+        generation = UUID()
+        monitor?.pathUpdateHandler = nil
+        monitor?.cancel()
+        monitor = nil
+    }
+}
+
+final class LockedConnectivity: Connectivity, @unchecked Sendable {
+    private let lock = NSLock()
+    private var state: (isOnline: Bool, isMetered: Bool)
+
+    init(isOnline: Bool, isMetered: Bool) {
+        state = (isOnline, isMetered)
+    }
+
+    var isOnline: Bool { withState { $0.isOnline } }
+    var isMetered: Bool { withState { $0.isMetered } }
+
+    func update(isOnline: Bool, isMetered: Bool) {
+        lock.lock()
+        state = (isOnline, isMetered)
+        lock.unlock()
+    }
+
+    private func withState<T>(_ read: ((isOnline: Bool, isMetered: Bool)) -> T) -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return read(state)
+    }
 }

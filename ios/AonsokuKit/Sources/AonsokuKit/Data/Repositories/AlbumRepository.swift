@@ -43,6 +43,10 @@ struct AlbumRepository {
                 query = filter.sortOrder == "desc"
                     ? query.order(Column("created").desc)
                     : query.order(Column("created").asc)
+            case "played":
+                query = filter.sortOrder == "desc"
+                    ? query.order(Column("played").desc)
+                    : query.order(Column("played").asc)
             case "starredAt":
                 query = filter.sortOrder == "desc"
                     ? query.order(Column("starredAt").desc)
