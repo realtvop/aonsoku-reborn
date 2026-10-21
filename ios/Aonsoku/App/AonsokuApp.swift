@@ -6,23 +6,21 @@ import UIKit
 struct AonsokuApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @Environment(\.scenePhase) private var scenePhase
-    @State private var app: AppModel
+    @State private var app: AppModel?
     @State private var router = Router()
-
-    init() {
-        // Loads settings and the stored session before the first frame, so
-        // launch shows the right screen without a placeholder.
-        let app = AppModel()
-        app.start()
-        _app = State(initialValue: app)
-    }
 
     var body: some Scene {
         WindowGroup {
-            AppRoot(app: app, router: router)
+            if let app {
+                AppRoot(app: app, router: router)
+            } else {
+                LaunchView()
+                    .task { await bootstrap() }
+            }
         }
         .onChange(of: scenePhase) { _, phase in
-            let lifecycle = AppServices.shared.lifecycle
+            guard let app else { return }
+            let lifecycle = app.services.lifecycle
             switch phase {
             case .background:
                 lifecycle.didEnterBackground()
@@ -33,6 +31,37 @@ struct AonsokuApp: App {
                 app.didBecomeActive()
             default:
                 break
+            }
+        }
+    }
+
+    /// Lets SwiftUI paint the launch view before opening and migrating the
+    /// library database. The service graph is Sendable and owns its own
+    /// queues, so its expensive construction does not need the main actor.
+    private func bootstrap() async {
+        guard app == nil else { return }
+        await Task.yield()
+        let services = await Task.detached(priority: .userInitiated) {
+            AppServices.shared
+        }.value
+        services.lifecycle.didFinishLaunching()
+        let model = AppModel(services: services)
+        model.start()
+        app = model
+    }
+}
+
+/// The first frame shown while the native service graph and database open.
+private struct LaunchView: View {
+    var body: some View {
+        ZStack {
+            Color(.systemBackground)
+                .ignoresSafeArea()
+            VStack(spacing: 24) {
+                AonsokuMark()
+                    .frame(width: 104, height: 104)
+                ProgressView()
+                    .tint(AonsokuMark.green)
             }
         }
     }
