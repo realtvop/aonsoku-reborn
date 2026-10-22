@@ -157,6 +157,55 @@ final class SearchAndSyncTests: XCTestCase {
         XCTAssertTrue(completed.read { $0 })
     }
 
+    func testReplacementSyncRejectsTheCancelledTasksTerminalState() async throws {
+        let database = try TemporaryDatabase()
+        let gate = SyncRequestGate()
+        let useCredentials = LockedTestBox(true)
+        let states = LockedTestBox<[[String: Any]]>([])
+        let credentials = ServerCredentials(
+            serverUrl: "https://music.test",
+            username: "user",
+            password: "password",
+            authType: "password",
+            protocolVersion: "1.16.1",
+            serverType: "navidrome",
+            fallbackUrl: nil
+        )
+        let engine = SyncEngine(
+            db: database.manager.dbPool,
+            httpClient: DelayedFailingSyncHTTPClient(gate: gate),
+            credentialsProvider: {
+                useCredentials.read { $0 ? credentials : nil }
+            }
+        )
+        engine.onSyncStateChanged = { state in
+            states.update { $0.append(state) }
+        }
+
+        let first = Task {
+            await engine.syncAllAndWait(includeFullSongs: false, mode: "full")
+        }
+        while !(await gate.hasStarted) {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+
+        useCredentials.update { $0 = false }
+        let secondResult = await engine.syncAllAndWait(
+            includeFullSongs: false,
+            mode: "full"
+        )
+        XCTAssertFalse(secondResult)
+        await gate.open()
+        let firstResult = await first.value
+        XCTAssertFalse(firstResult)
+        try? await Task.sleep(for: .milliseconds(50))
+
+        let latest = states.read { $0.last }
+        XCTAssertEqual(latest?["phase"] as? String, "error")
+        XCTAssertEqual(latest?["message"] as? String, "Not signed in")
+        XCTAssertFalse(engine.isSyncing)
+    }
+
     private func cacheRow(id: String, removed: Bool) -> CacheMetaRecord {
         CacheMetaRecord(
             key: "audio:\(id)",

@@ -45,6 +45,8 @@ extension LibrarySyncHTTPClient {
 extension SubsonicHTTPClient: LibrarySyncHTTPClient {}
 
 final class SyncEngine {
+    @TaskLocal private static var executingGeneration: Int?
+
     private let db: DatabasePool
     private let httpClient: any LibrarySyncHTTPClient
     private let syncStateRepo: SyncStateRepository
@@ -58,11 +60,13 @@ final class SyncEngine {
     private let cachedCoverSize: @Sendable (String) -> String?
     private let downloadCover: @Sendable (String, String) async throws -> Void
 
+    private let taskLock = NSLock()
     private var currentTask: Task<Bool, Never>?
     private var generation: Int = 0
+    private var activeGeneration: Int?
 
     private var syncStateTimer: Timer?
-    private var pendingSyncState: [String: Any]?
+    private var pendingSyncState: (generation: Int?, state: [String: Any])?
 
     var onSyncStateChanged: (([String: Any]) -> Void)?
     var onDataChanged: (([String]) -> Void)?
@@ -107,11 +111,19 @@ final class SyncEngine {
         mode: String = "full",
         coverArt: LibrarySyncOptions.CoverArt? = nil
     ) async -> Bool {
-        await startSync(
+        let handle = startSync(
             includeFullSongs: includeFullSongs,
             mode: mode,
             coverArt: coverArt
-        ).value
+        )
+        let result = await handle.task.value
+        finishSync(generation: handle.generation)
+        return result
+    }
+
+    private struct SyncHandle {
+        let generation: Int
+        let task: Task<Bool, Never>
     }
 
     @discardableResult
@@ -119,22 +131,37 @@ final class SyncEngine {
         includeFullSongs: Bool,
         mode: String,
         coverArt: LibrarySyncOptions.CoverArt?
-    ) -> Task<Bool, Never> {
-        let gen = generation + 1
-        generation = gen
-
-        currentTask?.cancel()
+    ) -> SyncHandle {
+        let (gen, previousTask) = taskLock.withLock {
+            generation &+= 1
+            activeGeneration = generation
+            let previousTask = currentTask
+            currentTask = nil
+            return (generation, previousTask)
+        }
+        previousTask?.cancel()
         let task = Task { [weak self] in
             guard let self else { return false }
-            return await self.performSync(
-                generation: gen,
-                includeFullSongs: includeFullSongs,
-                mode: mode,
-                coverArt: coverArt
-            )
+            return await Self.$executingGeneration.withValue(gen) {
+                await self.performSync(
+                    generation: gen,
+                    includeFullSongs: includeFullSongs,
+                    mode: mode,
+                    coverArt: coverArt
+                )
+            }
         }
-        currentTask = task
-        return task
+        let accepted = taskLock.withLock {
+            guard generation == gen, activeGeneration == gen else { return false }
+            currentTask = task
+            return true
+        }
+        if !accepted { task.cancel() }
+        Task { [weak self] in
+            _ = await task.value
+            self?.finishSync(generation: gen)
+        }
+        return SyncHandle(generation: gen, task: task)
     }
 
     func syncIncremental() {
@@ -142,13 +169,28 @@ final class SyncEngine {
     }
 
     func cancel() {
-        generation += 1
-        currentTask?.cancel()
-        currentTask = nil
+        let (task, cancellationGeneration) = taskLock.withLock {
+            () -> (Task<Bool, Never>?, Int) in
+            generation &+= 1
+            activeGeneration = nil
+            let task = currentTask
+            currentTask = nil
+            return (task, generation)
+        }
+        task?.cancel()
+        enqueueState(
+            phase: "cancelled",
+            tier: nil,
+            processed: 0,
+            total: 0,
+            message: nil,
+            generation: cancellationGeneration
+        )
+        forceFlushSyncState()
     }
 
     var isSyncing: Bool {
-        currentTask.map { !$0.isCancelled } ?? false
+        taskLock.withLock { activeGeneration != nil }
     }
 
     // MARK: - Private
@@ -168,7 +210,6 @@ final class SyncEngine {
                 message: "Not signed in"
             )
             forceFlushSyncState()
-            if self.generation == generation { currentTask = nil }
             return false
         }
 
@@ -202,7 +243,6 @@ final class SyncEngine {
             try? syncStateRepo.recordFullSync()
             emitState(phase: "done", tier: nil, processed: 0, total: 0)
             forceFlushSyncState()
-            if self.generation == generation { currentTask = nil }
             return true
         } catch is CancellationError {
             emitState(phase: "cancelled", tier: nil, processed: 0, total: 0)
@@ -219,10 +259,19 @@ final class SyncEngine {
             forceFlushSyncState()
         }
 
-        if self.generation == generation {
+        return false
+    }
+
+    private func finishSync(generation: Int) {
+        taskLock.withLock {
+            guard activeGeneration == generation else { return }
+            activeGeneration = nil
             currentTask = nil
         }
-        return false
+    }
+
+    private func isCurrentGeneration(_ generation: Int) -> Bool {
+        taskLock.withLock { self.generation == generation }
     }
 
     // MARK: - Cover Art
@@ -664,6 +713,25 @@ final class SyncEngine {
         total: Int,
         message: String? = nil
     ) {
+        enqueueState(
+            phase: phase,
+            tier: tier,
+            processed: processed,
+            total: total,
+            message: message,
+            generation: Self.executingGeneration
+        )
+    }
+
+    private func enqueueState(
+        phase: String,
+        tier: String?,
+        processed: Int,
+        total: Int,
+        message: String?,
+        generation: Int?
+    ) {
+        if let generation, !isCurrentGeneration(generation) { return }
         var state: [String: Any] = [
             "phase": phase,
             "tier": tier as Any,
@@ -673,10 +741,12 @@ final class SyncEngine {
             "totalItems": total,
         ]
         if let message { state["message"] = message }
-        pendingSyncState = state
-        if syncStateTimer == nil {
-            DispatchQueue.main.async { [weak self] in
-                self?.syncStateTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: false) { [weak self] _ in
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if let generation, !self.isCurrentGeneration(generation) { return }
+            self.pendingSyncState = (generation, state)
+            if self.syncStateTimer == nil {
+                self.syncStateTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: false) { [weak self] _ in
                     self?.flushSyncState()
                 }
             }
@@ -685,9 +755,13 @@ final class SyncEngine {
 
     private func flushSyncState() {
         syncStateTimer = nil
-        guard let state = pendingSyncState else { return }
+        guard let pending = pendingSyncState else { return }
         pendingSyncState = nil
-        onSyncStateChanged?(state)
+        if let generation = pending.generation,
+           !isCurrentGeneration(generation) {
+            return
+        }
+        onSyncStateChanged?(pending.state)
     }
 
     private func forceFlushSyncState() {
