@@ -108,6 +108,29 @@ final class LibrarySyncStoreTests: XCTestCase {
         XCTAssertEqual(fixture.spy.unsubscribeCount, 1)
         XCTAssertEqual(fixture.store.phase, .idle)
     }
+
+    func testSyncCompletionNotifiesDependentStoresOnlyAfterDone() throws {
+        let fixture = try LibrarySyncStoreFixture()
+        var completions = 0
+        fixture.store.onSyncCompleted { completions += 1 }
+
+        fixture.store.handle(.dataChanged(tables: ["songs"]))
+        fixture.store.handle(.syncStateChanged(LibrarySyncState(
+            phase: "error",
+            isSyncing: false,
+            processedItems: 0,
+            totalItems: 0
+        )))
+        XCTAssertEqual(completions, 0)
+
+        fixture.store.handle(.syncStateChanged(LibrarySyncState(
+            phase: "done",
+            isSyncing: false,
+            processedItems: 0,
+            totalItems: 0
+        )))
+        XCTAssertEqual(completions, 1)
+    }
 }
 
 @MainActor

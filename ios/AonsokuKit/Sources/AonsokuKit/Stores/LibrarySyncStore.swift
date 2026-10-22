@@ -48,6 +48,7 @@ public final class LibrarySyncStore {
     @ObservationIgnored private var started = false
     @ObservationIgnored private var revisionPending = false
     @ObservationIgnored private var lastForegroundSyncAt: Date?
+    @ObservationIgnored private var syncCompleted: (@MainActor () -> Void)?
     @ObservationIgnored private let operations: LibrarySyncOperations
     @ObservationIgnored private let now: @Sendable () -> Date
 
@@ -74,6 +75,10 @@ public final class LibrarySyncStore {
     }
 
     public var isSyncing: Bool { phase.isActive }
+
+    func onSyncCompleted(_ handler: @escaping @MainActor () -> Void) {
+        syncCompleted = handler
+    }
 
     /// Subscribes to sync events and runs the startup sync. Call after
     /// sign-in.
@@ -144,6 +149,7 @@ public final class LibrarySyncStore {
                 phase = .done
                 lastSyncedAt = now()
                 lastForegroundSyncAt = lastSyncedAt
+                syncCompleted?()
             case "cancelled":
                 phase = .cancelled
             case "error":

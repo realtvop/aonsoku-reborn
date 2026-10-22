@@ -35,6 +35,7 @@ public final class AppModel {
     @ObservationIgnored public let coordination: CoordinationStore
 
     @ObservationIgnored private var activation: Task<Void, Never>?
+    @ObservationIgnored private var smartDownloadsReady = false
 
     public init(services: AppServices = .shared, bundle: Bundle = .main) {
         self.services = services
@@ -100,6 +101,9 @@ public final class AppModel {
         settings.onChange { [weak self] old, new in
             self?.settingsChanged(from: old, to: new)
         }
+        sync.onSyncCompleted { [weak self] in
+            self?.librarySyncCompleted()
+        }
     }
 
     // MARK: Lifecycle
@@ -143,6 +147,7 @@ public final class AppModel {
     public func signOut() {
         activation?.cancel()
         activation = nil
+        smartDownloadsReady = false
         player.clearAll()
         sync.stop()
         coordination.stop()
@@ -164,6 +169,7 @@ public final class AppModel {
     private func activate() {
         guard !isActive else { return }
         isActive = true
+        smartDownloadsReady = false
         services.library.initialize(startAutomaticSync: false)
         pinned.load()
         history.load()
@@ -183,6 +189,10 @@ public final class AppModel {
             guard !Task.isCancelled else { return }
             downloads.start()
             await favorites.load()
+            guard !Task.isCancelled else { return }
+            smartDownloadsReady = true
+            await downloads.applySmartRules()
+            guard !Task.isCancelled else { return }
             await session.refreshUser()
         }
     }
@@ -229,11 +239,20 @@ public final class AppModel {
             Task { await downloads.enforceQuotas() }
         }
         if old.cache.smartRules != new.cache.smartRules {
-            Task { await downloads.applySmartRules() }
+            applySmartDownloadsIfReady()
         }
         if old.lyrics != new.lyrics || old.privacy != new.privacy {
             Task { await lyrics.reload() }
         }
+    }
+
+    private func librarySyncCompleted() {
+        applySmartDownloadsIfReady()
+    }
+
+    private func applySmartDownloadsIfReady() {
+        guard isActive, smartDownloadsReady else { return }
+        Task { await downloads.applySmartRules() }
     }
 
     private func applyReplayGain(_ replayGain: ReplayGainSettings) {
