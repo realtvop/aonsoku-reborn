@@ -109,4 +109,19 @@ final class PlaybackLifecycleTests: XCTestCase {
         service.unsubscribe(token)
         service.shutdown()
     }
+
+    func testPlaybackSnapshotCanBeReadFromABackgroundTask() async throws {
+        let database = try TemporaryDatabase()
+        let service = AudioService(databaseManager: database.manager)
+
+        let snapshot = await Task.detached {
+            service.playbackSnapshot()
+        }.value
+
+        XCTAssertEqual(snapshot.state, .idle)
+        XCTAssertEqual(snapshot.currentTime, 0)
+        XCTAssertEqual(snapshot.duration, 0)
+        XCTAssertNil(snapshot.queue)
+        service.shutdown()
+    }
 }

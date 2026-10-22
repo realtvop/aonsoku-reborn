@@ -579,15 +579,17 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     public func playbackSnapshot() -> AudioPlaybackSnapshot {
-        let queue = fullState()
-        return AudioPlaybackSnapshot(
-            state: playbackState,
-            currentTime: currentTime,
-            duration: duration,
-            bufferedTime: bufferedTime,
-            metadata: remoteProjection?.metadata ?? metadata,
-            queue: queue
-        )
+        dispatchMainSync {
+            let queue = fullState()
+            return AudioPlaybackSnapshot(
+                state: playbackState,
+                currentTime: currentTime,
+                duration: duration,
+                bufferedTime: bufferedTime,
+                metadata: remoteProjection?.metadata ?? metadata,
+                queue: queue
+            )
+        }
     }
 
     public func pauseAndGetFullState() -> AudioQueueSnapshot? {
@@ -2691,9 +2693,9 @@ public final class AudioService: NSObject, @unchecked Sendable {
         else { DispatchQueue.main.async(execute: work) }
     }
 
-    private func dispatchMainSync(_ work: () -> Void) {
-        if Thread.isMainThread { work() }
-        else { DispatchQueue.main.sync(execute: work) }
+    private func dispatchMainSync<Result>(_ work: () -> Result) -> Result {
+        if Thread.isMainThread { return work() }
+        return DispatchQueue.main.sync(execute: work)
     }
 
     private static func findSlider(in view: UIView) -> UISlider? {
