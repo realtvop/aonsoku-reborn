@@ -2231,9 +2231,11 @@ public final class AudioService: NSObject, @unchecked Sendable {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
 
+            let imageCache: ImageCacheManager?
+            let publicationGeneration: UInt64?
             if let coverArtId, !coverArtId.isEmpty {
-                let imageCache = ImageCacheManager(db: self.databaseManager.dbPool)
-                if let localURL = imageCache.resolveCoverImage(coverArtId: coverArtId),
+                let cache = ImageCacheManager(db: self.databaseManager.dbPool)
+                if let localURL = cache.resolveCoverImage(coverArtId: coverArtId),
                    let data = try? Data(contentsOf: localURL),
                    let image = UIImage(data: data) {
                     self.publishNowPlayingArtwork(image, revision: revision)
@@ -2243,7 +2245,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                 if URL(string: urlString)?.scheme == "aonsoku-media" {
                     Task {
                         do {
-                            _ = try await imageCache.downloadCoverImage(
+                            _ = try await cache.downloadCoverImage(
                                 coverArtId: coverArtId,
                                 size: "800"
                             )
@@ -2256,22 +2258,28 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     }
                     return
                 }
+                imageCache = cache
+                publicationGeneration = cache.publicationGeneration()
+            } else {
+                imageCache = nil
+                publicationGeneration = nil
             }
 
             guard let url = URL(string: urlString) else { return }
             let task = URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
                 guard let self, error == nil, let data,
                       let image = UIImage(data: data) else { return }
-                if let coverArtId, !coverArtId.isEmpty {
+                if let coverArtId, !coverArtId.isEmpty,
+                   let imageCache, let publicationGeneration {
                     let contentType = (response as? HTTPURLResponse)?
                         .value(forHTTPHeaderField: "Content-Type") ?? "image/jpeg"
-                    _ = try? ImageCacheManager(db: self.databaseManager.dbPool)
-                        .storeCoverImage(
-                            coverArtId: coverArtId,
-                            data: data,
-                            contentType: contentType,
-                            coverSize: "800"
-                        )
+                    _ = try? imageCache.storeCoverImage(
+                        coverArtId: coverArtId,
+                        data: data,
+                        contentType: contentType,
+                        coverSize: "800",
+                        expectedGeneration: publicationGeneration
+                    )
                 }
                 self.publishNowPlayingArtwork(image, revision: revision)
             }

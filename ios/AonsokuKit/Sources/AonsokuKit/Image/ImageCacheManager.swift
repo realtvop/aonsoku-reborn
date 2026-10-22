@@ -40,7 +40,7 @@ final class ImageCacheManager: @unchecked Sendable {
     // MARK: - Public API
 
     func downloadAvatar(username: String, size: String) async throws -> URL {
-        let generation = currentPublicationGeneration()
+        let generation = publicationGeneration()
         guard let credentials = credentialsProvider() else {
             throw ImageCacheError.noCredentials
         }
@@ -67,7 +67,7 @@ final class ImageCacheManager: @unchecked Sendable {
     }
 
     func downloadCoverImage(coverArtId: String, size: String) async throws -> URL {
-        let generation = currentPublicationGeneration()
+        let generation = publicationGeneration()
         guard let credentials = credentialsProvider() else {
             throw ImageCacheError.noCredentials
         }
@@ -98,14 +98,21 @@ final class ImageCacheManager: @unchecked Sendable {
         return publication.url
     }
 
-    func storeCoverImage(coverArtId: String, data: Data, contentType: String, coverSize: String) throws -> URL {
+    func storeCoverImage(
+        coverArtId: String,
+        data: Data,
+        contentType: String,
+        coverSize: String,
+        expectedGeneration: UInt64? = nil
+    ) throws -> URL {
         let directory = try ImageCacheUtils.cacheDirectoryURL(createIfNeeded: true)
         let publication = try publishCoverImage(
             coverArtId: coverArtId,
             data: data,
             contentType: contentType,
             coverSize: coverSize,
-            directory: directory
+            directory: directory,
+            expectedGeneration: expectedGeneration
         )
         if publication.didWrite {
             notifyCoverImageCached(coverArtId: coverArtId)
@@ -281,7 +288,7 @@ final class ImageCacheManager: @unchecked Sendable {
         )
     }
 
-    private func currentPublicationGeneration() -> UInt64 {
+    func publicationGeneration() -> UInt64 {
         Self.publication.lock.lock()
         defer { Self.publication.lock.unlock() }
         return Self.publication.generation

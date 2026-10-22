@@ -282,6 +282,35 @@ final class ImageCacheTests: XCTestCase {
         } catch is CancellationError {}
         XCTAssertNil(manager.resolveCoverImage(coverArtId: coverArtId))
     }
+
+    func testStoreRejectsArtworkCapturedBeforeCacheClear() throws {
+        let database = try TemporaryDatabase()
+        let manager = ImageCacheManager(
+            db: database.manager.dbPool,
+            session: .shared,
+            credentialsProvider: { nil }
+        )
+        let coverArtId = "stale-store-\(UUID().uuidString)"
+        let generation = manager.publicationGeneration()
+        _ = try manager.clearCoverImages()
+
+        XCTAssertThrowsError(
+            try manager.storeCoverImage(
+                coverArtId: coverArtId,
+                data: Data("stale-cover".utf8),
+                contentType: "image/png",
+                coverSize: "800",
+                expectedGeneration: generation
+            )
+        ) { error in
+            XCTAssertTrue(error is CancellationError)
+        }
+        XCTAssertNil(manager.resolveCoverImage(coverArtId: coverArtId))
+        XCTAssertNil(
+            try CacheMetaRepository(db: database.manager.dbPool)
+                .getByKey("cover:\(coverArtId)")
+        )
+    }
 }
 
 private final class ImageCacheURLProtocolStub: URLProtocol {
