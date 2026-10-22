@@ -94,6 +94,12 @@ class NativeScrobbleBuffer {
 
     func clear() {
         entries = []
+        currentSongId = nil
+        currentSongDuration = nil
+        accumulatedMs = 0
+        segmentStartTime = nil
+        trackingStartTimestamp = 0
+        lastEntryDuration = nil
         store.save([])
     }
 

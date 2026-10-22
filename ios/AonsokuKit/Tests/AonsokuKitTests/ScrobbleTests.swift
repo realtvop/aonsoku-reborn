@@ -81,6 +81,23 @@ final class ScrobbleTests: XCTestCase {
         XCTAssertTrue(store.load().isEmpty)
     }
 
+    func testClearDiscardsActiveTracking() {
+        let clock = ManualClock()
+        let store = InMemoryScrobbleEntryStore()
+        let buffer = NativeScrobbleBuffer(store: store, now: clock.now)
+        buffer.startTracking(songId: "old-account")
+        clock.advance(milliseconds: 1_000)
+
+        buffer.clear()
+        buffer.resumeTracking()
+        clock.advance(milliseconds: 1_000)
+
+        XCTAssertNil(buffer.stopTracking())
+        XCTAssertNil(buffer.lastEntryDuration)
+        XCTAssertTrue(buffer.getEntries().isEmpty)
+        XCTAssertTrue(store.load().isEmpty)
+    }
+
     func testSubmissionThresholdUsesHalfDurationCappedAtFourMinutes() {
         let submitter = NativeScrobbleSubmitter()
         let short = ScrobbleEntry(songId: "short", playedDurationMs: 59_999, timestamp: 1)
