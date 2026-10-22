@@ -106,4 +106,72 @@ final class AudioAdapterTests: XCTestCase {
             .reorderQueue(from: 3, to: 1)
         )
     }
+
+    func testRemoteCommandPayloadValidatesNumericRangesAndTypes() {
+        XCTAssertEqual(
+            AudioPayloadCodec.decodeRemoteControlCommand([
+                "type": "seek", "seconds": 12.5,
+            ]),
+            .seek(12.5)
+        )
+        XCTAssertEqual(
+            AudioPayloadCodec.decodeRemoteControlCommand([
+                "type": "set_volume", "volume": 1,
+            ]),
+            .setVolume(1)
+        )
+
+        let invalidCommands: [[String: Any]] = [
+            ["type": "seek"],
+            ["type": "seek", "seconds": -1],
+            ["type": "seek", "seconds": Double.infinity],
+            ["type": "set_volume"],
+            ["type": "set_volume", "volume": 1.1],
+            ["type": "set_volume", "volume": Double.nan],
+            ["type": "set_shuffle", "enabled": "true"],
+            ["type": "set_repeat", "mode": "track"],
+            ["type": "reorder_queue", "from": -1, "to": 0],
+            ["type": "reorder_queue", "from": 0.5, "to": 1],
+        ]
+        for command in invalidCommands {
+            XCTAssertNil(
+                AudioPayloadCodec.decodeRemoteControlCommand(command),
+                "Expected invalid command to be rejected: \(command)"
+            )
+        }
+    }
+
+    func testRemoteCommandPayloadValidatesIdsListsAndIndexes() {
+        XCTAssertEqual(
+            AudioPayloadCodec.decodeRemoteControlCommand([
+                "type": "play_album", "album_id": "album-1",
+            ]),
+            .playAlbum(id: "album-1", index: 0, shuffle: false)
+        )
+        XCTAssertEqual(
+            AudioPayloadCodec.decodeRemoteControlCommand([
+                "type": "play_at_index",
+                "song_ids": ["a", "b"],
+                "index": 1,
+            ]),
+            .playAtIndex(songIds: ["a", "b"], index: 1)
+        )
+
+        let invalidCommands: [[String: Any]] = [
+            ["type": "play_song", "song_id": ""],
+            ["type": "play_album", "album_id": "album-1", "index": "0"],
+            ["type": "play_playlist", "playlist_id": "playlist-1", "shuffle": 1],
+            ["type": "add_to_queue_next"],
+            ["type": "add_to_queue_last", "song_ids": ["a", 2]],
+            ["type": "remove_from_queue", "song_ids": [""]],
+            ["type": "play_at_index", "song_ids": ["a"], "index": 1],
+            ["type": "play_at_index", "song_ids": [], "index": 0],
+        ]
+        for command in invalidCommands {
+            XCTAssertNil(
+                AudioPayloadCodec.decodeRemoteControlCommand(command),
+                "Expected invalid command to be rejected: \(command)"
+            )
+        }
+    }
 }

@@ -48,44 +48,78 @@ public enum AudioPayloadCodec {
         case "stop": return .stop
         case "previous": return .previous
         case "next": return .next
-        case "seek": return .seek(number(object["seconds"]) ?? 0)
-        case "set_shuffle": return .setShuffle(object["enabled"] as? Bool ?? false)
+        case "seek":
+            guard let seconds = finiteNumber(object["seconds"]), seconds >= 0 else {
+                return nil
+            }
+            return .seek(seconds)
+        case "set_shuffle":
+            guard let enabled = object["enabled"] as? Bool else { return nil }
+            return .setShuffle(enabled)
         case "set_repeat":
-            return .setRepeat(AudioRepeatMode(rawValue: object["mode"] as? String ?? "off") ?? .off)
-        case "set_volume": return .setVolume(number(object["volume"]) ?? 0.5)
+            guard let rawMode = object["mode"] as? String,
+                  let mode = AudioRepeatMode(rawValue: rawMode) else {
+                return nil
+            }
+            return .setRepeat(mode)
+        case "set_volume":
+            guard let volume = finiteNumber(object["volume"]),
+                  (0 ... 1).contains(volume) else {
+                return nil
+            }
+            return .setVolume(volume)
         case "play_song":
-            guard let id = object["song_id"] as? String else { return nil }
+            guard let id = nonEmptyString(object["song_id"]) else { return nil }
             return .playSong(id)
         case "play_album":
-            guard let id = object["album_id"] as? String else { return nil }
+            guard let id = nonEmptyString(object["album_id"]),
+                  let index = optionalInteger(object, key: "index"),
+                  let shuffle = optionalBoolean(object, key: "shuffle") else {
+                return nil
+            }
             return .playAlbum(
                 id: id,
-                index: object["index"] as? Int ?? 0,
-                shuffle: object["shuffle"] as? Bool ?? false
+                index: index ?? 0,
+                shuffle: shuffle ?? false
             )
         case "play_playlist":
-            guard let id = object["playlist_id"] as? String else { return nil }
+            guard let id = nonEmptyString(object["playlist_id"]),
+                  let index = optionalInteger(object, key: "index"),
+                  let shuffle = optionalBoolean(object, key: "shuffle") else {
+                return nil
+            }
             return .playPlaylist(
                 id: id,
-                index: object["index"] as? Int ?? 0,
-                shuffle: object["shuffle"] as? Bool ?? false
+                index: index ?? 0,
+                shuffle: shuffle ?? false
             )
         case "play_at_index":
+            guard let songIds = songIds(object["song_ids"]),
+                  let index = integer(object["index"]),
+                  songIds.indices.contains(index) else {
+                return nil
+            }
             return .playAtIndex(
-                songIds: object["song_ids"] as? [String] ?? [],
-                index: object["index"] as? Int ?? 0
+                songIds: songIds,
+                index: index
             )
         case "add_to_queue_next", "add_to_queue_last":
+            guard let songIds = songIds(object["song_ids"]) else { return nil }
             return .addToQueue(
-                songIds: object["song_ids"] as? [String] ?? [],
+                songIds: songIds,
                 position: type == "add_to_queue_next" ? "next" : "last"
             )
         case "remove_from_queue":
-            return .removeFromQueue(songIds: object["song_ids"] as? [String] ?? [])
+            guard let songIds = songIds(object["song_ids"]) else { return nil }
+            return .removeFromQueue(songIds: songIds)
         case "reorder_queue":
+            guard let from = integer(object["from"]),
+                  let to = integer(object["to"]) else {
+                return nil
+            }
             return .reorderQueue(
-                from: object["from"] as? Int ?? -1,
-                to: object["to"] as? Int ?? -1
+                from: from,
+                to: to
             )
         case "clear_queue": return .clearQueue
         case "toggle_like": return .toggleLike
@@ -94,10 +128,12 @@ public enum AudioPayloadCodec {
     }
 
     public static func isSupportedRemoteControlCommand(_ type: String) -> Bool {
-        decodeRemoteControlCommand(["type": type]) != nil || [
-            "play_song", "play_album", "play_playlist", "play_at_index",
+        [
+            "play", "pause", "toggle_play_pause", "stop", "previous", "next",
+            "seek", "set_shuffle", "set_repeat", "set_volume", "play_song",
+            "play_album", "play_playlist", "play_at_index", "toggle_like",
             "add_to_queue_next", "add_to_queue_last", "remove_from_queue",
-            "reorder_queue",
+            "reorder_queue", "clear_queue",
         ].contains(type)
     }
 
@@ -204,5 +240,60 @@ public enum AudioPayloadCodec {
         case let value as NSNumber: return value.doubleValue
         default: return nil
         }
+    }
+
+    private static func finiteNumber(_ value: Any?) -> Double? {
+        guard !(value is Bool), let result = number(value), result.isFinite else {
+            return nil
+        }
+        return result
+    }
+
+    private static func integer(_ value: Any?) -> Int? {
+        guard let value = finiteNumber(value),
+              value >= 0,
+              value <= Double(Int.max),
+              value.rounded(.towardZero) == value else {
+            return nil
+        }
+        return Int(value)
+    }
+
+    private static func nonEmptyString(_ value: Any?) -> String? {
+        guard let value = value as? String, !value.isEmpty else { return nil }
+        return value
+    }
+
+    private static func songIds(_ value: Any?) -> [String]? {
+        guard let values = value as? [Any], values.count <= 2_000 else {
+            return nil
+        }
+        var result: [String] = []
+        result.reserveCapacity(values.count)
+        for value in values {
+            guard let id = nonEmptyString(value) else { return nil }
+            result.append(id)
+        }
+        return result
+    }
+
+    /// Returns an outer optional so a present-but-invalid value can be
+    /// distinguished from an omitted optional field.
+    private static func optionalInteger(
+        _ object: [String: Any],
+        key: String
+    ) -> Int?? {
+        guard let value = object[key], !(value is NSNull) else { return .some(nil) }
+        guard let value = integer(value) else { return nil }
+        return .some(value)
+    }
+
+    private static func optionalBoolean(
+        _ object: [String: Any],
+        key: String
+    ) -> Bool?? {
+        guard let value = object[key], !(value is NSNull) else { return .some(nil) }
+        guard let value = value as? Bool else { return nil }
+        return .some(value)
     }
 }
