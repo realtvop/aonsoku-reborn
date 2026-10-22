@@ -529,9 +529,10 @@ final class SyncEngine {
         }
 
         try Task.checkCancellation()
+        let albumsToStore = allAlbums
         try await db.write { db in
             _ = try AlbumRecord.deleteAll(db)
-            for album in allAlbums {
+            for album in albumsToStore {
                 try album.save(db, onConflict: .replace)
             }
         }
