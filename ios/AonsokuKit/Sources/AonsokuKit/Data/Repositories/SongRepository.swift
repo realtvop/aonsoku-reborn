@@ -70,11 +70,13 @@ struct SongRepository {
     }
 
     func getByIds(ids: [String]) throws -> [SongRecord] {
-        try db.read { db in
+        let records = try db.read { db in
             try SongRecord
                 .filter(ids.contains(Column("id")))
                 .fetchAll(db)
         }
+        let byId = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0) })
+        return ids.compactMap { byId[$0] }
     }
 
     func getByAlbumId(_ albumId: String) throws -> [SongRecord] {

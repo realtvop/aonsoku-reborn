@@ -667,6 +667,10 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     return
                 }
                 let songs = self.resolveSongs(ids: entries.map(\.id)).map(\.queueSong)
+                guard songs.count == entries.count else {
+                    completion(false)
+                    return
+                }
                 self.applyRemoteQueue(
                     songs: songs,
                     index: index,
@@ -683,7 +687,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     return
                 }
                 let songs = self.resolveSongs(ids: songIds).map(\.queueSong)
-                guard songIds.isEmpty || !songs.isEmpty else {
+                guard songs.count == songIds.count else {
                     completion(false)
                     return
                 }
@@ -1615,6 +1619,10 @@ public final class AudioService: NSObject, @unchecked Sendable {
                 return
             }
             let songs = self.resolveSongs(ids: ids).map(\.queueSong)
+            guard songs.count == ids.count else {
+                completion(false)
+                return
+            }
             self.applyRemoteQueue(
                 songs: songs,
                 index: index,

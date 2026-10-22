@@ -221,6 +221,44 @@ final class PlayerStoreTests: XCTestCase {
         fixture.audio.shutdown()
     }
 
+    func testRemoteQueueResolutionPreservesOrderAndRejectsMissingSongs() async throws {
+        let fixture = try PlayerStoreTestFixture()
+        try SongRepository(db: fixture.database.manager.dbPool).bulkUpsert([
+            makeSongRecord("first"),
+            makeSongRecord("second"),
+        ])
+
+        let added = await withCheckedContinuation { continuation in
+            XCTAssertTrue(fixture.audio.executeRemote(
+                .addToQueue(
+                    songIds: ["second", "first", "second"],
+                    position: "last"
+                )
+            ) { result in
+                continuation.resume(returning: result)
+            })
+        }
+        XCTAssertTrue(added)
+        XCTAssertEqual(
+            fixture.audio.fullState()?.userQueue.map(\.id),
+            ["second", "first", "second"]
+        )
+
+        let rejected = await withCheckedContinuation { continuation in
+            XCTAssertTrue(fixture.audio.executeRemote(
+                .addToQueue(songIds: ["first", "missing"], position: "last")
+            ) { result in
+                continuation.resume(returning: result)
+            })
+        }
+        XCTAssertFalse(rejected)
+        XCTAssertEqual(
+            fixture.audio.fullState()?.userQueue.map(\.id),
+            ["second", "first", "second"]
+        )
+        fixture.audio.shutdown()
+    }
+
     func testLocalEnqueueMoveRemoveAndCoverReplayGainConversion() async throws {
         let fixture = try PlayerStoreTestFixture()
         fixture.settings.update { $0.playback.useAlbumCoverForSongs = true }
