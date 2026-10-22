@@ -188,6 +188,76 @@ final class FavoritesStoreTests: XCTestCase {
         XCTAssertTrue(try library.starredIds().songIds.contains("concurrent"))
     }
 
+    func testLoadKeepsConfirmedMutationUntilServerAcknowledgesIt() async throws {
+        let database = try TemporaryDatabase()
+        try SongRepository(db: database.manager.dbPool).upsert(
+            makeCollectionSongRecord("recent")
+        )
+        let api = FakeSubsonicAPI()
+        let responses = LockedTestBox([
+            SearchResults(),
+            SearchResults(songs: [makeMediaSong("recent")]),
+            SearchResults(),
+        ])
+        api.starredHandler = {
+            responses.read(\.first) ?? SearchResults()
+        }
+        let store = FavoritesStore(
+            api: api,
+            library: LibraryService(dbManager: database.manager)
+        )
+
+        await store.setFavorite(.song, id: "recent", isFavorite: true)
+        await store.load()
+        XCTAssertTrue(store.songIds.contains("recent"))
+
+        responses.update { $0.removeFirst() }
+        await store.load()
+        XCTAssertTrue(store.songIds.contains("recent"))
+
+        responses.update { $0.removeFirst() }
+        await store.load()
+        XCTAssertFalse(store.songIds.contains("recent"))
+    }
+
+    func testOlderLoadCannotOverwriteNewerLoad() async throws {
+        let database = try TemporaryDatabase()
+        let api = FakeSubsonicAPI()
+        let calls = LockedTestBox(0)
+        let firstStarted = expectation(description: "first load started")
+        let secondStarted = expectation(description: "second load started")
+        let firstGate = TestAsyncGate()
+        let secondGate = TestAsyncGate()
+        api.starredHandler = {
+            let call = calls.read { $0 }
+            calls.update { $0 += 1 }
+            if call == 0 {
+                firstStarted.fulfill()
+                await firstGate.wait()
+                return SearchResults(songs: [makeMediaSong("old")])
+            }
+            secondStarted.fulfill()
+            await secondGate.wait()
+            return SearchResults(songs: [makeMediaSong("new")])
+        }
+        let store = FavoritesStore(
+            api: api,
+            library: LibraryService(dbManager: database.manager)
+        )
+
+        let first = Task { await store.load() }
+        await fulfillment(of: [firstStarted])
+        let second = Task { await store.load() }
+        await fulfillment(of: [secondStarted])
+        await secondGate.open()
+        await second.value
+        XCTAssertEqual(store.songIds, ["new"])
+
+        await firstGate.open()
+        await first.value
+        XCTAssertEqual(store.songIds, ["new"])
+    }
+
     func testOptimisticSuccessUpdatesLocalAndFailureRollsBackWithToast() async throws {
         let database = try TemporaryDatabase()
         try SongRepository(db: database.manager.dbPool).bulkUpsert([

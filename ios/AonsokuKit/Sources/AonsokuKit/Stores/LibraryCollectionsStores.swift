@@ -178,8 +178,8 @@ public final class FavoritesStore {
     @ObservationIgnored public weak var toasts: ToastCenter?
     @ObservationIgnored private var requests: [FavoriteRequestKey: FavoriteRequest] = [:]
     @ObservationIgnored private var requestTasks: [FavoriteRequestKey: Task<Void, Never>] = [:]
-    @ObservationIgnored private var mutationGeneration: UInt64 = 0
-    @ObservationIgnored private var mutationGenerations: [FavoriteRequestKey: UInt64] = [:]
+    @ObservationIgnored private var pendingMutations: Set<FavoriteRequestKey> = []
+    @ObservationIgnored private var loadGeneration: UInt64 = 0
 
     public init(api: any SubsonicAPI, library: LibraryService, toasts: ToastCenter? = nil) {
         self.api = api
@@ -190,22 +190,24 @@ public final class FavoritesStore {
     /// Loads starred ids from the local library, then from `getStarred2`
     /// when online.
     public func load() async {
-        let baseline = mutationGeneration
+        loadGeneration &+= 1
+        let generation = loadGeneration
         if let local = try? library.starredIds() {
             replace(
                 songs: local.songIds,
                 albums: local.albumIds,
                 artists: local.artistIds,
-                preservingMutationsAfter: baseline
+                authoritative: false
             )
         }
         do {
             let remote = try await api.starred()
+            guard generation == loadGeneration else { return }
             replace(
                 songs: Set(remote.songs.map(\.id)),
                 albums: Set(remote.albums.map(\.id)),
                 artists: Set(remote.artists.map(\.id)),
-                preservingMutationsAfter: baseline
+                authoritative: true
             )
         } catch {
             // The local snapshot remains useful while offline.
@@ -342,15 +344,26 @@ public final class FavoritesStore {
         songs: Set<String>,
         albums: Set<String>,
         artists: Set<String>,
-        preservingMutationsAfter baseline: UInt64
+        authoritative: Bool
     ) {
         var songs = songs
         var albums = albums
         var artists = artists
-        var protected = Set(mutationGenerations.compactMap { key, generation in
-            generation > baseline ? key : nil
-        })
+        var protected = pendingMutations
         protected.formUnion(requests.keys)
+        if authoritative {
+            for key in pendingMutations where requests[key] == nil {
+                let remote = switch key.kind {
+                case .song: songs.contains(key.id)
+                case .album: albums.contains(key.id)
+                case .artist: artists.contains(key.id)
+                }
+                if remote == isFavorite(key.kind, id: key.id) {
+                    pendingMutations.remove(key)
+                    protected.remove(key)
+                }
+            }
+        }
         for key in protected {
             let wanted = requests[key]?.wanted ?? isFavorite(key.kind, id: key.id)
             switch key.kind {
@@ -390,10 +403,8 @@ public final class FavoritesStore {
             after.subtract(ids)
         }
         guard before != after else { return }
-        mutationGeneration &+= 1
-        let generation = mutationGeneration
         for id in ids {
-            mutationGenerations[FavoriteRequestKey(kind: kind, id: id)] = generation
+            pendingMutations.insert(FavoriteRequestKey(kind: kind, id: id))
         }
         switch kind {
         case .song: songIds = after
