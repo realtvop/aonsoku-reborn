@@ -303,6 +303,53 @@ final class ArtworkProviderTests: XCTestCase {
         XCTAssertNil(provider.previewImage(for: id, size: .large))
     }
 
+    func testPurgeRejectsInFlightPaletteExtraction() async throws {
+        let database = try TemporaryDatabase()
+        let library = LibraryService(dbManager: database.manager)
+        let id = "palette-purge-\(UUID().uuidString)"
+        let image = makeQuadrantImage()
+        _ = try library.storeCover(
+            id: id,
+            data: try XCTUnwrap(image.pngData()),
+            contentType: "image/png",
+            size: ArtworkSize.large.requestValue
+        )
+        defer { _ = try? library.deleteCover(id: id) }
+
+        let gate = PaletteExtractionGate()
+        let calls = LockedTestBox(0)
+        let stalePalette = ArtworkPalette(
+            colors: [RGBColor(red: 1, green: 0, blue: 0)],
+            isDark: false
+        )
+        let freshPalette = ArtworkPalette(
+            colors: [RGBColor(red: 0, green: 0, blue: 1)],
+            isDark: true
+        )
+        let provider = ArtworkProvider(library: library) { _ in
+            let call = calls.read { $0 }
+            calls.update { $0 += 1 }
+            if call == 0 {
+                await gate.block()
+                return stalePalette
+            }
+            return freshPalette
+        }
+
+        let extraction = Task { await provider.palette(for: id) }
+        await gate.waitUntilBlocked()
+        provider.purgeMemory()
+        await gate.release()
+
+        let discarded = await extraction.value
+        let loaded = await provider.palette(for: id)
+        let cached = await provider.palette(for: id)
+        XCTAssertNil(discarded)
+        XCTAssertEqual(loaded, freshPalette)
+        XCTAssertEqual(cached, freshPalette)
+        XCTAssertEqual(calls.read { $0 }, 2)
+    }
+
     private func makeQuadrantImage() -> UIImage {
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: 128, height: 128))
         return renderer.image { context in
@@ -315,6 +362,33 @@ final class ArtworkProviderTests: XCTestCase {
             UIColor.yellow.setFill()
             context.fill(CGRect(x: 64, y: 64, width: 64, height: 64))
         }
+    }
+}
+
+private actor PaletteExtractionGate {
+    private var isBlocked = false
+    private var blockedContinuation: CheckedContinuation<Void, Never>?
+    private var releaseContinuation: CheckedContinuation<Void, Never>?
+
+    func block() async {
+        isBlocked = true
+        blockedContinuation?.resume()
+        blockedContinuation = nil
+        await withCheckedContinuation { continuation in
+            releaseContinuation = continuation
+        }
+    }
+
+    func waitUntilBlocked() async {
+        guard !isBlocked else { return }
+        await withCheckedContinuation { continuation in
+            blockedContinuation = continuation
+        }
+    }
+
+    func release() {
+        releaseContinuation?.resume()
+        releaseContinuation = nil
     }
 }
 

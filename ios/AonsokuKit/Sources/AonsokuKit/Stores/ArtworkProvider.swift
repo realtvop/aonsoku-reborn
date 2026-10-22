@@ -55,9 +55,22 @@ public final class ArtworkProvider: @unchecked Sendable {
     public let library: LibraryService
     private let images = NSCache<NSString, UIImage>()
     private let state = ArtworkProviderState()
+    private let paletteExtractor: @Sendable (UIImage) async -> ArtworkPalette?
 
-    public init(library: LibraryService) {
+    public convenience init(library: LibraryService) {
+        self.init(library: library) { image in
+            await Task.detached(priority: .utility) {
+                Self.extractPalette(from: image)
+            }.value
+        }
+    }
+
+    init(
+        library: LibraryService,
+        paletteExtractor: @escaping @Sendable (UIImage) async -> ArtworkPalette?
+    ) {
         self.library = library
+        self.paletteExtractor = paletteExtractor
         images.countLimit = 160
     }
 
@@ -118,11 +131,17 @@ public final class ArtworkProvider: @unchecked Sendable {
     /// Colors extracted from the medium cover, cached per id.
     public func palette(for coverArtId: String) async -> ArtworkPalette? {
         if let cached = state.palette(for: coverArtId) { return cached }
-        guard let image = await image(for: coverArtId, size: .medium) else { return nil }
-        let palette = await Task.detached(priority: .utility) {
-            Self.extractPalette(from: image)
-        }.value
-        if let palette { state.storePalette(palette, for: coverArtId) }
+        let generation = state.currentGeneration()
+        guard let image = await image(for: coverArtId, size: .medium),
+              state.isCurrent(generation),
+              let palette = await paletteExtractor(image),
+              state.storePalette(
+                  palette,
+                  for: coverArtId,
+                  generation: generation
+              ) else {
+            return nil
+        }
         return palette
     }
 
@@ -332,16 +351,28 @@ private final class ArtworkProviderState: @unchecked Sendable {
         return value == generation
     }
 
+    func currentGeneration() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return generation
+    }
+
     func palette(for id: String) -> ArtworkPalette? {
         lock.lock()
         defer { lock.unlock() }
         return palettes[id]
     }
 
-    func storePalette(_ palette: ArtworkPalette, for id: String) {
+    func storePalette(
+        _ palette: ArtworkPalette,
+        for id: String,
+        generation expectedGeneration: Int
+    ) -> Bool {
         lock.lock()
+        defer { lock.unlock() }
+        guard generation == expectedGeneration else { return false }
         palettes[id] = palette
-        lock.unlock()
+        return true
     }
 
     func purge() {
