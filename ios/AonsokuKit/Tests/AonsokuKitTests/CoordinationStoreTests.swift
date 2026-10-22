@@ -131,6 +131,22 @@ final class CoordinationStoreTests: XCTestCase {
         )
     }
 
+    func testCommandAcknowledgementErrorsAreThrownToThePlayer() {
+        XCTAssertNoThrow(
+            try CoordinationStore.requireSuccessfulCommand(.ok)
+        )
+        XCTAssertThrowsError(
+            try CoordinationStore.requireSuccessfulCommand(
+                .error(code: "execution_failed", reason: "queue changed")
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? CoordinationError,
+                CoordinationError(code: "execution_failed", reason: "queue changed")
+            )
+        }
+    }
+
     private func fixtureSongIds(_ groups: DeviceGroups) -> [String] {
         groups.live.compactMap(\.song?.id) + groups.offlineSnapshots.compactMap(\.song?.id)
     }

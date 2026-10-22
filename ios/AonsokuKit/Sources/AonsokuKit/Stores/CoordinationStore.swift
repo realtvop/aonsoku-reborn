@@ -185,7 +185,13 @@ public final class CoordinationStore: RemotePlaybackSource {
     }
 
     public func send(_ command: CoordinationRemoteCommand) async throws {
-        _ = try await service.sendActiveControlCommand(command)
+        let result = try await service.sendActiveControlCommand(command)
+        try Self.requireSuccessfulCommand(result)
+    }
+
+    static func requireSuccessfulCommand(_ result: CoordinationCommandResult) throws {
+        guard case let .error(code, reason) = result else { return }
+        throw CoordinationError(code: code, reason: reason)
     }
 
     // MARK: Handoff
