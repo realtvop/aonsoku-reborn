@@ -248,10 +248,8 @@ struct CrossDeviceSettingsView: View {
     }
 
     private func disconnect() {
-        Task {
-            await coordination.forgetDevice()
-            toasts.success("settings.crossDevice.disconnected")
-        }
+        coordination.disconnect()
+        toasts.success("settings.crossDevice.disconnected")
     }
 
     private func deleteAccount() {

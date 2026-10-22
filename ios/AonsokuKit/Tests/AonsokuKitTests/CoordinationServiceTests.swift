@@ -277,6 +277,23 @@ final class CoordinationServiceTests: XCTestCase {
         XCTAssertEqual(service.state.connectionState, .connected)
     }
 
+    func testDisconnectPreservesRegistrationAndTokens() {
+        let tokens = registeredTokens()
+        tokenStore.tokens = tokens
+        service.update {
+            $0.deviceId = tokens.deviceId
+            $0.accountId = tokens.accountId
+            $0.connectionState = .connected
+        }
+
+        service.disconnect()
+
+        XCTAssertEqual(tokenStore.tokens, tokens)
+        XCTAssertEqual(service.state.deviceId, tokens.deviceId)
+        XCTAssertEqual(service.state.accountId, tokens.accountId)
+        XCTAssertEqual(service.state.connectionState, .disconnected)
+    }
+
     func testResetRegistrationClearsAccountTokensButKeepsConfig() async {
         tokenStore.config = config
         tokenStore.tokens = registeredTokens()
