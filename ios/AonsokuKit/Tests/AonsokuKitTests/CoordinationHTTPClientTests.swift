@@ -150,6 +150,47 @@ final class CoordinationHTTPClientTests: XCTestCase {
         }
     }
 
+    func testClientRejectsTokensFromAnotherRegistration() async throws {
+        let oldTokens = CoordinationTokens(
+            deviceId: "old-device",
+            accountId: "old-account",
+            accessToken: "old-access",
+            refreshToken: "old-refresh",
+            accessTokenExpiresAt: 1700003600000,
+            historyLimit: 100
+        )
+        tokenStore.saveTokens(oldTokens)
+        let requests = LockedCounter()
+        let oldClient = CoordinationHTTPClient(
+            baseURL: "https://old-coordination.example.com",
+            tokenStore: tokenStore,
+            recoveryProof: { nil },
+            transport: { request in
+                requests.increment()
+                return (Data("[]".utf8), HTTPURLResponse(
+                    url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+                )!)
+            },
+            now: { Date(timeIntervalSince1970: 1700000000) }
+        )
+        tokenStore.saveTokens(CoordinationTokens(
+            deviceId: "new-device",
+            accountId: "new-account",
+            accessToken: "new-access",
+            refreshToken: "new-refresh",
+            accessTokenExpiresAt: 1700003600000,
+            historyLimit: 100
+        ))
+
+        do {
+            _ = try await oldClient.listDevices()
+            XCTFail("old client should reject new registration tokens")
+        } catch let error as CoordinationError {
+            XCTAssertEqual(error.code, CoordinationErrorCode.notConnected)
+        }
+        XCTAssertEqual(requests.value, 0)
+    }
+
     // MARK: - Token Refresh
 
     func testRefreshWithin60SecondsOfExpiry() async throws {

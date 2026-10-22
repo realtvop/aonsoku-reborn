@@ -275,6 +275,49 @@ final class CoordinationServiceTests: XCTestCase {
         XCTAssertEqual(transport.scheduleReconnectCount, 0)
     }
 
+    func testStaleDeviceRefreshCannotRevokeNewAccount() async {
+        tokenStore.config = config
+        tokenStore.tokens = registeredTokens()
+        service.start()
+        let requested = expectation(description: "device list requested")
+        let gate = DeviceListGate()
+        apiClient.deviceListGate = gate
+        apiClient.onDeviceListRequest = { requested.fulfill() }
+
+        let refresh = Task { try await service.refreshDevices() }
+        await fulfillment(of: [requested], timeout: 1)
+
+        service.resetRegistration()
+        let newTokens = CoordinationTokens(
+            deviceId: "new-device",
+            accountId: "new-account",
+            accessToken: "new-access",
+            refreshToken: "new-refresh",
+            accessTokenExpiresAt: 9_999_999_999_999,
+            historyLimit: 100
+        )
+        tokenStore.tokens = newTokens
+        service.update {
+            $0.deviceId = newTokens.deviceId
+            $0.accountId = newTokens.accountId
+        }
+        await gate.resume(throwing: CoordinationError(
+            code: CoordinationErrorCode.deviceRevoked
+        ))
+
+        do {
+            try await refresh.value
+            XCTFail("stale refresh should fail")
+        } catch let error as CoordinationError {
+            XCTAssertEqual(error.code, CoordinationErrorCode.notConnected)
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+        XCTAssertEqual(tokenStore.tokens, newTokens)
+        XCTAssertEqual(service.state.deviceId, newTokens.deviceId)
+        XCTAssertEqual(service.state.accountId, newTokens.accountId)
+    }
+
     func testRevokedErrorEnvelopeForgetsTheRegistration() async {
         tokenStore.tokens = registeredTokens()
         service.update {
@@ -811,6 +854,8 @@ private final class FakeAPIClient: CoordinationAPIClient, @unchecked Sendable {
     var onTicketRequest: (() -> Void)?
     var registrationGate: RegistrationGate?
     var onRegistrationRequest: (() -> Void)?
+    var deviceListGate: DeviceListGate?
+    var onDeviceListRequest: (() -> Void)?
 
     func register(
         proof: CoordinationSubsonicProof,
@@ -837,7 +882,13 @@ private final class FakeAPIClient: CoordinationAPIClient, @unchecked Sendable {
         return mockTicket
     }
 
-    func listDevices() async throws -> [CoordinationDevice] { mockDevices }
+    func listDevices() async throws -> [CoordinationDevice] {
+        onDeviceListRequest?()
+        if let deviceListGate {
+            return try await deviceListGate.wait()
+        }
+        return mockDevices
+    }
 
     func renameDevice(id: String, name: String) async throws -> CoordinationDevice {
         CoordinationDevice(id: id, name: name, platform: "capacitor-ios")
@@ -876,6 +927,39 @@ private actor TicketGate {
     }
 
     func resume(returning result: String) {
+        if let continuation {
+            self.continuation = nil
+            continuation.resume(returning: result)
+        } else {
+            self.result = result
+        }
+    }
+}
+
+private actor DeviceListGate {
+    private var result: Result<[CoordinationDevice], CoordinationError>?
+    private var continuation: CheckedContinuation<
+        Result<[CoordinationDevice], CoordinationError>,
+        Never
+    >?
+
+    func wait() async throws -> [CoordinationDevice] {
+        if let result { return try result.get() }
+        let result = await withCheckedContinuation { continuation = $0 }
+        return try result.get()
+    }
+
+    func resume(returning devices: [CoordinationDevice]) {
+        resume(with: .success(devices))
+    }
+
+    func resume(throwing error: CoordinationError) {
+        resume(with: .failure(error))
+    }
+
+    private func resume(
+        with result: Result<[CoordinationDevice], CoordinationError>
+    ) {
         if let continuation {
             self.continuation = nil
             continuation.resume(returning: result)

@@ -31,6 +31,7 @@ public final class CoordinationService: @unchecked Sendable {
     private var started = false
     private var manualDisconnect = false
     private var reconnectGeneration: UInt64 = 0
+    private var apiGeneration: UInt64 = 0
     private var pendingAcks: [String: PendingAck] = [:]
 
     private struct PendingAck {
@@ -39,6 +40,13 @@ public final class CoordinationService: @unchecked Sendable {
         let command: [String: Any]
         var retried: Bool
         var timeoutWorkItem: DispatchWorkItem
+    }
+
+    private struct APIContext {
+        let generation: UInt64
+        let client: CoordinationAPIClient
+        let deviceId: String
+        let accountId: String
     }
 
     init(
@@ -154,7 +162,8 @@ public final class CoordinationService: @unchecked Sendable {
 
         if let config = tokenStore.loadConfig() {
             update { $0.config = config }
-            lock.withLock { client = makeClient(for: config) }
+            let apiClient = makeClient(for: config)
+            lock.withLock { replaceClientLocked(with: apiClient) }
         }
 
         if let tokens = tokenStore.loadTokens() {
@@ -183,9 +192,10 @@ public final class CoordinationService: @unchecked Sendable {
     /// Persists the coordination server and identity URLs.
     public func saveConfig(_ config: CoordinationConfig) {
         tokenStore.saveConfig(config)
+        let apiClient = makeClient(for: config)
         lock.withLock {
             reconnectGeneration &+= 1
-            client = makeClient(for: config)
+            replaceClientLocked(with: apiClient)
         }
         update { $0.config = config }
     }
@@ -212,7 +222,7 @@ public final class CoordinationService: @unchecked Sendable {
         let registrationGeneration = lock.withLock { () -> UInt64 in
             reconnectGeneration &+= 1
             manualDisconnect = false
-            self.client = apiClient
+            replaceClientLocked(with: apiClient)
             return reconnectGeneration
         }
 
@@ -286,6 +296,7 @@ public final class CoordinationService: @unchecked Sendable {
                   currentState.config == config,
                   client === expectedClient else { return false }
             tokenStore.saveTokens(tokens)
+            expectedClient.bindRegistration(tokens)
             currentState.deviceId = tokens.deviceId
             currentState.accountId = tokens.accountId
             currentState.lastError = nil
@@ -331,7 +342,7 @@ public final class CoordinationService: @unchecked Sendable {
                       !manualDisconnect,
                       currentState.config == cfg,
                       currentState.deviceId == deviceId else { return false }
-                self.client = createdClient
+                replaceClientLocked(with: createdClient)
                 return true
             }) else { return }
             apiClient = createdClient
@@ -450,11 +461,11 @@ public final class CoordinationService: @unchecked Sendable {
     /// server configuration. Used before another Subsonic account activates.
     func resetRegistration() {
         disconnect()
+        lock.withLock { replaceClientLocked(with: nil) }
         tokenStore.clearTokens()
         onMain { [weak self] in
             self?.transport.resetSequence()
         }
-        lock.withLock { self.client = nil }
         update {
             $0.deviceId = nil
             $0.accountId = nil
@@ -469,28 +480,26 @@ public final class CoordinationService: @unchecked Sendable {
     /// Deletes the coordination account on the server, then forgets this
     /// device.
     public func deleteAccount() async throws {
-        guard let client = lock.withLock({ self.client }) else {
-            throw CoordinationError(code: CoordinationErrorCode.notConnected)
-        }
-
-        try await client.deleteAccount()
+        let context = try apiContext()
+        try await context.client.deleteAccount()
+        try validate(context)
         await forgetCurrentDevice()
     }
 
     // MARK: - Devices
 
     public func refreshDevices() async throws {
-        guard let client = lock.withLock({ self.client }) else {
-            throw CoordinationError(code: CoordinationErrorCode.notConnected)
-        }
+        let context = try apiContext()
 
         do {
-            let devices = try await client.listDevices()
+            let devices = try await context.client.listDevices()
+            try validate(context)
             update {
                 $0.devices = devices
                 $0.lastSyncAt = Date()
             }
         } catch let error as CoordinationError {
+            try validate(context)
             if error.code == CoordinationErrorCode.deviceRevoked {
                 handleDeviceRevoked(error)
             } else {
@@ -498,6 +507,7 @@ public final class CoordinationService: @unchecked Sendable {
             }
             throw error
         } catch {
+            try validate(context)
             let coordError = CoordinationError(code: CoordinationErrorCode.internal, reason: error.localizedDescription)
             update { $0.lastError = coordError }
             throw coordError
@@ -505,22 +515,18 @@ public final class CoordinationService: @unchecked Sendable {
     }
 
     public func renameDevice(id: String, name: String) async throws {
-        guard let client = lock.withLock({ self.client }) else {
-            throw CoordinationError(code: CoordinationErrorCode.notConnected)
-        }
-
-        _ = try await client.renameDevice(id: id, name: name)
+        let context = try apiContext()
+        _ = try await context.client.renameDevice(id: id, name: name)
+        try validate(context)
         try await refreshDevices()
     }
 
     public func revokeDevice(id: String) async throws {
-        guard let client = lock.withLock({ self.client }) else {
-            throw CoordinationError(code: CoordinationErrorCode.notConnected)
-        }
+        let context = try apiContext()
+        try await context.client.revokeDevice(id: id)
+        try validate(context)
 
-        try await client.revokeDevice(id: id)
-
-        if id == state.deviceId {
+        if id == context.deviceId {
             await forgetCurrentDevice()
         } else {
             try await refreshDevices()
@@ -659,6 +665,41 @@ public final class CoordinationService: @unchecked Sendable {
             guard let cfg else { return nil }
             guard let creds = self.getCredentials() else { return nil }
             return CoordinationSubsonicProof(identityUrl: cfg.identityUrl, credentials: creds)
+        }
+    }
+
+    private func replaceClientLocked(with replacement: CoordinationAPIClient?) {
+        client?.invalidateRegistration()
+        client = replacement
+        apiGeneration &+= 1
+    }
+
+    private func apiContext() throws -> APIContext {
+        guard let context = lock.withLock({ () -> APIContext? in
+            guard let client,
+                  let deviceId = currentState.deviceId,
+                  let accountId = currentState.accountId else { return nil }
+            return APIContext(
+                generation: apiGeneration,
+                client: client,
+                deviceId: deviceId,
+                accountId: accountId
+            )
+        }) else {
+            throw CoordinationError(code: CoordinationErrorCode.notConnected)
+        }
+        return context
+    }
+
+    private func validate(_ context: APIContext) throws {
+        let isCurrent = lock.withLock {
+            apiGeneration == context.generation
+                && client === context.client
+                && currentState.deviceId == context.deviceId
+                && currentState.accountId == context.accountId
+        }
+        guard isCurrent else {
+            throw CoordinationError(code: CoordinationErrorCode.notConnected)
         }
     }
 
@@ -859,6 +900,7 @@ public final class CoordinationService: @unchecked Sendable {
     }
 
     private func handleDeviceRevoked(_ error: CoordinationError) {
+        lock.withLock { replaceClientLocked(with: nil) }
         tokenStore.clearTokens()
         onMain { [weak self] in
             self?.transport.disconnect()
@@ -866,7 +908,6 @@ public final class CoordinationService: @unchecked Sendable {
         }
         lock.withLock {
             reconnectGeneration &+= 1
-            self.client = nil
         }
         update {
             $0.deviceId = nil

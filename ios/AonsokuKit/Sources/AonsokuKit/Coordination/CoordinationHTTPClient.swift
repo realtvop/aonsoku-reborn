@@ -10,8 +10,20 @@ final class CoordinationHTTPClient: CoordinationAPIClient, @unchecked Sendable {
     private let now: @Sendable () -> Date
 
     private let lock = NSLock()
+    private let registrationLock = NSLock()
     private var refreshTask: Task<Void, Error>?
     private var refreshTaskGen: Int = 0
+    private var expectedRegistration: RegistrationIdentity?
+
+    private struct RegistrationIdentity: Equatable {
+        let deviceId: String
+        let accountId: String
+
+        init(_ tokens: CoordinationTokens) {
+            deviceId = tokens.deviceId
+            accountId = tokens.accountId
+        }
+    }
 
     /// - Parameters:
     ///   - baseURL: The coordination server URL; a trailing slash is ignored.
@@ -34,6 +46,7 @@ final class CoordinationHTTPClient: CoordinationAPIClient, @unchecked Sendable {
         self.recoveryProof = recoveryProof
         self.transport = transport
         self.now = now
+        self.expectedRegistration = tokenStore.loadTokens().map(RegistrationIdentity.init)
     }
 
     static let urlSessionTransport: CoordinationTransport = { request in
@@ -48,6 +61,26 @@ final class CoordinationHTTPClient: CoordinationAPIClient, @unchecked Sendable {
 
     private func nowMs() -> Double {
         now().timeIntervalSince1970 * 1000
+    }
+
+    func bindRegistration(_ tokens: CoordinationTokens) {
+        registrationLock.withLock {
+            expectedRegistration = RegistrationIdentity(tokens)
+        }
+    }
+
+    func invalidateRegistration() {
+        registrationLock.withLock { expectedRegistration = nil }
+    }
+
+    private func authenticatedTokens() throws -> CoordinationTokens {
+        let expected = registrationLock.withLock { expectedRegistration }
+        guard let expected,
+              let tokens = tokenStore.loadTokens(),
+              RegistrationIdentity(tokens) == expected else {
+            throw CoordinationError(code: CoordinationErrorCode.notConnected)
+        }
+        return tokens
     }
 
     private func buildRequest(
@@ -65,9 +98,7 @@ final class CoordinationHTTPClient: CoordinationAPIClient, @unchecked Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         if requireAuth {
-            guard let tokens = tokenStore.loadTokens() else {
-                throw CoordinationError(code: CoordinationErrorCode.notConnected)
-            }
+            let tokens = try authenticatedTokens()
             request.setValue("Bearer \(tokens.accessToken)", forHTTPHeaderField: "Authorization")
         }
 
@@ -140,14 +171,14 @@ final class CoordinationHTTPClient: CoordinationAPIClient, @unchecked Sendable {
     /// one `sentAccessToken` names. Concurrent callers share one in-flight
     /// refresh and observe its error.
     private func refreshIfNeeded(force: Bool, sentAccessToken: String?) async throws {
+        let currentTokens = try authenticatedTokens()
         let task: Task<Void, Error>? = lock.withLock {
             if let refreshTask { return refreshTask }
-            guard let tokens = tokenStore.loadTokens() else { return nil }
             if force {
-                if let sentAccessToken, sentAccessToken != tokens.accessToken {
+                if let sentAccessToken, sentAccessToken != currentTokens.accessToken {
                     return nil
                 }
-            } else if tokens.accessTokenExpiresAt - nowMs() > 60_000 {
+            } else if currentTokens.accessTokenExpiresAt - nowMs() > 60_000 {
                 return nil
             }
 
@@ -161,7 +192,7 @@ final class CoordinationHTTPClient: CoordinationAPIClient, @unchecked Sendable {
                         }
                     }
                 }
-                try await self.refreshTokens()
+                try await self.refreshTokens(existingTokens: currentTokens)
             }
             refreshTask = task
             return task
@@ -169,9 +200,7 @@ final class CoordinationHTTPClient: CoordinationAPIClient, @unchecked Sendable {
         try await task?.value
     }
 
-    private func refreshTokens() async throws {
-        guard let tokens = tokenStore.loadTokens() else { return }
-
+    private func refreshTokens(existingTokens tokens: CoordinationTokens) async throws {
         let request = TokenRefreshRequest(
             deviceId: tokens.deviceId,
             refreshToken: tokens.refreshToken,
@@ -200,6 +229,9 @@ final class CoordinationHTTPClient: CoordinationAPIClient, @unchecked Sendable {
     }
 
     private func recoverTokens(existingTokens: CoordinationTokens) async throws {
+        guard try authenticatedTokens() == existingTokens else {
+            throw CoordinationError(code: CoordinationErrorCode.notConnected)
+        }
         guard let proof = recoveryProof() else {
             throw CoordinationError(
                 code: CoordinationErrorCode.authenticationFailed,

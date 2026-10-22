@@ -101,6 +101,14 @@ typealias CoordinationTransport =
 /// 401, persist rotated tokens through the token store, and throw
 /// `CoordinationError` carrying the server's `code`, `reason` and HTTP status.
 protocol CoordinationAPIClient: AnyObject, Sendable {
+    /// Binds authenticated requests to one registered device/account. Clients
+    /// must reject shared-store tokens belonging to another registration.
+    func bindRegistration(_ tokens: CoordinationTokens)
+
+    /// Prevents an in-flight client from reading credentials installed for a
+    /// later account after this registration is reset.
+    func invalidateRegistration()
+
     /// Requests a challenge, then registers this device. The service persists
     /// the returned tokens only after its account generation is still valid.
     func register(
@@ -118,6 +126,11 @@ protocol CoordinationAPIClient: AnyObject, Sendable {
     func revokeDevice(id: String) async throws
 
     func deleteAccount() async throws
+}
+
+extension CoordinationAPIClient {
+    func bindRegistration(_: CoordinationTokens) {}
+    func invalidateRegistration() {}
 }
 
 /// Persists coordination tokens (keychain) and server config
