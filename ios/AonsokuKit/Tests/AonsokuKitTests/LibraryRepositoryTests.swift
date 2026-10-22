@@ -350,6 +350,41 @@ final class ArtworkProviderTests: XCTestCase {
         XCTAssertEqual(calls.read { $0 }, 2)
     }
 
+    func testPurgeCannotRaceWithInFlightImagePublication() async throws {
+        let database = try TemporaryDatabase()
+        let library = LibraryService(dbManager: database.manager)
+        let id = "image-purge-\(UUID().uuidString)"
+        let gate = PaletteExtractionGate()
+        let calls = LockedTestBox(0)
+        let staleImage = makeQuadrantImage()
+        let freshImage = makeQuadrantImage()
+        let provider = ArtworkProvider(
+            library: library,
+            coverLoader: { _, _ in
+                let call = calls.read { $0 }
+                calls.update { $0 += 1 }
+                if call == 0 {
+                    await gate.block()
+                    return staleImage
+                }
+                return freshImage
+            },
+            paletteExtractor: { _ in nil }
+        )
+
+        let request = Task { await provider.image(for: id, size: .medium) }
+        await gate.waitUntilBlocked()
+        provider.purgeMemory()
+        await gate.release()
+
+        let discarded = await request.value
+        let loaded = await provider.image(for: id, size: .medium)
+        XCTAssertNil(discarded)
+        XCTAssertTrue(loaded === freshImage)
+        XCTAssertTrue(provider.cachedImage(for: id, size: .medium) === freshImage)
+        XCTAssertEqual(calls.read { $0 }, 2)
+    }
+
     private func makeQuadrantImage() -> UIImage {
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: 128, height: 128))
         return renderer.image { context in

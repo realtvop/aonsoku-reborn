@@ -55,21 +55,43 @@ public final class ArtworkProvider: @unchecked Sendable {
     public let library: LibraryService
     private let images = NSCache<NSString, UIImage>()
     private let state = ArtworkProviderState()
+    private let coverLoader: @Sendable (String, ArtworkSize) async -> UIImage?
     private let paletteExtractor: @Sendable (UIImage) async -> ArtworkPalette?
 
     public convenience init(library: LibraryService) {
-        self.init(library: library) { image in
-            await Task.detached(priority: .utility) {
-                Self.extractPalette(from: image)
-            }.value
-        }
+        self.init(
+            library: library,
+            coverLoader: { [library] id, size in
+                await Self.loadCover(library: library, id: id, size: size)
+            },
+            paletteExtractor: { image in
+                await Task.detached(priority: .utility) {
+                    Self.extractPalette(from: image)
+                }.value
+            }
+        )
+    }
+
+    convenience init(
+        library: LibraryService,
+        paletteExtractor: @escaping @Sendable (UIImage) async -> ArtworkPalette?
+    ) {
+        self.init(
+            library: library,
+            coverLoader: { [library] id, size in
+                await Self.loadCover(library: library, id: id, size: size)
+            },
+            paletteExtractor: paletteExtractor
+        )
     }
 
     init(
         library: LibraryService,
+        coverLoader: @escaping @Sendable (String, ArtworkSize) async -> UIImage?,
         paletteExtractor: @escaping @Sendable (UIImage) async -> ArtworkPalette?
     ) {
         self.library = library
+        self.coverLoader = coverLoader
         self.paletteExtractor = paletteExtractor
         images.countLimit = 160
     }
@@ -97,14 +119,18 @@ public final class ArtworkProvider: @unchecked Sendable {
     public func image(for coverArtId: String, size: ArtworkSize) async -> UIImage? {
         if let cached = cachedImage(for: coverArtId, size: size) { return cached }
         let key = cacheKey(prefix: "cover", id: coverArtId, size: size)
-        let request = state.imageRequest(key: key) { [library] in
-            await Self.loadCover(library: library, id: coverArtId, size: size)
+        let request = state.imageRequest(key: key) { [coverLoader] in
+            await coverLoader(coverArtId, size)
         }
         let result = await request.task.value
         state.finishImageRequest(key: key, token: request.token)
-        if let result, state.isCurrent(request.generation) {
-            images.setObject(result, forKey: key as NSString)
-        }
+        guard let result,
+              state.storeImage(
+                  result,
+                  forKey: key,
+                  generation: request.generation,
+                  in: images
+              ) else { return nil }
         return result
     }
 
@@ -122,9 +148,13 @@ public final class ArtworkProvider: @unchecked Sendable {
         }
         let result = await request.task.value
         state.finishImageRequest(key: key, token: request.token)
-        if let result, state.isCurrent(request.generation) {
-            images.setObject(result, forKey: key as NSString)
-        }
+        guard let result,
+              state.storeImage(
+                  result,
+                  forKey: key,
+                  generation: request.generation,
+                  in: images
+              ) else { return nil }
         return result
     }
 
@@ -147,8 +177,7 @@ public final class ArtworkProvider: @unchecked Sendable {
 
     /// Drops decoded images, after covers are cleared or on memory warnings.
     public func purgeMemory() {
-        images.removeAllObjects()
-        state.purge()
+        state.purge(images: images)
     }
 
     private func cachedImage(
@@ -357,6 +386,19 @@ private final class ArtworkProviderState: @unchecked Sendable {
         return generation
     }
 
+    func storeImage(
+        _ image: UIImage,
+        forKey key: String,
+        generation expectedGeneration: Int,
+        in images: NSCache<NSString, UIImage>
+    ) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard generation == expectedGeneration else { return false }
+        images.setObject(image, forKey: key as NSString)
+        return true
+    }
+
     func palette(for id: String) -> ArtworkPalette? {
         lock.lock()
         defer { lock.unlock() }
@@ -375,12 +417,13 @@ private final class ArtworkProviderState: @unchecked Sendable {
         return true
     }
 
-    func purge() {
+    func purge(images: NSCache<NSString, UIImage>) {
         lock.lock()
         generation += 1
         let tasks = requests.values.map(\.task)
         requests.removeAll()
         palettes.removeAll()
+        images.removeAllObjects()
         lock.unlock()
         tasks.forEach { $0.cancel() }
     }
