@@ -168,6 +168,26 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
         ]
     }
 
+    internal static func commandAckResult(
+        accepted: Bool,
+        succeeded: Bool
+    ) -> [String: Any] {
+        guard accepted else {
+            return [
+                "status": "error",
+                "code": "invalid_command",
+                "reason": "command is unsupported or malformed",
+            ]
+        }
+        return succeeded
+            ? ["status": "ok"]
+            : [
+                "status": "error",
+                "code": "execution_failed",
+                "reason": "command could not be applied",
+            ]
+    }
+
     internal static func buildRelinquishAckEnvelope(
         protocolVersion: Int,
         transactionId: String,
@@ -978,13 +998,10 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
                     guard let self else { return }
                     DispatchQueue.main.async {
                         if let messageId {
-                            let result: [String: Any] = succeeded
-                                ? ["status": "ok"]
-                                : [
-                                    "status": "error",
-                                    "code": "execution_failed",
-                                    "reason": "command could not be applied",
-                                ]
+                            let result = Self.commandAckResult(
+                                accepted: true,
+                                succeeded: succeeded
+                            )
                             self.sendEnvelope(Self.buildCommandAckEnvelope(
                                 protocolVersion: self.protocolVersion,
                                 messageId: messageId,
@@ -996,6 +1013,19 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
                     }
                 }
                 if accepted { return }
+                if let messageId {
+                    DispatchQueue.main.async {
+                        self.sendEnvelope(Self.buildCommandAckEnvelope(
+                            protocolVersion: self.protocolVersion,
+                            messageId: messageId,
+                            result: Self.commandAckResult(
+                                accepted: false,
+                                succeeded: false
+                            )
+                        ))
+                    }
+                }
+                return
             }
             if let type = dict["type"] as? String,
                type == "error",

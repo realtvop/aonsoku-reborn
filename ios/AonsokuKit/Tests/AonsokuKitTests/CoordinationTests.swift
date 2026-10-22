@@ -65,6 +65,27 @@ final class CoordinationTests: XCTestCase {
         XCTAssertEqual(failed["code"] as? String, "source_pause_timeout")
     }
 
+    func testRemoteCommandAckResultsDistinguishInvalidAndFailedExecution() {
+        XCTAssertEqual(
+            CoordinationRealtime.commandAckResult(
+                accepted: true,
+                succeeded: true
+            )["status"] as? String,
+            "ok"
+        )
+        let failed = CoordinationRealtime.commandAckResult(
+            accepted: true,
+            succeeded: false
+        )
+        XCTAssertEqual(failed["code"] as? String, "execution_failed")
+        let invalid = CoordinationRealtime.commandAckResult(
+            accepted: false,
+            succeeded: false
+        )
+        XCTAssertEqual(invalid["status"] as? String, "error")
+        XCTAssertEqual(invalid["code"] as? String, "invalid_command")
+    }
+
     func testPlaybackSnapshotMapsQueueStateToProtocolShape() throws {
         let snapshot = try XCTUnwrap(
             CoordinationRealtime.buildPlaybackSnapshot(
