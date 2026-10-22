@@ -4,6 +4,7 @@ public enum SubsonicHTTPError: Error {
     case networkUnreachable(String)
     case httpError(Int, String)
     case parseError(String)
+    case protocolIncompatible(version: String?, message: String)
     case serverError(String)
     case authFailed(String)
 }
@@ -80,6 +81,12 @@ public final class SubsonicHTTPClient {
             if code == 40 || code == 41 {
                 throw SubsonicHTTPError.authFailed(message)
             }
+            if code == 30 {
+                throw SubsonicHTTPError.protocolIncompatible(
+                    version: subsonicResponse["version"] as? String,
+                    message: message
+                )
+            }
             throw SubsonicHTTPError.serverError(message)
         }
 
@@ -149,8 +156,12 @@ public final class SubsonicHTTPClient {
             path: "ping.view",
             credentials: credentials
         )
+        guard let protocolVersion = response.data["version"] as? String,
+              !protocolVersion.isEmpty else {
+            throw SubsonicHTTPError.parseError("Missing protocol version")
+        }
         return (
-            response.data["version"] as? String ?? SubsonicAuthBuilder.defaultVersion,
+            protocolVersion,
             response.data["type"] as? String ?? "subsonic"
         )
     }

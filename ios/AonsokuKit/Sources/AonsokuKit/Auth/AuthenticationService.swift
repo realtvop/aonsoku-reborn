@@ -201,6 +201,9 @@ public final class AuthenticationService: @unchecked Sendable {
                     credentials: credentials
                 )
                 return ServerCompatibility(protocolVersion: info.protocolVersion)
+            } catch SubsonicHTTPError.protocolIncompatible(let version, _) {
+                guard let version, !version.isEmpty else { return .unknown }
+                return ServerCompatibility(protocolVersion: version)
             } catch SubsonicHTTPError.authFailed {
                 continue
             } catch {

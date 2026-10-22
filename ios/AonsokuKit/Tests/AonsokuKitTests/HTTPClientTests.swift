@@ -86,6 +86,64 @@ final class HTTPClientTests: XCTestCase {
         }
     }
 
+    func testRequestPreservesProtocolVersionFromIncompatibleResponse() async {
+        URLProtocolStub.handler = { request in
+            let body = Data("""
+                {"subsonic-response":{"status":"failed","version":"1.14.0","error":{"code":30,"message":"upgrade client"}}}
+                """.utf8)
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, body)
+        }
+        let client = SubsonicHTTPClient(session: makeSession())
+
+        do {
+            _ = try await client.request(
+                baseUrl: "https://music.example",
+                path: "ping.view",
+                credentials: credentials
+            )
+            XCTFail("Expected an incompatible protocol response")
+        } catch SubsonicHTTPError.protocolIncompatible(let version, let message) {
+            XCTAssertEqual(version, "1.14.0")
+            XCTAssertEqual(message, "upgrade client")
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testQueryServerInfoRejectsSuccessfulResponseWithoutVersion() async {
+        URLProtocolStub.handler = { request in
+            let body = Data("""
+                {"subsonic-response":{"status":"ok","type":"navidrome"}}
+                """.utf8)
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, body)
+        }
+        let client = SubsonicHTTPClient(session: makeSession())
+
+        do {
+            _ = try await client.queryServerInfo(
+                baseUrl: "https://music.example",
+                credentials: credentials
+            )
+            XCTFail("Expected a missing protocol version error")
+        } catch SubsonicHTTPError.parseError(let message) {
+            XCTAssertEqual(message, "Missing protocol version")
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
     private var credentials: ServerCredentials {
         ServerCredentials(
             serverUrl: "https://music.example",
