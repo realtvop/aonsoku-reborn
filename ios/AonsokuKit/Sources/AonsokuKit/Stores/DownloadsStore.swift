@@ -84,6 +84,10 @@ public final class DownloadsStore {
         }
     }
 
+    func reloadAfterLibrarySync() {
+        reloadIndex()
+    }
+
     // MARK: State
 
     public func state(ofSong id: String) -> SongCacheState {
@@ -500,6 +504,7 @@ public final class DownloadsStore {
     private func reloadIndex() {
         let values = (try? library.cacheMetadata()) ?? []
         rows = Dictionary(uniqueKeysWithValues: values.map { ($0.key, $0) })
+        collectionSongIds.removeAll()
         for row in values {
             if row.type == CachedItemType.album.rawValue,
                 let detail = try? library.album(id: row.id)

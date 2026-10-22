@@ -513,12 +513,49 @@ final class SyncEngine {
                     _ = try SongRecord.filter(staleIds.contains(Column("id"))).deleteAll(db)
                 }
             }
+            try reconcileCachedSongs(
+                serverIds: serverIds,
+                staleSongCount: staleIds.count,
+                serverSongCount: allSongs.count
+            )
         }
 
         emitState(phase: "songs", tier: "t3", processed: allSongs.count, total: allSongs.count)
         try syncStateRepo.recordTierCheckpoint(tier: "t3")
         forceFlushSyncState()
         onDataChanged?(["songs", "favorites"])
+    }
+
+    /// Marks cached audio whose song disappeared from an authoritative song
+    /// listing. Large unexpected removals retain their prior state, matching
+    /// the song-table deletion safety threshold, while reappearing songs are
+    /// always restored immediately.
+    func reconcileCachedSongs(
+        serverIds: Set<String>,
+        staleSongCount: Int,
+        serverSongCount: Int
+    ) throws {
+        guard serverSongCount > 0 else { return }
+        let maxRemovals = Int(ceil(Double(serverSongCount) * 0.1))
+        let canMarkMissing = staleSongCount <= maxRemovals
+        var updates: [CacheMetaRecord] = []
+
+        for var row in try cacheMetaRepo.getAll(type: "audio") {
+            let removed: Bool
+            if serverIds.contains(row.id) {
+                removed = false
+            } else if canMarkMissing {
+                removed = true
+            } else {
+                continue
+            }
+            guard row.removedFromServer != removed else { continue }
+            row.removedFromServer = removed
+            updates.append(row)
+        }
+        if !updates.isEmpty {
+            try cacheMetaRepo.bulkUpsert(updates)
+        }
     }
 
     // MARK: - Playlist Details

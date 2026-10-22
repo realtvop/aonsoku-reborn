@@ -419,6 +419,32 @@ final class DownloadsStoreTests: XCTestCase {
             .cached(source: .smart, removedFromServer: false)
         )
     }
+
+    func testLibrarySyncReloadsRemovedFromServerState() async throws {
+        let fixture = try DownloadsFixture()
+        let song = fixture.song("removed")
+        _ = try fixture.audio.storeAudioFile(
+            songId: song.id,
+            data: makeSilentWAVData(),
+            contentType: "audio/wav"
+        )
+        var row = fixture.row(song.id, source: .explicit, size: 8)
+        try fixture.library.upsertCacheMetadata(row)
+        fixture.store.start()
+        XCTAssertEqual(
+            fixture.store.state(ofSong: song.id),
+            .cached(source: .explicit, removedFromServer: false)
+        )
+
+        row.removedFromServer = true
+        try fixture.library.upsertCacheMetadata(row)
+        fixture.store.reloadAfterLibrarySync()
+
+        XCTAssertEqual(
+            fixture.store.state(ofSong: song.id),
+            .cached(source: .explicit, removedFromServer: true)
+        )
+    }
 }
 
 @MainActor

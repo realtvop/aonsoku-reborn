@@ -72,4 +72,76 @@ final class SearchAndSyncTests: XCTestCase {
         XCTAssertLessThan(SyncTier.t1.freshWindowMs, SyncTier.t2.freshWindowMs)
         XCTAssertLessThan(SyncTier.t2.freshWindowMs, SyncTier.t3.freshWindowMs)
     }
+
+    func testCachedSongReconciliationUsesDeletionSafetyAndRestoresSongs() throws {
+        let database = try TemporaryDatabase()
+        let cache = CacheMetaRepository(db: database.manager.dbPool)
+        try cache.bulkUpsert([
+            cacheRow(id: "present", removed: true),
+            cacheRow(id: "missing", removed: false),
+        ])
+        let engine = SyncEngine(
+            db: database.manager.dbPool,
+            httpClient: SearchSyncHTTPClient(),
+            credentialsProvider: { nil }
+        )
+
+        try engine.reconcileCachedSongs(
+            serverIds: ["present"],
+            staleSongCount: 2,
+            serverSongCount: 10
+        )
+        var rows = Dictionary(uniqueKeysWithValues: try cache.getAll(type: "audio").map {
+            ($0.id, $0)
+        })
+        XCTAssertEqual(rows["present"]?.removedFromServer, false)
+        XCTAssertEqual(rows["missing"]?.removedFromServer, false)
+
+        try engine.reconcileCachedSongs(
+            serverIds: ["present"],
+            staleSongCount: 1,
+            serverSongCount: 10
+        )
+        rows = Dictionary(uniqueKeysWithValues: try cache.getAll(type: "audio").map {
+            ($0.id, $0)
+        })
+        XCTAssertEqual(rows["missing"]?.removedFromServer, true)
+
+        try engine.reconcileCachedSongs(
+            serverIds: ["present", "missing"],
+            staleSongCount: 0,
+            serverSongCount: 10
+        )
+        XCTAssertEqual(
+            try cache.getByKey("audio:missing")?.removedFromServer,
+            false
+        )
+    }
+
+    private func cacheRow(id: String, removed: Bool) -> CacheMetaRecord {
+        CacheMetaRecord(
+            key: "audio:\(id)",
+            id: id,
+            type: "audio",
+            source: "explicit",
+            triggersJson: nil,
+            coverSize: nil,
+            sizeBytes: 1,
+            cachedAt: 1,
+            lastAccessedAt: 1,
+            removedFromServer: removed
+        )
+    }
+}
+
+private struct SearchSyncHTTPClient: LibrarySyncHTTPClient {
+    func request(
+        baseUrl: String,
+        path: String,
+        credentials: ServerCredentials,
+        extraQuery: [String: String],
+        method: String
+    ) async throws -> SubsonicResponse {
+        throw SubsonicAPIError.unsupported
+    }
 }

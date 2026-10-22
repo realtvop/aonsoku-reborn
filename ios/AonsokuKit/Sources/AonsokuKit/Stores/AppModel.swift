@@ -253,6 +253,7 @@ public final class AppModel {
     }
 
     private func librarySyncCompleted() {
+        downloads.reloadAfterLibrarySync()
         scheduleSmartDownloads(refreshFavorites: true)
     }
 
