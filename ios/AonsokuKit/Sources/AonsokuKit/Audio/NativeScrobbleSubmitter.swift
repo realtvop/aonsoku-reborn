@@ -89,7 +89,7 @@ class NativeScrobbleSubmitter {
         guard let context = operationContext() else { return }
 
         Task {
-            var submittedIds = Set<String>()
+            var submittedEntries: [ScrobbleEntry] = []
             for entry in entries {
                 guard isCurrent(context.generation) else { return }
                 if await request(
@@ -98,16 +98,16 @@ class NativeScrobbleSubmitter {
                     true,
                     entry.timestamp
                 ) {
-                    submittedIds.insert(entry.songId)
+                    submittedEntries.append(entry)
                 } else {
                     break
                 }
             }
-            if !submittedIds.isEmpty, isCurrent(context.generation) {
-                let completedIds = submittedIds
+            if !submittedEntries.isEmpty, isCurrent(context.generation) {
+                let completedEntries = submittedEntries
                 await MainActor.run {
                     guard self.isCurrent(context.generation) else { return }
-                    buffer.removeEntries(songIds: completedIds)
+                    buffer.removeEntries(completedEntries)
                 }
             }
         }

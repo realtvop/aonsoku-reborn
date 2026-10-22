@@ -151,6 +151,43 @@ final class ScrobbleTests: XCTestCase {
         XCTAssertEqual(buffer.getEntries().map(\.songId), ["old-song"])
     }
 
+    func testPendingSubmissionRemovesOnlyEntriesThatSucceeded() async {
+        let clock = ManualClock()
+        let buffer = NativeScrobbleBuffer(
+            store: InMemoryScrobbleEntryStore(),
+            now: clock.now
+        )
+        buffer.startTracking(songId: "repeat")
+        clock.advance(milliseconds: 100)
+        guard let first = buffer.stopTracking() else {
+            return XCTFail("first entry should be recorded")
+        }
+        buffer.startTracking(songId: "repeat")
+        clock.advance(milliseconds: 200)
+        guard let second = buffer.stopTracking() else {
+            return XCTFail("second entry should be recorded")
+        }
+        XCTAssertEqual(buffer.getEntries(), [first, second])
+        let requests = LockedTestBox(0)
+        let attempted = expectation(description: "both entries attempted")
+        attempted.expectedFulfillmentCount = 2
+        let submitter = NativeScrobbleSubmitter(
+            credentialsProvider: { makeCredentials(serverUrl: "https://music.test") },
+            request: { _, _, _, _ in
+                requests.update { $0 += 1 }
+                let attempt = requests.read { $0 }
+                attempted.fulfill()
+                return attempt == 1
+            }
+        )
+
+        submitter.submitPending(buffer: buffer)
+        await fulfillment(of: [attempted], timeout: 1)
+        try? await Task.sleep(for: .milliseconds(20))
+
+        XCTAssertEqual(buffer.getEntries(), [second])
+    }
+
     func testQueueExhaustionFlushesTheCurrentScrobbleSegment() throws {
         let database = try TemporaryDatabase()
         let clock = ManualClock()

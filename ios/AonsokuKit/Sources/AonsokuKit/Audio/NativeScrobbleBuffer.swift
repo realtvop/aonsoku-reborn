@@ -108,6 +108,18 @@ class NativeScrobbleBuffer {
         persistEntries()
     }
 
+    func removeEntries(_ submittedEntries: [ScrobbleEntry]) {
+        var remaining = submittedEntries
+        entries.removeAll { entry in
+            guard let index = remaining.firstIndex(of: entry) else {
+                return false
+            }
+            remaining.remove(at: index)
+            return true
+        }
+        persistEntries()
+    }
+
     func getEntriesAsArray() -> [[String: Any]] {
         entries.map { $0.toDict() }
     }
