@@ -313,6 +313,55 @@ final class PlayerStoreTests: XCTestCase {
         fixture.audio.shutdown()
     }
 
+    func testClearRejectsAnInFlightPlaybackSnapshot() async throws {
+        let fixture = try PlayerStoreTestFixture()
+        let started = expectation(description: "snapshot started")
+        let release = DispatchSemaphore(value: 0)
+        let shouldDelay = LockedTestBox(true)
+        let audio = fixture.audio
+        let oldSnapshot = AudioPlaybackSnapshot(
+            state: .playing,
+            currentTime: 12,
+            duration: 180,
+            bufferedTime: 30,
+            metadata: AudioMetadata(title: "Old account"),
+            queue: makePlayerSnapshot(
+                context: [fixture.queueSong("old-account")],
+                currentIndex: 0
+            )
+        )
+        let store = PlayerStore(
+            audio: fixture.audio,
+            repository: fixture.repository,
+            settings: fixture.settings,
+            authentication: .shared,
+            streamURL: { _ in nil },
+            playbackSnapshot: {
+                var delay = false
+                shouldDelay.update {
+                    delay = $0
+                    $0 = false
+                }
+                if delay {
+                    started.fulfill()
+                    release.wait()
+                    return oldSnapshot
+                }
+                return audio.playbackSnapshot()
+            }
+        )
+
+        store.start()
+        await fulfillment(of: [started], timeout: 1)
+        store.clearAll()
+        release.signal()
+        try? await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertFalse(store.hasMedia)
+        XCTAssertTrue(store.queue.isEmpty)
+        fixture.audio.shutdown()
+    }
+
     func testLocalEnqueueMoveRemoveAndCoverReplayGainConversion() async throws {
         let fixture = try PlayerStoreTestFixture()
         fixture.settings.update { $0.playback.useAlbumCoverForSongs = true }

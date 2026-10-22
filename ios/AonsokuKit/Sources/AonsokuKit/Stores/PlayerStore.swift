@@ -137,6 +137,7 @@ public final class PlayerStore {
     @ObservationIgnored public let settings: SettingsStore
     @ObservationIgnored public let authentication: AuthenticationService
     @ObservationIgnored private let streamURL: @Sendable (String) -> URL?
+    @ObservationIgnored private let playbackSnapshot: @Sendable () -> AudioPlaybackSnapshot
     @ObservationIgnored private var audioSubscription: UUID?
     @ObservationIgnored private var songCache: [String: Song] = [:]
     @ObservationIgnored private var lastProgressSample = 0.0
@@ -154,6 +155,7 @@ public final class PlayerStore {
         self.settings = settings
         self.authentication = authentication
         self.streamURL = { authentication.streamURL(songId: $0) }
+        self.playbackSnapshot = { audio.playbackSnapshot() }
     }
 
     init(
@@ -161,13 +163,15 @@ public final class PlayerStore {
         repository: LibraryRepository,
         settings: SettingsStore,
         authentication: AuthenticationService,
-        streamURL: @escaping @Sendable (String) -> URL?
+        streamURL: @escaping @Sendable (String) -> URL?,
+        playbackSnapshot: (@Sendable () -> AudioPlaybackSnapshot)? = nil
     ) {
         self.audio = audio
         self.repository = repository
         self.settings = settings
         self.authentication = authentication
         self.streamURL = streamURL
+        self.playbackSnapshot = playbackSnapshot ?? { audio.playbackSnapshot() }
     }
 
     // MARK: Target-aware state
@@ -215,6 +219,7 @@ public final class PlayerStore {
 
     /// Stops playback and clears the queue and its saved state (sign-out).
     public func clearAll() {
+        refreshGeneration += 1
         audio.stop()
         audio.cancelSleepTimer()
         audio.clear()
@@ -814,9 +819,9 @@ public final class PlayerStore {
     private func refreshFromAudio(enrich: Bool) {
         refreshGeneration += 1
         let generation = refreshGeneration
-        let audio = audio
+        let playbackSnapshot = playbackSnapshot
         Task.detached { [weak self] in
-            let playback = audio.playbackSnapshot()
+            let playback = playbackSnapshot()
             await MainActor.run { [weak self] in
                 guard let self, generation == self.refreshGeneration else { return }
                 self.adopt(playback, enrich: enrich)
