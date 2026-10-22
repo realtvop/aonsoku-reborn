@@ -237,6 +237,7 @@ public final class AppModel {
             hasLibraryData: hasLibraryData,
             explicitLogin: explicitLogin
         ) {
+            player.clearAll()
             services.coordination.resetRegistration()
             try services.library.resetAccountData()
             _ = try services.audio.clearAudioFiles()
