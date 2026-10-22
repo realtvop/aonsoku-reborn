@@ -160,6 +160,62 @@ final class DownloadsStoreTests: XCTestCase {
         XCTAssertEqual(fixture.store.state(ofPlaylist: "playlist"), .notCached)
     }
 
+    func testCollectionMarkerWithoutKnownSongsIsNotReportedAsCached() throws {
+        let fixture = try DownloadsFixture()
+        try fixture.library.upsertCacheMetadata(CacheMetaRecord(
+            key: "album:unknown",
+            id: "unknown",
+            type: CachedItemType.album.rawValue,
+            source: CacheSource.explicit.rawValue,
+            triggersJson: nil,
+            coverSize: nil,
+            sizeBytes: 0,
+            cachedAt: 1,
+            lastAccessedAt: 1,
+            removedFromServer: false
+        ))
+
+        fixture.store.start()
+
+        XCTAssertEqual(fixture.store.state(ofAlbum: "unknown"), .notCached)
+    }
+
+    func testPersistedCollectionSongsSupportOfflineRemoval() async throws {
+        let fixture = try DownloadsFixture()
+        let song = fixture.song("offline-album-song")
+        let file = try fixture.audio.storeAudioFile(
+            songId: song.id,
+            data: makeSilentWAVData(),
+            contentType: "audio/wav"
+        )
+        try fixture.library.upsertCacheMetadata(fixture.row(
+            song.id,
+            source: .explicit,
+            size: Int(file.sizeBytes ?? 0)
+        ))
+        try fixture.library.upsertCacheMetadata(CacheMetaRecord(
+            key: "album:offline",
+            id: "offline",
+            type: CachedItemType.album.rawValue,
+            source: CacheSource.explicit.rawValue,
+            triggersJson: #"["offline-album-song"]"#,
+            coverSize: nil,
+            sizeBytes: 0,
+            cachedAt: 1,
+            lastAccessedAt: 1,
+            removedFromServer: false
+        ))
+
+        fixture.store.start()
+        XCTAssertEqual(fixture.store.state(ofAlbum: "offline"), .cached)
+
+        await fixture.store.remove(albumId: "offline")
+
+        XCTAssertEqual(fixture.store.state(ofAlbum: "offline"), .notCached)
+        XCTAssertEqual(fixture.store.state(ofSong: song.id), .notCached)
+        XCTAssertNil(try fixture.audio.resolveAudioFile(songId: song.id))
+    }
+
     func testClearAndCancelAllCancelPendingDownloads() async throws {
         let fixture = try DownloadsFixture()
         let explicit = fixture.song("clear-explicit")

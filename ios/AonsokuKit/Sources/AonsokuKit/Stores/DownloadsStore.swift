@@ -138,8 +138,9 @@ public final class DownloadsStore {
         do {
             let detail = try await repository.album(id: albumId)
             let key = Self.albumKey(albumId)
-            collectionSongIds[key] = detail.songs.map(\.id)
-            upsert(marker(id: albumId, type: .album))
+            let songIds = detail.songs.map(\.id)
+            collectionSongIds[key] = songIds
+            upsert(marker(id: albumId, type: .album, songIds: songIds))
             await enqueue(songs: detail.songs, source: .explicit, triggers: [])
         } catch {
             toasts?.show(error: error)
@@ -150,8 +151,9 @@ public final class DownloadsStore {
         do {
             let detail = try await repository.playlist(id: playlistId)
             let key = Self.playlistKey(playlistId)
-            collectionSongIds[key] = detail.songs.map(\.id)
-            upsert(marker(id: playlistId, type: .playlist))
+            let songIds = detail.songs.map(\.id)
+            collectionSongIds[key] = songIds
+            upsert(marker(id: playlistId, type: .playlist, songIds: songIds))
             await enqueue(songs: detail.songs, source: .explicit, triggers: [])
         } catch {
             toasts?.show(error: error)
@@ -523,7 +525,12 @@ public final class DownloadsStore {
         rows = Dictionary(uniqueKeysWithValues: values.map { ($0.key, $0) })
         collectionSongIds.removeAll()
         for row in values {
-            if row.type == CachedItemType.album.rawValue,
+            if row.type == CachedItemType.album.rawValue
+                || row.type == CachedItemType.playlist.rawValue,
+                row.triggersJson != nil
+            {
+                collectionSongIds[row.key] = Self.triggers(from: row)
+            } else if row.type == CachedItemType.album.rawValue,
                 let detail = try? library.album(id: row.id)
             {
                 collectionSongIds[row.key] = detail.songs.map(\.id)
@@ -566,14 +573,18 @@ public final class DownloadsStore {
         }
     }
 
-    private func marker(id: String, type: CachedItemType) -> CacheMetaRecord {
+    private func marker(
+        id: String,
+        type: CachedItemType,
+        songIds: [String]
+    ) -> CacheMetaRecord {
         let timestamp = nowMilliseconds
         return CacheMetaRecord(
             key: "\(type.rawValue):\(id)",
             id: id,
             type: type.rawValue,
             source: CacheSource.explicit.rawValue,
-            triggersJson: nil,
+            triggersJson: Self.encodeCollectionSongIds(songIds),
             coverSize: nil,
             sizeBytes: 0,
             cachedAt: rows["\(type.rawValue):\(id)"]?.cachedAt ?? timestamp,
@@ -665,7 +676,7 @@ public final class DownloadsStore {
 
     private func collectionState(key: String) -> CollectionCacheState {
         guard rows[key] != nil else { return .notCached }
-        let ids = collectionSongIds[key] ?? []
+        guard let ids = collectionSongIds[key] else { return .notCached }
         let completed = ids.filter { state(ofSong: $0).isCached }.count
         let inFlight = ids.contains { state(ofSong: $0).isDownloading }
         if inFlight { return .downloading(completed: completed, total: ids.count) }
@@ -676,6 +687,7 @@ public final class DownloadsStore {
         let snapshot = rows
         var hydrated: [String: [String]] = [:]
         for row in snapshot.values {
+            guard collectionSongIds[row.key] == nil else { continue }
             if row.type == CachedItemType.album.rawValue,
                 let detail = await repository.cachedAlbum(id: row.id)
             {
@@ -688,6 +700,11 @@ public final class DownloadsStore {
         }
         guard generation == lifecycleGeneration else { return }
         collectionSongIds.merge(hydrated) { _, next in next }
+        for (key, songIds) in hydrated {
+            guard var row = rows[key], row.triggersJson == nil else { continue }
+            row.triggersJson = Self.encodeCollectionSongIds(songIds)
+            upsert(row)
+        }
         revision += 1
     }
 
@@ -850,6 +867,11 @@ public final class DownloadsStore {
             let data = try? JSONEncoder().encode(values)
         else { return nil }
         return String(data: data, encoding: .utf8)
+    }
+
+    private static func encodeCollectionSongIds(_ values: [String]) -> String {
+        let data = try? JSONEncoder().encode(values)
+        return data.flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
     }
 }
 
