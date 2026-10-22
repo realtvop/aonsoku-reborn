@@ -4,9 +4,15 @@ import Foundation
 enum AudioCoordinationBridge {
     // MARK: - Remote Control
 
-    static func executeRemoteControlCommand(_ object: [String: Any]) -> Bool {
+    static func executeRemoteControlCommand(
+        _ object: [String: Any],
+        completion: ((Bool) -> Void)? = nil
+    ) -> Bool {
         guard let command = AudioPayloadCodec.decodeRemoteControlCommand(object) else {
             return false
+        }
+        if let completion {
+            return AppServices.shared.audio.executeRemote(command, completion: completion)
         }
         return AppServices.shared.audio.execute(command)
     }

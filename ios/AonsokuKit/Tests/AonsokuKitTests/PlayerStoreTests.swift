@@ -193,6 +193,34 @@ final class PlayerStoreTests: XCTestCase {
         fixture.audio.shutdown()
     }
 
+    func testRemoteQueueExecutionCompletesAfterMutation() async throws {
+        let fixture = try PlayerStoreTestFixture()
+        try SongRepository(db: fixture.database.manager.dbPool).upsert(
+            makeSongRecord("queued")
+        )
+        fixture.audio.setContextQueue(
+            songs: [fixture.queueSong("current")],
+            currentIndex: 0,
+            autoplay: false
+        )
+        let loaded = await waitForPlayerStoreTest {
+            fixture.audio.fullState()?.currentSongId == "current"
+        }
+        XCTAssertTrue(loaded)
+
+        let succeeded = await withCheckedContinuation { continuation in
+            XCTAssertTrue(fixture.audio.executeRemote(
+                .addToQueue(songIds: ["queued"], position: "last")
+            ) { result in
+                continuation.resume(returning: result)
+            })
+        }
+
+        XCTAssertTrue(succeeded)
+        XCTAssertEqual(fixture.audio.fullState()?.userQueue.map(\.id), ["queued"])
+        fixture.audio.shutdown()
+    }
+
     func testLocalEnqueueMoveRemoveAndCoverReplayGainConversion() async throws {
         let fixture = try PlayerStoreTestFixture()
         fixture.settings.update { $0.playback.useAlbumCoverForSongs = true }

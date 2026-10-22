@@ -969,19 +969,33 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
             }
             if let type = dict["type"] as? String,
                type == "command",
-               let command = dict["command"] as? [String: Any],
-               AudioCoordinationBridge.executeRemoteControlCommand(command) {
-                if let messageId = dict["messageId"] as? String {
-                    self.sendEnvelope(Self.buildCommandAckEnvelope(
-                        protocolVersion: self.protocolVersion,
-                        messageId: messageId
-                    ))
-                }
+               let command = dict["command"] as? [String: Any] {
                 let sourceDeviceId = dict["sourceDeviceId"] as? String
-                DispatchQueue.main.async {
-                    self.onRemoteCommandExecuted?(command, sourceDeviceId)
+                let messageId = dict["messageId"] as? String
+                let accepted = AudioCoordinationBridge.executeRemoteControlCommand(
+                    command
+                ) { [weak self] succeeded in
+                    guard let self else { return }
+                    if let messageId {
+                        let result: [String: Any] = succeeded
+                            ? ["status": "ok"]
+                            : [
+                                "status": "error",
+                                "code": "execution_failed",
+                                "reason": "command could not be applied",
+                            ]
+                        self.sendEnvelope(Self.buildCommandAckEnvelope(
+                            protocolVersion: self.protocolVersion,
+                            messageId: messageId,
+                            result: result
+                        ))
+                    }
+                    guard succeeded else { return }
+                    DispatchQueue.main.async {
+                        self.onRemoteCommandExecuted?(command, sourceDeviceId)
+                    }
                 }
-                return
+                if accepted { return }
             }
             if let type = dict["type"] as? String,
                type == "error",

@@ -623,6 +623,118 @@ public final class AudioService: NSObject, @unchecked Sendable {
         return true
     }
 
+    /// Executes queue-changing coordination commands to completion so the
+    /// realtime layer does not acknowledge work that is still pending.
+    func executeRemote(
+        _ command: AudioCommand,
+        completion: @escaping (Bool) -> Void
+    ) -> Bool {
+        switch command {
+        case .playSong(let id):
+            resolveRemoteSongs(ids: [id], index: 0, completion: completion)
+        case .playAtIndex(let songIds, let index):
+            resolveRemoteSongs(ids: songIds, index: index, completion: completion)
+        case .playAlbum(let id, let index, let shuffle):
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self,
+                      let result = try? AlbumRepository(
+                          db: self.databaseManager.dbPool
+                      ).getWithSongs(id) else {
+                    completion(false)
+                    return
+                }
+                self.applyRemoteQueue(
+                    songs: result.songs.map(\.queueSong),
+                    index: index,
+                    sourceId: QueueSourceId(type: "album", id: id),
+                    sourceName: result.album.name,
+                    shuffle: shuffle,
+                    completion: completion
+                )
+            }
+        case .playPlaylist(let id, let index, let shuffle):
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self,
+                      let detail = try? PlaylistRepository(
+                          db: self.databaseManager.dbPool
+                      ).getDetailById(id),
+                      let data = detail.entriesJson.data(using: .utf8),
+                      let entries = try? JSONDecoder().decode(
+                          [PlaylistEntryIdentifier].self,
+                          from: data
+                      ) else {
+                    completion(false)
+                    return
+                }
+                let songs = self.resolveSongs(ids: entries.map(\.id)).map(\.queueSong)
+                self.applyRemoteQueue(
+                    songs: songs,
+                    index: index,
+                    sourceId: QueueSourceId(type: "playlist", id: id),
+                    sourceName: detail.name,
+                    shuffle: shuffle,
+                    completion: completion
+                )
+            }
+        case .addToQueue(let songIds, let position):
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self else {
+                    completion(false)
+                    return
+                }
+                let songs = self.resolveSongs(ids: songIds).map(\.queueSong)
+                guard songIds.isEmpty || !songs.isEmpty else {
+                    completion(false)
+                    return
+                }
+                self.stateQueue.async {
+                    if !songs.isEmpty {
+                        self.queueEngine.addToUserQueue(songs: songs, position: position)
+                        self.persistence.markStateDirty()
+                    }
+                    completion(true)
+                }
+            }
+        case .removeFromQueue(let songIds):
+            stateQueue.async { [weak self] in
+                guard let self else {
+                    completion(false)
+                    return
+                }
+                if self.queueEngine.removeSongIds(songIds) {
+                    self.persistence.markStateDirty()
+                }
+                completion(true)
+            }
+        case .reorderQueue(let from, let to):
+            stateQueue.async { [weak self] in
+                guard let self else {
+                    completion(false)
+                    return
+                }
+                let succeeded = from == to || self.queueEngine.reorderFlattenedQueue(
+                    fromIndex: from,
+                    toIndex: to
+                )
+                if succeeded && from != to { self.persistence.markStateDirty() }
+                completion(succeeded)
+            }
+        case .clearQueue:
+            stateQueue.async { [weak self] in
+                guard let self else {
+                    completion(false)
+                    return
+                }
+                self.queueEngine.clearUserQueue()
+                self.persistence.markStateDirty()
+                completion(true)
+            }
+        default:
+            completion(execute(command))
+        }
+        return true
+    }
+
     public func prepareHandoff(
         _ snapshot: AudioHandoffSnapshot,
         autoplay: Bool,
@@ -1489,6 +1601,56 @@ public final class AudioService: NSObject, @unchecked Sendable {
             let songs = self.resolveSongs(ids: ids).map(\.queueSong)
             guard !songs.isEmpty else { return }
             self.setContextQueue(songs: songs, currentIndex: index)
+        }
+    }
+
+    private func resolveRemoteSongs(
+        ids: [String],
+        index: Int,
+        completion: @escaping (Bool) -> Void
+    ) {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else {
+                completion(false)
+                return
+            }
+            let songs = self.resolveSongs(ids: ids).map(\.queueSong)
+            self.applyRemoteQueue(
+                songs: songs,
+                index: index,
+                sourceId: nil,
+                sourceName: nil,
+                shuffle: false,
+                completion: completion
+            )
+        }
+    }
+
+    private func applyRemoteQueue(
+        songs: [QueueSong],
+        index: Int,
+        sourceId: QueueSourceId?,
+        sourceName: String?,
+        shuffle: Bool,
+        completion: @escaping (Bool) -> Void
+    ) {
+        stateQueue.async { [weak self] in
+            guard let self, songs.indices.contains(index) else {
+                completion(false)
+                return
+            }
+            self.isQueueActive = true
+            self.queueEngine.setContextQueue(
+                songs: songs,
+                currentIndex: index,
+                autoplay: true,
+                startTime: nil,
+                sourceId: sourceId,
+                sourceName: sourceName
+            )
+            if shuffle { self.queueEngine.setShuffleActive(true) }
+            self.persistence.markStateDirty()
+            completion(true)
         }
     }
 
