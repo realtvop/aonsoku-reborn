@@ -115,6 +115,7 @@ final class SyncEngine {
     }
 
     func cancel() {
+        generation += 1
         currentTask?.cancel()
         currentTask = nil
     }
@@ -351,6 +352,7 @@ final class SyncEngine {
         try Task.checkCancellation()
 
         let genres = parseGenres(from: genreResponse.data)
+        try Task.checkCancellation()
         try genreRepo.replaceAll(genres)
 
         try Task.checkCancellation()
@@ -364,6 +366,7 @@ final class SyncEngine {
         try Task.checkCancellation()
 
         let playlists = parsePlaylists(from: playlistsResponse.data)
+        try Task.checkCancellation()
         try playlistRepo.bulkUpsert(playlists)
         try await syncPlaylistDetails(playlists: playlists, credentials: credentials)
 
@@ -379,9 +382,11 @@ final class SyncEngine {
 
         let starredSongs = parseStarredSongs(from: starredResponse.data)
         if !starredSongs.isEmpty {
+            try Task.checkCancellation()
             try songRepo.bulkUpsert(starredSongs)
         }
 
+        try Task.checkCancellation()
         try syncStateRepo.recordTierCheckpoint(tier: "t1")
         forceFlushSyncState()
         onDataChanged?(["playlists", "genres", "favorites", "songs"])
@@ -401,6 +406,7 @@ final class SyncEngine {
         try Task.checkCancellation()
 
         let artists = parseArtists(from: artistsResponse.data)
+        try Task.checkCancellation()
         try await db.write { db in
             _ = try ArtistRecord.deleteAll(db)
             for artist in artists {
@@ -443,6 +449,7 @@ final class SyncEngine {
             }
         }
 
+        try Task.checkCancellation()
         try await db.write { db in
             _ = try AlbumRecord.deleteAll(db)
             for album in allAlbums {
@@ -450,6 +457,7 @@ final class SyncEngine {
             }
         }
 
+        try Task.checkCancellation()
         try syncStateRepo.recordTierCheckpoint(tier: "t2")
         forceFlushSyncState()
         onDataChanged?(["artists", "albums"])
@@ -498,6 +506,7 @@ final class SyncEngine {
             }
         }
 
+        try Task.checkCancellation()
         try songRepo.bulkUpsert(allSongs)
 
         if !allSongs.isEmpty {
@@ -509,6 +518,7 @@ final class SyncEngine {
             let maxDeletions = Int(ceil(Double(allSongs.count) * 0.1))
 
             if !staleIds.isEmpty && staleIds.count <= maxDeletions {
+                try Task.checkCancellation()
                 try await db.write { db in
                     _ = try SongRecord.filter(staleIds.contains(Column("id"))).deleteAll(db)
                 }
@@ -521,6 +531,7 @@ final class SyncEngine {
         }
 
         emitState(phase: "songs", tier: "t3", processed: allSongs.count, total: allSongs.count)
+        try Task.checkCancellation()
         try syncStateRepo.recordTierCheckpoint(tier: "t3")
         forceFlushSyncState()
         onDataChanged?(["songs", "favorites"])
@@ -561,11 +572,13 @@ final class SyncEngine {
     // MARK: - Playlist Details
 
     private func syncPlaylistDetails(playlists: [PlaylistRecord], credentials: ServerCredentials) async throws {
+        try Task.checkCancellation()
         let playlistIds = Set(playlists.map { $0.id })
         let existingIds = try playlistRepo.getAllDetailIds()
         let removedIds = existingIds.filter { !playlistIds.contains($0) }
 
         if !removedIds.isEmpty && !playlists.isEmpty && removedIds.count < existingIds.count {
+            try Task.checkCancellation()
             try playlistRepo.deleteDetails(ids: removedIds)
         }
 
@@ -593,6 +606,7 @@ final class SyncEngine {
             }
 
             if !details.isEmpty {
+                try Task.checkCancellation()
                 try playlistRepo.bulkUpsertDetails(details)
             }
 

@@ -66,6 +66,13 @@ environment. The app renders a lightweight branded launch view before creating
 the service graph off the main actor, so database migration and service
 construction never leave the first frame blank.
 
+`AppModel` records the library owner as the normalized primary server URL and
+username. Signing out clears observable account state but keeps the offline
+library for the same account. Before a different account activates, it cancels
+old work and removes server metadata, playback/history rows, audio and artwork
+caches, pins and lyrics selections so process-wide services cannot expose the
+previous account's content.
+
 ## Services (AonsokuKit)
 
 | Service | Responsibility |

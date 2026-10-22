@@ -31,6 +31,7 @@ public final class DownloadsStore {
     @ObservationIgnored private var audioObservation: UUID?
     @ObservationIgnored private var didToastBatchFailure = false
     @ObservationIgnored private var started = false
+    @ObservationIgnored private var lifecycleGeneration: UInt64 = 0
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private let commands: DownloadCommands
 
@@ -72,6 +73,8 @@ public final class DownloadsStore {
     public func start() {
         guard !started else { return }
         started = true
+        lifecycleGeneration &+= 1
+        let generation = lifecycleGeneration
         reloadIndex()
         audioObservation = audio.subscribe { [weak self] event in
             Task { @MainActor [weak self] in
@@ -79,9 +82,23 @@ public final class DownloadsStore {
             }
         }
         Task { [weak self] in
-            await self?.hydrateCollectionSongs()
-            await self?.refreshUsage()
+            guard let self else { return }
+            await self.hydrateCollectionSongs(generation: generation)
+            guard generation == self.lifecycleGeneration else { return }
+            await self.refreshUsage()
         }
+    }
+
+    public func stop() {
+        lifecycleGeneration &+= 1
+        cancelAll()
+        if let audioObservation { audio.unsubscribe(audioObservation) }
+        audioObservation = nil
+        started = false
+        rows = [:]
+        collectionSongIds = [:]
+        usage = CacheUsage()
+        revision += 1
     }
 
     func reloadAfterLibrarySync() {
@@ -655,18 +672,22 @@ public final class DownloadsStore {
         return completed == ids.count ? .cached : .notCached
     }
 
-    private func hydrateCollectionSongs() async {
-        for row in rows.values {
+    private func hydrateCollectionSongs(generation: UInt64) async {
+        let snapshot = rows
+        var hydrated: [String: [String]] = [:]
+        for row in snapshot.values {
             if row.type == CachedItemType.album.rawValue,
                 let detail = await repository.cachedAlbum(id: row.id)
             {
-                collectionSongIds[row.key] = detail.songs.map(\.id)
+                hydrated[row.key] = detail.songs.map(\.id)
             } else if row.type == CachedItemType.playlist.rawValue,
                 let detail = await repository.cachedPlaylist(id: row.id)
             {
-                collectionSongIds[row.key] = detail.songs.map(\.id)
+                hydrated[row.key] = detail.songs.map(\.id)
             }
         }
+        guard generation == lifecycleGeneration else { return }
+        collectionSongIds.merge(hydrated) { _, next in next }
         revision += 1
     }
 

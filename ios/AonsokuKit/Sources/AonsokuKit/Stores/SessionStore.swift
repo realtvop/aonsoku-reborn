@@ -194,6 +194,7 @@ public final class SessionStore {
     public func refreshUser() async {
         guard let account else { return }
         if let refreshed = try? await api.user(username: account.username) {
+            guard self.account == account else { return }
             user = refreshed
         }
     }

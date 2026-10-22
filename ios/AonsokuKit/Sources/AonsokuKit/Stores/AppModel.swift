@@ -40,6 +40,8 @@ public final class AppModel {
     @ObservationIgnored private var smartDownloadsGeneration: UInt64 = 0
     @ObservationIgnored private var smartDownloadsNeedFavoritesReload = false
 
+    static let libraryOwnerStorageKey = "session.library-owner.v1"
+
     public init(services: AppServices = .shared, bundle: Bundle = .main) {
         self.services = services
         network = NetworkMonitor()
@@ -124,8 +126,15 @@ public final class AppModel {
         network.start()
         session.restore()
         isStarted = true
-        if session.isSignedIn {
-            activate()
+        if let account = session.account {
+            do {
+                try prepareAccountData(for: account, explicitLogin: false)
+                activate()
+            } catch {
+                resetAccountStores()
+                session.signOut()
+                toasts.show(error: error)
+            }
         }
     }
 
@@ -142,6 +151,13 @@ public final class AppModel {
             username: username,
             password: password
         )
+        guard let account = session.account else { return }
+        do {
+            try prepareAccountData(for: account, explicitLogin: true)
+        } catch {
+            session.signOut()
+            throw error
+        }
         activate()
     }
 
@@ -150,16 +166,18 @@ public final class AppModel {
     public func signOut() {
         activation?.cancel()
         activation = nil
+        isActive = false
         smartDownloadsTask?.cancel()
         smartDownloadsTask = nil
         smartDownloadsGeneration &+= 1
         smartDownloadsNeedFavoritesReload = false
         smartDownloadsReady = false
         player.clearAll()
+        downloads.stop()
         sync.stop()
         coordination.stop()
+        resetAccountStores()
         session.signOut()
-        isActive = false
     }
 
     /// The scene became active.
@@ -201,6 +219,53 @@ public final class AppModel {
             scheduleSmartDownloads(refreshFavorites: false)
             await session.refreshUser()
         }
+    }
+
+    private func prepareAccountData(
+        for account: ServerAccount,
+        explicitLogin: Bool
+    ) throws {
+        let next = LibraryAccountIdentity(account: account)
+        let previous = services.preferences.getJSON(
+            Self.libraryOwnerStorageKey,
+            as: LibraryAccountIdentity.self
+        )
+        let hasLibraryData = services.library.availability().available
+        if Self.requiresAccountReset(
+            previous: previous,
+            next: next,
+            hasLibraryData: hasLibraryData,
+            explicitLogin: explicitLogin
+        ) {
+            try services.library.resetAccountData()
+            _ = try services.audio.clearAudioFiles()
+            services.preferences.remove("pinned.v1")
+            services.preferences.remove("lyrics.selections.v1")
+            history.clear()
+            artwork.purgeMemory()
+        }
+        try services.preferences.setJSON(next, for: Self.libraryOwnerStorageKey)
+        resetAccountStores()
+    }
+
+    nonisolated static func requiresAccountReset(
+        previous: LibraryAccountIdentity?,
+        next: LibraryAccountIdentity,
+        hasLibraryData: Bool,
+        explicitLogin: Bool
+    ) -> Bool {
+        if let previous { return previous != next }
+        return explicitLogin && hasLibraryData
+    }
+
+    private func resetAccountStores() {
+        home.reset()
+        pinned.reset()
+        favorites.reset()
+        playlists.reset()
+        radios.reset()
+        history.reset()
+        lyrics.reset()
     }
 
     // MARK: Connections
@@ -299,5 +364,20 @@ public final class AppModel {
                 )
                 : nil
         )
+    }
+}
+
+struct LibraryAccountIdentity: Codable, Equatable, Sendable {
+    var serverUrl: String
+    var username: String
+
+    init(account: ServerAccount) {
+        serverUrl = account.primaryUrl
+        username = account.username
+    }
+
+    init(serverUrl: String, username: String) {
+        self.serverUrl = serverUrl
+        self.username = username
     }
 }

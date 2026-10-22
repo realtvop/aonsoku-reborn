@@ -262,4 +262,59 @@ final class NativeIntegrationTests: XCTestCase {
         XCTAssertTrue(initialized.ready)
         XCTAssertFalse(initialized.needsMigration)
     }
+
+    func testAccountResetClearsServerDataButKeepsAppPreferences() throws {
+        let database = try TemporaryDatabase()
+        let service = LibraryService(dbManager: database.manager)
+        let preferences = PreferencesService(db: database.manager.dbPool)
+        try SongRepository(db: database.manager.dbPool).upsert(makeSongRecord("old"))
+        try service.storeLyrics(songId: "old", content: "old lyrics", synced: true)
+        try SyncStateRepository(db: database.manager.dbPool).recordFullSync()
+        try preferences.addToPlayHistory(songJSON: "{}")
+        preferences.setString("dark", for: "theme")
+
+        try service.resetAccountData(clearCachedFiles: false)
+
+        XCTAssertTrue(try service.songs().items.isEmpty)
+        XCTAssertNil(try service.lyrics(songId: "old"))
+        XCTAssertFalse(service.availability().available)
+        XCTAssertTrue(try preferences.getPlayHistory().isEmpty)
+        XCTAssertEqual(preferences.getString("theme"), "dark")
+    }
+
+    func testAccountIdentityRequiresResetOnlyAcrossOwnersOrUnknownLoginData() {
+        let alice = LibraryAccountIdentity(
+            serverUrl: "https://one.test",
+            username: "alice"
+        )
+        let bob = LibraryAccountIdentity(
+            serverUrl: "https://two.test",
+            username: "bob"
+        )
+
+        XCTAssertFalse(AppModel.requiresAccountReset(
+            previous: alice,
+            next: alice,
+            hasLibraryData: true,
+            explicitLogin: true
+        ))
+        XCTAssertTrue(AppModel.requiresAccountReset(
+            previous: alice,
+            next: bob,
+            hasLibraryData: true,
+            explicitLogin: true
+        ))
+        XCTAssertTrue(AppModel.requiresAccountReset(
+            previous: nil,
+            next: alice,
+            hasLibraryData: true,
+            explicitLogin: true
+        ))
+        XCTAssertFalse(AppModel.requiresAccountReset(
+            previous: nil,
+            next: alice,
+            hasLibraryData: true,
+            explicitLogin: false
+        ))
+    }
 }

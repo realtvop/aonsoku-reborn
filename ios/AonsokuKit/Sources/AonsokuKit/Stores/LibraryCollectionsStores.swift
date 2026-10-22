@@ -65,6 +65,12 @@ public final class PinnedHomeStore {
         items = stored.filter { seen.insert($0.id).inserted }
     }
 
+    public func reset() {
+        resolveGeneration += 1
+        items = []
+        resolved = []
+    }
+
     public func isPinned(_ itemId: String, kind: PinnedItem.Kind) -> Bool {
         items.contains { $0.itemId == itemId && $0.kind == kind }
     }
@@ -212,6 +218,18 @@ public final class FavoritesStore {
         } catch {
             // The local snapshot remains useful while offline.
         }
+    }
+
+    public func reset() {
+        loadGeneration &+= 1
+        for task in requestTasks.values { task.cancel() }
+        requestTasks.removeAll()
+        requests.removeAll()
+        pendingMutations.removeAll()
+        songIds = []
+        albumIds = []
+        artistIds = []
+        revision += 1
     }
 
     public func isFavorite(_ kind: FavoriteKind, id: String) -> Bool {
@@ -438,6 +456,7 @@ public final class PlaylistsStore {
 
     @ObservationIgnored public let repository: LibraryRepository
     @ObservationIgnored public let api: any SubsonicAPI
+    @ObservationIgnored private var loadGeneration: UInt64 = 0
 
     public init(repository: LibraryRepository, api: any SubsonicAPI) {
         self.repository = repository
@@ -450,13 +469,25 @@ public final class PlaylistsStore {
     }
 
     public func reload() async {
+        loadGeneration &+= 1
+        let generation = loadGeneration
         if playlists.isEmpty { phase = .loading }
         do {
-            playlists = try await repository.playlists()
+            let values = try await repository.playlists()
+            guard generation == loadGeneration else { return }
+            playlists = values
             phase = .loaded
         } catch {
+            guard generation == loadGeneration else { return }
             phase = .failed(error.localizedDescription)
         }
+    }
+
+    public func reset() {
+        loadGeneration &+= 1
+        playlists = []
+        phase = .idle
+        revision += 1
     }
 
     /// Creates a playlist, optionally with songs, and returns it.
@@ -565,19 +596,31 @@ public final class RadioStore {
     public private(set) var phase: LoadPhase = .idle
 
     @ObservationIgnored public let api: any SubsonicAPI
+    @ObservationIgnored private var loadGeneration: UInt64 = 0
 
     public init(api: any SubsonicAPI) {
         self.api = api
     }
 
     public func load() async {
+        loadGeneration &+= 1
+        let generation = loadGeneration
         if stations.isEmpty { phase = .loading }
         do {
-            stations = try await api.radioStations()
+            let values = try await api.radioStations()
+            guard generation == loadGeneration else { return }
+            stations = values
             phase = .loaded
         } catch {
+            guard generation == loadGeneration else { return }
             phase = .failed(error.localizedDescription)
         }
+    }
+
+    public func reset() {
+        loadGeneration &+= 1
+        stations = []
+        phase = .idle
     }
 
     public func create(name: String, streamUrl: String, homePageUrl: String?) async throws {
@@ -655,6 +698,12 @@ public final class ListeningHistoryStore {
     public func clear() {
         songs = []
         try? preferences.clearPlayHistory()
+        resetTracking()
+    }
+
+    public func reset() {
+        songs = []
+        resetTracking()
     }
 
     /// Feeds playback changes. Call on every song, play state or target
@@ -687,6 +736,12 @@ public final class ListeningHistoryStore {
         guard let playingSince else { return }
         accumulatedPlayback += max(0, now.timeIntervalSince(playingSince))
         self.playingSince = nil
+    }
+
+    private func resetTracking() {
+        trackedSong = nil
+        accumulatedPlayback = 0
+        playingSince = nil
     }
 
     private func save() {

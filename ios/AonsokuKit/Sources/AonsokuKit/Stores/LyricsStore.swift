@@ -84,6 +84,19 @@ public final class LyricsStore {
         await load(for: song, bypassingMemory: false)
     }
 
+    public func reset() {
+        for load in inFlight.values { load.task.cancel() }
+        inFlight.removeAll()
+        memoryCache.removeAll()
+        memoryOrder.removeAll()
+        currentSong = nil
+        currentSongKey = nil
+        songId = nil
+        selection = CustomLyricsSelection()
+        state = .idle
+        revision = UUID()
+    }
+
     /// Loads again, bypassing the in-memory cache.
     public func reload() async {
         guard let currentSong else { return }

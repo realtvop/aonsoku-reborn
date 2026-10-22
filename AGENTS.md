@@ -185,6 +185,12 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   GRDB repository access, metadata sync/scheduling, typed library queries, and
   cover/avatar caching through `AppServices.library`; native UI must not open
   `DatabaseManager` or construct repository types directly.
+- `AppModel` persists an iOS library-owner identity (primary server URL plus
+  username). Sign-out resets observable account stores while retaining
+  same-account offline data; activating a different account first clears
+  server metadata, playback/history state, downloads, artwork, pins, and
+  lyrics selections so the singleton service graph cannot leak prior-account
+  content.
 - `AppLifecycleService` is the App/Scene lifecycle boundary shared by the iOS
   host and `AppServices`. It starts/restores audio once, flushes playback state
   on background/termination, validates coordination with a foreground ping and

@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 
 public final class LibraryService: @unchecked Sendable {
     public typealias EventHandler = @Sendable (LibraryEvent) -> Void
@@ -356,6 +357,31 @@ public final class LibraryService: @unchecked Sendable {
 
     public func clearCovers() throws -> Int {
         try imageCache.clearCoverImages()
+    }
+
+    /// Removes server-owned metadata and cached artwork before a different
+    /// Subsonic account is allowed to use this process-wide service graph.
+    func resetAccountData(clearCachedFiles: Bool = true) throws {
+        syncEngine.cancel()
+        if clearCachedFiles { _ = try imageCache.clearCoverImages() }
+        try dbManager.dbPool.write { db in
+            _ = try ArtistRecord.deleteAll(db)
+            _ = try AlbumRecord.deleteAll(db)
+            _ = try SongRecord.deleteAll(db)
+            _ = try PlaylistRecord.deleteAll(db)
+            _ = try PlaylistDetailRecord.deleteAll(db)
+            _ = try GenreRecord.deleteAll(db)
+            _ = try LyricsRecord.deleteAll(db)
+            _ = try CacheMetaRecord.deleteAll(db)
+            _ = try SyncStateRecord.deleteAll(db)
+            try db.execute(sql: "DELETE FROM queueState")
+            try db.execute(sql: "DELETE FROM playbackState")
+            try db.execute(sql: "DELETE FROM playHistory")
+        }
+        emit(.dataChanged(tables: [
+            "artist", "album", "song", "playlist", "playlistDetail",
+            "genre", "lyrics", "cacheMeta", "syncState",
+        ]))
     }
 
     public func downloadCover(id: String, size: String) async throws -> LibraryCachedImage {

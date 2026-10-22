@@ -13,6 +13,7 @@ public final class HomeStore {
     @ObservationIgnored public let repository: LibraryRepository
     @ObservationIgnored private var loadTask: Task<Void, Never>?
     @ObservationIgnored private var hasLoaded = false
+    @ObservationIgnored private var generation: UInt64 = 0
 
     public init(repository: LibraryRepository) {
         self.repository = repository
@@ -42,11 +43,22 @@ public final class HomeStore {
     /// Reloads only Recently Played; the Home screen calls it every two
     /// minutes while visible and online.
     public func refreshRecentlyPlayed() async {
+        let generation = generation
         guard let albums = try? await repository.homeAlbums(
             .recentlyPlayed,
             size: HomeSection.size
-        ) else { return }
+        ), generation == self.generation else { return }
         sections[.recentlyPlayed] = albums
+    }
+
+    public func reset() {
+        generation &+= 1
+        loadTask?.cancel()
+        loadTask = nil
+        hasLoaded = false
+        carousel = []
+        sections = [:]
+        phase = .idle
     }
 
     private func runRefresh() async {
@@ -54,20 +66,23 @@ public final class HomeStore {
             await loadTask.value
             return
         }
+        let generation = generation
         let task = Task { [weak self] in
             guard let self else { return }
-            await self.performRefresh()
+            await self.performRefresh(generation: generation)
         }
         loadTask = task
         await task.value
         loadTask = nil
     }
 
-    private func performRefresh() async {
+    private func performRefresh(generation: UInt64) async {
         let hadContent = !isEmpty
         phase = .loading
         var successes = 0
         var firstError: String?
+        var nextCarousel: [Album]?
+        var nextSections: [HomeSection: [Album]] = [:]
 
         await withTaskGroup(of: HomeRefreshResult.self) { group in
             group.addTask { [repository] in
@@ -93,10 +108,10 @@ public final class HomeStore {
             for await result in group {
                 switch result {
                 case let .carousel(albums):
-                    carousel = albums
+                    nextCarousel = albums
                     successes += 1
                 case let .section(section, albums):
-                    sections[section] = albums
+                    nextSections[section] = albums
                     successes += 1
                 case let .failure(message):
                     if firstError == nil { firstError = message }
@@ -104,6 +119,9 @@ public final class HomeStore {
             }
         }
 
+        guard generation == self.generation, !Task.isCancelled else { return }
+        if let nextCarousel { carousel = nextCarousel }
+        for (section, albums) in nextSections { sections[section] = albums }
         hasLoaded = true
         if successes == 0, !hadContent {
             phase = .failed(firstError ?? "Unable to load Home")
