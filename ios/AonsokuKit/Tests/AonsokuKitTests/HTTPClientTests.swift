@@ -144,6 +144,78 @@ final class HTTPClientTests: XCTestCase {
         }
     }
 
+    func testPingRetriesWithServerProtocolVersionAfterCodeThirty() async {
+        var requestedVersions: [String] = []
+        URLProtocolStub.handler = { request in
+            let components = try XCTUnwrap(
+                URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false)
+            )
+            let version = try XCTUnwrap(
+                components.queryItems?.first(where: { $0.name == "v" })?.value
+            )
+            requestedVersions.append(version)
+            let body: Data
+            if version == "1.16.0" {
+                body = Data("""
+                    {"subsonic-response":{"status":"failed","version":"1.14.0","error":{"code":30,"message":"unsupported version"}}}
+                    """.utf8)
+            } else {
+                body = Data("""
+                    {"subsonic-response":{"status":"ok","version":"1.14.0","type":"airsonic"}}
+                    """.utf8)
+            }
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, body)
+        }
+        let client = SubsonicHTTPClient(session: makeSession())
+
+        let result = await client.ping(
+            baseUrl: "https://music.example",
+            username: "alice",
+            password: "enc:736563726574",
+            authType: "password"
+        )
+
+        XCTAssertTrue(result.reachable)
+        XCTAssertNil(result.error)
+        XCTAssertEqual(requestedVersions, ["1.16.0", "1.14.0"])
+    }
+
+    func testQueryServerInfoReturnsDowngradedProtocolVersion() async throws {
+        URLProtocolStub.handler = { request in
+            let components = try XCTUnwrap(
+                URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false)
+            )
+            let version = try XCTUnwrap(
+                components.queryItems?.first(where: { $0.name == "v" })?.value
+            )
+            let payload = version == "1.16.0"
+                ? "{\"subsonic-response\":{\"status\":\"failed\",\"version\":\"1.14.0\",\"error\":{\"code\":30,\"message\":\"unsupported version\"}}}"
+                : "{\"subsonic-response\":{\"status\":\"ok\",\"version\":\"1.14.0\",\"type\":\"airsonic\"}}"
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, Data(payload.utf8))
+        }
+        let client = SubsonicHTTPClient(session: makeSession())
+
+        let info = try await client.queryServerInfo(
+            baseUrl: "https://music.example",
+            credentials: credentials
+        )
+
+        XCTAssertEqual(info.protocolVersion, "1.14.0")
+        XCTAssertEqual(info.serverType, "airsonic")
+    }
+
     private var credentials: ServerCredentials {
         ServerCredentials(
             serverUrl: "https://music.example",

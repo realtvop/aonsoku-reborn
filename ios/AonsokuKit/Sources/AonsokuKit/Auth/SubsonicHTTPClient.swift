@@ -111,9 +111,8 @@ public final class SubsonicHTTPClient {
         )
 
         do {
-            _ = try await request(
+            _ = try await queryServerInfo(
                 baseUrl: baseUrl,
-                path: "ping.view",
                 credentials: credentials
             )
             return (true, nil)
@@ -151,11 +150,36 @@ public final class SubsonicHTTPClient {
         baseUrl: String,
         credentials: ServerCredentials
     ) async throws -> (protocolVersion: String, serverType: String) {
-        let response = try await request(
-            baseUrl: baseUrl,
-            path: "ping.view",
-            credentials: credentials
-        )
+        let response: SubsonicResponse
+        do {
+            response = try await request(
+                baseUrl: baseUrl,
+                path: "ping.view",
+                credentials: credentials
+            )
+        } catch SubsonicHTTPError.protocolIncompatible(let version, let message) {
+            guard let version = validProtocolVersion(version),
+                  version != credentials.protocolVersion else {
+                throw SubsonicHTTPError.protocolIncompatible(
+                    version: version,
+                    message: message
+                )
+            }
+            let compatibleCredentials = ServerCredentials(
+                serverUrl: credentials.serverUrl,
+                username: credentials.username,
+                password: credentials.password,
+                authType: credentials.authType,
+                protocolVersion: version,
+                serverType: credentials.serverType,
+                fallbackUrl: credentials.fallbackUrl
+            )
+            response = try await request(
+                baseUrl: baseUrl,
+                path: "ping.view",
+                credentials: compatibleCredentials
+            )
+        }
         guard let protocolVersion = response.data["version"] as? String,
               !protocolVersion.isEmpty else {
             throw SubsonicHTTPError.parseError("Missing protocol version")
@@ -164,6 +188,19 @@ public final class SubsonicHTTPClient {
             protocolVersion,
             response.data["type"] as? String ?? "subsonic"
         )
+    }
+
+    private func validProtocolVersion(_ version: String?) -> String? {
+        guard let version, !version.isEmpty else { return nil }
+        let components = version.split(
+            separator: ".",
+            omittingEmptySubsequences: false
+        )
+        guard !components.isEmpty,
+              components.allSatisfy({ Int($0) != nil }) else {
+            return nil
+        }
+        return version
     }
 
     func buildURL(
