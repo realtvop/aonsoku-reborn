@@ -62,14 +62,16 @@ struct SectionHeader: View {
 
     private func label(showsChevron: Bool) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
+            // Concrete colors: a plain list's section header dims the
+            // hierarchical .primary style to grey.
             Text(title)
                 .font(.title2.bold())
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.primary)
                 .lineLimit(1)
             if showsChevron {
                 Image(systemName: "chevron.forward")
                     .font(.title3.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
