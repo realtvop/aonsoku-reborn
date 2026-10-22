@@ -29,17 +29,33 @@ final class DependencyBoundaryTests: XCTestCase {
         service.clear()
     }
 
-    func testAonsokuKitDoesNotDependOnCapacitor() {
+    func testAonsokuKitDoesNotDependOnCapacitor() throws {
         // This test verifies the architecture boundary: AonsokuKit source code
         // does not import Capacitor or Cordova. All coordination is managed
         // internally by CoordinationRealtime and CoordinationService.
         // If this test fails, check that no file under ios/AonsokuKit/Sources
         // and ios/Aonsoku has an import Capacitor or import Cordova statement.
 
-        // Verify core services can be instantiated without Capacitor ceremony
-        _ = AuthenticationService.shared
-        _ = PreferencesService.shared
-        _ = AppServices.shared
+        let packageRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let sources = packageRoot.appendingPathComponent("Sources/AonsokuKit")
+        let files = try XCTUnwrap(
+            FileManager.default.enumerator(
+                at: sources,
+                includingPropertiesForKeys: nil
+            )
+        )
+
+        for case let file as URL in files where file.pathExtension == "swift" {
+            let contents = try String(contentsOf: file, encoding: .utf8)
+            XCTAssertFalse(
+                contents.contains("import Capacitor") ||
+                    contents.contains("import Cordova"),
+                "Unexpected Capacitor dependency in \(file.lastPathComponent)"
+            )
+        }
     }
 
     func testAonsokuKitSourcesDoNotUseFatalErrors() throws {
