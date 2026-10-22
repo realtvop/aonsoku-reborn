@@ -86,7 +86,8 @@ struct ArtworkBackdrop: View {
 
 /// Loads cover art from memory, the cover cache or the server and hands
 /// it to `content`: nil while it loads or when there is none. A cached
-/// image is there on the first frame, so rows do not flash while scrolling.
+/// image is there on the first frame, so rows do not flash while scrolling;
+/// a smaller one in memory stands in while a larger size loads.
 struct ArtworkReader<Content: View>: View {
     let id: String?
     var size: ArtworkSize = .medium
@@ -108,6 +109,7 @@ struct ArtworkReader<Content: View>: View {
         guard let key, let id else { return nil }
         if let loaded, loaded.key == key { return loaded.image }
         return app.artwork.cachedImage(for: id, size: size)
+            ?? app.artwork.previewImage(for: id, size: size)
     }
 
     private func load() async {

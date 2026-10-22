@@ -66,6 +66,20 @@ public final class ArtworkProvider: @unchecked Sendable {
         cachedImage(prefix: "cover", id: coverArtId, size: size)
     }
 
+    /// The largest smaller size already in memory, to show while `size`
+    /// loads, so a cover a row or the mini player has shown does not
+    /// flash a placeholder in Now Playing or a detail header.
+    public func previewImage(for coverArtId: String, size: ArtworkSize) -> UIImage? {
+        ArtworkSize.allCases
+            .filter { $0.rawValue < size.rawValue }
+            .sorted { $0.rawValue > $1.rawValue }
+            .lazy
+            .compactMap { self.images.object(
+                forKey: self.cacheKey(prefix: "cover", id: coverArtId, size: $0) as NSString
+            ) }
+            .first
+    }
+
     /// The decoded image, downloading it when needed. nil when unavailable.
     public func image(for coverArtId: String, size: ArtworkSize) async -> UIImage? {
         if let cached = cachedImage(for: coverArtId, size: size) { return cached }

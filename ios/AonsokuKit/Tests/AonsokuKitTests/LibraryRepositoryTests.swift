@@ -286,6 +286,10 @@ final class ArtworkProviderTests: XCTestCase {
         XCTAssertNotNil(loaded.0)
         XCTAssertTrue(loaded.0 === loaded.1)
         XCTAssertTrue(provider.cachedImage(for: id, size: .small) === loaded.0)
+        // A smaller image only stands in for a larger one; it never satisfies it.
+        XCTAssertNil(provider.cachedImage(for: id, size: .large))
+        XCTAssertTrue(provider.previewImage(for: id, size: .large) === loaded.0)
+        XCTAssertNil(provider.previewImage(for: id, size: .medium))
 
         let extracted = await provider.palette(for: id)
         let palette = try XCTUnwrap(extracted)
@@ -296,6 +300,7 @@ final class ArtworkProviderTests: XCTestCase {
 
         provider.purgeMemory()
         XCTAssertNil(provider.cachedImage(for: id, size: .small))
+        XCTAssertNil(provider.previewImage(for: id, size: .large))
     }
 
     private func makeQuadrantImage() -> UIImage {
