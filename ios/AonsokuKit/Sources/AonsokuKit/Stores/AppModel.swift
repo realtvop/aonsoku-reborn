@@ -36,6 +36,9 @@ public final class AppModel {
 
     @ObservationIgnored private var activation: Task<Void, Never>?
     @ObservationIgnored private var smartDownloadsReady = false
+    @ObservationIgnored private var smartDownloadsTask: Task<Void, Never>?
+    @ObservationIgnored private var smartDownloadsGeneration: UInt64 = 0
+    @ObservationIgnored private var smartDownloadsNeedFavoritesReload = false
 
     public init(services: AppServices = .shared, bundle: Bundle = .main) {
         self.services = services
@@ -147,6 +150,10 @@ public final class AppModel {
     public func signOut() {
         activation?.cancel()
         activation = nil
+        smartDownloadsTask?.cancel()
+        smartDownloadsTask = nil
+        smartDownloadsGeneration &+= 1
+        smartDownloadsNeedFavoritesReload = false
         smartDownloadsReady = false
         player.clearAll()
         sync.stop()
@@ -191,8 +198,7 @@ public final class AppModel {
             await favorites.load()
             guard !Task.isCancelled else { return }
             smartDownloadsReady = true
-            await downloads.applySmartRules()
-            guard !Task.isCancelled else { return }
+            scheduleSmartDownloads(refreshFavorites: false)
             await session.refreshUser()
         }
     }
@@ -247,12 +253,39 @@ public final class AppModel {
     }
 
     private func librarySyncCompleted() {
-        applySmartDownloadsIfReady()
+        scheduleSmartDownloads(refreshFavorites: true)
     }
 
     private func applySmartDownloadsIfReady() {
+        scheduleSmartDownloads(refreshFavorites: false)
+    }
+
+    private func scheduleSmartDownloads(refreshFavorites: Bool) {
         guard isActive, smartDownloadsReady else { return }
-        Task { await downloads.applySmartRules() }
+        if refreshFavorites {
+            smartDownloadsNeedFavoritesReload = true
+        }
+        smartDownloadsGeneration &+= 1
+        let generation = smartDownloadsGeneration
+        smartDownloadsTask?.cancel()
+        smartDownloadsTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            if smartDownloadsNeedFavoritesReload {
+                await favorites.load()
+                guard canApplySmartDownloads(generation: generation) else { return }
+                smartDownloadsNeedFavoritesReload = false
+            }
+            await downloads.applySmartRules()
+            guard canApplySmartDownloads(generation: generation) else { return }
+            smartDownloadsTask = nil
+        }
+    }
+
+    private func canApplySmartDownloads(generation: UInt64) -> Bool {
+        !Task.isCancelled
+            && isActive
+            && smartDownloadsReady
+            && smartDownloadsGeneration == generation
     }
 
     private func applyReplayGain(_ replayGain: ReplayGainSettings) {

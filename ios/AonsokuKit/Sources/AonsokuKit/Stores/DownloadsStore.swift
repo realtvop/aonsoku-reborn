@@ -344,14 +344,14 @@ public final class DownloadsStore {
     /// Skipped on metered networks.
     public func applySmartRules() async {
         let rules = settings.settings.cache.smartRules
-        guard rules.enabled, !repository.connectivity.isMetered else { return }
+        guard !repository.connectivity.isMetered else { return }
 
         var targets: [String: Set<String>] = [:]
-        if rules.favoriteSongs {
+        if rules.enabled, rules.favoriteSongs {
             let ids = favorites?.songIds ?? (try? library.starredIds().songIds) ?? []
             for id in ids { targets[id, default: []].insert("favorite") }
         }
-        if rules.favoritePlaylists {
+        if rules.enabled, rules.favoritePlaylists {
             let playlists = (try? library.playlists(limit: Int.max).items) ?? []
             for playlist in playlists where playlist.starred != nil {
                 guard let detail = await repository.cachedPlaylist(id: playlist.id) else {
@@ -362,8 +362,19 @@ public final class DownloadsStore {
                 }
             }
         }
+        guard !Task.isCancelled else { return }
+
+        for id in Array(pending.keys) where targets[id] == nil {
+            guard let request = pending[id] else { continue }
+            if request.source == .smart {
+                cancelPending(id)
+            } else if request.source == .explicit, !request.triggers.isEmpty {
+                pending[id]?.triggers = []
+            }
+        }
 
         for var row in rows.values where row.type == CachedItemType.audio.rawValue {
+            guard !Task.isCancelled else { return }
             guard targets[row.id] == nil else { continue }
             if row.source == CacheSource.smart.rawValue {
                 await deleteRow(key: row.key, deleteFile: true)
@@ -376,7 +387,9 @@ public final class DownloadsStore {
         }
 
         let songs = (try? await repository.songs(ids: Array(targets.keys))) ?? []
+        guard !Task.isCancelled else { return }
         for song in songs {
+            guard !Task.isCancelled else { return }
             await enqueue(
                 songs: [song],
                 source: .smart,

@@ -288,6 +288,45 @@ final class DownloadsStoreTests: XCTestCase {
         )
         _ = try? fixture.audio.deleteAudioFile(songId: record.id)
     }
+
+    func testDisablingSmartRulesRemovesCachedAndPendingSmartDownloads() async throws {
+        let fixture = try DownloadsFixture()
+        var cached = makeSongRecord("cached-smart")
+        cached.starred = "2026-01-01T00:00:00Z"
+        cached.starredAt = 1
+        var pending = makeSongRecord("pending-smart")
+        pending.starred = "2026-01-01T00:00:00Z"
+        pending.starredAt = 1
+        try SongRepository(db: fixture.database.manager.dbPool).bulkUpsert([
+            cached,
+            pending,
+        ])
+        _ = try fixture.audio.storeAudioFile(
+            songId: cached.id,
+            data: makeSilentWAVData(),
+            contentType: "audio/wav"
+        )
+        try fixture.library.upsertCacheMetadata(fixture.row(
+            cached.id,
+            source: .smart,
+            size: 8
+        ))
+        fixture.settings.update {
+            $0.cache.smartRules.enabled = true
+            $0.cache.smartRules.favoriteSongs = true
+        }
+        fixture.store.start()
+
+        await fixture.store.applySmartRules()
+        XCTAssertEqual(fixture.commands.started.map(\.songId), [pending.id])
+
+        fixture.settings.update { $0.cache.smartRules.enabled = false }
+        await fixture.store.applySmartRules()
+
+        XCTAssertEqual(fixture.store.state(ofSong: cached.id), .notCached)
+        XCTAssertEqual(fixture.store.state(ofSong: pending.id), .notCached)
+        XCTAssertEqual(fixture.commands.cancelled, [pending.id])
+    }
 }
 
 @MainActor
