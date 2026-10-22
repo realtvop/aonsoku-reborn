@@ -976,22 +976,22 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
                     command
                 ) { [weak self] succeeded in
                     guard let self else { return }
-                    if let messageId {
-                        let result: [String: Any] = succeeded
-                            ? ["status": "ok"]
-                            : [
-                                "status": "error",
-                                "code": "execution_failed",
-                                "reason": "command could not be applied",
-                            ]
-                        self.sendEnvelope(Self.buildCommandAckEnvelope(
-                            protocolVersion: self.protocolVersion,
-                            messageId: messageId,
-                            result: result
-                        ))
-                    }
-                    guard succeeded else { return }
                     DispatchQueue.main.async {
+                        if let messageId {
+                            let result: [String: Any] = succeeded
+                                ? ["status": "ok"]
+                                : [
+                                    "status": "error",
+                                    "code": "execution_failed",
+                                    "reason": "command could not be applied",
+                                ]
+                            self.sendEnvelope(Self.buildCommandAckEnvelope(
+                                protocolVersion: self.protocolVersion,
+                                messageId: messageId,
+                                result: result
+                            ))
+                        }
+                        guard succeeded else { return }
                         self.onRemoteCommandExecuted?(command, sourceDeviceId)
                     }
                 }
