@@ -160,6 +160,34 @@ final class FavoritesStoreTests: XCTestCase {
         XCTAssertEqual(store.revision, 2)
     }
 
+    func testLoadDoesNotOverwriteConcurrentSuccessfulFavorite() async throws {
+        let database = try TemporaryDatabase()
+        try SongRepository(db: database.manager.dbPool).upsert(
+            makeCollectionSongRecord("concurrent")
+        )
+        let api = FakeSubsonicAPI()
+        let started = expectation(description: "remote favorites started")
+        let gate = TestAsyncGate()
+        api.starredHandler = {
+            started.fulfill()
+            await gate.wait()
+            return SearchResults()
+        }
+        let library = LibraryService(dbManager: database.manager)
+        let store = FavoritesStore(api: api, library: library)
+
+        let load = Task { await store.load() }
+        await fulfillment(of: [started])
+        await store.setFavorite(.song, id: "concurrent", isFavorite: true)
+        XCTAssertTrue(store.songIds.contains("concurrent"))
+
+        await gate.open()
+        await load.value
+
+        XCTAssertTrue(store.songIds.contains("concurrent"))
+        XCTAssertTrue(try library.starredIds().songIds.contains("concurrent"))
+    }
+
     func testOptimisticSuccessUpdatesLocalAndFailureRollsBackWithToast() async throws {
         let database = try TemporaryDatabase()
         try SongRepository(db: database.manager.dbPool).bulkUpsert([

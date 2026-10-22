@@ -178,6 +178,8 @@ public final class FavoritesStore {
     @ObservationIgnored public weak var toasts: ToastCenter?
     @ObservationIgnored private var requests: [FavoriteRequestKey: FavoriteRequest] = [:]
     @ObservationIgnored private var requestTasks: [FavoriteRequestKey: Task<Void, Never>] = [:]
+    @ObservationIgnored private var mutationGeneration: UInt64 = 0
+    @ObservationIgnored private var mutationGenerations: [FavoriteRequestKey: UInt64] = [:]
 
     public init(api: any SubsonicAPI, library: LibraryService, toasts: ToastCenter? = nil) {
         self.api = api
@@ -188,11 +190,13 @@ public final class FavoritesStore {
     /// Loads starred ids from the local library, then from `getStarred2`
     /// when online.
     public func load() async {
+        let baseline = mutationGeneration
         if let local = try? library.starredIds() {
             replace(
                 songs: local.songIds,
                 albums: local.albumIds,
-                artists: local.artistIds
+                artists: local.artistIds,
+                preservingMutationsAfter: baseline
             )
         }
         do {
@@ -200,7 +204,8 @@ public final class FavoritesStore {
             replace(
                 songs: Set(remote.songs.map(\.id)),
                 albums: Set(remote.albums.map(\.id)),
-                artists: Set(remote.artists.map(\.id))
+                artists: Set(remote.artists.map(\.id)),
+                preservingMutationsAfter: baseline
             )
         } catch {
             // The local snapshot remains useful while offline.
@@ -336,8 +341,27 @@ public final class FavoritesStore {
     private func replace(
         songs: Set<String>,
         albums: Set<String>,
-        artists: Set<String>
+        artists: Set<String>,
+        preservingMutationsAfter baseline: UInt64
     ) {
+        var songs = songs
+        var albums = albums
+        var artists = artists
+        var protected = Set(mutationGenerations.compactMap { key, generation in
+            generation > baseline ? key : nil
+        })
+        protected.formUnion(requests.keys)
+        for key in protected {
+            let wanted = requests[key]?.wanted ?? isFavorite(key.kind, id: key.id)
+            switch key.kind {
+            case .song:
+                if wanted { songs.insert(key.id) } else { songs.remove(key.id) }
+            case .album:
+                if wanted { albums.insert(key.id) } else { albums.remove(key.id) }
+            case .artist:
+                if wanted { artists.insert(key.id) } else { artists.remove(key.id) }
+            }
+        }
         guard songIds != songs || albumIds != albums || artistIds != artists else {
             return
         }
@@ -366,6 +390,11 @@ public final class FavoritesStore {
             after.subtract(ids)
         }
         guard before != after else { return }
+        mutationGeneration &+= 1
+        let generation = mutationGeneration
+        for id in ids {
+            mutationGenerations[FavoriteRequestKey(kind: kind, id: id)] = generation
+        }
         switch kind {
         case .song: songIds = after
         case .album: albumIds = after
