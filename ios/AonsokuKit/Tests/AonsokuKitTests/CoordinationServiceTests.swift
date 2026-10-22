@@ -182,6 +182,42 @@ final class CoordinationServiceTests: XCTestCase {
         XCTAssertEqual(transport.connectCallCount, 0)
     }
 
+    func testDisconnectAfterRegistrationPreventsSocketConnection() async throws {
+        let registrationRequested = expectation(description: "registration requested")
+        let ticketRequested = expectation(description: "ticket requested")
+        let registrationGate = RegistrationGate()
+        let ticketGate = TicketGate()
+        apiClient.registrationGate = registrationGate
+        apiClient.ticketGate = ticketGate
+        apiClient.onRegistrationRequest = { registrationRequested.fulfill() }
+        apiClient.onTicketRequest = { ticketRequested.fulfill() }
+        let service = makeService(credentials: ServerCredentials(
+            serverUrl: "https://music.test",
+            username: "u",
+            password: "p",
+            authType: "password",
+            protocolVersion: "1.16.1",
+            serverType: "navidrome",
+            fallbackUrl: nil
+        ))
+
+        let connect = Task {
+            try await service.connect(config: config, deviceName: "Phone")
+        }
+        await fulfillment(of: [registrationRequested], timeout: 1)
+        await registrationGate.resume(returning: registeredTokens())
+        await fulfillment(of: [ticketRequested], timeout: 1)
+
+        service.disconnect()
+        await ticketGate.resume(returning: "stale-ticket")
+        try await connect.value
+
+        XCTAssertEqual(service.state.connectionState, .disconnected)
+        XCTAssertEqual(service.state.deviceId, "dev-1")
+        XCTAssertEqual(transport.connectCallCount, 0)
+        XCTAssertEqual(tokenStore.tokens, registeredTokens())
+    }
+
     func testConnectThrowsWithoutCredentials() async {
         do {
             try await service.connect(config: config, deviceName: "Phone")

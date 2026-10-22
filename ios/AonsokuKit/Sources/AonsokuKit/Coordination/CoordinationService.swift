@@ -226,7 +226,7 @@ public final class CoordinationService: @unchecked Sendable {
                 capabilities: CoordinationCapabilities.all
             )
             let tokens = try await apiClient.register(proof: proof, device: device)
-            guard acceptRegistration(
+            guard acceptRegistrationAndUpdateState(
                 tokens,
                 generation: registrationGeneration,
                 config: config,
@@ -234,14 +234,6 @@ public final class CoordinationService: @unchecked Sendable {
             ) else {
                 throw CoordinationError(code: CoordinationErrorCode.notConnected)
             }
-
-            update {
-                $0.deviceId = tokens.deviceId
-                $0.accountId = tokens.accountId
-                $0.lastError = nil
-            }
-
-            lock.withLock { manualDisconnect = false }
             await reconnect(userInitiated: false)
         } catch let error as CoordinationError {
             guard isCurrentRegistration(
@@ -282,20 +274,30 @@ public final class CoordinationService: @unchecked Sendable {
         }
     }
 
-    private func acceptRegistration(
+    private func acceptRegistrationAndUpdateState(
         _ tokens: CoordinationTokens,
         generation: UInt64,
         config: CoordinationConfig,
         client expectedClient: CoordinationAPIClient
     ) -> Bool {
-        lock.withLock {
+        let accepted = lock.withLock {
             guard reconnectGeneration == generation,
                   !manualDisconnect,
                   currentState.config == config,
                   client === expectedClient else { return false }
             tokenStore.saveTokens(tokens)
+            currentState.deviceId = tokens.deviceId
+            currentState.accountId = tokens.accountId
+            currentState.lastError = nil
             return true
         }
+        if accepted {
+            onMain { [weak self] in
+                guard let self else { return }
+                self.notifyObservers(.stateChanged(self.state))
+            }
+        }
+        return accepted
     }
 
     /// Opens the realtime connection with a fresh ticket when registered.
