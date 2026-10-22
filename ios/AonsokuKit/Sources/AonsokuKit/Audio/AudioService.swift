@@ -746,8 +746,23 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     public func downloadAudioFile(songId: String, maxBitRate: Int?, format: String?) {
+        downloadAudioFile(
+            songId: songId,
+            requestId: UUID().uuidString,
+            maxBitRate: maxBitRate,
+            format: format
+        )
+    }
+
+    public func downloadAudioFile(
+        songId: String,
+        requestId: String,
+        maxBitRate: Int?,
+        format: String?
+    ) {
         downloadManager.download(
             songId: songId,
+            requestId: requestId,
             maxBitRate: maxBitRate,
             format: format
         )
@@ -2610,19 +2625,26 @@ extension AudioService: NativeDownloadManagerDelegate {
     func downloadManager(
         _ manager: NativeDownloadManager,
         didProgress songId: String,
+        requestId: String?,
         loaded: Int64,
         total: Int64
     ) {
         dispatchMain { [weak self] in
             guard let self,
-                  !self.backgroundCacheSongIds.contains(songId) else { return }
-            self.emit(.downloadProgress(songId: songId, loaded: loaded, total: total))
+                  requestId != nil || !self.backgroundCacheSongIds.contains(songId) else { return }
+            self.emit(.downloadProgress(
+                songId: songId,
+                requestId: requestId,
+                loaded: loaded,
+                total: total
+            ))
         }
     }
 
     func downloadManager(
         _ manager: NativeDownloadManager,
         didComplete songId: String,
+        requestId: String?,
         fileUrl: URL,
         contentType: String,
         sizeBytes: Int64
@@ -2636,12 +2658,16 @@ extension AudioService: NativeDownloadManagerDelegate {
         )
         dispatchMain { [weak self] in
             guard let self else { return }
-            if self.backgroundCacheSongIds.remove(songId) != nil {
+            if requestId == nil, self.backgroundCacheSongIds.remove(songId) != nil {
                 self.backgroundCacheCompletedSongIds.insert(songId)
                 self.emit(.streamCacheCompleted(songId: songId, file: file))
                 self.checkEndOfStreamAfterCacheComplete(songId: songId)
             } else {
-                self.emit(.downloadCompleted(songId: songId, file: file))
+                self.emit(.downloadCompleted(
+                    songId: songId,
+                    requestId: requestId,
+                    file: file
+                ))
             }
         }
     }
@@ -2649,11 +2675,12 @@ extension AudioService: NativeDownloadManagerDelegate {
     func downloadManager(
         _ manager: NativeDownloadManager,
         didFail songId: String,
+        requestId: String?,
         error: Error
     ) {
         dispatchMain { [weak self] in
             guard let self else { return }
-            if self.backgroundCacheSongIds.remove(songId) != nil {
+            if requestId == nil, self.backgroundCacheSongIds.remove(songId) != nil {
                 NativeLogger.shared.warn(
                     "Background cache failed for \(songId): \(error.localizedDescription)",
                     source: "AudioService"
@@ -2662,6 +2689,7 @@ extension AudioService: NativeDownloadManagerDelegate {
             }
             self.emit(.downloadFailed(
                 songId: songId,
+                requestId: requestId,
                 message: error.localizedDescription
             ))
         }

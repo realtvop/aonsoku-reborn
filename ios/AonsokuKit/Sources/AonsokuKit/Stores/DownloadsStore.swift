@@ -32,6 +32,7 @@ public final class DownloadsStore {
     @ObservationIgnored private var didToastBatchFailure = false
     @ObservationIgnored private var started = false
     @ObservationIgnored private let now: @Sendable () -> Date
+    @ObservationIgnored private let commands: DownloadCommands
 
     public init(
         audio: AudioService,
@@ -44,6 +45,7 @@ public final class DownloadsStore {
         self.repository = repository
         self.settings = settings
         now = { Date() }
+        commands = DownloadCommands(audio: audio)
     }
 
     init(
@@ -51,13 +53,15 @@ public final class DownloadsStore {
         library: LibraryService,
         repository: LibraryRepository,
         settings: SettingsStore,
-        now: @escaping @Sendable () -> Date
+        now: @escaping @Sendable () -> Date,
+        commands: DownloadCommands? = nil
     ) {
         self.audio = audio
         self.library = library
         self.repository = repository
         self.settings = settings
         self.now = now
+        self.commands = commands ?? DownloadCommands(audio: audio)
     }
 
     deinit {
@@ -168,7 +172,7 @@ public final class DownloadsStore {
     }
 
     public func cancelAll() {
-        audio.cancelDownload(songId: nil)
+        commands.cancel(nil)
         progress.removeAll()
         progressOrder.removeAll()
         pending.removeAll()
@@ -258,13 +262,26 @@ public final class DownloadsStore {
             }.map(\.key)
             removeRows(keys: markerKeys)
             let kept = explicitCollectionSongIds()
-            let songIds = rows.values.filter {
+            let songIds = Set(rows.values.filter {
                 $0.source == source.rawValue && $0.type == CachedItemType.audio.rawValue
-            }.map(\.id)
+            }.map(\.id)).union(pending.compactMap { id, request in
+                request.source == .explicit ? id : nil
+            })
             for id in songIds {
                 await removeExplicitSong(id, keptByCollections: kept)
             }
         } else {
+            if source == .smart {
+                let smartPending = pending.compactMap { id, request in
+                    request.source == .smart ? id : nil
+                }
+                for id in smartPending { cancelPending(id) }
+                for (id, request) in pending where
+                    request.source == .explicit && !request.triggers.isEmpty
+                {
+                    pending[id]?.triggers = []
+                }
+            }
             let values = rows.values.filter {
                 $0.source == source.rawValue && $0.type != CachedItemType.cover.rawValue
             }
@@ -390,13 +407,23 @@ public final class DownloadsStore {
 
     func handleAudioEvent(_ event: AudioServiceEvent) {
         switch event {
-        case let .downloadProgress(songId, loaded, total):
+        case let .downloadProgress(songId, requestId, loaded, total):
+            guard let requestId,
+                  pending[songId]?.requestId == requestId else { return }
             if progress[songId] == nil { progressOrder.append(songId) }
             progress[songId] = DownloadProgress(loaded: loaded, total: total)
             updateActiveDownloads()
-        case let .downloadCompleted(songId, file):
-            let request = pending.removeValue(forKey: songId)
-                ?? PendingDownload(source: .explicit, triggers: [])
+        case let .downloadCompleted(songId, requestId, file):
+            guard let requestId,
+                  let request = pending[songId],
+                  request.requestId == requestId else {
+                if pending[songId] == nil,
+                   rows[Self.audioKey(songId)] == nil {
+                    _ = try? audio.deleteAudioFile(songId: songId)
+                }
+                return
+            }
+            pending.removeValue(forKey: songId)
             progress.removeValue(forKey: songId)
             progressOrder.removeAll { $0 == songId }
             recordAudio(file, source: request.source, triggers: request.triggers)
@@ -405,7 +432,11 @@ public final class DownloadsStore {
                 await self?.refreshUsage()
                 await self?.enforceQuotas()
             }
-        case let .downloadFailed(songId, message):
+        case let .downloadFailed(songId, requestId, message):
+            guard let requestId,
+                  pending[songId]?.requestId == requestId else {
+                return
+            }
             pending.removeValue(forKey: songId)
             progress.removeValue(forKey: songId)
             progressOrder.removeAll { $0 == songId }
@@ -535,15 +566,21 @@ public final class DownloadsStore {
             if rows[key] != nil { removeRows(keys: [key]) }
             if let existing = pending[song.id] {
                 pending[song.id] = PendingDownload(
+                    requestId: existing.requestId,
                     source: Self.stronger(source, than: existing.source),
                     triggers: Array(Set(existing.triggers).union(triggers)).sorted()
                 )
                 continue
             }
-            pending[song.id] = PendingDownload(source: source, triggers: triggers)
+            let requestId = UUID().uuidString
+            pending[song.id] = PendingDownload(
+                requestId: requestId,
+                source: source,
+                triggers: triggers
+            )
             progress[song.id] = DownloadProgress(loaded: 0, total: 0)
             progressOrder.append(song.id)
-            audio.downloadAudioFile(songId: song.id, maxBitRate: nil, format: nil)
+            commands.start(song.id, requestId, nil, nil)
         }
         updateActiveDownloads()
     }
@@ -601,11 +638,19 @@ public final class DownloadsStore {
         _ songId: String,
         keptByCollections: Set<String>
     ) async {
+        if keptByCollections.contains(songId) { return }
+        if var request = pending[songId], request.source == .explicit {
+            if request.triggers.isEmpty {
+                cancelPending(songId)
+            } else {
+                request.source = .smart
+                pending[songId] = request
+            }
+        }
         let key = Self.audioKey(songId)
         guard var row = rows[key], row.source == CacheSource.explicit.rawValue else {
             return
         }
-        if keptByCollections.contains(songId) { return }
         let triggers = Self.triggers(from: row)
         if !triggers.isEmpty {
             row.source = CacheSource.smart.rawValue
@@ -614,6 +659,15 @@ public final class DownloadsStore {
             return
         }
         await deleteRow(key: key, deleteFile: true)
+    }
+
+    private func cancelPending(_ songId: String) {
+        guard pending.removeValue(forKey: songId) != nil else { return }
+        progress.removeValue(forKey: songId)
+        progressOrder.removeAll { $0 == songId }
+        commands.cancel(songId)
+        updateActiveDownloads()
+        revision += 1
     }
 
     private func explicitCollectionSongIds() -> Set<String> {
@@ -733,6 +787,7 @@ public final class DownloadsStore {
 }
 
 private struct PendingDownload {
+    var requestId: String
     var source: CacheSource
     var triggers: [String]
 }
@@ -744,5 +799,30 @@ private struct DownloadProgress {
     var fraction: Double? {
         guard total > 0 else { return nil }
         return min(1, max(0, Double(loaded) / Double(total)))
+    }
+}
+
+struct DownloadCommands {
+    var start: (String, String, Int?, String?) -> Void
+    var cancel: (String?) -> Void
+
+    init(audio: AudioService) {
+        start = {
+            audio.downloadAudioFile(
+                songId: $0,
+                requestId: $1,
+                maxBitRate: $2,
+                format: $3
+            )
+        }
+        cancel = { audio.cancelDownload(songId: $0) }
+    }
+
+    init(
+        start: @escaping (String, String, Int?, String?) -> Void,
+        cancel: @escaping (String?) -> Void
+    ) {
+        self.start = start
+        self.cancel = cancel
     }
 }

@@ -28,15 +28,27 @@ final class DownloadsStoreTests: XCTestCase {
 
     func testProgressCompletionFailureAndStreamCache() async throws {
         let fixture = try DownloadsFixture()
+        let eventSong = fixture.song("event")
         let file = try fixture.audio.storeAudioFile(
-            songId: "event",
+            songId: eventSong.id,
             data: makeSilentWAVData(),
             contentType: "audio/wav"
         )
         fixture.store.start()
-        fixture.store.handleAudioEvent(.downloadProgress(songId: "event", loaded: 5, total: 10))
+        await fixture.store.download(songs: [eventSong])
+        let eventRequestId = try XCTUnwrap(fixture.commands.requestId(for: eventSong.id))
+        fixture.store.handleAudioEvent(.downloadProgress(
+            songId: "event",
+            requestId: eventRequestId,
+            loaded: 5,
+            total: 10
+        ))
         XCTAssertEqual(fixture.store.activeDownloads.overallProgress, 0.5)
-        fixture.store.handleAudioEvent(.downloadCompleted(songId: "event", file: file))
+        fixture.store.handleAudioEvent(.downloadCompleted(
+            songId: "event",
+            requestId: eventRequestId,
+            file: file
+        ))
         XCTAssertEqual(fixture.store.state(ofSong: "event"), .cached(source: .explicit, removedFromServer: false))
 
         let stream = try fixture.audio.storeAudioFile(
@@ -47,10 +59,122 @@ final class DownloadsStoreTests: XCTestCase {
         fixture.store.handleAudioEvent(.streamCacheCompleted(songId: "stream", file: stream))
         XCTAssertEqual(fixture.store.state(ofSong: "stream"), .cached(source: .lru, removedFromServer: false))
 
-        fixture.store.handleAudioEvent(.downloadFailed(songId: "bad", message: "failed"))
+        let bad = fixture.song("bad")
+        await fixture.store.download(songs: [bad])
+        fixture.store.handleAudioEvent(.downloadFailed(
+            songId: bad.id,
+            requestId: try XCTUnwrap(fixture.commands.requestId(for: bad.id)),
+            message: "failed"
+        ))
         XCTAssertEqual(fixture.store.toasts?.current?.message, .text("failed"))
         _ = try? fixture.audio.deleteAudioFile(songId: "event")
         _ = try? fixture.audio.deleteAudioFile(songId: "stream")
+    }
+
+    func testRemovingPendingSongCancelsAndRejectsLateCompletion() async throws {
+        let fixture = try DownloadsFixture()
+        let song = fixture.song("remove-pending")
+        fixture.store.start()
+        await fixture.store.download(songs: [song])
+        let requestId = try XCTUnwrap(fixture.commands.requestId(for: song.id))
+        XCTAssertTrue(fixture.store.state(ofSong: song.id).isDownloading)
+
+        await fixture.store.remove(songIds: [song.id])
+
+        XCTAssertEqual(fixture.commands.cancelled, [song.id])
+        XCTAssertEqual(fixture.store.state(ofSong: song.id), .notCached)
+        let file = try fixture.audio.storeAudioFile(
+            songId: song.id,
+            data: makeSilentWAVData(),
+            contentType: "audio/wav"
+        )
+        fixture.store.handleAudioEvent(.downloadCompleted(
+            songId: song.id,
+            requestId: requestId,
+            file: file
+        ))
+        XCTAssertEqual(fixture.store.state(ofSong: song.id), .notCached)
+        XCTAssertNil(try fixture.audio.resolveAudioFile(songId: song.id))
+    }
+
+    func testCancelThenRedownloadRejectsOnlyTheOldRequest() async throws {
+        let fixture = try DownloadsFixture()
+        let song = fixture.song("redownload")
+        fixture.store.start()
+        await fixture.store.download(songs: [song])
+        let oldRequestId = try XCTUnwrap(fixture.commands.requestId(for: song.id))
+        await fixture.store.remove(songIds: [song.id])
+
+        await fixture.store.download(songs: [song])
+        let newRequestId = try XCTUnwrap(fixture.commands.requestId(for: song.id))
+        XCTAssertNotEqual(oldRequestId, newRequestId)
+        let file = try fixture.audio.storeAudioFile(
+            songId: song.id,
+            data: makeSilentWAVData(),
+            contentType: "audio/wav"
+        )
+
+        fixture.store.handleAudioEvent(.downloadCompleted(
+            songId: song.id,
+            requestId: oldRequestId,
+            file: file
+        ))
+        XCTAssertTrue(fixture.store.state(ofSong: song.id).isDownloading)
+        fixture.store.handleAudioEvent(.downloadCompleted(
+            songId: song.id,
+            requestId: newRequestId,
+            file: file
+        ))
+        XCTAssertEqual(
+            fixture.store.state(ofSong: song.id),
+            .cached(source: .explicit, removedFromServer: false)
+        )
+        _ = try? fixture.audio.deleteAudioFile(songId: song.id)
+    }
+
+    func testRemovingPendingCollectionsCancelsTheirSongs() async throws {
+        let fixture = try DownloadsFixture()
+        let albumSong = fixture.song("album-pending")
+        let playlistSong = fixture.song("playlist-pending")
+        fixture.api.albumHandler = { _ in
+            AlbumDetail(album: Album(id: "album", name: "Album"), songs: [albumSong])
+        }
+        fixture.api.playlistHandler = { _ in
+            PlaylistDetail(
+                playlist: Playlist(id: "playlist", name: "Playlist"),
+                songs: [playlistSong]
+            )
+        }
+        fixture.store.start()
+
+        await fixture.store.download(albumId: "album")
+        await fixture.store.remove(albumId: "album")
+        await fixture.store.download(playlistId: "playlist")
+        await fixture.store.remove(playlistId: "playlist")
+
+        XCTAssertEqual(Set(fixture.commands.cancelled.compactMap { $0 }), [
+            albumSong.id,
+            playlistSong.id,
+        ])
+        XCTAssertEqual(fixture.store.state(ofAlbum: "album"), .notCached)
+        XCTAssertEqual(fixture.store.state(ofPlaylist: "playlist"), .notCached)
+    }
+
+    func testClearAndCancelAllCancelPendingDownloads() async throws {
+        let fixture = try DownloadsFixture()
+        let explicit = fixture.song("clear-explicit")
+        let remaining = fixture.song("cancel-all")
+        fixture.store.start()
+        await fixture.store.download(songs: [explicit])
+
+        await fixture.store.clear(source: .explicit)
+        await fixture.store.download(songs: [remaining])
+        fixture.store.cancelAll()
+
+        XCTAssertEqual(fixture.commands.cancelled, [explicit.id, nil])
+        XCTAssertEqual(fixture.store.activeDownloads.activeCount, 0)
+        XCTAssertEqual(fixture.store.state(ofSong: explicit.id), .notCached)
+        XCTAssertEqual(fixture.store.state(ofSong: remaining.id), .notCached)
     }
 
     func testSharedAlbumAndPlaylistRemovalKeepsThenDeletesSong() async throws {
@@ -176,6 +300,7 @@ private final class DownloadsFixture {
     let settings: SettingsStore
     let repository: LibraryRepository
     let toasts = ToastCenter()
+    let commands = DownloadCommandSpy()
     let store: DownloadsStore
 
     init(connectivity: any Connectivity = FixedConnectivity()) throws {
@@ -197,7 +322,8 @@ private final class DownloadsFixture {
             library: library,
             repository: repository,
             settings: settings,
-            now: { Date(timeIntervalSince1970: 10) }
+            now: { Date(timeIntervalSince1970: 10) },
+            commands: commands.operations
         )
         store.toasts = toasts
     }
@@ -223,6 +349,25 @@ private final class DownloadsFixture {
             cachedAt: accessed,
             lastAccessedAt: accessed,
             removedFromServer: false
+        )
+    }
+}
+
+@MainActor
+private final class DownloadCommandSpy {
+    var started: [(songId: String, requestId: String)] = []
+    var cancelled: [String?] = []
+
+    func requestId(for songId: String) -> String? {
+        started.last(where: { $0.songId == songId })?.requestId
+    }
+
+    var operations: DownloadCommands {
+        DownloadCommands(
+            start: { [weak self] id, requestId, _, _ in
+                self?.started.append((id, requestId))
+            },
+            cancel: { [weak self] id in self?.cancelled.append(id) }
         )
     }
 }

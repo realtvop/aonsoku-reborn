@@ -132,6 +132,124 @@ final class DownloadTests: XCTestCase {
         XCTAssertEqual(manager.activeDownloadSongIds, [])
     }
 
+    func testCancelledTaskCannotPublishLateCompletion() throws {
+        let database = try TemporaryDatabase()
+        let cache = database.directory.appendingPathComponent("audio-cache")
+        var session: URLSession?
+        let manager = NativeDownloadManager(
+            sessionFactory: { delegate in
+                let created = URLSession(
+                    configuration: .ephemeral,
+                    delegate: delegate,
+                    delegateQueue: nil
+                )
+                session = created
+                return created
+            },
+            cacheDirectoryProvider: { create in
+                if create {
+                    try FileManager.default.createDirectory(
+                        at: cache,
+                        withIntermediateDirectories: true
+                    )
+                }
+                return cache
+            }
+        )
+        let delegate = DownloadDelegateSpy()
+        manager.delegate = delegate
+        _ = manager.handleEvents(
+            forBackgroundSession: NativeDownloadManager.backgroundSessionIdentifier,
+            completionHandler: {}
+        )
+        let activeSession = try XCTUnwrap(session)
+        let task = activeSession.downloadTask(
+            with: URL(string: "https://example.test/song")!
+        )
+        task.taskDescription = "cancelled"
+        manager.urlSession(
+            activeSession,
+            downloadTask: task,
+            didWriteData: 1,
+            totalBytesWritten: 1,
+            totalBytesExpectedToWrite: 2
+        )
+        XCTAssertEqual(manager.activeDownloadSongIds, ["cancelled"])
+
+        manager.cancel(songId: "cancelled")
+        let download = database.directory.appendingPathComponent("download.tmp")
+        try Data([1, 2, 3]).write(to: download)
+        manager.urlSession(
+            activeSession,
+            downloadTask: task,
+            didFinishDownloadingTo: download
+        )
+
+        XCTAssertTrue(delegate.completed.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: cache.path))
+    }
+
+    func testCancelAllDoesNotCancelDownloadStartedAfterIt() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [StallingURLProtocol.self]
+        let manager = NativeDownloadManager(
+            sessionFactory: { delegate in
+                URLSession(
+                    configuration: configuration,
+                    delegate: delegate,
+                    delegateQueue: nil
+                )
+            },
+            credentialsProvider: { self.credentials }
+        )
+        manager.download(songId: "old", requestId: "old-request")
+
+        manager.cancelAll()
+        manager.download(songId: "new", requestId: "new-request")
+
+        for _ in 0 ..< 100 where manager.activeDownloadSongIds != ["new"] {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(manager.activeDownloadSongIds, ["new"])
+        manager.cancelAll()
+    }
+
+    func testCancelAllDropsDownloadThatBeganBeforeTaskSnapshot() async throws {
+        let credentialsRequested = expectation(description: "credentials requested")
+        let requestReturned = expectation(description: "download request returned")
+        let releaseCredentials = DispatchSemaphore(value: 0)
+        let manager = NativeDownloadManager(
+            sessionFactory: { delegate in
+                URLSession(
+                    configuration: .ephemeral,
+                    delegate: delegate,
+                    delegateQueue: nil
+                )
+            },
+            credentialsProvider: {
+                credentialsRequested.fulfill()
+                releaseCredentials.wait()
+                return self.credentials
+            }
+        )
+
+        DispatchQueue.global().async {
+            manager.download(songId: "old", requestId: "old-request")
+            requestReturned.fulfill()
+        }
+        await fulfillment(of: [credentialsRequested], timeout: 1)
+
+        manager.cancelAll()
+        for _ in 0 ..< 100 where manager.isCancellingDownloads {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertFalse(manager.isCancellingDownloads)
+
+        releaseCredentials.signal()
+        await fulfillment(of: [requestReturned], timeout: 1)
+        XCTAssertEqual(manager.activeDownloadSongIds, [])
+    }
+
     func testCompletedDownloadMovesFileWritesMetadataAndNotifiesDelegate() throws {
         let database = try TemporaryDatabase()
         let cache = database.directory.appendingPathComponent("audio-cache")
@@ -167,7 +285,7 @@ final class DownloadTests: XCTestCase {
         let task = activeSession.downloadTask(
             with: URL(string: "https://example.test/song")!
         )
-        task.taskDescription = "song-1"
+        task.taskDescription = "{\"songId\":\"song-1\",\"requestId\":\"request-1\"}"
         let download = database.directory.appendingPathComponent("download.tmp")
         try Data([1, 2, 3]).write(to: download)
 
@@ -179,6 +297,7 @@ final class DownloadTests: XCTestCase {
 
         let completed = try XCTUnwrap(delegate.completed.first)
         XCTAssertEqual(completed.songId, "song-1")
+        XCTAssertEqual(completed.requestId, "request-1")
         XCTAssertEqual(completed.contentType, "audio/mpeg")
         XCTAssertEqual(completed.sizeBytes, 3)
         XCTAssertTrue(FileManager.default.fileExists(atPath: completed.url.path))
@@ -220,6 +339,7 @@ private final class DownloadDelegateSpy: NativeDownloadManagerDelegate {
     var failedSongIds: [String] = []
     var completed: [(
         songId: String,
+        requestId: String?,
         url: URL,
         contentType: String,
         sizeBytes: Int64
@@ -228,6 +348,7 @@ private final class DownloadDelegateSpy: NativeDownloadManagerDelegate {
     func downloadManager(
         _ manager: NativeDownloadManager,
         didProgress songId: String,
+        requestId: String?,
         loaded: Int64,
         total: Int64
     ) {}
@@ -235,16 +356,18 @@ private final class DownloadDelegateSpy: NativeDownloadManagerDelegate {
     func downloadManager(
         _ manager: NativeDownloadManager,
         didComplete songId: String,
+        requestId: String?,
         fileUrl: URL,
         contentType: String,
         sizeBytes: Int64
     ) {
-        completed.append((songId, fileUrl, contentType, sizeBytes))
+        completed.append((songId, requestId, fileUrl, contentType, sizeBytes))
     }
 
     func downloadManager(
         _ manager: NativeDownloadManager,
         didFail songId: String,
+        requestId: String?,
         error: Error
     ) {
         failedSongIds.append(songId)

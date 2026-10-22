@@ -1,9 +1,9 @@
 import Foundation
 
 protocol NativeDownloadManagerDelegate: AnyObject {
-    func downloadManager(_ manager: NativeDownloadManager, didProgress songId: String, loaded: Int64, total: Int64)
-    func downloadManager(_ manager: NativeDownloadManager, didComplete songId: String, fileUrl: URL, contentType: String, sizeBytes: Int64)
-    func downloadManager(_ manager: NativeDownloadManager, didFail songId: String, error: Error)
+    func downloadManager(_ manager: NativeDownloadManager, didProgress songId: String, requestId: String?, loaded: Int64, total: Int64)
+    func downloadManager(_ manager: NativeDownloadManager, didComplete songId: String, requestId: String?, fileUrl: URL, contentType: String, sizeBytes: Int64)
+    func downloadManager(_ manager: NativeDownloadManager, didFail songId: String, requestId: String?, error: Error)
 }
 
 enum DownloadError: Error {
@@ -19,7 +19,18 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
 
     weak var delegate: NativeDownloadManagerDelegate?
 
-    private var activeTasks: [Int: String] = [:]
+    private var activeTasks: [Int: DownloadTaskContext] = [:]
+    /// Task identifiers cancelled by the user. URLSession may still deliver
+    /// delegate callbacks after `cancel()` wins a race with completion; those
+    /// callbacks must not publish a completed download.
+    private var cancelledTaskIds: Set<Int> = []
+    /// New requests wait outside the URLSession while `cancelAll()` takes its
+    /// task snapshot, so the snapshot cannot accidentally include them.
+    private var isCancellingAll = false
+    /// Requests that began before a cancel-all operation must not create a
+    /// task after that operation has already taken its URLSession snapshot.
+    private var cancelAllGeneration: UInt64 = 0
+    private var deferredDownloads: [DownloadRequest] = []
     private var backgroundCompletionHandler: (() -> Void)?
     private let lock = NSLock()
     private let sessionFactory: SessionFactory
@@ -70,54 +81,126 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
         return URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
     }
 
-    func download(songId: String, maxBitRate: Int? = nil, format: String? = nil) {
+    func download(
+        songId: String,
+        requestId: String? = nil,
+        maxBitRate: Int? = nil,
+        format: String? = nil
+    ) {
+        let request = DownloadRequest(
+            context: DownloadTaskContext(songId: songId, requestId: requestId),
+            maxBitRate: maxBitRate,
+            format: format
+        )
+        lock.lock()
+        if isCancellingAll {
+            deferredDownloads.append(request)
+            lock.unlock()
+            return
+        }
+        let generation = cancelAllGeneration
+        lock.unlock()
+        start(request, generation: generation)
+    }
+
+    private func start(_ request: DownloadRequest, generation: UInt64) {
+        let context = request.context
         guard let credentials = credentialsProvider() else {
-            delegate?.downloadManager(self, didFail: songId, error: DownloadError.noCredentials)
+            guard isCurrent(generation: generation) else { return }
+            delegate?.downloadManager(
+                self,
+                didFail: context.songId,
+                requestId: context.requestId,
+                error: DownloadError.noCredentials
+            )
             return
         }
         guard let url = buildDownloadURL(
-            songId: songId,
+            songId: context.songId,
             credentials: credentials,
-            maxBitRate: maxBitRate,
-            format: format
+            maxBitRate: request.maxBitRate,
+            format: request.format
         ) else {
-            delegate?.downloadManager(self, didFail: songId, error: DownloadError.invalidURL)
+            guard isCurrent(generation: generation) else { return }
+            delegate?.downloadManager(
+                self,
+                didFail: context.songId,
+                requestId: context.requestId,
+                error: DownloadError.invalidURL
+            )
             return
         }
 
-        let task = session.downloadTask(with: url)
-        task.taskDescription = songId
+        let activeSession = session
         lock.lock()
-        activeTasks[task.taskIdentifier] = songId
+        guard !isCancellingAll, cancelAllGeneration == generation else {
+            lock.unlock()
+            return
+        }
+        let task = activeSession.downloadTask(with: url)
+        task.taskDescription = Self.encode(context)
+        activeTasks[task.taskIdentifier] = context
         lock.unlock()
         task.resume()
     }
 
     func cancel(songId: String) {
         lock.lock()
-        let taskId = activeTasks.first(where: { $0.value == songId })?.key
-        if let taskId { activeTasks.removeValue(forKey: taskId) }
+        let taskIds = Set(activeTasks.compactMap { taskId, context in
+            context.songId == songId ? taskId : nil
+        })
+        for taskId in taskIds {
+            activeTasks.removeValue(forKey: taskId)
+        }
+        cancelledTaskIds.formUnion(taskIds)
+        deferredDownloads.removeAll { $0.context.songId == songId }
         lock.unlock()
 
-        guard let taskId else { return }
+        guard !taskIds.isEmpty else { return }
         session.getAllTasks { tasks in
-            tasks.first(where: { $0.taskIdentifier == taskId })?.cancel()
+            for task in tasks where taskIds.contains(task.taskIdentifier) {
+                task.cancel()
+            }
         }
     }
 
     func cancelAll() {
-        session.getAllTasks { tasks in
-            for task in tasks { task.cancel() }
-        }
         lock.lock()
+        if isCancellingAll {
+            deferredDownloads.removeAll()
+            lock.unlock()
+            return
+        }
+        isCancellingAll = true
+        cancelAllGeneration &+= 1
+        cancelledTaskIds.formUnion(activeTasks.keys)
         activeTasks.removeAll()
         lock.unlock()
+        session.getAllTasks { tasks in
+            self.lock.lock()
+            self.cancelledTaskIds.formUnion(tasks.map(\.taskIdentifier))
+            let deferred = self.deferredDownloads
+            self.deferredDownloads.removeAll()
+            self.isCancellingAll = false
+            let generation = self.cancelAllGeneration
+            self.lock.unlock()
+            for task in tasks { task.cancel() }
+            for request in deferred {
+                self.start(request, generation: generation)
+            }
+        }
     }
 
     var activeDownloadSongIds: Set<String> {
         lock.lock()
         defer { lock.unlock() }
-        return Set(activeTasks.values)
+        return Set(activeTasks.values.map(\.songId))
+    }
+
+    var isCancellingDownloads: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return isCancellingAll
     }
 
     func handleEvents(
@@ -166,24 +249,36 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
     // MARK: - URLSessionDownloadDelegate
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
-        guard let songId = songId(for: downloadTask) else {
+        guard let context = context(for: downloadTask) else {
             return
         }
 
         let total = totalBytesExpectedToWrite > 0 ? totalBytesExpectedToWrite : 0
-        delegate?.downloadManager(self, didProgress: songId, loaded: totalBytesWritten, total: total)
+        delegate?.downloadManager(
+            self,
+            didProgress: context.songId,
+            requestId: context.requestId,
+            loaded: totalBytesWritten,
+            total: total
+        )
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        guard let songId = removeSongId(for: downloadTask) else {
+        guard let context = removeContext(for: downloadTask) else {
             return
         }
+        let songId = context.songId
 
         let httpResponse = downloadTask.response as? HTTPURLResponse
         let statusCode = httpResponse?.statusCode ?? 200
 
         guard statusCode >= 200, statusCode < 300 else {
-            delegate?.downloadManager(self, didFail: songId, error: DownloadError.httpError(statusCode))
+            delegate?.downloadManager(
+                self,
+                didFail: songId,
+                requestId: context.requestId,
+                error: DownloadError.httpError(statusCode)
+            )
             return
         }
 
@@ -213,21 +308,38 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
             let metadataURL = directory.appendingPathComponent("\(cacheId).json", isDirectory: false)
             try metadataData.write(to: metadataURL, options: [.atomic])
 
-            delegate?.downloadManager(self, didComplete: songId, fileUrl: destURL, contentType: contentType, sizeBytes: sizeBytes)
+            delegate?.downloadManager(
+                self,
+                didComplete: songId,
+                requestId: context.requestId,
+                fileUrl: destURL,
+                contentType: contentType,
+                sizeBytes: sizeBytes
+            )
         } catch {
-            delegate?.downloadManager(self, didFail: songId, error: DownloadError.fileMoveFailed)
+            delegate?.downloadManager(
+                self,
+                didFail: songId,
+                requestId: context.requestId,
+                error: DownloadError.fileMoveFailed
+            )
         }
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         guard let error else { return }
 
-        guard let songId = removeSongId(for: task) else {
+        guard let context = removeContext(for: task) else {
             return
         }
 
         if (error as NSError).code == NSURLErrorCancelled { return }
-        delegate?.downloadManager(self, didFail: songId, error: error)
+        delegate?.downloadManager(
+            self,
+            didFail: context.songId,
+            requestId: context.requestId,
+            error: error
+        )
     }
 
     func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
@@ -238,19 +350,59 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
         DispatchQueue.main.async { completionHandler?() }
     }
 
-    private func songId(for task: URLSessionTask) -> String? {
+    private func context(for task: URLSessionTask) -> DownloadTaskContext? {
         lock.lock()
         defer { lock.unlock() }
-        if let songId = activeTasks[task.taskIdentifier] { return songId }
-        guard let songId = task.taskDescription, !songId.isEmpty else { return nil }
-        activeTasks[task.taskIdentifier] = songId
-        return songId
+        guard !cancelledTaskIds.contains(task.taskIdentifier) else { return nil }
+        if let context = activeTasks[task.taskIdentifier] { return context }
+        guard let context = Self.decode(task.taskDescription) else { return nil }
+        activeTasks[task.taskIdentifier] = context
+        return context
     }
 
-    private func removeSongId(for task: URLSessionTask) -> String? {
+    private func removeContext(for task: URLSessionTask) -> DownloadTaskContext? {
         lock.lock()
         defer { lock.unlock() }
+        if cancelledTaskIds.remove(task.taskIdentifier) != nil {
+            activeTasks.removeValue(forKey: task.taskIdentifier)
+            return nil
+        }
         return activeTasks.removeValue(forKey: task.taskIdentifier)
-            ?? task.taskDescription
+            ?? Self.decode(task.taskDescription)
     }
+
+    private func isCurrent(generation: UInt64) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return !isCancellingAll && cancelAllGeneration == generation
+    }
+
+    private static func encode(_ context: DownloadTaskContext) -> String {
+        guard let data = try? JSONEncoder().encode(context),
+              let value = String(data: data, encoding: .utf8) else {
+            return context.songId
+        }
+        return value
+    }
+
+    private static func decode(_ value: String?) -> DownloadTaskContext? {
+        guard let value, !value.isEmpty else { return nil }
+        if let data = value.data(using: .utf8),
+           let context = try? JSONDecoder().decode(DownloadTaskContext.self, from: data) {
+            return context
+        }
+        // Compatibility with downloads created before request IDs were added.
+        return DownloadTaskContext(songId: value, requestId: nil)
+    }
+}
+
+private struct DownloadTaskContext: Codable {
+    var songId: String
+    var requestId: String?
+}
+
+private struct DownloadRequest {
+    var context: DownloadTaskContext
+    var maxBitRate: Int?
+    var format: String?
 }
