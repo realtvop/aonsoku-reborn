@@ -10,6 +10,8 @@ enum ImageCacheNotification {
 }
 
 final class ImageCacheManager: @unchecked Sendable {
+    private static let publicationLock = NSLock()
+
     private let db: DatabasePool
     private let session: URLSession
     private let credentialsProvider: @Sendable () -> ServerCredentials?
@@ -100,49 +102,69 @@ final class ImageCacheManager: @unchecked Sendable {
         }
 
         let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type") ?? "image/jpeg"
-        let ext = ImageCacheUtils.fileExtension(for: contentType)
-        let finalFileName = "\(ImageCacheUtils.cacheId(for: coverArtId)).\(ext)"
-        let finalFileURL = directory.appendingPathComponent(finalFileName, isDirectory: false)
-
-        try data.write(to: finalFileURL, options: [.atomic])
-
-        let now = Int(Date().timeIntervalSince1970 * 1000)
-        let record = CacheMetaRecord(
-            key: "cover:\(coverArtId)",
-            id: coverArtId,
-            type: "cover",
-            source: "explicit",
-            triggersJson: nil,
+        let publication = try publishCoverImage(
+            coverArtId: coverArtId,
+            data: data,
+            contentType: contentType,
             coverSize: size,
-            sizeBytes: data.count,
-            cachedAt: now,
-            lastAccessedAt: now,
-            removedFromServer: nil
+            directory: directory
         )
+        if publication.didWrite {
+            notifyCoverImageCached(coverArtId: coverArtId)
+        }
 
-        let repo = CacheMetaRepository(db: db)
-        try repo.upsert(record)
-        removeCoverImageFiles(
-            cacheId: ImageCacheUtils.cacheId(for: coverArtId),
-            in: directory,
-            excluding: finalFileURL
-        )
-        notifyCoverImageCached(coverArtId: coverArtId)
-
-        return finalFileURL
+        return publication.url
     }
 
     func storeCoverImage(coverArtId: String, data: Data, contentType: String, coverSize: String) throws -> URL {
         let directory = try ImageCacheUtils.cacheDirectoryURL(createIfNeeded: true)
+        let publication = try publishCoverImage(
+            coverArtId: coverArtId,
+            data: data,
+            contentType: contentType,
+            coverSize: coverSize,
+            directory: directory
+        )
+        if publication.didWrite {
+            notifyCoverImageCached(coverArtId: coverArtId)
+        }
+        return publication.url
+    }
+
+    private func publishCoverImage(
+        coverArtId: String,
+        data: Data,
+        contentType: String,
+        coverSize: String,
+        directory: URL
+    ) throws -> (url: URL, didWrite: Bool) {
+        Self.publicationLock.lock()
+        defer { Self.publicationLock.unlock() }
+
+        let cacheId = ImageCacheUtils.cacheId(for: coverArtId)
+        let key = "cover:\(coverArtId)"
+        let repo = CacheMetaRepository(db: db)
+        if let incomingSize = Int(coverSize),
+           let existingSizeString = try repo.getByKey(key)?.coverSize,
+           let existingSize = Int(existingSizeString),
+           existingSize > incomingSize,
+           let existingURL = try findCoverImageURL(
+               cacheId: cacheId,
+               in: directory
+           ),
+           FileManager.default.fileExists(atPath: existingURL.path) {
+            return (existingURL, false)
+        }
+
         let ext = ImageCacheUtils.fileExtension(for: contentType)
-        let fileName = "\(ImageCacheUtils.cacheId(for: coverArtId)).\(ext)"
+        let fileName = "\(cacheId).\(ext)"
         let fileURL = directory.appendingPathComponent(fileName, isDirectory: false)
 
         try data.write(to: fileURL, options: [.atomic])
 
         let now = Int(Date().timeIntervalSince1970 * 1000)
         let record = CacheMetaRecord(
-            key: "cover:\(coverArtId)",
+            key: key,
             id: coverArtId,
             type: "cover",
             source: "explicit",
@@ -154,16 +176,14 @@ final class ImageCacheManager: @unchecked Sendable {
             removedFromServer: nil
         )
 
-        let repo = CacheMetaRepository(db: db)
         try repo.upsert(record)
         removeCoverImageFiles(
-            cacheId: ImageCacheUtils.cacheId(for: coverArtId),
+            cacheId: cacheId,
             in: directory,
             excluding: fileURL
         )
-        notifyCoverImageCached(coverArtId: coverArtId)
 
-        return fileURL
+        return (fileURL, true)
     }
 
     func resolveCoverImage(coverArtId: String) -> URL? {
