@@ -353,14 +353,40 @@ public final class DownloadsStore {
         }
         if rules.enabled, rules.favoritePlaylists {
             let playlists = (try? library.playlists(limit: Int.max).items) ?? []
+            var resolutionFailed = false
             for playlist in playlists where playlist.starred != nil {
-                let detail = await repository.cachedPlaylist(id: playlist.id)
-                    ?? (try? await repository.playlist(id: playlist.id))
-                guard let detail else {
-                    continue
+                let detail: PlaylistDetail
+                if let cached = await repository.cachedPlaylist(id: playlist.id) {
+                    detail = cached
+                } else {
+                    do {
+                        detail = try await repository.playlist(id: playlist.id)
+                    } catch {
+                        resolutionFailed = true
+                        continue
+                    }
                 }
                 for song in detail.songs {
                     targets[song.id, default: []].insert("playlist")
+                }
+            }
+            if resolutionFailed {
+                for row in rows.values where row.type == CachedItemType.audio.rawValue {
+                    let triggers = Self.triggers(from: row)
+                    guard triggers.contains("playlist")
+                            || (row.source == CacheSource.smart.rawValue && triggers.isEmpty)
+                    else {
+                        continue
+                    }
+                    targets[row.id, default: []].insert("playlist")
+                }
+                for (id, request) in pending {
+                    guard request.triggers.contains("playlist")
+                            || (request.source == .smart && request.triggers.isEmpty)
+                    else {
+                        continue
+                    }
+                    targets[id, default: []].insert("playlist")
                 }
             }
         }

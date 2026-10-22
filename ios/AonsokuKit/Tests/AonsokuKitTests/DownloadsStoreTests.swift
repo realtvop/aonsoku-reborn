@@ -353,9 +353,9 @@ final class DownloadsStoreTests: XCTestCase {
                 starredAt: 1
             )
         )
-        var requestedPlaylistIds: [String] = []
+        let requestedPlaylistIds = LockedTestBox<[String]>([])
         fixture.api.playlistHandler = { id in
-            requestedPlaylistIds.append(id)
+            requestedPlaylistIds.update { $0.append(id) }
             return PlaylistDetail(playlist: playlist, songs: [song])
         }
         fixture.api.songHandler = { id in
@@ -371,8 +371,53 @@ final class DownloadsStoreTests: XCTestCase {
 
         await fixture.store.applySmartRules()
 
-        XCTAssertEqual(requestedPlaylistIds, [playlist.id])
+        XCTAssertEqual(requestedPlaylistIds.read { $0 }, [playlist.id])
         XCTAssertEqual(fixture.commands.started.map(\.songId), [song.id])
+    }
+
+    func testSmartPlaylistFailurePreservesExistingPlaylistCache() async throws {
+        let fixture = try DownloadsFixture()
+        let song = fixture.song("existing-playlist-song")
+        try SongRepository(db: fixture.database.manager.dbPool).upsert(
+            makeSongRecord(song.id)
+        )
+        try PlaylistRepository(db: fixture.database.manager.dbPool).upsert(
+            PlaylistRecord(
+                id: "unavailable-playlist",
+                name: "Unavailable Playlist",
+                comment: nil,
+                songCount: 1,
+                duration: 0,
+                isPublic: false,
+                owner: nil,
+                created: nil,
+                changed: nil,
+                coverArt: nil,
+                starred: "1970-01-01T00:00:01Z",
+                starredAt: 1
+            )
+        )
+        _ = try fixture.audio.storeAudioFile(
+            songId: song.id,
+            data: makeSilentWAVData(),
+            contentType: "audio/wav"
+        )
+        var row = fixture.row(song.id, source: .smart, size: 8)
+        row.triggersJson = #"["playlist"]"#
+        try fixture.library.upsertCacheMetadata(row)
+        fixture.settings.update {
+            $0.cache.smartRules.enabled = true
+            $0.cache.smartRules.favoriteSongs = false
+            $0.cache.smartRules.favoritePlaylists = true
+        }
+        fixture.store.start()
+
+        await fixture.store.applySmartRules()
+
+        XCTAssertEqual(
+            fixture.store.state(ofSong: song.id),
+            .cached(source: .smart, removedFromServer: false)
+        )
     }
 }
 
