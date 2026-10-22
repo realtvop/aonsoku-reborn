@@ -257,6 +257,25 @@ final class CoordinationServiceTests: XCTestCase {
         XCTAssertEqual(transport.connectCallCount, 1)
     }
 
+    func testResetRegistrationRejectsAnInFlightTicket() async {
+        tokenStore.config = config
+        tokenStore.tokens = registeredTokens()
+        let requested = expectation(description: "ticket requested")
+        let gate = TicketGate()
+        apiClient.ticketGate = gate
+        apiClient.onTicketRequest = { requested.fulfill() }
+
+        service.start()
+        await fulfillment(of: [requested], timeout: 1)
+        service.resetRegistration()
+        await gate.resume(returning: "old-account-ticket")
+        try? await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertEqual(transport.connectCallCount, 0)
+        XCTAssertNil(service.state.deviceId)
+        XCTAssertNil(service.state.accountId)
+    }
+
     func testReconnectResumesFromTheLastSequence() async {
         tokenStore.config = config
         tokenStore.tokens = registeredTokens()
@@ -670,6 +689,8 @@ private final class FakeAPIClient: CoordinationAPIClient, @unchecked Sendable {
     var mockDevices: [CoordinationDevice] = []
     var lastDeviceReg: CoordinationDeviceRegistration?
     var lastProof: CoordinationSubsonicProof?
+    var ticketGate: TicketGate?
+    var onTicketRequest: (() -> Void)?
 
     func register(
         proof: CoordinationSubsonicProof,
@@ -684,6 +705,10 @@ private final class FakeAPIClient: CoordinationAPIClient, @unchecked Sendable {
     }
 
     func webSocketTicket() async throws -> String {
+        onTicketRequest?()
+        if let ticketGate {
+            return await ticketGate.wait()
+        }
         if let ticketError { throw ticketError }
         return mockTicket
     }
@@ -696,4 +721,23 @@ private final class FakeAPIClient: CoordinationAPIClient, @unchecked Sendable {
 
     func revokeDevice(id: String) async throws {}
     func deleteAccount() async throws {}
+}
+
+private actor TicketGate {
+    private var result: String?
+    private var continuation: CheckedContinuation<String, Never>?
+
+    func wait() async -> String {
+        if let result { return result }
+        return await withCheckedContinuation { continuation = $0 }
+    }
+
+    func resume(returning result: String) {
+        if let continuation {
+            self.continuation = nil
+            continuation.resume(returning: result)
+        } else {
+            self.result = result
+        }
+    }
 }

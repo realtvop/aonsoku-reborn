@@ -30,6 +30,7 @@ public final class CoordinationService: @unchecked Sendable {
     private var client: CoordinationAPIClient?
     private var started = false
     private var manualDisconnect = false
+    private var reconnectGeneration: UInt64 = 0
     private var pendingAcks: [String: PendingAck] = [:]
 
     private struct PendingAck {
@@ -182,7 +183,10 @@ public final class CoordinationService: @unchecked Sendable {
     /// Persists the coordination server and identity URLs.
     public func saveConfig(_ config: CoordinationConfig) {
         tokenStore.saveConfig(config)
-        lock.withLock { client = makeClient(for: config) }
+        lock.withLock {
+            reconnectGeneration &+= 1
+            client = makeClient(for: config)
+        }
         update { $0.config = config }
     }
 
@@ -249,29 +253,56 @@ public final class CoordinationService: @unchecked Sendable {
     }
 
     private func reconnect(userInitiated: Bool) async {
-        let (manualDisconnected, config, existingClient) = lock.withLock { () -> (Bool, CoordinationConfig?, CoordinationAPIClient?) in
-            (manualDisconnect, currentState.config, self.client)
+        let (generation, manualDisconnected, config, existingClient, deviceId) = lock.withLock {
+            () -> (UInt64, Bool, CoordinationConfig?, CoordinationAPIClient?, String?) in
+            reconnectGeneration &+= 1
+            return (
+                reconnectGeneration,
+                manualDisconnect,
+                currentState.config,
+                self.client,
+                currentState.deviceId
+            )
         }
 
-        guard !manualDisconnected else { return }
+        guard !manualDisconnected, let deviceId else { return }
 
         var apiClient = existingClient
         guard let cfg = config else { return }
 
         if apiClient == nil {
-            apiClient = makeClient(for: cfg)
-            lock.withLock { self.client = apiClient }
+            let createdClient = makeClient(for: cfg)
+            guard lock.withLock({
+                guard reconnectGeneration == generation,
+                      !manualDisconnect,
+                      currentState.config == cfg,
+                      currentState.deviceId == deviceId else { return false }
+                self.client = createdClient
+                return true
+            }) else { return }
+            apiClient = createdClient
         }
 
         guard let apiClient else { return }
 
         do {
             let ticket = try await apiClient.webSocketTicket()
-            let deviceId = state.deviceId ?? ""
+            guard isCurrentReconnect(
+                generation: generation,
+                config: cfg,
+                client: apiClient,
+                deviceId: deviceId
+            ) else { return }
             let wsUrl = buildWSUrl(cfg.serverUrl)
             // The transport's state lives on the main thread.
             let transport = transport
             try await MainActor.run {
+                guard self.isCurrentReconnect(
+                    generation: generation,
+                    config: cfg,
+                    client: apiClient,
+                    deviceId: deviceId
+                ) else { return }
                 try transport.connect(
                     wsUrl: wsUrl,
                     ticket: ticket,
@@ -282,6 +313,12 @@ public final class CoordinationService: @unchecked Sendable {
                 )
             }
         } catch let error as CoordinationError {
+            guard isCurrentReconnect(
+                generation: generation,
+                config: cfg,
+                client: apiClient,
+                deviceId: deviceId
+            ) else { return }
             if error.code == CoordinationErrorCode.deviceRevoked {
                 handleDeviceRevoked(error)
             } else if error.code == CoordinationErrorCode.authenticationFailed {
@@ -300,14 +337,38 @@ public final class CoordinationService: @unchecked Sendable {
                 }
             }
         } catch {
+            guard isCurrentReconnect(
+                generation: generation,
+                config: cfg,
+                client: apiClient,
+                deviceId: deviceId
+            ) else { return }
             update { $0.lastError = CoordinationError(code: CoordinationErrorCode.internal, reason: error.localizedDescription) }
+        }
+    }
+
+    private func isCurrentReconnect(
+        generation: UInt64,
+        config: CoordinationConfig,
+        client expectedClient: CoordinationAPIClient,
+        deviceId: String
+    ) -> Bool {
+        lock.withLock {
+            reconnectGeneration == generation
+                && !manualDisconnect
+                && currentState.config == config
+                && currentState.deviceId == deviceId
+                && client === expectedClient
         }
     }
 
     /// Closes the realtime connection and cancels automatic reconnects. The
     /// registration and tokens are kept.
     public func disconnect() {
-        lock.withLock { manualDisconnect = true }
+        lock.withLock {
+            manualDisconnect = true
+            reconnectGeneration &+= 1
+        }
         onMain { [weak self] in
             self?.transport.disconnect()
         }
@@ -749,7 +810,10 @@ public final class CoordinationService: @unchecked Sendable {
             self?.transport.disconnect()
             self?.transport.resetSequence()
         }
-        lock.withLock { self.client = nil }
+        lock.withLock {
+            reconnectGeneration &+= 1
+            self.client = nil
+        }
         update {
             $0.deviceId = nil
             $0.accountId = nil
