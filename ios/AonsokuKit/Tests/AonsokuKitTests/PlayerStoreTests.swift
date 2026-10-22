@@ -287,6 +287,32 @@ final class PlayerStoreTests: XCTestCase {
         fixture.audio.shutdown()
     }
 
+    func testClearRemovesQueueAndInvalidatesPendingRemoteCommands() async throws {
+        let fixture = try PlayerStoreTestFixture()
+        fixture.audio.setContextQueue(
+            songs: [fixture.queueSong("old-account")],
+            currentIndex: 0,
+            autoplay: false
+        )
+        let loaded = await waitForPlayerStoreTest {
+            fixture.audio.fullState()?.currentSongId == "old-account"
+        }
+        XCTAssertTrue(loaded)
+
+        let completed = expectation(description: "remote command rejected")
+        let result = LockedTestBox<Bool?>(nil)
+        XCTAssertTrue(fixture.audio.executeRemote(.play) { succeeded in
+            result.update { $0 = succeeded }
+            completed.fulfill()
+        })
+        fixture.audio.clear()
+
+        await fulfillment(of: [completed], timeout: 1)
+        XCTAssertEqual(result.read { $0 }, false)
+        XCTAssertNil(fixture.audio.fullState())
+        fixture.audio.shutdown()
+    }
+
     func testLocalEnqueueMoveRemoveAndCoverReplayGainConversion() async throws {
         let fixture = try PlayerStoreTestFixture()
         fixture.settings.update { $0.playback.useAlbumCoverForSongs = true }

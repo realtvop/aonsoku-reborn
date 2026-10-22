@@ -296,6 +296,23 @@ class NativeQueueEngine {
         delegate?.queueEngine(self, didChangeContents: "queue-edit")
     }
 
+    func clearAll() {
+        contextSongs = []
+        originalContextSongs = []
+        currentIndex = 0
+        userQueue = []
+        originalUserSongs = []
+        isInUserQueue = false
+        playedUserQueueHistory = []
+        loopState = .off
+        isShuffleActive = false
+        shuffleHistory = []
+        shuffleStartHistory = []
+        sourceId = nil
+        sourceName = nil
+        isRestored = false
+    }
+
     func playAtIndex(_ index: Int, startTime: Double?) {
         guard index >= 0, index < contextSongs.count else { return }
         isInUserQueue = false

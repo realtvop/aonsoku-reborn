@@ -24,6 +24,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
         label: "com.aonsoku.AudioService.remote-commands",
         qos: .userInitiated
     )
+    private let remoteCommandGenerationLock = NSLock()
     private let listenerQueue = DispatchQueue(
         label: "com.aonsoku.AudioService.listeners"
     )
@@ -82,9 +83,11 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private var started = false
     private var pendingRemoteCommands: [(
         command: AudioCommand,
+        generation: Int,
         completion: (Bool) -> Void
     )] = []
     private var isExecutingRemoteCommand = false
+    private var remoteCommandGeneration = 0
 
     public override convenience init() {
         self.init(databaseManager: .shared)
@@ -543,10 +546,23 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     public func clear() {
+        invalidateRemoteCommands()
+        stateQueue.sync {
+            queueEngine.clearAll()
+            isQueueActive = false
+            handoffGeneration += 1
+            preparedHandoffBefore = nil
+        }
         dispatchMain { [weak self] in
             guard let self else { return }
             self.clearPlayer(deactivateSession: true)
             try? self.persistence.repository.clear()
+            self.currentSource = nil
+            self.currentSourceURL = nil
+            self.currentSourceKind = nil
+            self.remoteProjection = nil
+            self.metadata = AudioMetadata()
+            self.loadedDuration = nil
             self.playbackState = .idle
             self.emitPlaybackState(.idle, force: true)
             self.clearNowPlayingInfo()
@@ -638,12 +654,15 @@ public final class AudioService: NSObject, @unchecked Sendable {
         _ command: AudioCommand,
         completion: @escaping (Bool) -> Void
     ) -> Bool {
+        let generation = remoteCommandGenerationLock.withLock {
+            remoteCommandGeneration
+        }
         remoteCommandQueue.async { [weak self] in
             guard let self else {
                 completion(false)
                 return
             }
-            self.pendingRemoteCommands.append((command, completion))
+            self.pendingRemoteCommands.append((command, generation, completion))
             self.executeNextRemoteCommand()
         }
         return true
@@ -655,13 +674,24 @@ public final class AudioService: NSObject, @unchecked Sendable {
         }
         isExecutingRemoteCommand = true
         let pending = pendingRemoteCommands.removeFirst()
-        performRemoteCommand(pending.command) { [weak self] succeeded in
+        guard isRemoteCommandCurrent(pending.generation) else {
+            pending.completion(false)
+            isExecutingRemoteCommand = false
+            executeNextRemoteCommand()
+            return
+        }
+        performRemoteCommand(
+            pending.command,
+            generation: pending.generation
+        ) { [weak self] succeeded in
             guard let self else {
                 pending.completion(false)
                 return
             }
             self.remoteCommandQueue.async {
-                pending.completion(succeeded)
+                pending.completion(
+                    succeeded && self.isRemoteCommandCurrent(pending.generation)
+                )
                 self.isExecutingRemoteCommand = false
                 self.executeNextRemoteCommand()
             }
@@ -670,21 +700,36 @@ public final class AudioService: NSObject, @unchecked Sendable {
 
     private func performRemoteCommand(
         _ command: AudioCommand,
+        generation: Int,
         completion: @escaping (Bool) -> Void
     ) {
         switch command {
         case .play:
-            play { result in
-                if case .success = result { completion(true) }
-                else { completion(false) }
+            dispatchMain {
+                guard self.isRemoteCommandCurrent(generation) else {
+                    completion(false)
+                    return
+                }
+                self.play { result in
+                    if case .success = result { completion(true) }
+                    else { completion(false) }
+                }
             }
         case .pause:
             dispatchMain {
+                guard self.isRemoteCommandCurrent(generation) else {
+                    completion(false)
+                    return
+                }
                 self.pause()
                 completion(true)
             }
         case .togglePlayPause:
             dispatchMain {
+                guard self.isRemoteCommandCurrent(generation) else {
+                    completion(false)
+                    return
+                }
                 if self.player?.timeControlStatus == .playing {
                     self.pause()
                     completion(true)
@@ -697,32 +742,62 @@ public final class AudioService: NSObject, @unchecked Sendable {
             }
         case .stop:
             dispatchMain {
+                guard self.isRemoteCommandCurrent(generation) else {
+                    completion(false)
+                    return
+                }
                 self.stop()
                 completion(true)
             }
         case .previous:
             dispatchMain {
+                guard self.isRemoteCommandCurrent(generation) else {
+                    completion(false)
+                    return
+                }
                 let currentTime = self.player?.currentTime().seconds ?? 0
                 self.stateQueue.async {
+                    guard self.isRemoteCommandCurrent(generation) else {
+                        completion(false)
+                        return
+                    }
                     self.queueEngine.skipToPrevious(currentTime: currentTime)
                     completion(true)
                 }
             }
         case .next:
             stateQueue.async {
+                guard self.isRemoteCommandCurrent(generation) else {
+                    completion(false)
+                    return
+                }
                 self.queueEngine.skipToNext()
                 completion(true)
             }
         case .seek(let seconds):
-            seek(to: seconds) { completion(true) }
+            dispatchMain {
+                guard self.isRemoteCommandCurrent(generation) else {
+                    completion(false)
+                    return
+                }
+                self.seek(to: seconds) { completion(true) }
+            }
         case .setShuffle(let enabled):
             stateQueue.async {
+                guard self.isRemoteCommandCurrent(generation) else {
+                    completion(false)
+                    return
+                }
                 self.queueEngine.setShuffleActive(enabled)
                 self.persistence.markStateDirty()
                 completion(true)
             }
         case .setRepeat(let mode):
             stateQueue.async {
+                guard self.isRemoteCommandCurrent(generation) else {
+                    completion(false)
+                    return
+                }
                 self.queueEngine.setLoopState(
                     LoopState(rawValue: mode.rawValue) ?? .off
                 )
@@ -730,14 +805,30 @@ public final class AudioService: NSObject, @unchecked Sendable {
                 completion(true)
             }
         case .setVolume(let value):
-            setSystemVolume(value) { result in
-                if case .success = result { completion(true) }
-                else { completion(false) }
+            dispatchMain {
+                guard self.isRemoteCommandCurrent(generation) else {
+                    completion(false)
+                    return
+                }
+                self.setSystemVolume(value) { result in
+                    if case .success = result { completion(true) }
+                    else { completion(false) }
+                }
             }
         case .playSong(let id):
-            resolveRemoteSongs(ids: [id], index: 0, completion: completion)
+            resolveRemoteSongs(
+                ids: [id],
+                index: 0,
+                generation: generation,
+                completion: completion
+            )
         case .playAtIndex(let songIds, let index):
-            resolveRemoteSongs(ids: songIds, index: index, completion: completion)
+            resolveRemoteSongs(
+                ids: songIds,
+                index: index,
+                generation: generation,
+                completion: completion
+            )
         case .playAlbum(let id, let index, let shuffle):
             guard let result = try? AlbumRepository(
                 db: databaseManager.dbPool
@@ -751,6 +842,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                 sourceId: QueueSourceId(type: "album", id: id),
                 sourceName: result.album.name,
                 shuffle: shuffle,
+                generation: generation,
                 completion: completion
             )
         case .playPlaylist(let id, let index, let shuffle):
@@ -776,6 +868,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                 sourceId: QueueSourceId(type: "playlist", id: id),
                 sourceName: detail.name,
                 shuffle: shuffle,
+                generation: generation,
                 completion: completion
             )
         case .addToQueue(let songIds, let position):
@@ -785,6 +878,10 @@ public final class AudioService: NSObject, @unchecked Sendable {
                 return
             }
             stateQueue.async {
+                guard self.isRemoteCommandCurrent(generation) else {
+                    completion(false)
+                    return
+                }
                 if !songs.isEmpty {
                     self.queueEngine.addToUserQueue(songs: songs, position: position)
                     self.persistence.markStateDirty()
@@ -793,6 +890,10 @@ public final class AudioService: NSObject, @unchecked Sendable {
             }
         case .removeFromQueue(let songIds):
             stateQueue.async {
+                guard self.isRemoteCommandCurrent(generation) else {
+                    completion(false)
+                    return
+                }
                 if self.queueEngine.removeSongIds(songIds) {
                     self.persistence.markStateDirty()
                 }
@@ -800,6 +901,10 @@ public final class AudioService: NSObject, @unchecked Sendable {
             }
         case .reorderQueue(let from, let to):
             stateQueue.async {
+                guard self.isRemoteCommandCurrent(generation) else {
+                    completion(false)
+                    return
+                }
                 let succeeded = from == to || self.queueEngine.reorderFlattenedQueue(
                     fromIndex: from,
                     toIndex: to
@@ -809,12 +914,20 @@ public final class AudioService: NSObject, @unchecked Sendable {
             }
         case .clearQueue:
             stateQueue.async {
+                guard self.isRemoteCommandCurrent(generation) else {
+                    completion(false)
+                    return
+                }
                 self.queueEngine.clearUserQueue()
                 self.persistence.markStateDirty()
                 completion(true)
             }
         case .toggleLike:
             stateQueue.async {
+                guard self.isRemoteCommandCurrent(generation) else {
+                    completion(false)
+                    return
+                }
                 guard let song = self.queueEngine.currentSong,
                       let record = try? SongRepository(
                           db: self.databaseManager.dbPool
@@ -1714,6 +1827,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private func resolveRemoteSongs(
         ids: [String],
         index: Int,
+        generation: Int,
         completion: @escaping (Bool) -> Void
     ) {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -1732,6 +1846,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                 sourceId: nil,
                 sourceName: nil,
                 shuffle: false,
+                generation: generation,
                 completion: completion
             )
         }
@@ -1743,10 +1858,13 @@ public final class AudioService: NSObject, @unchecked Sendable {
         sourceId: QueueSourceId?,
         sourceName: String?,
         shuffle: Bool,
+        generation: Int,
         completion: @escaping (Bool) -> Void
     ) {
         stateQueue.async { [weak self] in
-            guard let self, songs.indices.contains(index) else {
+            guard let self,
+                  self.isRemoteCommandCurrent(generation),
+                  songs.indices.contains(index) else {
                 completion(false)
                 return
             }
@@ -2584,6 +2702,24 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private static func orderedUnique(_ values: [String]) -> [String] {
         var seen = Set<String>()
         return values.filter { seen.insert($0).inserted }
+    }
+
+    private func invalidateRemoteCommands() {
+        remoteCommandGenerationLock.withLock {
+            remoteCommandGeneration += 1
+        }
+        remoteCommandQueue.async { [weak self] in
+            guard let self else { return }
+            let pending = self.pendingRemoteCommands
+            self.pendingRemoteCommands.removeAll()
+            for command in pending { command.completion(false) }
+        }
+    }
+
+    private func isRemoteCommandCurrent(_ generation: Int) -> Bool {
+        remoteCommandGenerationLock.withLock {
+            remoteCommandGeneration == generation
+        }
     }
 
     private static func sourceKind(_ source: AudioSource) -> String {
