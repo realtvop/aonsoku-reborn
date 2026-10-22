@@ -142,7 +142,44 @@ final class CoordinationServiceTests: XCTestCase {
         XCTAssertEqual(tokenStore.config, config)
         XCTAssertEqual(service.state.deviceId, "dev-1")
         XCTAssertEqual(service.state.accountId, "acc-1")
+        XCTAssertEqual(tokenStore.tokens?.deviceId, "dev-1")
         XCTAssertEqual(transport.lastTicket, "ticket-2")
+    }
+
+    func testResetRegistrationRejectsAnInFlightRegistration() async {
+        let requested = expectation(description: "registration requested")
+        let gate = RegistrationGate()
+        apiClient.registrationGate = gate
+        apiClient.onRegistrationRequest = { requested.fulfill() }
+        let service = makeService(credentials: ServerCredentials(
+            serverUrl: "https://music.test",
+            username: "u",
+            password: "p",
+            authType: "password",
+            protocolVersion: "1.16.1",
+            serverType: "navidrome",
+            fallbackUrl: nil
+        ))
+
+        let connect = Task {
+            try await service.connect(config: config, deviceName: "Phone")
+        }
+        await fulfillment(of: [requested], timeout: 1)
+        service.resetRegistration()
+        await gate.resume(returning: registeredTokens())
+
+        do {
+            try await connect.value
+            XCTFail("stale registration should fail")
+        } catch let error as CoordinationError {
+            XCTAssertEqual(error.code, CoordinationErrorCode.notConnected)
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+        XCTAssertNil(tokenStore.tokens)
+        XCTAssertNil(service.state.deviceId)
+        XCTAssertNil(service.state.accountId)
+        XCTAssertEqual(transport.connectCallCount, 0)
     }
 
     func testConnectThrowsWithoutCredentials() async {
@@ -691,6 +728,8 @@ private final class FakeAPIClient: CoordinationAPIClient, @unchecked Sendable {
     var lastProof: CoordinationSubsonicProof?
     var ticketGate: TicketGate?
     var onTicketRequest: (() -> Void)?
+    var registrationGate: RegistrationGate?
+    var onRegistrationRequest: (() -> Void)?
 
     func register(
         proof: CoordinationSubsonicProof,
@@ -698,6 +737,10 @@ private final class FakeAPIClient: CoordinationAPIClient, @unchecked Sendable {
     ) async throws -> CoordinationTokens {
         lastProof = proof
         lastDeviceReg = device
+        onRegistrationRequest?()
+        if let registrationGate {
+            return await registrationGate.wait()
+        }
         guard let mockTokens else {
             throw CoordinationError(code: CoordinationErrorCode.internal)
         }
@@ -721,6 +764,25 @@ private final class FakeAPIClient: CoordinationAPIClient, @unchecked Sendable {
 
     func revokeDevice(id: String) async throws {}
     func deleteAccount() async throws {}
+}
+
+private actor RegistrationGate {
+    private var result: CoordinationTokens?
+    private var continuation: CheckedContinuation<CoordinationTokens, Never>?
+
+    func wait() async -> CoordinationTokens {
+        if let result { return result }
+        return await withCheckedContinuation { continuation = $0 }
+    }
+
+    func resume(returning result: CoordinationTokens) {
+        if let continuation {
+            self.continuation = nil
+            continuation.resume(returning: result)
+        } else {
+            self.result = result
+        }
+    }
 }
 
 private actor TicketGate {

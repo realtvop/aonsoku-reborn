@@ -101,8 +101,8 @@ typealias CoordinationTransport =
 /// 401, persist rotated tokens through the token store, and throw
 /// `CoordinationError` carrying the server's `code`, `reason` and HTTP status.
 protocol CoordinationAPIClient: AnyObject, Sendable {
-    /// Requests a challenge, then registers this device. The returned tokens
-    /// are already persisted.
+    /// Requests a challenge, then registers this device. The service persists
+    /// the returned tokens only after its account generation is still valid.
     func register(
         proof: CoordinationSubsonicProof,
         device: CoordinationDeviceRegistration

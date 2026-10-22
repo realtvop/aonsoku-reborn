@@ -209,7 +209,12 @@ public final class CoordinationService: @unchecked Sendable {
         saveConfig(config)
 
         let apiClient = makeClient(for: config)
-        lock.withLock { self.client = apiClient }
+        let registrationGeneration = lock.withLock { () -> UInt64 in
+            reconnectGeneration &+= 1
+            manualDisconnect = false
+            self.client = apiClient
+            return reconnectGeneration
+        }
 
         update { $0.connectionState = .authenticating }
 
@@ -221,6 +226,14 @@ public final class CoordinationService: @unchecked Sendable {
                 capabilities: CoordinationCapabilities.all
             )
             let tokens = try await apiClient.register(proof: proof, device: device)
+            guard acceptRegistration(
+                tokens,
+                generation: registrationGeneration,
+                config: config,
+                client: apiClient
+            ) else {
+                throw CoordinationError(code: CoordinationErrorCode.notConnected)
+            }
 
             update {
                 $0.deviceId = tokens.deviceId
@@ -231,18 +244,57 @@ public final class CoordinationService: @unchecked Sendable {
             lock.withLock { manualDisconnect = false }
             await reconnect(userInitiated: false)
         } catch let error as CoordinationError {
+            guard isCurrentRegistration(
+                generation: registrationGeneration,
+                config: config,
+                client: apiClient
+            ) else { throw error }
             update {
                 $0.connectionState = .error
                 $0.lastError = error
             }
             throw error
         } catch {
+            guard isCurrentRegistration(
+                generation: registrationGeneration,
+                config: config,
+                client: apiClient
+            ) else { throw error }
             let coordError = CoordinationError(code: CoordinationErrorCode.internal, reason: error.localizedDescription)
             update {
                 $0.connectionState = .error
                 $0.lastError = coordError
             }
             throw coordError
+        }
+    }
+
+    private func isCurrentRegistration(
+        generation: UInt64,
+        config: CoordinationConfig,
+        client expectedClient: CoordinationAPIClient
+    ) -> Bool {
+        lock.withLock {
+            reconnectGeneration == generation
+                && !manualDisconnect
+                && currentState.config == config
+                && client === expectedClient
+        }
+    }
+
+    private func acceptRegistration(
+        _ tokens: CoordinationTokens,
+        generation: UInt64,
+        config: CoordinationConfig,
+        client expectedClient: CoordinationAPIClient
+    ) -> Bool {
+        lock.withLock {
+            guard reconnectGeneration == generation,
+                  !manualDisconnect,
+                  currentState.config == config,
+                  client === expectedClient else { return false }
+            tokenStore.saveTokens(tokens)
+            return true
         }
     }
 

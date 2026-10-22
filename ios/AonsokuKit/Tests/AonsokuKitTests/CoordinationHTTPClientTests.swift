@@ -83,7 +83,7 @@ final class CoordinationHTTPClientTests: XCTestCase {
         XCTAssertEqual(requests[1].url?.path, "/v1/auth/register")
     }
 
-    func testRegisterPersistsTokens() async throws {
+    func testRegisterReturnsTokensWithoutPersistingThem() async throws {
         let proof = CoordinationSubsonicProof(
             identityUrl: "https://example.com/subsonic",
             username: "testuser",
@@ -109,14 +109,11 @@ final class CoordinationHTTPClientTests: XCTestCase {
                                      "expiresIn": 7200,
                                  ] ))
 
-        let _ = try await client.register(proof: proof, device: device)
+        let tokens = try await client.register(proof: proof, device: device)
 
-        let loaded = tokenStore.loadTokens()
-        XCTAssertNotNil(loaded)
-        XCTAssertEqual(loaded?.deviceId, "dev-456")
-        XCTAssertEqual(loaded?.accountId, "acc-456")
-        XCTAssertEqual(loaded?.accessToken, "access-456")
-        XCTAssertEqual(loaded?.refreshToken, "refresh-456")
+        XCTAssertEqual(tokens.deviceId, "dev-456")
+        XCTAssertEqual(tokens.accountId, "acc-456")
+        XCTAssertNil(tokenStore.loadTokens())
     }
 
     // MARK: - Bearer Token

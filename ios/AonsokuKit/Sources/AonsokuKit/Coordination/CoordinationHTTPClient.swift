@@ -324,7 +324,6 @@ final class CoordinationHTTPClient: CoordinationAPIClient, @unchecked Sendable {
             historyLimit: response.historyLimit ?? 100
         )
 
-        tokenStore.saveTokens(tokens)
         return tokens
     }
 
