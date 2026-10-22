@@ -354,7 +354,9 @@ public final class DownloadsStore {
         if rules.enabled, rules.favoritePlaylists {
             let playlists = (try? library.playlists(limit: Int.max).items) ?? []
             for playlist in playlists where playlist.starred != nil {
-                guard let detail = await repository.cachedPlaylist(id: playlist.id) else {
+                let detail = await repository.cachedPlaylist(id: playlist.id)
+                    ?? (try? await repository.playlist(id: playlist.id))
+                guard let detail else {
                     continue
                 }
                 for song in detail.songs {

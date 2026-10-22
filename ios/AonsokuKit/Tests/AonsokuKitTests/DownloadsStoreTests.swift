@@ -327,6 +327,53 @@ final class DownloadsStoreTests: XCTestCase {
         XCTAssertEqual(fixture.store.state(ofSong: pending.id), .notCached)
         XCTAssertEqual(fixture.commands.cancelled, [pending.id])
     }
+
+    func testSmartFavoritePlaylistFetchesMissingDetailFromServer() async throws {
+        let fixture = try DownloadsFixture()
+        let song = fixture.song("playlist-song")
+        let playlist = Playlist(
+            id: "favorite-playlist",
+            name: "Favorite Playlist",
+            songCount: 1,
+            starred: Date(timeIntervalSince1970: 1)
+        )
+        try PlaylistRepository(db: fixture.database.manager.dbPool).upsert(
+            PlaylistRecord(
+                id: playlist.id,
+                name: playlist.name,
+                comment: nil,
+                songCount: playlist.songCount,
+                duration: 0,
+                isPublic: false,
+                owner: nil,
+                created: nil,
+                changed: nil,
+                coverArt: nil,
+                starred: "1970-01-01T00:00:01Z",
+                starredAt: 1
+            )
+        )
+        var requestedPlaylistIds: [String] = []
+        fixture.api.playlistHandler = { id in
+            requestedPlaylistIds.append(id)
+            return PlaylistDetail(playlist: playlist, songs: [song])
+        }
+        fixture.api.songHandler = { id in
+            XCTAssertEqual(id, song.id)
+            return song
+        }
+        fixture.settings.update {
+            $0.cache.smartRules.enabled = true
+            $0.cache.smartRules.favoriteSongs = false
+            $0.cache.smartRules.favoritePlaylists = true
+        }
+        fixture.store.start()
+
+        await fixture.store.applySmartRules()
+
+        XCTAssertEqual(requestedPlaylistIds, [playlist.id])
+        XCTAssertEqual(fixture.commands.started.map(\.songId), [song.id])
+    }
 }
 
 @MainActor
