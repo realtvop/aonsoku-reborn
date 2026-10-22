@@ -60,14 +60,18 @@ public final class LibraryService: @unchecked Sendable {
         let hasData = (try? SyncStateRepository(
             db: dbManager.dbPool
         ).getFullSyncTimestamp()) != nil
+        syncScheduler.setForegroundSchedulingEnabled(startAutomaticSync)
         if !initialized {
             initialized = true
-            syncScheduler.startForegroundSchedule()
             if startAutomaticSync {
                 hasData ? syncEngine.syncIncremental() : syncEngine.syncAll()
             }
         }
         return LibraryInitialization(ready: true, needsMigration: !hasData)
+    }
+
+    var isAutomaticForegroundSyncEnabled: Bool {
+        syncScheduler.isForegroundSchedulingEnabled
     }
 
     @discardableResult

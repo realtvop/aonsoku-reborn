@@ -234,6 +234,7 @@ final class NativeIntegrationTests: XCTestCase {
             service.initialize(startAutomaticSync: false),
             LibraryInitialization(ready: true, needsMigration: true)
         )
+        XCTAssertFalse(service.isAutomaticForegroundSyncEnabled)
         try SongRepository(db: database.manager.dbPool).bulkUpsert([
             makeSongRecord("2", title: "Beta"),
             makeSongRecord("1", title: "Alpha"),

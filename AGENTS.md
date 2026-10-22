@@ -277,7 +277,10 @@ Metadata/library sync is runtime-specific:
   runtimes do not fall back to the browser Worker/IndexedDB sync path.
 - **Native iOS**: `AonsokuKit.LibraryService` owns GRDB-backed queries and
   `SyncEngine`/`SyncScheduler`; `LibrarySyncStore` exposes sync state to
-  SwiftUI. It does not use the TypeScript adapter or IndexedDB.
+  SwiftUI and is the sole foreground scheduling owner, so `AppModel` disables
+  `SyncScheduler`'s raw foreground timer while preserving its system
+  background-refresh handling. It does not use the TypeScript adapter or
+  IndexedDB.
 
 ### Data Flow
 

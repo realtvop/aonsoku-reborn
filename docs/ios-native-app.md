@@ -115,6 +115,11 @@ they do not expose observable state.
 | `ToastCenter` | Transient confirmations and errors shown above the tab bar. |
 | `PagedCollection` | Paged list loading with retry for the long library lists. |
 
+`LibrarySyncStore` is the sole owner of foreground sync scheduling, including
+connectivity, metered-network and cover-art options. `SyncScheduler` only owns
+the system background refresh path when `AppModel` initializes the library
+with automatic foreground sync disabled.
+
 ## Navigation and screens
 
 - **Tabs**: Home, Library, Search (`Tab(role: .search)`). The tab bar

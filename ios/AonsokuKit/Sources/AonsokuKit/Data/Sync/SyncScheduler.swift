@@ -10,6 +10,7 @@ public final class SyncScheduler {
     private let syncEngine: SyncEngine
     private var foregroundTimer: Timer?
     private var isInForeground = true
+    private(set) var isForegroundSchedulingEnabled = false
 
     init(syncEngine: SyncEngine) {
         self.syncEngine = syncEngine
@@ -17,7 +18,17 @@ public final class SyncScheduler {
         observeAppLifecycle()
     }
 
-    func startForegroundSchedule() {
+    func setForegroundSchedulingEnabled(_ enabled: Bool) {
+        isForegroundSchedulingEnabled = enabled
+        guard enabled, isInForeground else {
+            stopForegroundSchedule()
+            return
+        }
+        startForegroundSchedule()
+    }
+
+    private func startForegroundSchedule() {
+        guard isForegroundSchedulingEnabled else { return }
         stopForegroundSchedule()
         isInForeground = true
         foregroundTimer = Timer.scheduledTimer(withTimeInterval: SyncTier.t1.freshWindowSeconds, repeats: true) { [weak self] _ in
@@ -129,6 +140,7 @@ public final class SyncScheduler {
 
     @objc private func appWillEnterForeground() {
         isInForeground = true
+        guard isForegroundSchedulingEnabled else { return }
         startForegroundSchedule()
         syncEngine.syncIncremental()
     }
