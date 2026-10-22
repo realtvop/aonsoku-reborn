@@ -1,22 +1,64 @@
 import Foundation
 
 class NativeScrobbleSubmitter {
-    private let httpClient = SubsonicHTTPClient()
     private let thresholdPercent = 0.5
     private let thresholdMaxSeconds: Double = 240
+    private let credentialsProvider: @Sendable () -> ServerCredentials?
+    private let request: @Sendable (
+        ServerCredentials,
+        String,
+        Bool,
+        Double
+    ) async -> Bool
+    private let generationLock = NSLock()
+    private var generation: UInt64 = 0
+
+    convenience init() {
+        let httpClient = SubsonicHTTPClient()
+        self.init(
+            credentialsProvider: { KeychainManager.retrieve() },
+            request: { credentials, songId, submission, timestamp in
+                do {
+                    _ = try await httpClient.request(
+                        baseUrl: credentials.serverUrl,
+                        path: "scrobble",
+                        credentials: credentials,
+                        extraQuery: [
+                            "id": songId,
+                            "submission": submission ? "true" : "false",
+                            "time": String(Int(timestamp)),
+                        ]
+                    )
+                    return true
+                } catch {
+                    return false
+                }
+            }
+        )
+    }
+
+    init(
+        credentialsProvider: @escaping @Sendable () -> ServerCredentials?,
+        request: @escaping @Sendable (
+            ServerCredentials,
+            String,
+            Bool,
+            Double
+        ) async -> Bool
+    ) {
+        self.credentialsProvider = credentialsProvider
+        self.request = request
+    }
 
     func sendNowPlaying(songId: String) {
+        guard let context = operationContext() else { return }
         Task {
-            guard let credentials = KeychainManager.retrieve() else { return }
-            _ = try? await httpClient.request(
-                baseUrl: credentials.serverUrl,
-                path: "scrobble",
-                credentials: credentials,
-                extraQuery: [
-                    "id": songId,
-                    "submission": "false",
-                    "time": String(Int(Date().timeIntervalSince1970 * 1000)),
-                ]
+            guard isCurrent(context.generation) else { return }
+            _ = await request(
+                context.credentials,
+                songId,
+                false,
+                Date().timeIntervalSince1970 * 1000
             )
         }
     }
@@ -44,49 +86,61 @@ class NativeScrobbleSubmitter {
     func submitPending(buffer: NativeScrobbleBuffer) {
         let entries = buffer.getEntries()
         guard !entries.isEmpty else { return }
-        guard KeychainManager.retrieve() != nil else { return }
+        guard let context = operationContext() else { return }
 
         Task {
             var submittedIds = Set<String>()
             for entry in entries {
-                if await submitAsync(songId: entry.songId, timestamp: entry.timestamp) {
+                guard isCurrent(context.generation) else { return }
+                if await request(
+                    context.credentials,
+                    entry.songId,
+                    true,
+                    entry.timestamp
+                ) {
                     submittedIds.insert(entry.songId)
                 } else {
                     break
                 }
             }
-            if !submittedIds.isEmpty {
+            if !submittedIds.isEmpty, isCurrent(context.generation) {
+                let completedIds = submittedIds
                 await MainActor.run {
-                    buffer.removeEntries(songIds: submittedIds)
+                    guard self.isCurrent(context.generation) else { return }
+                    buffer.removeEntries(songIds: completedIds)
                 }
             }
         }
     }
 
+    func invalidate() {
+        generationLock.withLock { generation &+= 1 }
+    }
+
     private func submit(songId: String, timestamp: Double) {
+        guard let context = operationContext() else { return }
         Task {
-            await submitAsync(songId: songId, timestamp: timestamp)
+            guard isCurrent(context.generation) else { return }
+            _ = await request(
+                context.credentials,
+                songId,
+                true,
+                timestamp
+            )
         }
     }
 
-    @discardableResult
-    private func submitAsync(songId: String, timestamp: Double) async -> Bool {
-        guard let credentials = KeychainManager.retrieve() else { return false }
+    private func operationContext() -> (
+        generation: UInt64,
+        credentials: ServerCredentials
+    )? {
+        let currentGeneration = generationLock.withLock { generation }
+        guard let credentials = credentialsProvider() else { return nil }
+        guard isCurrent(currentGeneration) else { return nil }
+        return (currentGeneration, credentials)
+    }
 
-        do {
-            _ = try await httpClient.request(
-                baseUrl: credentials.serverUrl,
-                path: "scrobble",
-                credentials: credentials,
-                extraQuery: [
-                    "id": songId,
-                    "submission": "true",
-                    "time": String(Int(timestamp)),
-                ]
-            )
-            return true
-        } catch {
-            return false
-        }
+    private func isCurrent(_ candidate: UInt64) -> Bool {
+        generationLock.withLock { generation == candidate }
     }
 }

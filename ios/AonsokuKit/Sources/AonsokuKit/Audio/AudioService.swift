@@ -556,6 +556,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
         dispatchMain { [weak self] in
             guard let self else { return }
             self.clearPlayer(deactivateSession: true)
+            self.scrobbleSubmitter.invalidate()
             self.scrobbleBuffer.clear()
             try? self.persistence.repository.clear()
             self.currentSource = nil

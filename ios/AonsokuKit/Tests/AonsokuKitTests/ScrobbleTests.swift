@@ -116,6 +116,41 @@ final class ScrobbleTests: XCTestCase {
         XCTAssertFalse(submitter.isEligible(entry: long, songDurationSeconds: 0))
     }
 
+    func testInvalidationKeepsInFlightSubmissionBoundToOldAccount() async {
+        let oldCredentials = makeCredentials(serverUrl: "https://old.test")
+        let newCredentials = makeCredentials(serverUrl: "https://new.test")
+        let activeCredentials = LockedTestBox(oldCredentials)
+        let requests = LockedTestBox<[String]>([])
+        let gate = ScrobbleRequestGate()
+        let started = expectation(description: "submission started")
+        let submitter = NativeScrobbleSubmitter(
+            credentialsProvider: { activeCredentials.read { $0 } },
+            request: { credentials, _, _, _ in
+                requests.update { $0.append(credentials.serverUrl) }
+                started.fulfill()
+                return await gate.wait()
+            }
+        )
+        let clock = ManualClock()
+        let buffer = NativeScrobbleBuffer(
+            store: InMemoryScrobbleEntryStore(),
+            now: clock.now
+        )
+        buffer.startTracking(songId: "old-song")
+        clock.advance(milliseconds: 1_000)
+        _ = buffer.stopTracking()
+
+        submitter.submitPending(buffer: buffer)
+        await fulfillment(of: [started], timeout: 1)
+        activeCredentials.update { $0 = newCredentials }
+        submitter.invalidate()
+        await gate.resume(returning: true)
+        try? await Task.sleep(for: .milliseconds(20))
+
+        XCTAssertEqual(requests.read { $0 }, ["https://old.test"])
+        XCTAssertEqual(buffer.getEntries().map(\.songId), ["old-song"])
+    }
+
     func testQueueExhaustionFlushesTheCurrentScrobbleSegment() throws {
         let database = try TemporaryDatabase()
         let clock = ManualClock()
@@ -142,6 +177,37 @@ final class ScrobbleTests: XCTestCase {
         XCTAssertEqual(entry.playedDurationMs, 1_000)
         service.unsubscribe(token)
         service.shutdown()
+    }
+}
+
+private func makeCredentials(serverUrl: String) -> ServerCredentials {
+    ServerCredentials(
+        serverUrl: serverUrl,
+        username: "user",
+        password: "password",
+        authType: "password",
+        protocolVersion: "1.16.1",
+        serverType: "navidrome",
+        fallbackUrl: nil
+    )
+}
+
+private actor ScrobbleRequestGate {
+    private var result: Bool?
+    private var continuation: CheckedContinuation<Bool, Never>?
+
+    func wait() async -> Bool {
+        if let result { return result }
+        return await withCheckedContinuation { continuation = $0 }
+    }
+
+    func resume(returning result: Bool) {
+        if let continuation {
+            self.continuation = nil
+            continuation.resume(returning: result)
+        } else {
+            self.result = result
+        }
     }
 }
 
