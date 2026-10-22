@@ -176,6 +176,16 @@ public final class AuthenticationService: @unchecked Sendable {
         await httpClient.queryServerInfo(baseUrl: baseUrl)
     }
 
+    func queryAuthenticatedServerInfo(
+        baseUrl: String,
+        credentials: ServerCredentials
+    ) async throws -> (protocolVersion: String, serverType: String) {
+        try await httpClient.queryServerInfo(
+            baseUrl: baseUrl,
+            credentials: credentials
+        )
+    }
+
     public func probeServerCompatibility(
         baseUrl: String,
         username: String,

@@ -164,6 +164,7 @@ final class SessionStoreTests: XCTestCase {
         try preferences.setJSON(original, for: SessionStore.accountStorageKey)
         let credentials = makeCredentials()
         let stored = LockedTestBox<ServerCredentials?>(nil)
+        let infoCredentials = LockedTestBox<ServerCredentials?>(nil)
         let client = makeClient(
             getCredentials: { credentials },
             storeCredentials: { credentials in
@@ -172,7 +173,10 @@ final class SessionStoreTests: XCTestCase {
             ping: { url, _, _, _ in
                 (url.contains("fallback"), url.contains("fallback") ? nil : "network_unreachable")
             },
-            queryServerInfo: { _ in ("1.16.2", "lms") }
+            queryAuthenticatedServerInfo: { _, credentials in
+                infoCredentials.update { $0 = credentials }
+                return ("1.14.0", "airsonic")
+            }
         )
         let store = makeStore(preferences: preferences, client: client)
         store.restore()
@@ -184,8 +188,10 @@ final class SessionStoreTests: XCTestCase {
 
         XCTAssertEqual(store.account?.primaryUrl, "https://new.test")
         XCTAssertEqual(store.account?.activeUrl, "https://fallback.test")
-        XCTAssertEqual(store.account?.serverType, "lms")
+        XCTAssertEqual(store.account?.serverType, "airsonic")
+        XCTAssertEqual(store.account?.protocolVersion, "1.14.0")
         XCTAssertEqual(stored.read { $0 }?.serverUrl, "https://fallback.test")
+        XCTAssertEqual(infoCredentials.read { $0 }?.protocolVersion, "1.16.1")
 
         let successful = store.account
         let failingClient = makeClient(
@@ -265,6 +271,15 @@ final class SessionStoreTests: XCTestCase {
             protocolVersion: String,
             serverType: String
         ) = { _ in ("1.16.0", "subsonic") },
+        queryAuthenticatedServerInfo: @escaping (
+            String,
+            ServerCredentials
+        ) async throws -> (
+            protocolVersion: String,
+            serverType: String
+        ) = { _, credentials in
+            (credentials.protocolVersion, credentials.serverType)
+        },
         probeCompatibility: @escaping (String, String, String) async ->
             ServerCompatibility = { _, _, _ in .compatible }
     ) -> SessionAuthenticationClient {
@@ -275,6 +290,7 @@ final class SessionStoreTests: XCTestCase {
             login: login,
             ping: ping,
             queryServerInfo: queryServerInfo,
+            queryAuthenticatedServerInfo: queryAuthenticatedServerInfo,
             probeCompatibility: probeCompatibility
         )
     }

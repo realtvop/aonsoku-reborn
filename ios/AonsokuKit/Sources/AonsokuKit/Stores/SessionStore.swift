@@ -279,7 +279,10 @@ public final class SessionStore {
                 failures.contains("auth_failed") ? "auth_failed" : "network_unreachable"
             )
         }
-        let info = await authenticationClient.queryServerInfo(activeUrl)
+        let info = try await authenticationClient.queryAuthenticatedServerInfo(
+            activeUrl,
+            credentials
+        )
         let updated = ServerAccount(
             primaryUrl: primary,
             fallbackUrl: fallback,
@@ -368,6 +371,10 @@ struct SessionAuthenticationClient: @unchecked Sendable {
     var login: (String, String?, String, String) async -> LoginResult
     var ping: (String, String, String, String) async -> (reachable: Bool, error: String?)
     var queryServerInfo: (String) async -> (protocolVersion: String, serverType: String)
+    var queryAuthenticatedServerInfo: (
+        String,
+        ServerCredentials
+    ) async throws -> (protocolVersion: String, serverType: String)
     var probeCompatibility: (String, String, String) async -> ServerCompatibility
 
     static func live(_ service: AuthenticationService) -> Self {
@@ -378,6 +385,7 @@ struct SessionAuthenticationClient: @unchecked Sendable {
             login: service.login,
             ping: service.ping,
             queryServerInfo: service.queryServerInfo,
+            queryAuthenticatedServerInfo: service.queryAuthenticatedServerInfo,
             probeCompatibility: service.probeServerCompatibility
         )
     }
