@@ -99,7 +99,7 @@ final class ScrobbleTests: XCTestCase {
     }
 
     func testSubmissionThresholdUsesHalfDurationCappedAtFourMinutes() {
-        let submitter = NativeScrobbleSubmitter()
+        let submitter = makeIsolatedScrobbleSubmitter()
         let short = ScrobbleEntry(songId: "short", playedDurationMs: 59_999, timestamp: 1)
         let long = ScrobbleEntry(songId: "long", playedDurationMs: 240_000, timestamp: 1)
 
