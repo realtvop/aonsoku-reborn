@@ -132,6 +132,11 @@ final class AudioAdapterTests: XCTestCase {
             ["type": "set_repeat", "mode": "track"],
             ["type": "reorder_queue", "from": -1, "to": 0],
             ["type": "reorder_queue", "from": 0.5, "to": 1],
+            [
+                "type": "reorder_queue",
+                "from": 9_223_372_036_854_775_808.0,
+                "to": 0,
+            ],
         ]
         for command in invalidCommands {
             XCTAssertNil(

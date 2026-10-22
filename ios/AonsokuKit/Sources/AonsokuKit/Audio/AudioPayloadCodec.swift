@@ -250,9 +250,10 @@ public enum AudioPayloadCodec {
     }
 
     private static func integer(_ value: Any?) -> Int? {
+        let maxSafeJSONInteger = 9_007_199_254_740_991.0
         guard let value = finiteNumber(value),
               value >= 0,
-              value <= Double(Int.max),
+              value <= maxSafeJSONInteger,
               value.rounded(.towardZero) == value else {
             return nil
         }
