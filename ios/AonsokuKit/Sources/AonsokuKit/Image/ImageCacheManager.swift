@@ -10,7 +10,7 @@ enum ImageCacheNotification {
 }
 
 final class ImageCacheManager: @unchecked Sendable {
-    private static let publicationLock = NSLock()
+    private static let publication = ImageCachePublicationState()
 
     private let db: DatabasePool
     private let session: URLSession
@@ -44,8 +44,8 @@ final class ImageCacheManager: @unchecked Sendable {
             throw ImageCacheError.noCredentials
         }
 
+        let generation = currentPublicationGeneration()
         let directory = try ImageCacheUtils.cacheDirectoryURL(createIfNeeded: true)
-        let cacheId = ImageCacheUtils.cacheId(for: username)
         let url = try buildAvatarURL(credentials: credentials, username: username, size: size)
         let (data, response) = try await session.data(from: url)
 
@@ -55,35 +55,15 @@ final class ImageCacheManager: @unchecked Sendable {
         }
 
         let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type") ?? "image/jpeg"
-        let ext = ImageCacheUtils.fileExtension(for: contentType)
-        let fileName = "\(cacheId).\(ext)"
-        let fileURL = directory.appendingPathComponent(fileName, isDirectory: false)
-
-        try data.write(to: fileURL, options: [.atomic])
-
-        let now = Int(Date().timeIntervalSince1970 * 1000)
-        let record = CacheMetaRecord(
-            key: "cover:\(username)",
-            id: username,
-            type: "cover",
-            source: "explicit",
-            triggersJson: nil,
+        return try publishCoverImage(
+            coverArtId: username,
+            data: data,
+            contentType: contentType,
             coverSize: size,
-            sizeBytes: data.count,
-            cachedAt: now,
-            lastAccessedAt: now,
-            removedFromServer: nil
+            directory: directory,
+            expectedGeneration: generation
         )
-
-        let repo = CacheMetaRepository(db: db)
-        try repo.upsert(record)
-        removeCoverImageFiles(
-            cacheId: cacheId,
-            in: directory,
-            excluding: fileURL
-        )
-
-        return fileURL
+        .url
     }
 
     func downloadCoverImage(coverArtId: String, size: String) async throws -> URL {
@@ -91,6 +71,7 @@ final class ImageCacheManager: @unchecked Sendable {
             throw ImageCacheError.noCredentials
         }
 
+        let generation = currentPublicationGeneration()
         let directory = try ImageCacheUtils.cacheDirectoryURL(createIfNeeded: true)
 
         let url = try buildCoverArtURL(credentials: credentials, coverArtId: coverArtId, size: size)
@@ -107,7 +88,8 @@ final class ImageCacheManager: @unchecked Sendable {
             data: data,
             contentType: contentType,
             coverSize: size,
-            directory: directory
+            directory: directory,
+            expectedGeneration: generation
         )
         if publication.didWrite {
             notifyCoverImageCached(coverArtId: coverArtId)
@@ -136,10 +118,15 @@ final class ImageCacheManager: @unchecked Sendable {
         data: Data,
         contentType: String,
         coverSize: String,
-        directory: URL
+        directory: URL,
+        expectedGeneration: UInt64? = nil
     ) throws -> (url: URL, didWrite: Bool) {
-        Self.publicationLock.lock()
-        defer { Self.publicationLock.unlock() }
+        Self.publication.lock.lock()
+        defer { Self.publication.lock.unlock() }
+        if let expectedGeneration,
+           expectedGeneration != Self.publication.generation {
+            throw CancellationError()
+        }
 
         let cacheId = ImageCacheUtils.cacheId(for: coverArtId)
         let key = "cover:\(coverArtId)"
@@ -216,6 +203,10 @@ final class ImageCacheManager: @unchecked Sendable {
     }
 
     func deleteCoverImage(coverArtId: String) throws -> Bool {
+        Self.publication.lock.lock()
+        defer { Self.publication.lock.unlock() }
+        Self.publication.generation &+= 1
+
         var deleted = false
         if let directory = try? ImageCacheUtils.cacheDirectoryURL(createIfNeeded: false),
            FileManager.default.fileExists(atPath: directory.path) {
@@ -231,6 +222,10 @@ final class ImageCacheManager: @unchecked Sendable {
     }
 
     func clearCoverImages() throws -> Int {
+        Self.publication.lock.lock()
+        defer { Self.publication.lock.unlock() }
+        Self.publication.generation &+= 1
+
         var deletedCount = 0
         if let directory = try? ImageCacheUtils.cacheDirectoryURL(createIfNeeded: false),
            FileManager.default.fileExists(atPath: directory.path) {
@@ -284,6 +279,12 @@ final class ImageCacheManager: @unchecked Sendable {
             object: nil,
             userInfo: [ImageCacheNotification.coverArtIdKey: coverArtId]
         )
+    }
+
+    private func currentPublicationGeneration() -> UInt64 {
+        Self.publication.lock.lock()
+        defer { Self.publication.lock.unlock() }
+        return Self.publication.generation
     }
 
     private func buildAvatarURL(credentials: ServerCredentials, username: String, size: String) throws -> URL {
@@ -346,4 +347,9 @@ final class ImageCacheManager: @unchecked Sendable {
             excluding: preservedURL
         )
     }
+}
+
+private final class ImageCachePublicationState: @unchecked Sendable {
+    let lock = NSLock()
+    var generation: UInt64 = 0
 }

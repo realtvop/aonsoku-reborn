@@ -176,6 +176,61 @@ final class ImageCacheTests: XCTestCase {
         ).getByKey("cover:\(coverArtId)")
         XCTAssertEqual(metadata?.coverSize, "900")
     }
+
+    func testClearRejectsAnOlderInFlightCoverDownload() async throws {
+        let database = try TemporaryDatabase()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ImageCacheURLProtocolStub.self]
+        let manager = ImageCacheManager(
+            db: database.manager.dbPool,
+            session: URLSession(configuration: configuration),
+            credentialsProvider: {
+                ServerCredentials(
+                    serverUrl: "https://music.test",
+                    username: "user",
+                    password: "password",
+                    authType: "password",
+                    protocolVersion: "1.16.1",
+                    serverType: "navidrome",
+                    fallbackUrl: nil
+                )
+            }
+        )
+        let coverArtId = "clear-race-\(UUID().uuidString)"
+        let requestStarted = expectation(description: "cover request started")
+        let releaseResponse = DispatchSemaphore(value: 0)
+        ImageCacheURLProtocolStub.handler = { request in
+            requestStarted.fulfill()
+            releaseResponse.wait()
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "image/png"]
+            )!
+            return (response, Data("stale-cover".utf8))
+        }
+
+        let download = Task {
+            try await manager.downloadCoverImage(
+                coverArtId: coverArtId,
+                size: "900"
+            )
+        }
+        await fulfillment(of: [requestStarted], timeout: 1)
+        _ = try manager.clearCoverImages()
+        releaseResponse.signal()
+
+        do {
+            _ = try await download.value
+            XCTFail("Expected the stale download to be cancelled")
+        } catch is CancellationError {}
+        XCTAssertNil(manager.resolveCoverImage(coverArtId: coverArtId))
+        XCTAssertNil(
+            try CacheMetaRepository(db: database.manager.dbPool)
+                .getByKey("cover:\(coverArtId)")
+        )
+    }
 }
 
 private final class ImageCacheURLProtocolStub: URLProtocol {
