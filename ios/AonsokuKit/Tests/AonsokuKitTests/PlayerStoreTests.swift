@@ -153,6 +153,36 @@ final class PlayerStoreTests: XCTestCase {
         XCTAssertEqual(volume, 1)
     }
 
+    func testClearRejectsAnInFlightAlbumSelectionFromOldAccount() async throws {
+        let fixture = try PlayerStoreTestFixture()
+        let requested = expectation(description: "old album requested")
+        let gate = PlayerSongGate()
+        fixture.api.albumHandler = { id in
+            requested.fulfill()
+            await gate.wait()
+            return AlbumDetail(
+                album: Album(id: id, name: "Old album"),
+                songs: [mediaSong("old-account-song")]
+            )
+        }
+        let store = fixture.store()
+        store.start()
+
+        let selection = Task {
+            await store.playAlbum(id: "old-account-album")
+        }
+        await fulfillment(of: [requested], timeout: 1)
+        store.clearAll()
+        await gate.open()
+        await selection.value
+        try? await Task.sleep(for: .milliseconds(30))
+
+        XCTAssertFalse(store.hasMedia)
+        XCTAssertEqual(store.playbackStarts, 0)
+        XCTAssertNil(fixture.audio.fullState())
+        fixture.audio.shutdown()
+    }
+
     func testRemoteQueueReorderSendsFlattenedProtocolIndexes() async throws {
         let fixture = try PlayerStoreTestFixture()
         let remote = PlayerRemoteSpy()

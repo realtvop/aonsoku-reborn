@@ -143,6 +143,7 @@ public final class PlayerStore {
     @ObservationIgnored private var lastProgressSample = 0.0
     @ObservationIgnored private var lastSnapshot: AudioQueueSnapshot?
     @ObservationIgnored private var refreshGeneration = 0
+    @ObservationIgnored private var selectionGeneration = 0
 
     public init(
         audio: AudioService,
@@ -220,6 +221,7 @@ public final class PlayerStore {
     /// Stops playback and clears the queue and its saved state (sign-out).
     public func clearAll() {
         refreshGeneration += 1
+        selectionGeneration += 1
         audio.stop()
         audio.cancelSleepTimer()
         audio.clear()
@@ -254,6 +256,7 @@ public final class PlayerStore {
         sourceName: String? = nil,
         confirmed: Bool = false
     ) {
+        selectionGeneration += 1
         guard !songs.isEmpty else { return }
         let clampedIndex = min(max(index, 0), songs.count - 1)
 
@@ -304,6 +307,7 @@ public final class PlayerStore {
 
     /// Plays one song on its own (search results, song links).
     public func play(song: Song, sourceName: String? = nil, confirmed: Bool = false) {
+        selectionGeneration += 1
         if !confirmed, isSameContext(songs: [song], index: 0, source: nil) {
             resume()
             return
@@ -324,8 +328,11 @@ public final class PlayerStore {
 
     /// Loads the album and plays it.
     public func playAlbum(id: String, startingAt index: Int = 0, shuffle: Bool = false) async {
+        selectionGeneration += 1
+        let generation = selectionGeneration
         do {
             let detail = try await repository.album(id: id)
+            guard generation == selectionGeneration else { return }
             play(
                 detail.songs,
                 startingAt: index,
@@ -334,13 +341,17 @@ public final class PlayerStore {
                 sourceName: detail.album.name
             )
         } catch {
+            guard generation == selectionGeneration else { return }
             errorMessage = error.localizedDescription
         }
     }
 
     public func playPlaylist(id: String, startingAt index: Int = 0, shuffle: Bool = false) async {
+        selectionGeneration += 1
+        let generation = selectionGeneration
         do {
             let detail = try await repository.playlist(id: id)
+            guard generation == selectionGeneration else { return }
             play(
                 detail.songs,
                 startingAt: index,
@@ -349,18 +360,22 @@ public final class PlayerStore {
                 sourceName: detail.playlist.name
             )
         } catch {
+            guard generation == selectionGeneration else { return }
             errorMessage = error.localizedDescription
         }
     }
 
     /// Plays every song by the artist (web artist play button).
     public func playArtist(id: String, name: String, shuffle: Bool = false) async {
+        selectionGeneration += 1
+        let generation = selectionGeneration
         do {
             let page = try await repository.songs(
                 SongListQuery(scope: .artist(id: id, name: name)),
                 offset: 0,
                 limit: 10_000
             )
+            guard generation == selectionGeneration else { return }
             play(
                 page.items,
                 shuffle: shuffle,
@@ -368,12 +383,14 @@ public final class PlayerStore {
                 sourceName: name
             )
         } catch {
+            guard generation == selectionGeneration else { return }
             errorMessage = error.localizedDescription
         }
     }
 
     /// Plays `stations[index]`. Next and previous move between stations.
     public func playRadio(_ stations: [RadioStation], index: Int) {
+        selectionGeneration += 1
         loadRadio(stations, index: index, countStart: true)
     }
 
