@@ -134,13 +134,22 @@ public final class CoordinationService: @unchecked Sendable {
     /// Loads the saved config and tokens, then reconnects when this device is
     /// registered. Safe to call more than once.
     public func start() {
-        let shouldStart = lock.withLock { () -> Bool in
-            guard !started else { return false }
+        let action = lock.withLock { () -> (load: Bool, reconnect: Bool) in
+            if started {
+                let reconnect = manualDisconnect && currentState.deviceId != nil
+                manualDisconnect = false
+                return (false, reconnect)
+            }
             started = true
-            return true
+            manualDisconnect = false
+            return (true, false)
         }
 
-        guard shouldStart else { return }
+        if action.reconnect {
+            Task { await reconnect(userInitiated: false) }
+            return
+        }
+        guard action.load else { return }
 
         if let config = tokenStore.loadConfig() {
             update { $0.config = config }
@@ -319,6 +328,12 @@ public final class CoordinationService: @unchecked Sendable {
 
     /// Clears this device's tokens and disconnects.
     public func forgetCurrentDevice() async {
+        resetRegistration()
+    }
+
+    /// Clears account-bound registration without deleting the coordination
+    /// server configuration. Used before another Subsonic account activates.
+    func resetRegistration() {
         disconnect()
         tokenStore.clearTokens()
         onMain { [weak self] in

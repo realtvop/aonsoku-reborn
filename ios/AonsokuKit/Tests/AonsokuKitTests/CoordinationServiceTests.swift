@@ -104,6 +104,21 @@ final class CoordinationServiceTests: XCTestCase {
         XCTAssertEqual(transport.connectCallCount, 1)
     }
 
+    func testStartAfterDisconnectReconnectsSavedRegistration() async {
+        tokenStore.config = config
+        tokenStore.tokens = registeredTokens()
+
+        service.start()
+        await waitUntil { self.transport.connectCallCount == 1 }
+        service.disconnect()
+        service.start()
+        await waitUntil { self.transport.connectCallCount == 2 }
+
+        XCTAssertEqual(transport.connectCallCount, 2)
+        XCTAssertEqual(service.state.connectionState, .connected)
+        XCTAssertEqual(service.state.deviceId, "dev-1")
+    }
+
     func testConnectRegistersThisDeviceAndOpensTheSocket() async throws {
         apiClient.mockTokens = registeredTokens()
         apiClient.mockTicket = "ticket-2"
@@ -223,6 +238,23 @@ final class CoordinationServiceTests: XCTestCase {
         await service.reconnect()
         XCTAssertEqual(transport.connectCallCount, 2)
         XCTAssertEqual(service.state.connectionState, .connected)
+    }
+
+    func testResetRegistrationClearsAccountTokensButKeepsConfig() async {
+        tokenStore.config = config
+        tokenStore.tokens = registeredTokens()
+        service.start()
+        await waitUntil { self.transport.connectCallCount == 1 }
+
+        service.resetRegistration()
+        service.start()
+        try? await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertNil(tokenStore.tokens)
+        XCTAssertEqual(tokenStore.config, config)
+        XCTAssertNil(service.state.deviceId)
+        XCTAssertNil(service.state.accountId)
+        XCTAssertEqual(transport.connectCallCount, 1)
     }
 
     func testReconnectResumesFromTheLastSequence() async {

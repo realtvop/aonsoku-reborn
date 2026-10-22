@@ -237,6 +237,7 @@ public final class AppModel {
             hasLibraryData: hasLibraryData,
             explicitLogin: explicitLogin
         ) {
+            services.coordination.resetRegistration()
             try services.library.resetAccountData()
             _ = try services.audio.clearAudioFiles()
             services.preferences.remove("pinned.v1")

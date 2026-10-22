@@ -70,8 +70,9 @@ construction never leave the first frame blank.
 username. Signing out clears observable account state but keeps the offline
 library for the same account. Before a different account activates, it cancels
 old work and removes server metadata, playback/history rows, audio and artwork
-caches, pins and lyrics selections so process-wide services cannot expose the
-previous account's content.
+caches, pins, lyrics selections and the prior coordination registration so
+process-wide services cannot expose the previous account's content. Signing
+back into the same account resumes its preserved coordination registration.
 
 ## Services (AonsokuKit)
 
