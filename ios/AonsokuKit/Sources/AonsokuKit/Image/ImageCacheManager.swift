@@ -40,7 +40,7 @@ final class ImageCacheManager: @unchecked Sendable {
     // MARK: - Public API
 
     func downloadAvatar(username: String, size: String) async throws -> URL {
-        let generation = publicationGeneration()
+        let publication = publicationToken(for: username)
         guard let credentials = credentialsProvider() else {
             throw ImageCacheError.noCredentials
         }
@@ -61,13 +61,13 @@ final class ImageCacheManager: @unchecked Sendable {
             contentType: contentType,
             coverSize: size,
             directory: directory,
-            expectedGeneration: generation
+            expectedPublication: publication
         )
         .url
     }
 
     func downloadCoverImage(coverArtId: String, size: String) async throws -> URL {
-        let generation = publicationGeneration()
+        let expectedPublication = publicationToken(for: coverArtId)
         guard let credentials = credentialsProvider() else {
             throw ImageCacheError.noCredentials
         }
@@ -89,7 +89,7 @@ final class ImageCacheManager: @unchecked Sendable {
             contentType: contentType,
             coverSize: size,
             directory: directory,
-            expectedGeneration: generation
+            expectedPublication: expectedPublication
         )
         if publication.didWrite {
             notifyCoverImageCached(coverArtId: coverArtId)
@@ -103,7 +103,7 @@ final class ImageCacheManager: @unchecked Sendable {
         data: Data,
         contentType: String,
         coverSize: String,
-        expectedGeneration: UInt64? = nil
+        expectedPublication: ImageCachePublicationToken? = nil
     ) throws -> URL {
         let directory = try ImageCacheUtils.cacheDirectoryURL(createIfNeeded: true)
         let publication = try publishCoverImage(
@@ -112,7 +112,7 @@ final class ImageCacheManager: @unchecked Sendable {
             contentType: contentType,
             coverSize: coverSize,
             directory: directory,
-            expectedGeneration: expectedGeneration
+            expectedPublication: expectedPublication
         )
         if publication.didWrite {
             notifyCoverImageCached(coverArtId: coverArtId)
@@ -126,12 +126,12 @@ final class ImageCacheManager: @unchecked Sendable {
         contentType: String,
         coverSize: String,
         directory: URL,
-        expectedGeneration: UInt64? = nil
+        expectedPublication: ImageCachePublicationToken? = nil
     ) throws -> (url: URL, didWrite: Bool) {
         Self.publication.lock.lock()
         defer { Self.publication.lock.unlock() }
-        if let expectedGeneration,
-           expectedGeneration != Self.publication.generation {
+        if let expectedPublication,
+           expectedPublication != Self.publication.token(for: coverArtId) {
             throw CancellationError()
         }
 
@@ -212,7 +212,7 @@ final class ImageCacheManager: @unchecked Sendable {
     func deleteCoverImage(coverArtId: String) throws -> Bool {
         Self.publication.lock.lock()
         defer { Self.publication.lock.unlock() }
-        Self.publication.generation &+= 1
+        Self.publication.itemGenerations[coverArtId, default: 0] &+= 1
 
         var deleted = false
         if let directory = try? ImageCacheUtils.cacheDirectoryURL(createIfNeeded: false),
@@ -231,7 +231,8 @@ final class ImageCacheManager: @unchecked Sendable {
     func clearCoverImages() throws -> Int {
         Self.publication.lock.lock()
         defer { Self.publication.lock.unlock() }
-        Self.publication.generation &+= 1
+        Self.publication.clearGeneration &+= 1
+        Self.publication.itemGenerations.removeAll(keepingCapacity: true)
 
         var deletedCount = 0
         if let directory = try? ImageCacheUtils.cacheDirectoryURL(createIfNeeded: false),
@@ -288,10 +289,10 @@ final class ImageCacheManager: @unchecked Sendable {
         )
     }
 
-    func publicationGeneration() -> UInt64 {
+    func publicationToken(for coverArtId: String) -> ImageCachePublicationToken {
         Self.publication.lock.lock()
         defer { Self.publication.lock.unlock() }
-        return Self.publication.generation
+        return Self.publication.token(for: coverArtId)
     }
 
     private func buildAvatarURL(credentials: ServerCredentials, username: String, size: String) throws -> URL {
@@ -358,5 +359,18 @@ final class ImageCacheManager: @unchecked Sendable {
 
 private final class ImageCachePublicationState: @unchecked Sendable {
     let lock = NSLock()
-    var generation: UInt64 = 0
+    var clearGeneration: UInt64 = 0
+    var itemGenerations: [String: UInt64] = [:]
+
+    func token(for coverArtId: String) -> ImageCachePublicationToken {
+        ImageCachePublicationToken(
+            clearGeneration: clearGeneration,
+            itemGeneration: itemGenerations[coverArtId, default: 0]
+        )
+    }
+}
+
+struct ImageCachePublicationToken: Equatable, Sendable {
+    let clearGeneration: UInt64
+    let itemGeneration: UInt64
 }

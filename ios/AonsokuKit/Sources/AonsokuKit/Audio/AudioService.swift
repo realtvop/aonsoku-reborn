@@ -2232,7 +2232,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
             guard let self else { return }
 
             let imageCache: ImageCacheManager?
-            let publicationGeneration: UInt64?
+            let publication: ImageCachePublicationToken?
             if let coverArtId, !coverArtId.isEmpty {
                 let cache = ImageCacheManager(db: self.databaseManager.dbPool)
                 if let localURL = cache.resolveCoverImage(coverArtId: coverArtId),
@@ -2259,10 +2259,10 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     return
                 }
                 imageCache = cache
-                publicationGeneration = cache.publicationGeneration()
+                publication = cache.publicationToken(for: coverArtId)
             } else {
                 imageCache = nil
-                publicationGeneration = nil
+                publication = nil
             }
 
             guard let url = URL(string: urlString) else { return }
@@ -2270,7 +2270,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                 guard let self, error == nil, let data,
                       let image = UIImage(data: data) else { return }
                 if let coverArtId, !coverArtId.isEmpty,
-                   let imageCache, let publicationGeneration {
+                   let imageCache, let publication {
                     let contentType = (response as? HTTPURLResponse)?
                         .value(forHTTPHeaderField: "Content-Type") ?? "image/jpeg"
                     _ = try? imageCache.storeCoverImage(
@@ -2278,7 +2278,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                         data: data,
                         contentType: contentType,
                         coverSize: "800",
-                        expectedGeneration: publicationGeneration
+                        expectedPublication: publication
                     )
                 }
                 self.publishNowPlayingArtwork(image, revision: revision)

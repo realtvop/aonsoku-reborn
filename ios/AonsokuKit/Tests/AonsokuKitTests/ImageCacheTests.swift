@@ -291,7 +291,7 @@ final class ImageCacheTests: XCTestCase {
             credentialsProvider: { nil }
         )
         let coverArtId = "stale-store-\(UUID().uuidString)"
-        let generation = manager.publicationGeneration()
+        let publication = manager.publicationToken(for: coverArtId)
         _ = try manager.clearCoverImages()
 
         XCTAssertThrowsError(
@@ -300,7 +300,7 @@ final class ImageCacheTests: XCTestCase {
                 data: Data("stale-cover".utf8),
                 contentType: "image/png",
                 coverSize: "800",
-                expectedGeneration: generation
+                expectedPublication: publication
             )
         ) { error in
             XCTAssertTrue(error is CancellationError)
@@ -310,6 +310,31 @@ final class ImageCacheTests: XCTestCase {
             try CacheMetaRepository(db: database.manager.dbPool)
                 .getByKey("cover:\(coverArtId)")
         )
+    }
+
+    func testDeletingOneCoverDoesNotCancelAnotherCoverPublication() throws {
+        let database = try TemporaryDatabase()
+        let manager = ImageCacheManager(
+            db: database.manager.dbPool,
+            session: .shared,
+            credentialsProvider: { nil }
+        )
+        let deletedId = "deleted-\(UUID().uuidString)"
+        let retainedId = "retained-\(UUID().uuidString)"
+        let publication = manager.publicationToken(for: retainedId)
+        _ = try manager.deleteCoverImage(coverArtId: deletedId)
+
+        let url = try manager.storeCoverImage(
+            coverArtId: retainedId,
+            data: Data("retained-cover".utf8),
+            contentType: "image/png",
+            coverSize: "800",
+            expectedPublication: publication
+        )
+        defer { _ = try? manager.deleteCoverImage(coverArtId: retainedId) }
+
+        XCTAssertEqual(try Data(contentsOf: url), Data("retained-cover".utf8))
+        XCTAssertEqual(manager.resolveCoverImage(coverArtId: retainedId), url)
     }
 }
 
