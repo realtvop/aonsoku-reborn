@@ -162,8 +162,10 @@ struct ServerSettingsView: View {
         guard network.isOnline else { return }
         isLoadingScan = true
         defer { isLoadingScan = false }
-        if let status = try? await app.repository.scanStatus() {
-            scanStatus = status
+        do {
+            scanStatus = try await app.repository.scanStatus()
+        } catch {
+            toasts.show(error: error)
         }
     }
 
