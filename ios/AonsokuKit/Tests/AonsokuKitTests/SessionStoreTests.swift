@@ -120,6 +120,43 @@ final class SessionStoreTests: XCTestCase {
         }
     }
 
+    func testCompatibilityProbeDistinguishesUnknownAndFallbackOverride() async throws {
+        let database = try TemporaryDatabase()
+        let preferences = PreferencesService(db: database.manager.dbPool)
+        let store = makeStore(
+            preferences: preferences,
+            client: makeClient(probeCompatibility: { url, _, _ in
+                url.contains("old") ? .incompatible : .unknown
+            })
+        )
+
+        let primary = await store.compatibility(
+            serverUrl: "https://old.test",
+            username: "alice",
+            password: "secret"
+        )
+        let fallback = await store.compatibility(
+            serverUrl: "https://offline.test",
+            username: "alice",
+            password: "secret"
+        )
+
+        XCTAssertEqual(primary, .incompatible)
+        XCTAssertEqual(fallback, .unknown)
+        XCTAssertTrue(ServerCompatibility.requiresOverride(
+            primary: .incompatible,
+            fallback: .compatible
+        ))
+        XCTAssertFalse(ServerCompatibility.requiresOverride(
+            primary: .unknown,
+            fallback: .compatible
+        ))
+        XCTAssertTrue(ServerCompatibility.requiresOverride(
+            primary: .unknown,
+            fallback: .incompatible
+        ))
+    }
+
     func testUpdateURLsUsesFallbackAndKeepsAccountOnFailure() async throws {
         let database = try TemporaryDatabase()
         let preferences = PreferencesService(db: database.manager.dbPool)
@@ -227,7 +264,9 @@ final class SessionStoreTests: XCTestCase {
         queryServerInfo: @escaping (String) async -> (
             protocolVersion: String,
             serverType: String
-        ) = { _ in ("1.16.0", "subsonic") }
+        ) = { _ in ("1.16.0", "subsonic") },
+        probeCompatibility: @escaping (String, String, String) async ->
+            ServerCompatibility = { _, _, _ in .compatible }
     ) -> SessionAuthenticationClient {
         SessionAuthenticationClient(
             getCredentials: getCredentials,
@@ -235,7 +274,8 @@ final class SessionStoreTests: XCTestCase {
             clearCredentials: clearCredentials,
             login: login,
             ping: ping,
-            queryServerInfo: queryServerInfo
+            queryServerInfo: queryServerInfo,
+            probeCompatibility: probeCompatibility
         )
     }
 

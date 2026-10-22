@@ -231,11 +231,23 @@ struct LoginView: View {
         isConnecting = true
         Task {
             if !force {
-                var isCompatible = await session.isCompatible(serverUrl: serverUrl)
-                if !isCompatible, !fallback.isEmpty {
-                    isCompatible = await session.isCompatible(serverUrl: fallback)
+                let primaryCompatibility = await session.compatibility(
+                    serverUrl: serverUrl,
+                    username: username,
+                    password: password
+                )
+                var fallbackCompatibility: ServerCompatibility?
+                if primaryCompatibility == .unknown, !fallback.isEmpty {
+                    fallbackCompatibility = await session.compatibility(
+                        serverUrl: fallback,
+                        username: username,
+                        password: password
+                    )
                 }
-                if !isCompatible {
+                if ServerCompatibility.requiresOverride(
+                    primary: primaryCompatibility,
+                    fallback: fallbackCompatibility
+                ) {
                     isConnecting = false
                     isAskingToForce = true
                     return

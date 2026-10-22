@@ -45,6 +45,32 @@ public enum SessionState: Hashable, Sendable {
     case signedIn(ServerAccount)
 }
 
+public enum ServerCompatibility: Hashable, Sendable {
+    case compatible
+    case incompatible
+    case unknown
+
+    init(protocolVersion: String) {
+        let parts = protocolVersion.split(separator: ".").map { Int($0) }
+        guard !parts.isEmpty, parts.allSatisfy({ $0 != nil }) else {
+            self = .unknown
+            return
+        }
+        let version = parts.compactMap { $0 } + [0, 0, 0]
+        self = version.prefix(3).lexicographicallyPrecedes([1, 15, 0])
+            ? .incompatible
+            : .compatible
+    }
+
+    public static func requiresOverride(
+        primary: Self,
+        fallback: Self?
+    ) -> Bool {
+        primary == .incompatible
+            || (primary == .unknown && fallback == .incompatible)
+    }
+}
+
 /// Sign-in state. Credentials stay in the Keychain owned by
 /// `AuthenticationService`; library data is kept on sign-out (web logout).
 @MainActor
@@ -184,10 +210,19 @@ public final class SessionStore {
     /// compatible, so the sign-in itself reports the failure.
     public func isCompatible(serverUrl: String) async -> Bool {
         let info = await authenticationClient.queryServerInfo(serverUrl)
-        let parts = info.protocolVersion.split(separator: ".").map { Int($0) }
-        guard !parts.isEmpty, parts.allSatisfy({ $0 != nil }) else { return true }
-        let version = parts.compactMap { $0 } + [0, 0, 0]
-        return version.prefix(3).lexicographicallyPrecedes([1, 15, 0]) == false
+        return ServerCompatibility(protocolVersion: info.protocolVersion) != .incompatible
+    }
+
+    public func compatibility(
+        serverUrl: String,
+        username: String,
+        password: String
+    ) async -> ServerCompatibility {
+        await authenticationClient.probeCompatibility(
+            serverUrl,
+            username,
+            password
+        )
     }
 
     /// Reloads `user`; keeps the previous value on failure.
@@ -333,6 +368,7 @@ struct SessionAuthenticationClient: @unchecked Sendable {
     var login: (String, String?, String, String) async -> LoginResult
     var ping: (String, String, String, String) async -> (reachable: Bool, error: String?)
     var queryServerInfo: (String) async -> (protocolVersion: String, serverType: String)
+    var probeCompatibility: (String, String, String) async -> ServerCompatibility
 
     static func live(_ service: AuthenticationService) -> Self {
         Self(
@@ -341,7 +377,8 @@ struct SessionAuthenticationClient: @unchecked Sendable {
             clearCredentials: service.clearCredentials,
             login: service.login,
             ping: service.ping,
-            queryServerInfo: service.queryServerInfo
+            queryServerInfo: service.queryServerInfo,
+            probeCompatibility: service.probeServerCompatibility
         )
     }
 }

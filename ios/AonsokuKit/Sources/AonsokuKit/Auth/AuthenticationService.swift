@@ -55,7 +55,12 @@ public final class AuthenticationService: @unchecked Sendable {
             )
 
             if result.reachable {
-                let serverInfo = await httpClient.queryServerInfo(baseUrl: primaryUrl)
+                let serverInfo = await authenticatedServerInfo(
+                    baseUrl: primaryUrl,
+                    username: username,
+                    password: hashedPassword,
+                    authType: authType
+                )
 
                 let credentials = ServerCredentials(
                     serverUrl: primaryUrl,
@@ -104,7 +109,12 @@ public final class AuthenticationService: @unchecked Sendable {
                 )
 
                 if result.reachable {
-                    let serverInfo = await httpClient.queryServerInfo(baseUrl: fallbackUrl)
+                    let serverInfo = await authenticatedServerInfo(
+                        baseUrl: fallbackUrl,
+                        username: username,
+                        password: hashedPassword,
+                        authType: authType
+                    )
 
                     let credentials = ServerCredentials(
                         serverUrl: fallbackUrl,
@@ -164,6 +174,61 @@ public final class AuthenticationService: @unchecked Sendable {
     /// Query basic server information.
     public func queryServerInfo(baseUrl: String) async -> (protocolVersion: String, serverType: String) {
         await httpClient.queryServerInfo(baseUrl: baseUrl)
+    }
+
+    public func probeServerCompatibility(
+        baseUrl: String,
+        username: String,
+        rawPassword: String
+    ) async -> ServerCompatibility {
+        for authType in ["token", "password"] {
+            let password = SubsonicAuthBuilder.hashPasswordForStorage(
+                rawPassword: rawPassword,
+                authType: authType
+            )
+            let credentials = ServerCredentials(
+                serverUrl: baseUrl,
+                username: username,
+                password: password,
+                authType: authType,
+                protocolVersion: SubsonicAuthBuilder.defaultVersion,
+                serverType: "subsonic",
+                fallbackUrl: nil
+            )
+            do {
+                let info = try await httpClient.queryServerInfo(
+                    baseUrl: baseUrl,
+                    credentials: credentials
+                )
+                return ServerCompatibility(protocolVersion: info.protocolVersion)
+            } catch SubsonicHTTPError.authFailed {
+                continue
+            } catch {
+                return .unknown
+            }
+        }
+        return .unknown
+    }
+
+    private func authenticatedServerInfo(
+        baseUrl: String,
+        username: String,
+        password: String,
+        authType: String
+    ) async -> (protocolVersion: String, serverType: String) {
+        let credentials = ServerCredentials(
+            serverUrl: baseUrl,
+            username: username,
+            password: password,
+            authType: authType,
+            protocolVersion: SubsonicAuthBuilder.defaultVersion,
+            serverType: "subsonic",
+            fallbackUrl: nil
+        )
+        return (try? await httpClient.queryServerInfo(
+            baseUrl: baseUrl,
+            credentials: credentials
+        )) ?? (SubsonicAuthBuilder.defaultVersion, "subsonic")
     }
 
     /// Perform an authenticated API request.

@@ -131,19 +131,28 @@ public final class SubsonicHTTPClient {
         )
 
         do {
-            let response = try await request(
+            return try await queryServerInfo(
                 baseUrl: baseUrl,
-                path: "ping.view",
                 credentials: dummyCredentials
             )
-            let version = response.data["version"] as? String ?? SubsonicAuthBuilder.defaultVersion
-            let serverType = response.data["type"] as? String ?? "subsonic"
-            return (version, serverType)
-        } catch SubsonicHTTPError.authFailed {
-            return (SubsonicAuthBuilder.defaultVersion, "subsonic")
         } catch {
             return (SubsonicAuthBuilder.defaultVersion, "subsonic")
         }
+    }
+
+    func queryServerInfo(
+        baseUrl: String,
+        credentials: ServerCredentials
+    ) async throws -> (protocolVersion: String, serverType: String) {
+        let response = try await request(
+            baseUrl: baseUrl,
+            path: "ping.view",
+            credentials: credentials
+        )
+        return (
+            response.data["version"] as? String ?? SubsonicAuthBuilder.defaultVersion,
+            response.data["type"] as? String ?? "subsonic"
+        )
     }
 
     func buildURL(
