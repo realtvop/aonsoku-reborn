@@ -99,6 +99,9 @@ public final class AppModel {
         favorites.toasts = toasts
         downloads.favorites = favorites
         downloads.toasts = toasts
+        downloads.onAssetsCleared = { [weak artwork] in
+            artwork?.purgeMemory()
+        }
         coordination.toasts = toasts
         player.favorites = favorites
         player.remote = coordination

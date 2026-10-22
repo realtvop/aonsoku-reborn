@@ -233,6 +233,16 @@ final class DownloadsStoreTests: XCTestCase {
         XCTAssertEqual(fixture.store.state(ofSong: remaining.id), .notCached)
     }
 
+    func testClearAssetsInvalidatesDecodedArtwork() async throws {
+        let fixture = try DownloadsFixture()
+        var invalidationCount = 0
+        fixture.store.onAssetsCleared = { invalidationCount += 1 }
+
+        await fixture.store.clearAssets()
+
+        XCTAssertEqual(invalidationCount, 1)
+    }
+
     func testSharedAlbumAndPlaylistRemovalKeepsThenDeletesSong() async throws {
         let fixture = try DownloadsFixture()
         let song = fixture.song("shared")

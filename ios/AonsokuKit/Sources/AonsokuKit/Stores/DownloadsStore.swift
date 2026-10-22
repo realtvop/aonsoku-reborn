@@ -22,6 +22,7 @@ public final class DownloadsStore {
     @ObservationIgnored public let settings: SettingsStore
     @ObservationIgnored public weak var favorites: FavoritesStore?
     @ObservationIgnored public weak var toasts: ToastCenter?
+    @ObservationIgnored public var onAssetsCleared: (() -> Void)?
 
     @ObservationIgnored private var rows: [String: CacheMetaRecord] = [:]
     @ObservationIgnored private var progress: [String: DownloadProgress] = [:]
@@ -331,6 +332,7 @@ public final class DownloadsStore {
     /// Deletes all cover art.
     public func clearAssets() async {
         _ = try? library.clearCovers()
+        onAssetsCleared?()
         let keys = rows.values
             .filter { $0.type == CachedItemType.cover.rawValue }
             .map(\.key)
