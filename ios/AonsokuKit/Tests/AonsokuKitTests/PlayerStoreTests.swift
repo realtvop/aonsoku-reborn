@@ -153,6 +153,46 @@ final class PlayerStoreTests: XCTestCase {
         XCTAssertEqual(volume, 1)
     }
 
+    func testRemoteQueueReorderSendsFlattenedProtocolIndexes() async throws {
+        let fixture = try PlayerStoreTestFixture()
+        let remote = PlayerRemoteSpy()
+        remote.remoteNowPlaying = RemoteNowPlaying(
+            deviceId: "remote-1",
+            deviceName: "Living Room",
+            song: mediaSong("b"),
+            queue: PlayerQueue(
+                history: [
+                    QueueEntry(song: mediaSong("a"), tier: .context, index: 0)
+                ],
+                current: QueueEntry(song: mediaSong("b"), tier: .context, index: 1),
+                userQueue: [
+                    QueueEntry(song: mediaSong("u1"), tier: .user, index: 0),
+                    QueueEntry(song: mediaSong("u2"), tier: .user, index: 1),
+                ],
+                upNext: [
+                    QueueEntry(song: mediaSong("c"), tier: .context, index: 2),
+                    QueueEntry(song: mediaSong("d"), tier: .context, index: 3),
+                ]
+            )
+        )
+        let store = fixture.store(remote: remote)
+
+        store.move(in: .user, from: IndexSet(integer: 0), to: 2)
+        store.move(in: .context, from: IndexSet(integer: 0), to: 2)
+
+        let sent = await waitForPlayerStoreTest { remote.commands.count == 2 }
+        XCTAssertTrue(sent)
+        XCTAssertEqual(
+            remote.commands.map(\.jsonObject).compactMap { object in
+                guard let from = object["from"] as? Int,
+                      let to = object["to"] as? Int else { return nil }
+                return [from, to]
+            },
+            [[2, 3], [4, 5]]
+        )
+        fixture.audio.shutdown()
+    }
+
     func testLocalEnqueueMoveRemoveAndCoverReplayGainConversion() async throws {
         let fixture = try PlayerStoreTestFixture()
         fixture.settings.update { $0.playback.useAlbumCoverForSongs = true }

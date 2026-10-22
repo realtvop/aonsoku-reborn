@@ -99,6 +99,45 @@ final class QueueTests: XCTestCase {
         XCTAssertEqual(delegate.contentReasons, ["queue-edit"])
     }
 
+    func testRemoteReorderUsesFlattenedQueueTiers() {
+        let engine = NativeQueueEngine()
+        engine.setContextQueue(
+            songs: [makeSong("a"), makeSong("b"), makeSong("c"), makeSong("d")],
+            currentIndex: 0,
+            autoplay: false,
+            startTime: nil
+        )
+        engine.addToUserQueue(
+            songs: [makeSong("u1"), makeSong("u2")],
+            position: "last"
+        )
+
+        XCTAssertTrue(engine.reorderFlattenedQueue(fromIndex: 1, toIndex: 2))
+        XCTAssertEqual(engine.userQueue.map(\.id), ["u2", "u1"])
+        XCTAssertTrue(engine.reorderFlattenedQueue(fromIndex: 3, toIndex: 5))
+        XCTAssertEqual(engine.contextSongs.map(\.id), ["a", "c", "d", "b"])
+        XCTAssertFalse(engine.reorderFlattenedQueue(fromIndex: 1, toIndex: 3))
+    }
+
+    func testRemoteRemovalPrefersUserTierAndProtectsCurrentSong() {
+        let engine = NativeQueueEngine()
+        engine.setContextQueue(
+            songs: [makeSong("current"), makeSong("duplicate"), makeSong("later")],
+            currentIndex: 0,
+            autoplay: false,
+            startTime: nil
+        )
+        engine.addToUserQueue(songs: [makeSong("duplicate")], position: "last")
+
+        XCTAssertTrue(engine.removeSongIds(["duplicate"]))
+        XCTAssertTrue(engine.userQueue.isEmpty)
+        XCTAssertEqual(engine.contextSongs.map(\.id), ["current", "duplicate", "later"])
+        XCTAssertTrue(engine.removeSongIds(["duplicate"]))
+        XCTAssertEqual(engine.contextSongs.map(\.id), ["current", "later"])
+        XCTAssertFalse(engine.removeSongIds(["current"]))
+        XCTAssertEqual(engine.currentSong?.id, "current")
+    }
+
     func testQueueExhaustionDoesNotReloadCurrentSong() {
         let engine = NativeQueueEngine()
         let delegate = QueueDelegateSpy()

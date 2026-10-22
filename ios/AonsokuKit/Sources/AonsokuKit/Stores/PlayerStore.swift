@@ -629,10 +629,11 @@ public final class PlayerStore {
             guard entries.indices.contains(from) else { return }
             let adjusted = destination > from ? destination - 1 : destination
             guard entries.indices.contains(max(0, min(adjusted, entries.count - 1))) else { return }
+            let to = max(0, min(adjusted, entries.count - 1))
             sendRemote(
                 .reorderQueue(
-                    from: entries[from].index,
-                    to: entries[max(0, min(adjusted, entries.count - 1))].index
+                    from: flattenedRemoteQueueIndex(for: entries[from]),
+                    to: flattenedRemoteQueueIndex(for: entries[to])
                 ))
             return
         }
@@ -658,6 +659,19 @@ public final class PlayerStore {
                 audio.clearUserQueue()
                 if !visible.isEmpty { audio.addToUserQueue(songs: visible, position: "last") }
             }
+        }
+    }
+
+    private func flattenedRemoteQueueIndex(for entry: QueueEntry) -> Int {
+        let contextPlayedCount = queue.history.count
+            + (queue.current?.tier == .context ? 1 : 0)
+        let fullUserCount = queue.userQueue.count
+            + (queue.current?.tier == .user ? 1 : 0)
+        switch entry.tier {
+        case .user:
+            return contextPlayedCount + entry.index
+        case .context:
+            return entry.index + fullUserCount
         }
     }
 

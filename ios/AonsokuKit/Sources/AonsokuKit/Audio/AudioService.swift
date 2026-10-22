@@ -606,14 +606,15 @@ public final class AudioService: NSObject, @unchecked Sendable {
         case .removeFromQueue(let songIds):
             stateQueue.async { [weak self] in
                 guard let self else { return }
-                let ids = Set(songIds)
-                let indices = self.queueEngine.userQueue.enumerated().compactMap {
-                    ids.contains($0.element.id) ? $0.offset : nil
-                }
-                self.queueEngine.removeFromUserQueue(indices: indices)
+                self.queueEngine.removeSongIds(songIds)
+                self.persistence.markStateDirty()
             }
         case .reorderQueue(let from, let to):
-            reorderContextQueue(from: from, to: to)
+            stateQueue.async { [weak self] in
+                guard let self else { return }
+                self.queueEngine.reorderFlattenedQueue(fromIndex: from, toIndex: to)
+                self.persistence.markStateDirty()
+            }
         case .clearQueue:
             clearUserQueue()
         case .toggleLike:

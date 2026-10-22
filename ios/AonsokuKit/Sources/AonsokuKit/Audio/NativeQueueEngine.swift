@@ -194,10 +194,11 @@ class NativeQueueEngine {
         }
     }
 
-    func reorderContextQueue(fromIndex: Int, toIndex: Int) {
+    @discardableResult
+    func reorderContextQueue(fromIndex: Int, toIndex: Int) -> Bool {
         guard fromIndex != toIndex,
               fromIndex >= 0, fromIndex < contextSongs.count,
-              toIndex >= 0, toIndex < contextSongs.count else { return }
+              toIndex >= 0, toIndex < contextSongs.count else { return false }
 
         let currentSongId = currentSong?.id
         let song = contextSongs.remove(at: fromIndex)
@@ -207,6 +208,61 @@ class NativeQueueEngine {
             currentIndex = retainedIndex
         }
         delegate?.queueEngine(self, didChangeContents: "queue-edit")
+        return true
+    }
+
+    /// Reorders the flattened protocol queue: played context, user queue,
+    /// then the remaining context. Cross-tier moves are intentionally rejected.
+    @discardableResult
+    func reorderFlattenedQueue(fromIndex: Int, toIndex: Int) -> Bool {
+        guard fromIndex != toIndex else { return false }
+        let contextPlayedCount = currentIndex + 1
+        let userRange = contextPlayedCount..<(contextPlayedCount + userQueue.count)
+
+        if userRange.contains(fromIndex), userRange.contains(toIndex) {
+            let from = fromIndex - contextPlayedCount
+            let to = toIndex - contextPlayedCount
+            let song = userQueue.remove(at: from)
+            userQueue.insert(song, at: to)
+            delegate?.queueEngine(self, didChangeContents: "queue-edit")
+            return true
+        }
+
+        let upcomingStart = contextPlayedCount + userQueue.count
+        guard fromIndex >= upcomingStart, toIndex >= upcomingStart else {
+            return false
+        }
+        return reorderContextQueue(
+            fromIndex: fromIndex - userQueue.count,
+            toIndex: toIndex - userQueue.count
+        )
+    }
+
+    /// Removes each requested song from the user tier first, matching the web
+    /// queue's tier detection, then from upcoming context if it was not queued.
+    @discardableResult
+    func removeSongIds(_ songIds: [String]) -> Bool {
+        var changed = false
+        for id in songIds {
+            if let index = userQueue.firstIndex(where: { $0.id == id }) {
+                guard !(isInUserQueue && index == 0) else { continue }
+                userQueue.remove(at: index)
+                originalUserSongs.removeAll { $0.id == id }
+                changed = true
+                continue
+            }
+            if let index = contextSongs.firstIndex(where: { $0.id == id }),
+               index != currentIndex {
+                contextSongs.remove(at: index)
+                originalContextSongs.removeAll { $0.id == id }
+                if index < currentIndex { currentIndex -= 1 }
+                changed = true
+            }
+        }
+        if changed {
+            delegate?.queueEngine(self, didChangeContents: "queue-edit")
+        }
+        return changed
     }
 
     func addToUserQueue(songs: [QueueSong], position: String) {
