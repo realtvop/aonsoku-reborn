@@ -11,6 +11,7 @@ struct LoginView: View {
     @Environment(Localizer.self) private var t
 
     @State private var url = "https://"
+    @State private var fallbackUrl = ""
     @State private var username = ""
     @State private var password = ""
     @State private var showsErrors = false
@@ -20,6 +21,7 @@ struct LoginView: View {
 
     private enum Field: Hashable {
         case url
+        case fallbackUrl
         case username
         case password
     }
@@ -42,13 +44,37 @@ struct LoginView: View {
                             .autocorrectionDisabled()
                             .submitLabel(.next)
                             .focused($focus, equals: .url)
-                            .onSubmit { focus = .username }
+                            .onSubmit { focus = .fallbackUrl }
                     }
                 } footer: {
                     if showsErrors, let urlError {
                         ValidationMessage(text: urlError)
                     } else {
                         Text(t("login.form.urlDescription"))
+                    }
+                }
+                .themedRow()
+
+                Section {
+                    LabeledContent(t("settings.server.fallbackUrl.label")) {
+                        TextField(
+                            t("settings.server.fallbackUrl.label"),
+                            text: $fallbackUrl,
+                            prompt: Text(t("settings.server.fallbackUrl.placeholder"))
+                        )
+                        .keyboardType(.URL)
+                        .textContentType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .submitLabel(.next)
+                        .focused($focus, equals: .fallbackUrl)
+                        .onSubmit { focus = .username }
+                    }
+                } footer: {
+                    if showsErrors, let fallbackUrlError {
+                        ValidationMessage(text: fallbackUrlError)
+                    } else {
+                        Text(t("settings.server.fallbackUrl.info"))
                     }
                 }
                 .themedRow()
@@ -166,6 +192,14 @@ struct LoginView: View {
         return nil
     }
 
+    private var fallbackUrlError: String? {
+        let value = ServerAddress.normalize(fallbackUrl)
+        guard !value.isEmpty else { return nil }
+        return ServerAddress.isValid(value)
+            ? nil
+            : t("settings.server.validation.fallbackUrl")
+    }
+
     private var credentialsError: String? {
         if username.isEmpty { return t("login.form.validations.username") }
         if username.count < 2 { return t("login.form.validations.usernameLength") }
@@ -183,26 +217,34 @@ struct LoginView: View {
             focus = .url
             return
         }
+        if fallbackUrlError != nil {
+            focus = .fallbackUrl
+            return
+        }
         if credentialsError != nil {
             focus = username.count < 2 ? .username : .password
             return
         }
-        var serverUrl = trimmedURL
-        while serverUrl.hasSuffix("/") {
-            serverUrl.removeLast()
-        }
+        let serverUrl = ServerAddress.normalize(trimmedURL)
+        let fallback = ServerAddress.normalize(fallbackUrl)
         focus = nil
         isConnecting = true
         Task {
-            if !force, !(await session.isCompatible(serverUrl: serverUrl)) {
-                isConnecting = false
-                isAskingToForce = true
-                return
+            if !force {
+                var isCompatible = await session.isCompatible(serverUrl: serverUrl)
+                if !isCompatible, !fallback.isEmpty {
+                    isCompatible = await session.isCompatible(serverUrl: fallback)
+                }
+                if !isCompatible {
+                    isConnecting = false
+                    isAskingToForce = true
+                    return
+                }
             }
             do {
                 try await app.signIn(
                     serverUrl: serverUrl,
-                    fallbackUrl: nil,
+                    fallbackUrl: fallback.isEmpty ? nil : fallback,
                     username: username,
                     password: password
                 )
