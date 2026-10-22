@@ -40,11 +40,11 @@ final class ImageCacheManager: @unchecked Sendable {
     // MARK: - Public API
 
     func downloadAvatar(username: String, size: String) async throws -> URL {
+        let generation = currentPublicationGeneration()
         guard let credentials = credentialsProvider() else {
             throw ImageCacheError.noCredentials
         }
 
-        let generation = currentPublicationGeneration()
         let directory = try ImageCacheUtils.cacheDirectoryURL(createIfNeeded: true)
         let url = try buildAvatarURL(credentials: credentials, username: username, size: size)
         let (data, response) = try await session.data(from: url)
@@ -67,11 +67,11 @@ final class ImageCacheManager: @unchecked Sendable {
     }
 
     func downloadCoverImage(coverArtId: String, size: String) async throws -> URL {
+        let generation = currentPublicationGeneration()
         guard let credentials = credentialsProvider() else {
             throw ImageCacheError.noCredentials
         }
 
-        let generation = currentPublicationGeneration()
         let directory = try ImageCacheUtils.cacheDirectoryURL(createIfNeeded: true)
 
         let url = try buildCoverArtURL(credentials: credentials, coverArtId: coverArtId, size: size)

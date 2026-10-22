@@ -231,6 +231,57 @@ final class ImageCacheTests: XCTestCase {
                 .getByKey("cover:\(coverArtId)")
         )
     }
+
+    func testAccountClearBetweenGenerationAndCredentialsRejectsOldRequest() async throws {
+        let database = try TemporaryDatabase()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ImageCacheURLProtocolStub.self]
+        let credentialsRequested = expectation(description: "credentials requested")
+        let releaseCredentials = DispatchSemaphore(value: 0)
+        let coverArtId = "credential-race-\(UUID().uuidString)"
+        let manager = ImageCacheManager(
+            db: database.manager.dbPool,
+            session: URLSession(configuration: configuration),
+            credentialsProvider: {
+                credentialsRequested.fulfill()
+                releaseCredentials.wait()
+                return ServerCredentials(
+                    serverUrl: "https://old-account.test",
+                    username: "old-user",
+                    password: "old-password",
+                    authType: "password",
+                    protocolVersion: "1.16.1",
+                    serverType: "navidrome",
+                    fallbackUrl: nil
+                )
+            }
+        )
+        ImageCacheURLProtocolStub.handler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "image/png"]
+            )!
+            return (response, Data("old-account-cover".utf8))
+        }
+
+        let download = Task {
+            try await manager.downloadCoverImage(
+                coverArtId: coverArtId,
+                size: "900"
+            )
+        }
+        await fulfillment(of: [credentialsRequested], timeout: 1)
+        _ = try manager.deleteCoverImage(coverArtId: coverArtId)
+        releaseCredentials.signal()
+
+        do {
+            _ = try await download.value
+            XCTFail("Expected the old account download to be cancelled")
+        } catch is CancellationError {}
+        XCTAssertNil(manager.resolveCoverImage(coverArtId: coverArtId))
+    }
 }
 
 private final class ImageCacheURLProtocolStub: URLProtocol {
