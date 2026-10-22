@@ -40,6 +40,28 @@ final class DependencyBoundaryTests: XCTestCase {
         _ = AppServices.shared
     }
 
+    func testAonsokuKitSourcesDoNotUseFatalErrors() throws {
+        let packageRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let sources = packageRoot.appendingPathComponent("Sources/AonsokuKit")
+        let files = try XCTUnwrap(
+            FileManager.default.enumerator(
+                at: sources,
+                includingPropertiesForKeys: nil
+            )
+        )
+
+        for case let file as URL in files where file.pathExtension == "swift" {
+            let contents = try String(contentsOf: file, encoding: .utf8)
+            XCTAssertFalse(
+                contents.contains("fatalError("),
+                "Unexpected fatalError in \(file.lastPathComponent)"
+            )
+        }
+    }
+
     func testVolumeHUDControlStaysAttachedWhenTheHostChanges() throws {
         let database = try TemporaryDatabase()
         let service = AudioService(databaseManager: database.manager)

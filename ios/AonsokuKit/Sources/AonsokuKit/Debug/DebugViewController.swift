@@ -36,7 +36,8 @@ public final class DebugViewController: UIViewController {
     }
 
     required public init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
+        dataProvider = DebugDataProvider(audioService: AppServices.shared.audio)
+        super.init(coder: coder)
     }
 
     public override func viewDidLoad() {
