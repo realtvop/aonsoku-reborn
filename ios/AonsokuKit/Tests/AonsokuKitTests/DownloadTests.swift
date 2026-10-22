@@ -250,6 +250,36 @@ final class DownloadTests: XCTestCase {
         XCTAssertEqual(manager.activeDownloadSongIds, [])
     }
 
+    func testSingleCancelDropsDeferredDownloadWhileItStarts() async throws {
+        let credentialsRequested = expectation(description: "credentials requested")
+        let releaseCredentials = DispatchSemaphore(value: 0)
+        let manager = NativeDownloadManager(
+            sessionFactory: { delegate in
+                URLSession(
+                    configuration: .ephemeral,
+                    delegate: delegate,
+                    delegateQueue: nil
+                )
+            },
+            credentialsProvider: {
+                credentialsRequested.fulfill()
+                releaseCredentials.wait()
+                return self.credentials
+            }
+        )
+
+        manager.cancelAll()
+        manager.download(songId: "new", requestId: "new-request")
+        await fulfillment(of: [credentialsRequested], timeout: 1)
+
+        manager.cancel(songId: "new")
+        releaseCredentials.signal()
+        for _ in 0 ..< 100 where manager.activeDownloadSongIds.isEmpty {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(manager.activeDownloadSongIds, [])
+    }
+
     func testCompletedDownloadMovesFileWritesMetadataAndNotifiesDelegate() throws {
         let database = try TemporaryDatabase()
         let cache = database.directory.appendingPathComponent("audio-cache")

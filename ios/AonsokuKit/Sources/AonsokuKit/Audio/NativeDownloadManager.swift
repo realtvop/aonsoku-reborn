@@ -30,6 +30,9 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
     /// Requests that began before a cancel-all operation must not create a
     /// task after that operation has already taken its URLSession snapshot.
     private var cancelAllGeneration: UInt64 = 0
+    /// Cancels requests that are still resolving credentials or moving out of
+    /// the cancel-all deferred queue, before they own a URLSession task.
+    private var songCancellationGenerations: [String: UInt64] = [:]
     private var deferredDownloads: [DownloadRequest] = []
     private var backgroundCompletionHandler: (() -> Void)?
     private let lock = NSLock()
@@ -87,12 +90,13 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
         maxBitRate: Int? = nil,
         format: String? = nil
     ) {
+        lock.lock()
         let request = DownloadRequest(
             context: DownloadTaskContext(songId: songId, requestId: requestId),
             maxBitRate: maxBitRate,
-            format: format
+            format: format,
+            songCancellationGeneration: songCancellationGenerations[songId, default: 0]
         )
-        lock.lock()
         if isCancellingAll {
             deferredDownloads.append(request)
             lock.unlock()
@@ -106,7 +110,7 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
     private func start(_ request: DownloadRequest, generation: UInt64) {
         let context = request.context
         guard let credentials = credentialsProvider() else {
-            guard isCurrent(generation: generation) else { return }
+            guard isCurrent(request, generation: generation) else { return }
             delegate?.downloadManager(
                 self,
                 didFail: context.songId,
@@ -121,7 +125,7 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
             maxBitRate: request.maxBitRate,
             format: request.format
         ) else {
-            guard isCurrent(generation: generation) else { return }
+            guard isCurrent(request, generation: generation) else { return }
             delegate?.downloadManager(
                 self,
                 didFail: context.songId,
@@ -133,7 +137,10 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
 
         let activeSession = session
         lock.lock()
-        guard !isCancellingAll, cancelAllGeneration == generation else {
+        guard !isCancellingAll,
+              cancelAllGeneration == generation,
+              songCancellationGenerations[context.songId, default: 0]
+              == request.songCancellationGeneration else {
             lock.unlock()
             return
         }
@@ -146,6 +153,7 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
 
     func cancel(songId: String) {
         lock.lock()
+        songCancellationGenerations[songId, default: 0] &+= 1
         let taskIds = Set(activeTasks.compactMap { taskId, context in
             context.songId == songId ? taskId : nil
         })
@@ -371,10 +379,16 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
             ?? Self.decode(task.taskDescription)
     }
 
-    private func isCurrent(generation: UInt64) -> Bool {
+    private func isCurrent(
+        _ request: DownloadRequest,
+        generation: UInt64
+    ) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        return !isCancellingAll && cancelAllGeneration == generation
+        return !isCancellingAll
+            && cancelAllGeneration == generation
+            && songCancellationGenerations[request.context.songId, default: 0]
+            == request.songCancellationGeneration
     }
 
     private static func encode(_ context: DownloadTaskContext) -> String {
@@ -405,4 +419,5 @@ private struct DownloadRequest {
     var context: DownloadTaskContext
     var maxBitRate: Int?
     var format: String?
+    var songCancellationGeneration: UInt64
 }
