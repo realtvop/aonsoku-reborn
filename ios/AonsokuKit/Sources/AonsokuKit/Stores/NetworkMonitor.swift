@@ -40,6 +40,7 @@ public final class NetworkMonitor {
     @ObservationIgnored private nonisolated let queue = DispatchQueue(
         label: "github.realtvop.aonsoku.network-monitor"
     )
+    @ObservationIgnored private let monitorsPaths: Bool
     @ObservationIgnored private var monitor: NWPathMonitor?
     @ObservationIgnored private var generation = UUID()
 
@@ -47,10 +48,24 @@ public final class NetworkMonitor {
         let sharedConnectivity = LockedConnectivity(isOnline: true, isMetered: false)
         self.sharedConnectivity = sharedConnectivity
         connectivity = sharedConnectivity
+        monitorsPaths = true
+    }
+
+    init(isOnline: Bool, isMetered: Bool) {
+        let sharedConnectivity = LockedConnectivity(
+            isOnline: isOnline,
+            isMetered: isMetered
+        )
+        self.sharedConnectivity = sharedConnectivity
+        connectivity = sharedConnectivity
+        self.isOnline = isOnline
+        isExpensive = isMetered
+        monitorsPaths = false
     }
 
     /// Starts monitoring. Calling it again has no effect.
     public func start() {
+        guard monitorsPaths else { return }
         guard monitor == nil else { return }
         let monitor = NWPathMonitor()
         let generation = UUID()

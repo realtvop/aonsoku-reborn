@@ -42,15 +42,34 @@ public final class AppModel {
 
     static let libraryOwnerStorageKey = "session.library-owner.v1"
 
-    public init(services: AppServices = .shared, bundle: Bundle = .main) {
+    public convenience init(services: AppServices = .shared, bundle: Bundle = .main) {
+        let api = LiveSubsonicAPI(
+            transport: AuthenticatedSubsonicTransport(
+                authentication: services.authentication
+            )
+        )
+        self.init(
+            services: services,
+            bundle: bundle,
+            network: NetworkMonitor(),
+            api: api,
+            sessionAuthenticationClient: nil
+        )
+    }
+
+    init(
+        services: AppServices,
+        bundle: Bundle,
+        network: NetworkMonitor,
+        api: any SubsonicAPI,
+        sessionAuthenticationClient: SessionAuthenticationClient?
+    ) {
         self.services = services
-        network = NetworkMonitor()
+        self.network = network
         toasts = ToastCenter()
         localizer = Localizer(bundle: bundle)
         settings = SettingsStore(preferences: services.preferences)
-        api = LiveSubsonicAPI(
-            transport: AuthenticatedSubsonicTransport(authentication: services.authentication)
-        )
+        self.api = api
         repository = LibraryRepository(
             api: api,
             library: services.library,
@@ -60,11 +79,20 @@ public final class AppModel {
             }
         )
         artwork = ArtworkProvider(library: services.library)
-        session = SessionStore(
-            authentication: services.authentication,
-            preferences: services.preferences,
-            api: api
-        )
+        if let sessionAuthenticationClient {
+            session = SessionStore(
+                authentication: services.authentication,
+                authenticationClient: sessionAuthenticationClient,
+                preferences: services.preferences,
+                api: api
+            )
+        } else {
+            session = SessionStore(
+                authentication: services.authentication,
+                preferences: services.preferences,
+                api: api
+            )
+        }
         sync = LibrarySyncStore(
             library: services.library,
             settings: settings,
@@ -148,6 +176,9 @@ public final class AppModel {
         username: String,
         password: String
     ) async throws {
+        if isActive {
+            signOut()
+        }
         try await session.signIn(
             serverUrl: serverUrl,
             fallbackUrl: fallbackUrl,
