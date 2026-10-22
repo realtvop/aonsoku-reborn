@@ -74,11 +74,15 @@ enum ImageCacheUtils {
     static func removeCoverImageFiles(
         in directory: URL,
         cacheId: String,
+        excluding preservedURL: URL? = nil,
         fileManager: FileManager = .default
     ) -> Bool {
         var deleted = false
         for ext in cachedImageExtensions {
             let url = directory.appendingPathComponent("\(cacheId).\(ext)")
+            if url.standardizedFileURL == preservedURL?.standardizedFileURL {
+                continue
+            }
             guard fileManager.fileExists(atPath: url.path) else { continue }
             do {
                 try fileManager.removeItem(at: url)

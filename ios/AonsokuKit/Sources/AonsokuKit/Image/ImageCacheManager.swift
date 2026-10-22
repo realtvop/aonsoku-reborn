@@ -12,33 +12,38 @@ enum ImageCacheNotification {
 final class ImageCacheManager: @unchecked Sendable {
     private let db: DatabasePool
     private let session: URLSession
+    private let credentialsProvider: @Sendable () -> ServerCredentials?
 
-    init(db: DatabasePool) {
-        self.db = db
+    convenience init(db: DatabasePool) {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 120
-        self.session = URLSession(configuration: config)
+        self.init(
+            db: db,
+            session: URLSession(configuration: config),
+            credentialsProvider: { KeychainManager.retrieve() }
+        )
+    }
+
+    init(
+        db: DatabasePool,
+        session: URLSession,
+        credentialsProvider: @escaping @Sendable () -> ServerCredentials?
+    ) {
+        self.db = db
+        self.session = session
+        self.credentialsProvider = credentialsProvider
     }
 
     // MARK: - Public API
 
     func downloadAvatar(username: String, size: String) async throws -> URL {
-        guard let credentials = KeychainManager.retrieve() else {
+        guard let credentials = credentialsProvider() else {
             throw ImageCacheError.noCredentials
         }
 
         let directory = try ImageCacheUtils.cacheDirectoryURL(createIfNeeded: true)
         let cacheId = ImageCacheUtils.cacheId(for: username)
-        // Remove existing file before downloading
-        let existingFiles = try FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: nil
-        ).filter { $0.lastPathComponent.hasPrefix("\(cacheId).") }
-        for file in existingFiles {
-            try? FileManager.default.removeItem(at: file)
-        }
-
         let url = try buildAvatarURL(credentials: credentials, username: username, size: size)
         let (data, response) = try await session.data(from: url)
 
@@ -70,18 +75,21 @@ final class ImageCacheManager: @unchecked Sendable {
 
         let repo = CacheMetaRepository(db: db)
         try repo.upsert(record)
+        removeCoverImageFiles(
+            cacheId: cacheId,
+            in: directory,
+            excluding: fileURL
+        )
 
         return fileURL
     }
 
     func downloadCoverImage(coverArtId: String, size: String) async throws -> URL {
-        guard let credentials = KeychainManager.retrieve() else {
+        guard let credentials = credentialsProvider() else {
             throw ImageCacheError.noCredentials
         }
 
         let directory = try ImageCacheUtils.cacheDirectoryURL(createIfNeeded: true)
-
-        removeCoverImageFiles(cacheId: ImageCacheUtils.cacheId(for: coverArtId), in: directory)
 
         let url = try buildCoverArtURL(credentials: credentials, coverArtId: coverArtId, size: size)
         let (data, response) = try await session.data(from: url)
@@ -114,6 +122,11 @@ final class ImageCacheManager: @unchecked Sendable {
 
         let repo = CacheMetaRepository(db: db)
         try repo.upsert(record)
+        removeCoverImageFiles(
+            cacheId: ImageCacheUtils.cacheId(for: coverArtId),
+            in: directory,
+            excluding: finalFileURL
+        )
         notifyCoverImageCached(coverArtId: coverArtId)
 
         return finalFileURL
@@ -124,8 +137,6 @@ final class ImageCacheManager: @unchecked Sendable {
         let ext = ImageCacheUtils.fileExtension(for: contentType)
         let fileName = "\(ImageCacheUtils.cacheId(for: coverArtId)).\(ext)"
         let fileURL = directory.appendingPathComponent(fileName, isDirectory: false)
-
-        removeCoverImageFiles(cacheId: ImageCacheUtils.cacheId(for: coverArtId), in: directory)
 
         try data.write(to: fileURL, options: [.atomic])
 
@@ -145,6 +156,11 @@ final class ImageCacheManager: @unchecked Sendable {
 
         let repo = CacheMetaRepository(db: db)
         try repo.upsert(record)
+        removeCoverImageFiles(
+            cacheId: ImageCacheUtils.cacheId(for: coverArtId),
+            in: directory,
+            excluding: fileURL
+        )
         notifyCoverImageCached(coverArtId: coverArtId)
 
         return fileURL
@@ -299,7 +315,15 @@ final class ImageCacheManager: @unchecked Sendable {
     }
 
     @discardableResult
-    private func removeCoverImageFiles(cacheId: String, in directory: URL) -> Bool {
-        ImageCacheUtils.removeCoverImageFiles(in: directory, cacheId: cacheId)
+    private func removeCoverImageFiles(
+        cacheId: String,
+        in directory: URL,
+        excluding preservedURL: URL? = nil
+    ) -> Bool {
+        ImageCacheUtils.removeCoverImageFiles(
+            in: directory,
+            cacheId: cacheId,
+            excluding: preservedURL
+        )
     }
 }

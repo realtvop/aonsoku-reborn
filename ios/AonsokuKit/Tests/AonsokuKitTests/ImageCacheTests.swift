@@ -51,4 +51,69 @@ final class ImageCacheTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: webp.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: unrelated.path))
     }
+
+    func testFailedCoverUpgradePreservesExistingFileAndMetadata() async throws {
+        let database = try TemporaryDatabase()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ImageCacheURLProtocolStub.self]
+        ImageCacheURLProtocolStub.error = URLError(.notConnectedToInternet)
+        let manager = ImageCacheManager(
+            db: database.manager.dbPool,
+            session: URLSession(configuration: configuration),
+            credentialsProvider: {
+                ServerCredentials(
+                    serverUrl: "https://music.test",
+                    username: "user",
+                    password: "password",
+                    authType: "password",
+                    protocolVersion: "1.16.1",
+                    serverType: "navidrome",
+                    fallbackUrl: nil
+                )
+            }
+        )
+        let coverArtId = "failed-upgrade-\(UUID().uuidString)"
+        let originalData = Data("original-cover".utf8)
+        let originalURL = try manager.storeCoverImage(
+            coverArtId: coverArtId,
+            data: originalData,
+            contentType: "image/png",
+            coverSize: "300"
+        )
+        defer { _ = try? manager.deleteCoverImage(coverArtId: coverArtId) }
+
+        do {
+            _ = try await manager.downloadCoverImage(
+                coverArtId: coverArtId,
+                size: "900"
+            )
+            XCTFail("Expected the upgrade download to fail")
+        } catch {}
+
+        XCTAssertEqual(manager.resolveCoverImage(coverArtId: coverArtId), originalURL)
+        XCTAssertEqual(try Data(contentsOf: originalURL), originalData)
+        let metadata = try CacheMetaRepository(
+            db: database.manager.dbPool
+        ).getByKey("cover:\(coverArtId)")
+        XCTAssertEqual(metadata?.coverSize, "300")
+        XCTAssertEqual(metadata?.sizeBytes, originalData.count)
+    }
+}
+
+private final class ImageCacheURLProtocolStub: URLProtocol {
+    static var error: Error?
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        client?.urlProtocol(
+            self,
+            didFailWithError: Self.error ?? URLError(.unknown)
+        )
+    }
+
+    override func stopLoading() {}
 }
