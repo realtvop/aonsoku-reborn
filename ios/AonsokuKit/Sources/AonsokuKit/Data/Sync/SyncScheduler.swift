@@ -41,8 +41,12 @@ public final class SyncScheduler {
             forTaskWithIdentifier: Self.bgTaskIdentifier,
             using: nil
         ) { task in
+            guard let refreshTask = task as? BGAppRefreshTask else {
+                task.setTaskCompleted(success: false)
+                return
+            }
             if let shared = Self.shared {
-                shared.handleBackgroundRefresh(task as! BGAppRefreshTask)
+                shared.handleBackgroundRefresh(refreshTask)
             } else {
                 let db = DatabaseManager.shared.dbPool
                 let httpClient = SubsonicHTTPClient()
@@ -54,17 +58,20 @@ public final class SyncScheduler {
                 try? BGTaskScheduler.shared.submit(request)
 
                 let syncTask = Task {
-                    syncEngine.syncAll(includeFullSongs: false, mode: "incremental")
+                    await syncEngine.syncAllAndWait(
+                        includeFullSongs: false,
+                        mode: "incremental"
+                    )
                 }
 
-                task.expirationHandler = {
+                refreshTask.expirationHandler = {
                     syncEngine.cancel()
                     syncTask.cancel()
                 }
 
                 Task {
-                    _ = await syncTask.value
-                    task.setTaskCompleted(success: true)
+                    let succeeded = await syncTask.value
+                    refreshTask.setTaskCompleted(success: succeeded)
                 }
             }
         }
@@ -80,7 +87,10 @@ public final class SyncScheduler {
         scheduleNextBackgroundRefresh()
 
         let syncTask = Task {
-            syncEngine.syncAll(includeFullSongs: false, mode: "incremental")
+            await syncEngine.syncAllAndWait(
+                includeFullSongs: false,
+                mode: "incremental"
+            )
         }
 
         task.expirationHandler = { [weak self] in
@@ -89,8 +99,8 @@ public final class SyncScheduler {
         }
 
         Task {
-            _ = await syncTask.value
-            task.setTaskCompleted(success: true)
+            let succeeded = await syncTask.value
+            task.setTaskCompleted(success: succeeded)
         }
     }
 

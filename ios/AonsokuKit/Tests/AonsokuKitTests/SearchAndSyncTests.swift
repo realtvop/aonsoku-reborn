@@ -118,6 +118,45 @@ final class SearchAndSyncTests: XCTestCase {
         )
     }
 
+    func testAwaitableSyncFinishesOnlyAfterTheUnderlyingRequest() async throws {
+        let database = try TemporaryDatabase()
+        let gate = SyncRequestGate()
+        let completed = LockedTestBox(false)
+        let engine = SyncEngine(
+            db: database.manager.dbPool,
+            httpClient: DelayedFailingSyncHTTPClient(gate: gate),
+            credentialsProvider: {
+                ServerCredentials(
+                    serverUrl: "https://music.test",
+                    username: "user",
+                    password: "password",
+                    authType: "password",
+                    protocolVersion: "1.16.1",
+                    serverType: "navidrome",
+                    fallbackUrl: nil
+                )
+            }
+        )
+
+        let sync = Task {
+            let result = await engine.syncAllAndWait(
+                includeFullSongs: false,
+                mode: "incremental"
+            )
+            completed.update { $0 = true }
+            return result
+        }
+        while !(await gate.hasStarted) {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertFalse(completed.read { $0 })
+
+        await gate.open()
+        let result = await sync.value
+        XCTAssertFalse(result)
+        XCTAssertTrue(completed.read { $0 })
+    }
+
     private func cacheRow(id: String, removed: Bool) -> CacheMetaRecord {
         CacheMetaRecord(
             key: "audio:\(id)",
@@ -142,6 +181,36 @@ private struct SearchSyncHTTPClient: LibrarySyncHTTPClient {
         extraQuery: [String: String],
         method: String
     ) async throws -> SubsonicResponse {
+        throw SubsonicAPIError.unsupported
+    }
+}
+
+private actor SyncRequestGate {
+    private(set) var hasStarted = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        hasStarted = true
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func open() {
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
+private struct DelayedFailingSyncHTTPClient: LibrarySyncHTTPClient {
+    let gate: SyncRequestGate
+
+    func request(
+        baseUrl: String,
+        path: String,
+        credentials: ServerCredentials,
+        extraQuery: [String: String],
+        method: String
+    ) async throws -> SubsonicResponse {
+        await gate.wait()
         throw SubsonicAPIError.unsupported
     }
 }

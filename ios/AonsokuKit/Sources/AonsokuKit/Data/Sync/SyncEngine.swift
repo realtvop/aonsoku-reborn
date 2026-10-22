@@ -58,7 +58,7 @@ final class SyncEngine {
     private let cachedCoverSize: @Sendable (String) -> String?
     private let downloadCover: @Sendable (String, String) async throws -> Void
 
-    private var currentTask: Task<Void, Never>?
+    private var currentTask: Task<Bool, Never>?
     private var generation: Int = 0
 
     private var syncStateTimer: Timer?
@@ -95,19 +95,46 @@ final class SyncEngine {
         mode: String = "full",
         coverArt: LibrarySyncOptions.CoverArt? = nil
     ) {
+        startSync(
+            includeFullSongs: includeFullSongs,
+            mode: mode,
+            coverArt: coverArt
+        )
+    }
+
+    func syncAllAndWait(
+        includeFullSongs: Bool = true,
+        mode: String = "full",
+        coverArt: LibrarySyncOptions.CoverArt? = nil
+    ) async -> Bool {
+        await startSync(
+            includeFullSongs: includeFullSongs,
+            mode: mode,
+            coverArt: coverArt
+        ).value
+    }
+
+    @discardableResult
+    private func startSync(
+        includeFullSongs: Bool,
+        mode: String,
+        coverArt: LibrarySyncOptions.CoverArt?
+    ) -> Task<Bool, Never> {
         let gen = generation + 1
         generation = gen
 
         currentTask?.cancel()
-        currentTask = Task { [weak self] in
-            guard let self else { return }
-            await self.performSync(
+        let task = Task { [weak self] in
+            guard let self else { return false }
+            return await self.performSync(
                 generation: gen,
                 includeFullSongs: includeFullSongs,
                 mode: mode,
                 coverArt: coverArt
             )
         }
+        currentTask = task
+        return task
     }
 
     func syncIncremental() {
@@ -131,7 +158,7 @@ final class SyncEngine {
         includeFullSongs: Bool,
         mode: String,
         coverArt: LibrarySyncOptions.CoverArt?
-    ) async {
+    ) async -> Bool {
         guard let credentials = credentialsProvider() else {
             emitState(
                 phase: "error",
@@ -142,7 +169,7 @@ final class SyncEngine {
             )
             forceFlushSyncState()
             if self.generation == generation { currentTask = nil }
-            return
+            return false
         }
 
         emitState(phase: "idle", tier: nil, processed: 0, total: 0)
@@ -175,6 +202,8 @@ final class SyncEngine {
             try? syncStateRepo.recordFullSync()
             emitState(phase: "done", tier: nil, processed: 0, total: 0)
             forceFlushSyncState()
+            if self.generation == generation { currentTask = nil }
+            return true
         } catch is CancellationError {
             emitState(phase: "cancelled", tier: nil, processed: 0, total: 0)
             forceFlushSyncState()
@@ -193,6 +222,7 @@ final class SyncEngine {
         if self.generation == generation {
             currentTask = nil
         }
+        return false
     }
 
     // MARK: - Cover Art
