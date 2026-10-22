@@ -220,25 +220,25 @@ final class SyncEngine {
                 try await runT1(credentials: credentials)
             }
             try Task.checkCancellation()
-            guard self.generation == generation else { throw CancellationError() }
+            guard isCurrentGeneration(generation) else { throw CancellationError() }
 
             if !shouldSkipTier(.t2, mode: mode) {
                 try await runT2(credentials: credentials)
             }
             try Task.checkCancellation()
-            guard self.generation == generation else { throw CancellationError() }
+            guard isCurrentGeneration(generation) else { throw CancellationError() }
 
             if includeFullSongs && !shouldSkipTier(.t3, mode: mode) {
                 try await runT3(credentials: credentials)
             }
             try Task.checkCancellation()
-            guard self.generation == generation else { throw CancellationError() }
+            guard isCurrentGeneration(generation) else { throw CancellationError() }
 
             if let coverArt {
                 try await runCoverArt(options: coverArt, serverType: credentials.serverType)
             }
             try Task.checkCancellation()
-            guard self.generation == generation else { throw CancellationError() }
+            guard isCurrentGeneration(generation) else { throw CancellationError() }
 
             try? syncStateRepo.recordFullSync()
             emitState(phase: "done", tier: nil, processed: 0, total: 0)
