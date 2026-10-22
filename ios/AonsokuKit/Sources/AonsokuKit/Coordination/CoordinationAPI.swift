@@ -125,7 +125,12 @@ protocol CoordinationAPIClient: AnyObject, Sendable {
 protocol CoordinationTokenStoring: AnyObject, Sendable {
     func loadTokens() -> CoordinationTokens?
     func saveTokens(_ tokens: CoordinationTokens)
+    func replaceTokens(
+        _ tokens: CoordinationTokens,
+        ifCurrentMatches expected: CoordinationTokens
+    ) -> Bool
     func clearTokens()
+    func clearTokens(ifCurrentMatches expected: CoordinationTokens) -> Bool
     func loadConfig() -> CoordinationConfig?
     func saveConfig(_ config: CoordinationConfig)
 }

@@ -33,8 +33,6 @@ final class CoordinationKeychainTokenStore: CoordinationTokenStoring, @unchecked
     }
 
     private func keychainGet(_ key: String) -> String? {
-        lock.lock()
-        defer { lock.unlock() }
         if let access = keychainAccess {
             return access.get(key)
         }
@@ -42,8 +40,6 @@ final class CoordinationKeychainTokenStore: CoordinationTokenStoring, @unchecked
     }
 
     private func keychainSet(_ key: String, _ value: String) {
-        lock.lock()
-        defer { lock.unlock() }
         if let access = keychainAccess {
             access.set(key, value)
         } else {
@@ -52,8 +48,6 @@ final class CoordinationKeychainTokenStore: CoordinationTokenStoring, @unchecked
     }
 
     private func keychainDelete(_ key: String) {
-        lock.lock()
-        defer { lock.unlock() }
         if let access = keychainAccess {
             access.delete(key)
         } else {
@@ -62,6 +56,10 @@ final class CoordinationKeychainTokenStore: CoordinationTokenStoring, @unchecked
     }
 
     func loadTokens() -> CoordinationTokens? {
+        lock.withLock { loadTokensLocked() }
+    }
+
+    private func loadTokensLocked() -> CoordinationTokens? {
         guard let accessToken = keychainGet("coord_access_token"),
               let refreshToken = keychainGet("coord_refresh_token"),
               let deviceId = keychainGet("coord_device_id"),
@@ -86,6 +84,10 @@ final class CoordinationKeychainTokenStore: CoordinationTokenStoring, @unchecked
     }
 
     func saveTokens(_ tokens: CoordinationTokens) {
+        lock.withLock { saveTokensLocked(tokens) }
+    }
+
+    private func saveTokensLocked(_ tokens: CoordinationTokens) {
         keychainSet("coord_access_token", tokens.accessToken)
         keychainSet("coord_refresh_token", tokens.refreshToken)
         keychainSet("coord_access_token_expires_at", String(tokens.accessTokenExpiresAt))
@@ -94,13 +96,36 @@ final class CoordinationKeychainTokenStore: CoordinationTokenStoring, @unchecked
         keychainSet("coord_history_limit", String(tokens.historyLimit))
     }
 
+    func replaceTokens(
+        _ tokens: CoordinationTokens,
+        ifCurrentMatches expected: CoordinationTokens
+    ) -> Bool {
+        lock.withLock {
+            guard loadTokensLocked() == expected else { return false }
+            saveTokensLocked(tokens)
+            return true
+        }
+    }
+
     func clearTokens() {
+        lock.withLock { clearTokensLocked() }
+    }
+
+    private func clearTokensLocked() {
         keychainDelete("coord_access_token")
         keychainDelete("coord_refresh_token")
         keychainDelete("coord_access_token_expires_at")
         keychainDelete("coord_device_id")
         keychainDelete("coord_account_id")
         keychainDelete("coord_history_limit")
+    }
+
+    func clearTokens(ifCurrentMatches expected: CoordinationTokens) -> Bool {
+        lock.withLock {
+            guard loadTokensLocked() == expected else { return false }
+            clearTokensLocked()
+            return true
+        }
     }
 
     func loadConfig() -> CoordinationConfig? {

@@ -312,6 +312,60 @@ final class CoordinationHTTPClientTests: XCTestCase {
         XCTAssertEqual(requests[0].url?.path, "/v1/auth/token")
     }
 
+    func testStaleRefreshCannotReplaceNewAccountTokens() async throws {
+        let now = Date(timeIntervalSince1970: 1700000000)
+        let oldTokens = CoordinationTokens(
+            deviceId: "old-device",
+            accountId: "old-account",
+            accessToken: "old-access",
+            refreshToken: "old-refresh",
+            accessTokenExpiresAt: now.timeIntervalSince1970 * 1000,
+            historyLimit: 100
+        )
+        let newTokens = CoordinationTokens(
+            deviceId: "new-device",
+            accountId: "new-account",
+            accessToken: "new-access",
+            refreshToken: "new-refresh",
+            accessTokenExpiresAt: now.addingTimeInterval(3600).timeIntervalSince1970 * 1000,
+            historyLimit: 200
+        )
+        tokenStore.saveTokens(oldTokens)
+        let refreshStarted = expectation(description: "refresh started")
+        let gate = AsyncGate()
+        let responseData = try JSONSerialization.data(withJSONObject: [
+            "accessToken": "stale-access",
+            "refreshToken": "stale-refresh",
+            "expiresIn": 3600,
+        ])
+        let testClient = CoordinationHTTPClient(
+            baseURL: "https://coordination.example.com",
+            tokenStore: tokenStore,
+            recoveryProof: { nil },
+            transport: { request in
+                refreshStarted.fulfill()
+                await gate.wait()
+                return (responseData, HTTPURLResponse(
+                    url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+                )!)
+            },
+            now: { now }
+        )
+
+        let request = Task { try await testClient.listDevices() }
+        await fulfillment(of: [refreshStarted], timeout: 1)
+        tokenStore.saveTokens(newTokens)
+        await gate.open()
+
+        do {
+            _ = try await request.value
+            XCTFail("stale refresh should fail")
+        } catch let error as CoordinationError {
+            XCTAssertEqual(error.code, CoordinationErrorCode.notConnected)
+        }
+        XCTAssertEqual(tokenStore.loadTokens(), newTokens)
+    }
+
     // MARK: - Device Revoked
 
     func testDeviceRevokedClearsTokens() async throws {
@@ -341,6 +395,59 @@ final class CoordinationHTTPClientTests: XCTestCase {
         }
 
         XCTAssertNil(tokenStore.loadTokens())
+    }
+
+    func testStaleRevocationCannotClearNewAccountTokens() async throws {
+        let now = Date(timeIntervalSince1970: 1700000000)
+        let oldTokens = CoordinationTokens(
+            deviceId: "old-device",
+            accountId: "old-account",
+            accessToken: "old-access",
+            refreshToken: "old-refresh",
+            accessTokenExpiresAt: now.timeIntervalSince1970 * 1000,
+            historyLimit: 100
+        )
+        let newTokens = CoordinationTokens(
+            deviceId: "new-device",
+            accountId: "new-account",
+            accessToken: "new-access",
+            refreshToken: "new-refresh",
+            accessTokenExpiresAt: now.addingTimeInterval(3600).timeIntervalSince1970 * 1000,
+            historyLimit: 200
+        )
+        tokenStore.saveTokens(oldTokens)
+        let refreshStarted = expectation(description: "refresh started")
+        let gate = AsyncGate()
+        let responseData = try JSONSerialization.data(withJSONObject: [
+            "code": "device_revoked",
+            "reason": "old device was revoked",
+        ])
+        let testClient = CoordinationHTTPClient(
+            baseURL: "https://coordination.example.com",
+            tokenStore: tokenStore,
+            recoveryProof: { nil },
+            transport: { request in
+                refreshStarted.fulfill()
+                await gate.wait()
+                return (responseData, HTTPURLResponse(
+                    url: request.url!, statusCode: 403, httpVersion: nil, headerFields: nil
+                )!)
+            },
+            now: { now }
+        )
+
+        let request = Task { try await testClient.listDevices() }
+        await fulfillment(of: [refreshStarted], timeout: 1)
+        tokenStore.saveTokens(newTokens)
+        await gate.open()
+
+        do {
+            _ = try await request.value
+            XCTFail("revoked refresh should fail")
+        } catch let error as CoordinationError {
+            XCTAssertEqual(error.code, CoordinationErrorCode.deviceRevoked)
+        }
+        XCTAssertEqual(tokenStore.loadTokens(), newTokens)
     }
 
     // MARK: - Authentication Failed Recovery
@@ -755,7 +862,24 @@ fileprivate final class InMemoryTokenStore: CoordinationTokenStoring, @unchecked
 
     func loadTokens() -> CoordinationTokens? { lock.withLock { tokens } }
     func saveTokens(_ tokens: CoordinationTokens) { lock.withLock { self.tokens = tokens } }
+    func replaceTokens(
+        _ tokens: CoordinationTokens,
+        ifCurrentMatches expected: CoordinationTokens
+    ) -> Bool {
+        lock.withLock {
+            guard self.tokens == expected else { return false }
+            self.tokens = tokens
+            return true
+        }
+    }
     func clearTokens() { lock.withLock { tokens = nil } }
+    func clearTokens(ifCurrentMatches expected: CoordinationTokens) -> Bool {
+        lock.withLock {
+            guard tokens == expected else { return false }
+            tokens = nil
+            return true
+        }
+    }
     func loadConfig() -> CoordinationConfig? { lock.withLock { config } }
     func saveConfig(_ config: CoordinationConfig) { lock.withLock { self.config = config } }
 }
@@ -767,6 +891,25 @@ fileprivate final class LockedCounter: @unchecked Sendable {
     var value: Int { lock.withLock { count } }
 
     func increment() { lock.withLock { count += 1 } }
+}
+
+fileprivate actor AsyncGate {
+    private var isOpen = false
+    private var continuations: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { continuations.append($0) }
+    }
+
+    func open() {
+        isOpen = true
+        let waiting = continuations
+        continuations.removeAll()
+        for continuation in waiting {
+            continuation.resume()
+        }
+    }
 }
 
 fileprivate class FakeTransport {

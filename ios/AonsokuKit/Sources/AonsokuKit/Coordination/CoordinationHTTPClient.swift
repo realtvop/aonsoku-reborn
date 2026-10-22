@@ -186,20 +186,20 @@ final class CoordinationHTTPClient: CoordinationAPIClient, @unchecked Sendable {
 
         do {
             let response: TokenRefreshResponse = try await performTokenRefreshRequest(request, requireAuth: false)
-            try await applyTokenRefreshResponse(response, existingTokens: tokens)
+            try applyTokenRefreshResponse(response, existingTokens: tokens)
         } catch let error as CoordinationError {
             if error.code == CoordinationErrorCode.deviceRevoked {
-                tokenStore.clearTokens()
+                _ = tokenStore.clearTokens(ifCurrentMatches: tokens)
                 throw error
             } else if error.code == CoordinationErrorCode.authenticationFailed {
-                try await recoverTokens(deviceId: tokens.deviceId, refreshToken: tokens.refreshToken)
+                try await recoverTokens(existingTokens: tokens)
             } else {
                 throw error
             }
         }
     }
 
-    private func recoverTokens(deviceId: String, refreshToken: String) async throws {
+    private func recoverTokens(existingTokens: CoordinationTokens) async throws {
         guard let proof = recoveryProof() else {
             throw CoordinationError(
                 code: CoordinationErrorCode.authenticationFailed,
@@ -221,8 +221,8 @@ final class CoordinationHTTPClient: CoordinationAPIClient, @unchecked Sendable {
             )
 
             let tokenRequest = TokenRefreshRequest(
-                deviceId: deviceId,
-                refreshToken: refreshToken,
+                deviceId: existingTokens.deviceId,
+                refreshToken: existingTokens.refreshToken,
                 challengeId: challenge.challengeId,
                 identityUrl: proof.identityUrl,
                 username: proof.username,
@@ -237,13 +237,10 @@ final class CoordinationHTTPClient: CoordinationAPIClient, @unchecked Sendable {
                 requireAuth: false
             )
 
-            guard let tokens = tokenStore.loadTokens() else {
-                throw CoordinationError(code: CoordinationErrorCode.internal)
-            }
-            try await applyTokenRefreshResponse(response, existingTokens: tokens)
+            try applyTokenRefreshResponse(response, existingTokens: existingTokens)
         } catch let error as CoordinationError {
             if error.code == CoordinationErrorCode.deviceRevoked {
-                tokenStore.clearTokens()
+                _ = tokenStore.clearTokens(ifCurrentMatches: existingTokens)
             }
             throw error
         }
@@ -265,7 +262,7 @@ final class CoordinationHTTPClient: CoordinationAPIClient, @unchecked Sendable {
     private func applyTokenRefreshResponse(
         _ response: TokenRefreshResponse,
         existingTokens: CoordinationTokens
-    ) async throws {
+    ) throws {
         let updatedTokens = CoordinationTokens(
             deviceId: existingTokens.deviceId,
             accountId: existingTokens.accountId,
@@ -274,7 +271,12 @@ final class CoordinationHTTPClient: CoordinationAPIClient, @unchecked Sendable {
             accessTokenExpiresAt: nowMs() + Double(response.expiresIn) * 1000,
             historyLimit: existingTokens.historyLimit
         )
-        tokenStore.saveTokens(updatedTokens)
+        guard tokenStore.replaceTokens(
+            updatedTokens,
+            ifCurrentMatches: existingTokens
+        ) else {
+            throw CoordinationError(code: CoordinationErrorCode.notConnected)
+        }
     }
 
     // MARK: - CoordinationAPIClient

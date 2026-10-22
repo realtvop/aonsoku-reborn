@@ -629,12 +629,40 @@ private final class EventRecorder: @unchecked Sendable {
 }
 
 private final class TestTokenStore: CoordinationTokenStoring, @unchecked Sendable {
-    var tokens: CoordinationTokens?
-    var config: CoordinationConfig?
+    private let lock = NSLock()
+    private var storedTokens: CoordinationTokens?
+    private var storedConfig: CoordinationConfig?
+
+    var tokens: CoordinationTokens? {
+        get { lock.withLock { storedTokens } }
+        set { lock.withLock { storedTokens = newValue } }
+    }
+
+    var config: CoordinationConfig? {
+        get { lock.withLock { storedConfig } }
+        set { lock.withLock { storedConfig = newValue } }
+    }
 
     func loadTokens() -> CoordinationTokens? { tokens }
     func saveTokens(_ tokens: CoordinationTokens) { self.tokens = tokens }
+    func replaceTokens(
+        _ tokens: CoordinationTokens,
+        ifCurrentMatches expected: CoordinationTokens
+    ) -> Bool {
+        lock.withLock {
+            guard storedTokens == expected else { return false }
+            storedTokens = tokens
+            return true
+        }
+    }
     func clearTokens() { tokens = nil }
+    func clearTokens(ifCurrentMatches expected: CoordinationTokens) -> Bool {
+        lock.withLock {
+            guard storedTokens == expected else { return false }
+            storedTokens = nil
+            return true
+        }
+    }
     func loadConfig() -> CoordinationConfig? { config }
     func saveConfig(_ config: CoordinationConfig) { self.config = config }
 }
