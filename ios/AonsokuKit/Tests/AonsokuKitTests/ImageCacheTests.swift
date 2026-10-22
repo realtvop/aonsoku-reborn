@@ -336,6 +336,49 @@ final class ImageCacheTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: url), Data("retained-cover".utf8))
         XCTAssertEqual(manager.resolveCoverImage(coverArtId: retainedId), url)
     }
+
+    func testDownloadRejectsPublicationCapturedBeforeRequestWasQueued() async throws {
+        let database = try TemporaryDatabase()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ImageCacheURLProtocolStub.self]
+        let coverArtId = "queued-download-\(UUID().uuidString)"
+        let manager = ImageCacheManager(
+            db: database.manager.dbPool,
+            session: URLSession(configuration: configuration),
+            credentialsProvider: {
+                ServerCredentials(
+                    serverUrl: "https://old-account.test",
+                    username: "old-user",
+                    password: "old-password",
+                    authType: "password",
+                    protocolVersion: "1.16.1",
+                    serverType: "navidrome",
+                    fallbackUrl: nil
+                )
+            }
+        )
+        ImageCacheURLProtocolStub.handler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "image/png"]
+            )!
+            return (response, Data("old-account-cover".utf8))
+        }
+        let publication = manager.publicationToken(for: coverArtId)
+        _ = try manager.clearCoverImages()
+
+        do {
+            _ = try await manager.downloadCoverImage(
+                coverArtId: coverArtId,
+                size: "800",
+                expectedPublication: publication
+            )
+            XCTFail("Expected the queued download to be cancelled")
+        } catch is CancellationError {}
+        XCTAssertNil(manager.resolveCoverImage(coverArtId: coverArtId))
+    }
 }
 
 private final class ImageCacheURLProtocolStub: URLProtocol {

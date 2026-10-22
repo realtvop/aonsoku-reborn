@@ -2227,14 +2227,23 @@ public final class AudioService: NSObject, @unchecked Sendable {
            let queryItems = components.queryItems {
             coverArtId = coverArtId ?? queryItems.first(where: { $0.name == "id" })?.value
         }
+        let imageCache: ImageCacheManager?
+        let publication: ImageCachePublicationToken?
+        if let coverArtId, !coverArtId.isEmpty {
+            let cache = ImageCacheManager(db: databaseManager.dbPool)
+            imageCache = cache
+            publication = cache.publicationToken(for: coverArtId)
+        } else {
+            imageCache = nil
+            publication = nil
+        }
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
 
-            let imageCache: ImageCacheManager?
-            let publication: ImageCachePublicationToken?
-            if let coverArtId, !coverArtId.isEmpty {
-                let cache = ImageCacheManager(db: self.databaseManager.dbPool)
+            if let coverArtId, !coverArtId.isEmpty,
+               let imageCache, let publication {
+                let cache = imageCache
                 if let localURL = cache.resolveCoverImage(coverArtId: coverArtId),
                    let data = try? Data(contentsOf: localURL),
                    let image = UIImage(data: data) {
@@ -2247,7 +2256,8 @@ public final class AudioService: NSObject, @unchecked Sendable {
                         do {
                             _ = try await cache.downloadCoverImage(
                                 coverArtId: coverArtId,
-                                size: "800"
+                                size: "800",
+                                expectedPublication: publication
                             )
                         } catch {
                             NativeLogger.shared.warn(
@@ -2258,11 +2268,6 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     }
                     return
                 }
-                imageCache = cache
-                publication = cache.publicationToken(for: coverArtId)
-            } else {
-                imageCache = nil
-                publication = nil
             }
 
             guard let url = URL(string: urlString) else { return }

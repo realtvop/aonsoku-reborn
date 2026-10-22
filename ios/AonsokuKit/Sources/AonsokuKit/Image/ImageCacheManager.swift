@@ -66,8 +66,12 @@ final class ImageCacheManager: @unchecked Sendable {
         .url
     }
 
-    func downloadCoverImage(coverArtId: String, size: String) async throws -> URL {
-        let expectedPublication = publicationToken(for: coverArtId)
+    func downloadCoverImage(
+        coverArtId: String,
+        size: String,
+        expectedPublication: ImageCachePublicationToken? = nil
+    ) async throws -> URL {
+        let requestPublication = expectedPublication ?? publicationToken(for: coverArtId)
         guard let credentials = credentialsProvider() else {
             throw ImageCacheError.noCredentials
         }
@@ -89,7 +93,7 @@ final class ImageCacheManager: @unchecked Sendable {
             contentType: contentType,
             coverSize: size,
             directory: directory,
-            expectedPublication: expectedPublication
+            expectedPublication: requestPublication
         )
         if publication.didWrite {
             notifyCoverImageCached(coverArtId: coverArtId)
