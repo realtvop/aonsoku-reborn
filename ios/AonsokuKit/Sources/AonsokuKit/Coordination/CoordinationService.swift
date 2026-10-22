@@ -374,7 +374,8 @@ public final class CoordinationService: @unchecked Sendable {
                     deviceId: deviceId,
                     capabilities: CoordinationCapabilities.all,
                     protocolVersion: 1,
-                    lastSeq: transport.lastSeq
+                    lastSeq: transport.lastSeq,
+                    connectionId: generation
                 )
             }
         } catch let error as CoordinationError {
@@ -711,8 +712,8 @@ public final class CoordinationService: @unchecked Sendable {
     }
 
     private func setupRealtimeCallbacks() {
-        transport.onStateChange = { [weak self] state in
-            self?.handleRealtimeStateChange(state)
+        transport.onStateChange = { [weak self] state, connectionId in
+            self?.handleRealtimeStateChange(state, connectionId: connectionId)
         }
 
         transport.onReconnectNeeded = { [weak self] _ in
@@ -732,7 +733,14 @@ public final class CoordinationService: @unchecked Sendable {
         }
     }
 
-    private func handleRealtimeStateChange(_ stateStr: String) {
+    private func handleRealtimeStateChange(
+        _ stateStr: String,
+        connectionId: UInt64
+    ) {
+        guard lock.withLock({
+            reconnectGeneration == connectionId && !manualDisconnect
+        }) else { return }
+
         let connectionState: CoordinationConnectionState
         switch stateStr {
         case "connecting": connectionState = .connecting
@@ -741,9 +749,6 @@ public final class CoordinationService: @unchecked Sendable {
             update { $0.lastError = nil }
         case "reconnecting": connectionState = .reconnecting
         case "disconnected", "interrupted":
-            if lock.withLock({ manualDisconnect }) {
-                return
-            }
             connectionState = .disconnected
         default: return
         }

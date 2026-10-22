@@ -3,7 +3,7 @@ import AVFoundation
 import UIKit
 
 protocol CoordinationRealtimeTransport: AnyObject {
-    var onStateChange: ((String) -> Void)? { get set }
+    var onStateChange: ((String, UInt64) -> Void)? { get set }
     var onEnvelope: ((String) -> Void)? { get set }
     var onCommandAck: ((String, String) -> Void)? { get set }
     var onReconnectNeeded: ((Int) -> Void)? { get set }
@@ -15,7 +15,8 @@ protocol CoordinationRealtimeTransport: AnyObject {
         deviceId: String,
         capabilities: Int,
         protocolVersion: Int,
-        lastSeq: Int
+        lastSeq: Int,
+        connectionId: UInt64
     ) throws
 
     func disconnect()
@@ -108,7 +109,7 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
 
     /// Called when the connection state changes (connecting, connected, disconnected, etc).
     /// Invoked on the main thread with the state string.
-    var onStateChange: ((String) -> Void)?
+    var onStateChange: ((String, UInt64) -> Void)?
 
     /// Called when an envelope is received or sent.
     /// Invoked on the main thread with the raw envelope JSON string.
@@ -317,6 +318,7 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
     private var session: URLSession?
     private var reconnectAttempts = 0
     private var isConnecting = false
+    private var connectionId: UInt64 = 0
     /// True after an explicit `disconnect()`. Prevents the auto-reconnect path
     /// from firing for a user-initiated close.
     private var manualDisconnect = false
@@ -375,11 +377,13 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
         deviceId: String,
         capabilities: Int,
         protocolVersion: Int,
-        lastSeq: Int
+        lastSeq: Int,
+        connectionId: UInt64
     ) throws {
         // Do not create a second socket when lifecycle validation finds the
         // existing connection healthy.
         if let task = self.webSocketTask, !self.isConnecting, task.state == .running {
+            self.connectionId = connectionId
             return
         }
 
@@ -392,6 +396,7 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
         let savedReconnectAttempts = self.reconnectAttempts
         self.disconnectInternal()
         self.reconnectAttempts = savedReconnectAttempts
+        self.connectionId = connectionId
         self.deviceId = deviceId
         self.currentTicket = ticket
         self.capabilities = capabilities
@@ -1252,8 +1257,9 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
     }
 
     private func notifyState(_ state: String) {
+        let connectionId = connectionId
         DispatchQueue.main.async {
-            self.onStateChange?(state)
+            self.onStateChange?(state, connectionId)
         }
     }
 }

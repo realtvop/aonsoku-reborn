@@ -356,6 +356,30 @@ final class CoordinationServiceTests: XCTestCase {
         XCTAssertEqual(service.state.connectionState, .connected)
     }
 
+    func testStaleSocketStateDoesNotOverwriteTheCurrentConnection() async {
+        tokenStore.config = config
+        tokenStore.tokens = registeredTokens()
+        service.start()
+        await waitUntil { self.transport.connectCallCount == 1 }
+        guard let oldConnectionId = transport.connectionIds.first else {
+            return XCTFail("expected the first connection id")
+        }
+
+        await service.reconnect()
+        XCTAssertEqual(transport.connectCallCount, 2)
+        guard let currentConnectionId = transport.connectionIds.last else {
+            return XCTFail("expected the current connection id")
+        }
+        XCTAssertNotEqual(oldConnectionId, currentConnectionId)
+        XCTAssertEqual(service.state.connectionState, .connected)
+
+        transport.simulateState("disconnected", connectionId: oldConnectionId)
+        XCTAssertEqual(service.state.connectionState, .connected)
+
+        transport.simulateState("disconnected", connectionId: currentConnectionId)
+        XCTAssertEqual(service.state.connectionState, .disconnected)
+    }
+
     func testDisconnectPreservesRegistrationAndTokens() {
         let tokens = registeredTokens()
         tokenStore.tokens = tokens
@@ -718,7 +742,7 @@ private final class FakeRealtimeTransport: CoordinationRealtimeTransport, @unche
         let messageId: String?
     }
 
-    var onStateChange: ((String) -> Void)?
+    var onStateChange: ((String, UInt64) -> Void)?
     var onEnvelope: ((String) -> Void)?
     var onCommandAck: ((String, String) -> Void)?
     var onReconnectNeeded: ((Int) -> Void)?
@@ -731,6 +755,7 @@ private final class FakeRealtimeTransport: CoordinationRealtimeTransport, @unche
     var lastCapabilities: Int?
     var lastProtocolVersion: Int?
     var lastConnectSeq: Int?
+    var connectionIds: [UInt64] = []
     var disconnectCount = 0
     var scheduleReconnectCount = 0
     var resetSequenceCount = 0
@@ -753,7 +778,8 @@ private final class FakeRealtimeTransport: CoordinationRealtimeTransport, @unche
         deviceId: String,
         capabilities: Int,
         protocolVersion: Int,
-        lastSeq: Int
+        lastSeq: Int,
+        connectionId: UInt64
     ) throws {
         XCTAssertTrue(Thread.isMainThread)
         connectCallCount += 1
@@ -763,12 +789,15 @@ private final class FakeRealtimeTransport: CoordinationRealtimeTransport, @unche
         lastCapabilities = capabilities
         lastProtocolVersion = protocolVersion
         lastConnectSeq = lastSeq
-        onStateChange?("connected")
+        connectionIds.append(connectionId)
+        onStateChange?("connected", connectionId)
     }
 
     func disconnect() {
         disconnectCount += 1
-        onStateChange?("disconnected")
+        if let connectionId = connectionIds.last {
+            onStateChange?("disconnected", connectionId)
+        }
     }
 
     func scheduleReconnect() {
@@ -840,6 +869,10 @@ private final class FakeRealtimeTransport: CoordinationRealtimeTransport, @unche
 
     func simulateEnvelope(_ json: String) {
         onEnvelope?(json)
+    }
+
+    func simulateState(_ state: String, connectionId: UInt64) {
+        onStateChange?(state, connectionId)
     }
 }
 
