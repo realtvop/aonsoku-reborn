@@ -532,7 +532,11 @@ private final class DownloadsFixture {
             dbManager: database.manager,
             credentialsProvider: { nil }
         )
-        audio = AudioService(databaseManager: database.manager)
+        audio = AudioService(
+            databaseManager: database.manager,
+            scrobbleBuffer: makeIsolatedScrobbleBuffer(),
+            scrobbleSubmitter: makeIsolatedScrobbleSubmitter()
+        )
         preferences = PreferencesService(db: database.manager.dbPool)
         settings = SettingsStore(preferences: preferences)
         repository = LibraryRepository(

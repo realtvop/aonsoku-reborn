@@ -286,6 +286,22 @@ final class LockedTestBox<Value>: @unchecked Sendable {
     }
 }
 
+func makeIsolatedScrobbleBuffer() -> NativeScrobbleBuffer {
+    NativeScrobbleBuffer(store: IsolatedScrobbleEntryStore())
+}
+
+func makeIsolatedScrobbleSubmitter() -> NativeScrobbleSubmitter {
+    NativeScrobbleSubmitter(
+        credentialsProvider: { nil },
+        request: { _, _, _, _ in false }
+    )
+}
+
+private final class IsolatedScrobbleEntryStore: ScrobbleEntryStore {
+    func load() -> [ScrobbleEntry] { [] }
+    func save(_: [ScrobbleEntry]) {}
+}
+
 // MARK: - Data Conversion Helpers (from removed AonsokuNativeDataPlugin)
 
 func pageDictionary<T: Encodable & Sendable>(_ page: LibraryPage<T>) -> [String: Any] {

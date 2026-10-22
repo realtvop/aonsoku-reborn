@@ -231,7 +231,8 @@ final class ScrobbleTests: XCTestCase {
         )
         let service = AudioService(
             databaseManager: database.manager,
-            scrobbleBuffer: buffer
+            scrobbleBuffer: buffer,
+            scrobbleSubmitter: makeIsolatedScrobbleSubmitter()
         )
         let ended = expectation(description: "queue exhaustion published")
         let token = service.subscribe { event in

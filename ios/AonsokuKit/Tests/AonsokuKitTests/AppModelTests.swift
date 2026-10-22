@@ -72,13 +72,8 @@ private final class AppModelFixture {
         let services = AppServices(
             audio: AudioService(
                 databaseManager: database.manager,
-                scrobbleBuffer: NativeScrobbleBuffer(
-                    store: EmptyScrobbleEntryStore()
-                ),
-                scrobbleSubmitter: NativeScrobbleSubmitter(
-                    credentialsProvider: { nil },
-                    request: { _, _, _, _ in false }
-                )
+                scrobbleBuffer: makeIsolatedScrobbleBuffer(),
+                scrobbleSubmitter: makeIsolatedScrobbleSubmitter()
             ),
             library: LibraryService(dbManager: database.manager),
             preferences: preferences,
@@ -136,9 +131,4 @@ private final class EmptyCoordinationTokenStore: CoordinationTokenStoring,
     func clearTokens(ifCurrentMatches _: CoordinationTokens) -> Bool { false }
     func loadConfig() -> CoordinationConfig? { nil }
     func saveConfig(_: CoordinationConfig) {}
-}
-
-private final class EmptyScrobbleEntryStore: ScrobbleEntryStore {
-    func load() -> [ScrobbleEntry] { [] }
-    func save(_: [ScrobbleEntry]) {}
 }

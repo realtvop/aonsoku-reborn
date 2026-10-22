@@ -47,7 +47,11 @@ final class LegacyQueueMigrationTests: XCTestCase {
             )
         }
 
-        let service = AudioService(databaseManager: database.manager)
+        let service = AudioService(
+            databaseManager: database.manager,
+            scrobbleBuffer: makeIsolatedScrobbleBuffer(),
+            scrobbleSubmitter: makeIsolatedScrobbleSubmitter()
+        )
         let started = expectation(description: "service restored legacy queue")
         service.start()
         DispatchQueue.main.async { started.fulfill() }

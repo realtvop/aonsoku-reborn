@@ -88,7 +88,11 @@ final class PlaybackLifecycleTests: XCTestCase {
 
     func testStopDoesNotPublishNaturalEndedEvent() throws {
         let database = try TemporaryDatabase()
-        let service = AudioService(databaseManager: database.manager)
+        let service = AudioService(
+            databaseManager: database.manager,
+            scrobbleBuffer: makeIsolatedScrobbleBuffer(),
+            scrobbleSubmitter: makeIsolatedScrobbleSubmitter()
+        )
         let stopped = expectation(description: "stopped state published")
         let ended = expectation(description: "stop must not publish ended")
         ended.isInverted = true
@@ -112,7 +116,11 @@ final class PlaybackLifecycleTests: XCTestCase {
 
     func testPlaybackSnapshotCanBeReadFromABackgroundTask() async throws {
         let database = try TemporaryDatabase()
-        let service = AudioService(databaseManager: database.manager)
+        let service = AudioService(
+            databaseManager: database.manager,
+            scrobbleBuffer: makeIsolatedScrobbleBuffer(),
+            scrobbleSubmitter: makeIsolatedScrobbleSubmitter()
+        )
 
         let snapshot = await Task.detached {
             service.playbackSnapshot()

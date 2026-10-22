@@ -744,6 +744,8 @@ final class PlayerStoreTestFixture {
             databaseManager: database.manager,
             sourceResolver: resolver,
             downloadManager: downloads,
+            scrobbleBuffer: makeIsolatedScrobbleBuffer(),
+            scrobbleSubmitter: makeIsolatedScrobbleSubmitter(),
             playerFactory: playerFactory
         )
     }

@@ -13,6 +13,8 @@ final class DependencyBoundaryTests: XCTestCase {
         var factoryCalls = 0
         let service = AudioService(
             databaseManager: database.manager,
+            scrobbleBuffer: makeIsolatedScrobbleBuffer(),
+            scrobbleSubmitter: makeIsolatedScrobbleSubmitter(),
             playerFactory: { item in
                 factoryCalls += 1
                 return AVPlayer(playerItem: item)
@@ -64,7 +66,11 @@ final class DependencyBoundaryTests: XCTestCase {
 
     func testVolumeHUDControlStaysAttachedWhenTheHostChanges() throws {
         let database = try TemporaryDatabase()
-        let service = AudioService(databaseManager: database.manager)
+        let service = AudioService(
+            databaseManager: database.manager,
+            scrobbleBuffer: makeIsolatedScrobbleBuffer(),
+            scrobbleSubmitter: makeIsolatedScrobbleSubmitter()
+        )
         let firstHost = UIView()
         let secondHost = UIView()
 

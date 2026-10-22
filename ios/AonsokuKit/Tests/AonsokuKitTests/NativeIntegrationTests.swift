@@ -5,7 +5,11 @@ import XCTest
 final class NativeIntegrationTests: XCTestCase {
     func testAppServicesKeepsOneTypedServiceGraphAndLifecycle() throws {
         let database = try TemporaryDatabase()
-        let audio = AudioService(databaseManager: database.manager)
+        let audio = AudioService(
+            databaseManager: database.manager,
+            scrobbleBuffer: makeIsolatedScrobbleBuffer(),
+            scrobbleSubmitter: makeIsolatedScrobbleSubmitter()
+        )
         let library = LibraryService(dbManager: database.manager)
         var lifecycleEvents: [String] = []
         let lifecycle = AppLifecycleService(
@@ -89,6 +93,8 @@ final class NativeIntegrationTests: XCTestCase {
         let queueEvent = expectation(description: "queue event")
         let source = AudioService(
             databaseManager: database.manager,
+            scrobbleBuffer: makeIsolatedScrobbleBuffer(),
+            scrobbleSubmitter: makeIsolatedScrobbleSubmitter(),
             playerFactory: {
                 playerCreations += 1
                 playerCreated.fulfill()
@@ -123,7 +129,11 @@ final class NativeIntegrationTests: XCTestCase {
         source.applicationWillTerminate()
         source.unsubscribe(eventToken)
 
-        let restoredService = AudioService(databaseManager: database.manager)
+        let restoredService = AudioService(
+            databaseManager: database.manager,
+            scrobbleBuffer: makeIsolatedScrobbleBuffer(),
+            scrobbleSubmitter: makeIsolatedScrobbleSubmitter()
+        )
         restoredService.start()
         guard let restored = restoredService.fullState() else {
             return XCTFail("expected restored queue state")
@@ -166,7 +176,9 @@ final class NativeIntegrationTests: XCTestCase {
             sourceResolver: NativeSourceResolver(
                 cacheDirectories: [cacheDirectory],
                 credentialsProvider: { nil }
-            )
+            ),
+            scrobbleBuffer: makeIsolatedScrobbleBuffer(),
+            scrobbleSubmitter: makeIsolatedScrobbleSubmitter()
         )
         let accepted = expectation(description: "handoff accepted")
         var acceptedResult = false
