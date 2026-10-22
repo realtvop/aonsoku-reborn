@@ -86,6 +86,7 @@ public final class CoordinationStore: RemotePlaybackSource {
     @ObservationIgnored private var observation: CoordinationObservation?
     @ObservationIgnored private var songCache: [String: Song] = [:]
     @ObservationIgnored private var rebuildGeneration = 0
+    @ObservationIgnored private var observationGeneration = 0
 
     public init(service: CoordinationService, repository: LibraryRepository) {
         self.service = service
@@ -99,9 +100,14 @@ public final class CoordinationStore: RemotePlaybackSource {
     /// Call after sign-in.
     public func start() {
         guard observation == nil else { return }
+        observationGeneration += 1
+        let generation = observationGeneration
         observation = service.observe { [weak self] event in
             Task { @MainActor [weak self] in
-                self?.handle(event)
+                guard let self,
+                      self.observation != nil,
+                      self.observationGeneration == generation else { return }
+                self.handle(event)
             }
         }
         service.start()
@@ -109,11 +115,17 @@ public final class CoordinationStore: RemotePlaybackSource {
 
     /// Stops observing and disconnects (sign-out).
     public func stop() {
+        observationGeneration += 1
         observation?.cancel()
         observation = nil
         if controlledDeviceId != nil {
             service.endControlSession()
         }
+        rebuildGeneration += 1
+        songCache.removeAll()
+        state = CoordinationState()
+        groups = DeviceGroups()
+        handoffStatus = .idle
         remoteNowPlaying = nil
         service.disconnect()
     }

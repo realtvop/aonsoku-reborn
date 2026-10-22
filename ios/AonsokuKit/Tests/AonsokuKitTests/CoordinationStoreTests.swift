@@ -147,6 +147,55 @@ final class CoordinationStoreTests: XCTestCase {
         }
     }
 
+    func testStopRejectsOldAccountSongResolutionAndClearsState() async throws {
+        let api = FakeSubsonicAPI()
+        let requested = expectation(description: "old song requested")
+        let gate = CoordinationSongGate()
+        let calls = LockedTestBox(0)
+        api.songHandler = { id in
+            calls.update { $0 += 1 }
+            if calls.read({ $0 }) == 1 {
+                requested.fulfill()
+                await gate.wait()
+                return Song(id: id, title: "Old account title")
+            }
+            return Song(id: id, title: "New account title")
+        }
+        let fixture = try CoordinationStoreFixture(api: api, isOnline: true)
+        let device = fixture.device("remote")
+        let oldState = CoordinationState(
+            connectionState: .connected,
+            deviceId: "local",
+            devices: [device],
+            deviceSnapshots: [
+                device.id: fixture.snapshot(
+                    device.id,
+                    songId: "shared-song",
+                    isOnline: true
+                ),
+            ]
+        )
+        fixture.store.handle(.stateChanged(oldState))
+        await fulfillment(of: [requested], timeout: 1)
+
+        fixture.store.stop()
+        await gate.open()
+        try? await Task.sleep(for: .milliseconds(20))
+
+        XCTAssertEqual(fixture.store.state, CoordinationState())
+        XCTAssertEqual(fixture.store.groups, DeviceGroups())
+        fixture.store.handle(.stateChanged(oldState))
+        await fixture.waitUntil {
+            fixture.store.groups.live.first?.song?.title == "New account title"
+        }
+
+        XCTAssertEqual(calls.read { $0 }, 2)
+        XCTAssertEqual(
+            fixture.store.groups.live.first?.song?.title,
+            "New account title"
+        )
+    }
+
     private func fixtureSongIds(_ groups: DeviceGroups) -> [String] {
         groups.live.compactMap(\.song?.id) + groups.offlineSnapshots.compactMap(\.song?.id)
     }
@@ -155,20 +204,25 @@ final class CoordinationStoreTests: XCTestCase {
 @MainActor
 private final class CoordinationStoreFixture {
     let database: TemporaryDatabase
+    let api: FakeSubsonicAPI
     let library: LibraryService
     let store: CoordinationStore
     let toasts = ToastCenter()
 
-    init() throws {
+    init(
+        api: FakeSubsonicAPI = FakeSubsonicAPI(),
+        isOnline: Bool = false
+    ) throws {
         database = try TemporaryDatabase()
+        self.api = api
         library = LibraryService(
             dbManager: database.manager,
             credentialsProvider: { nil }
         )
         let repository = LibraryRepository(
-            api: FakeSubsonicAPI(),
+            api: api,
             library: library,
-            connectivity: FixedConnectivity(isOnline: false)
+            connectivity: FixedConnectivity(isOnline: isOnline)
         )
         store = CoordinationStore(
             service: CoordinationService(credentials: { nil }),
@@ -228,6 +282,25 @@ private final class CoordinationStoreFixture {
         let deadline = Date().addingTimeInterval(timeout)
         while !condition(), Date() < deadline {
             try? await Task.sleep(for: .milliseconds(5))
+        }
+    }
+}
+
+private actor CoordinationSongGate {
+    private var isOpen = false
+    private var continuations: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { continuations.append($0) }
+    }
+
+    func open() {
+        isOpen = true
+        let waiting = continuations
+        continuations.removeAll()
+        for continuation in waiting {
+            continuation.resume()
         }
     }
 }
