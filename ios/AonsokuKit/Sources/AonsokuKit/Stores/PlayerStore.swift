@@ -859,10 +859,15 @@ public final class PlayerStore {
         } else {
             audio.setLikeActive(false)
         }
-        if enrich { enrichSongs(in: snapshot) }
+        if enrich {
+            enrichSongs(in: snapshot, generation: refreshGeneration)
+        }
     }
 
-    private func enrichSongs(in snapshot: AudioQueueSnapshot) {
+    private func enrichSongs(
+        in snapshot: AudioQueueSnapshot,
+        generation: Int
+    ) {
         let all = snapshot.contextSongs + snapshot.userQueue + snapshot.playedUserQueueHistory
         var seen = Set<String>()
         let ids = all.map(\.id).filter { songCache[$0] == nil && seen.insert($0).inserted }
@@ -871,6 +876,7 @@ public final class PlayerStore {
             guard let self else { return }
             do {
                 let songs = try await repository.songs(ids: ids)
+                guard generation == refreshGeneration else { return }
                 for song in songs { songCache[song.id] = song }
                 guard let current = lastSnapshot else { return }
                 localQueue = Self.playerQueue(from: current, songs: songCache)

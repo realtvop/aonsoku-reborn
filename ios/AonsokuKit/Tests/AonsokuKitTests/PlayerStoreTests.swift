@@ -462,6 +462,67 @@ final class PlayerStoreTests: XCTestCase {
         fixture.audio.shutdown()
     }
 
+    func testClearRejectsInFlightSongEnrichmentFromOldAccount() async throws {
+        let fixture = try PlayerStoreTestFixture()
+        let enrichmentStarted = expectation(description: "old enrichment started")
+        let gate = PlayerSongGate()
+        let calls = LockedTestBox(0)
+        fixture.api.songHandler = { id in
+            calls.update { $0 += 1 }
+            if calls.read({ $0 }) == 1 {
+                enrichmentStarted.fulfill()
+                await gate.wait()
+                return Song(id: id, title: "Old enriched title")
+            }
+            return Song(id: id, title: "New enriched title")
+        }
+        fixture.audio.setContextQueue(
+            songs: [QueueSong(
+                id: "shared-id",
+                title: "Old compact title",
+                artist: "Old artist",
+                album: "Old album",
+                duration: 180,
+                streamUrl: "https://example.test/old"
+            )],
+            currentIndex: 0,
+            autoplay: false
+        )
+        let loaded = await waitForPlayerStoreTest {
+            fixture.audio.fullState()?.currentSongId == "shared-id"
+        }
+        XCTAssertTrue(loaded)
+        let store = fixture.store()
+        store.start()
+        await fulfillment(of: [enrichmentStarted], timeout: 1)
+
+        store.clearAll()
+        await gate.open()
+        let cleared = await waitForPlayerStoreTest { !store.hasMedia }
+        XCTAssertTrue(cleared)
+        try? await Task.sleep(for: .milliseconds(20))
+
+        fixture.audio.setContextQueue(
+            songs: [QueueSong(
+                id: "shared-id",
+                title: "New compact title",
+                artist: "New artist",
+                album: "New album",
+                duration: 180,
+                streamUrl: "https://example.test/new"
+            )],
+            currentIndex: 0,
+            autoplay: false
+        )
+        let enriched = await waitForPlayerStoreTest {
+            store.localSong?.title == "New enriched title"
+        }
+
+        XCTAssertTrue(enriched)
+        XCTAssertEqual(calls.read { $0 }, 2)
+        fixture.audio.shutdown()
+    }
+
     func testStartAdoptsQueueRestoredAfterTheStoreSubscribes() async throws {
         let fixture = try PlayerStoreTestFixture()
         let engine = NativeQueueEngine()
@@ -627,6 +688,25 @@ final class PlayerRemoteSpy: RemotePlaybackSource {
     func send(_ command: CoordinationRemoteCommand) async throws {
         if let error { throw error }
         commands.append(command)
+    }
+}
+
+private actor PlayerSongGate {
+    private var isOpen = false
+    private var continuations: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { continuations.append($0) }
+    }
+
+    func open() {
+        isOpen = true
+        let waiting = continuations
+        continuations.removeAll()
+        for continuation in waiting {
+            continuation.resume()
+        }
     }
 }
 
