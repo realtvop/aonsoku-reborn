@@ -518,6 +518,7 @@ public final class PlayerStore {
     }
 
     public func next() {
+        selectionGeneration += 1
         if target.isRemote {
             sendRemote(.next)
         } else if let radio {
@@ -528,6 +529,7 @@ public final class PlayerStore {
     }
     /// Restarts the song after three seconds, otherwise goes back.
     public func previous() {
+        selectionGeneration += 1
         if target.isRemote {
             sendRemote(.previous)
         } else if let radio {
@@ -586,6 +588,7 @@ public final class PlayerStore {
 
     /// Jumps to a queue row.
     public func play(entry: QueueEntry) {
+        selectionGeneration += 1
         if target.isRemote {
             let contextCurrent = queue.current.flatMap {
                 $0.tier == .context ? $0 : nil
@@ -615,6 +618,7 @@ public final class PlayerStore {
 
     /// Plays a history song next and starts it (web history rows).
     public func playFromHistory(_ song: Song) {
+        selectionGeneration += 1
         enqueueAndStart([song])
     }
 

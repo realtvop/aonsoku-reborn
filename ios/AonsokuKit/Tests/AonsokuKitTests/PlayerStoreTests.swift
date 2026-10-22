@@ -183,6 +183,50 @@ final class PlayerStoreTests: XCTestCase {
         fixture.audio.shutdown()
     }
 
+    func testQueueNavigationRejectsAnInFlightAlbumSelection() async throws {
+        let fixture = try PlayerStoreTestFixture()
+        let requested = expectation(description: "album requested")
+        let gate = PlayerSongGate()
+        fixture.api.albumHandler = { id in
+            requested.fulfill()
+            await gate.wait()
+            return AlbumDetail(
+                album: Album(id: id, name: "Delayed album"),
+                songs: [mediaSong("delayed-song")]
+            )
+        }
+        fixture.audio.setContextQueue(
+            songs: [fixture.queueSong("current"), fixture.queueSong("next")],
+            currentIndex: 0,
+            autoplay: false
+        )
+        let queueLoaded = await waitForPlayerStoreTest {
+            fixture.audio.fullState()?.currentSongId == "current"
+        }
+        XCTAssertTrue(queueLoaded)
+        let store = fixture.store()
+        store.start()
+
+        let selection = Task {
+            await store.playAlbum(id: "delayed-album")
+        }
+        await fulfillment(of: [requested], timeout: 1)
+        store.next()
+        let navigated = await waitForPlayerStoreTest {
+            store.localSong?.id == "next"
+        }
+        XCTAssertTrue(navigated)
+
+        await gate.open()
+        await selection.value
+        try? await Task.sleep(for: .milliseconds(30))
+
+        XCTAssertEqual(store.localSong?.id, "next")
+        XCTAssertEqual(fixture.audio.fullState()?.currentSongId, "next")
+        XCTAssertEqual(store.playbackStarts, 0)
+        fixture.audio.shutdown()
+    }
+
     func testRemoteQueueReorderSendsFlattenedProtocolIndexes() async throws {
         let fixture = try PlayerStoreTestFixture()
         let remote = PlayerRemoteSpy()
