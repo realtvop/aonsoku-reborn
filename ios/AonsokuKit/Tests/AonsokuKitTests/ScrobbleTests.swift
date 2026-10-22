@@ -188,6 +188,40 @@ final class ScrobbleTests: XCTestCase {
         XCTAssertEqual(buffer.getEntries(), [second])
     }
 
+    func testConcurrentPendingSubmissionCallsShareOneRequest() async {
+        let clock = ManualClock()
+        let buffer = NativeScrobbleBuffer(
+            store: InMemoryScrobbleEntryStore(),
+            now: clock.now
+        )
+        buffer.startTracking(songId: "pending")
+        clock.advance(milliseconds: 100)
+        _ = buffer.stopTracking()
+        let requests = LockedTestBox(0)
+        let gate = ScrobbleBarrierGate()
+        let submitter = NativeScrobbleSubmitter(
+            credentialsProvider: { makeCredentials(serverUrl: "https://music.test") },
+            request: { _, _, _, _ in
+                requests.update { $0 += 1 }
+                await gate.wait()
+                return true
+            }
+        )
+
+        submitter.submitPending(buffer: buffer)
+        submitter.submitPending(buffer: buffer)
+        let deadline = Date().addingTimeInterval(1)
+        while requests.read({ $0 }) == 0, Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        try? await Task.sleep(for: .milliseconds(20))
+
+        XCTAssertEqual(requests.read { $0 }, 1)
+        await gate.open()
+        try? await Task.sleep(for: .milliseconds(20))
+        XCTAssertTrue(buffer.getEntries().isEmpty)
+    }
+
     func testQueueExhaustionFlushesTheCurrentScrobbleSegment() throws {
         let database = try TemporaryDatabase()
         let clock = ManualClock()
@@ -244,6 +278,25 @@ private actor ScrobbleRequestGate {
             continuation.resume(returning: result)
         } else {
             self.result = result
+        }
+    }
+}
+
+private actor ScrobbleBarrierGate {
+    private var isOpen = false
+    private var continuations: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { continuations.append($0) }
+    }
+
+    func open() {
+        isOpen = true
+        let waiting = continuations
+        continuations.removeAll()
+        for continuation in waiting {
+            continuation.resume()
         }
     }
 }

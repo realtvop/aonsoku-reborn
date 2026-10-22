@@ -12,6 +12,8 @@ class NativeScrobbleSubmitter {
     ) async -> Bool
     private let generationLock = NSLock()
     private var generation: UInt64 = 0
+    private var pendingSubmissionId: UUID?
+    private var pendingSubmissionTask: Task<Void, Never>?
 
     convenience init() {
         let httpClient = SubsonicHTTPClient()
@@ -87,12 +89,22 @@ class NativeScrobbleSubmitter {
         let entries = buffer.getEntries()
         guard !entries.isEmpty else { return }
         guard let context = operationContext() else { return }
+        let submissionId = UUID()
+        let reserved = generationLock.withLock { () -> Bool in
+            guard generation == context.generation,
+                  pendingSubmissionId == nil else { return false }
+            pendingSubmissionId = submissionId
+            return true
+        }
+        guard reserved else { return }
 
-        Task {
+        let task = Task { [weak self] in
+            guard let self else { return }
+            defer { self.finishPendingSubmission(submissionId) }
             var submittedEntries: [ScrobbleEntry] = []
             for entry in entries {
-                guard isCurrent(context.generation) else { return }
-                if await request(
+                guard self.isCurrent(context.generation) else { return }
+                if await self.request(
                     context.credentials,
                     entry.songId,
                     true,
@@ -103,7 +115,7 @@ class NativeScrobbleSubmitter {
                     break
                 }
             }
-            if !submittedEntries.isEmpty, isCurrent(context.generation) {
+            if !submittedEntries.isEmpty, self.isCurrent(context.generation) {
                 let completedEntries = submittedEntries
                 await MainActor.run {
                     guard self.isCurrent(context.generation) else { return }
@@ -111,10 +123,24 @@ class NativeScrobbleSubmitter {
                 }
             }
         }
+        generationLock.withLock {
+            if pendingSubmissionId == submissionId {
+                pendingSubmissionTask = task
+            } else {
+                task.cancel()
+            }
+        }
     }
 
     func invalidate() {
-        generationLock.withLock { generation &+= 1 }
+        let task = generationLock.withLock { () -> Task<Void, Never>? in
+            generation &+= 1
+            pendingSubmissionId = nil
+            let task = pendingSubmissionTask
+            pendingSubmissionTask = nil
+            return task
+        }
+        task?.cancel()
     }
 
     private func submit(songId: String, timestamp: Double) {
@@ -142,5 +168,13 @@ class NativeScrobbleSubmitter {
 
     private func isCurrent(_ candidate: UInt64) -> Bool {
         generationLock.withLock { generation == candidate }
+    }
+
+    private func finishPendingSubmission(_ submissionId: UUID) {
+        generationLock.withLock {
+            guard pendingSubmissionId == submissionId else { return }
+            pendingSubmissionId = nil
+            pendingSubmissionTask = nil
+        }
     }
 }
