@@ -387,4 +387,3 @@ enum NowPlayingText {
         return nil
     }
 }
-

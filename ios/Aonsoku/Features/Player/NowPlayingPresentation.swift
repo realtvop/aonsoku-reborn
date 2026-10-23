@@ -10,7 +10,7 @@ final class PlayerPresentationState {
     var artworkFrames: [PlayerArtworkLocation: PlayerArtworkFrame] = [:]
 }
 
-enum PlayerArtworkLocation: Hashable {
+nonisolated enum PlayerArtworkLocation: Hashable {
     case mini
     case cover
     case header
@@ -18,7 +18,7 @@ enum PlayerArtworkLocation: Hashable {
     static let coordinateSpace = "nowPlayingArtwork"
 }
 
-struct PlayerArtworkFrame: Equatable {
+nonisolated struct PlayerArtworkFrame: Equatable {
     var rect: CGRect
     var cornerRadius: CGFloat
     var shadowRadius: CGFloat
@@ -110,7 +110,9 @@ private struct NowPlayingPresentation: ViewModifier {
         let geometry = artworkFrame(in: proxy, height: height)
         return PlayerArtwork(cornerRadius: 0, size: .large)
             .frame(width: geometry?.rect.width ?? 0, height: geometry?.rect.height ?? 0)
-            .clipShape(.rect(cornerRadius: geometry?.cornerRadius ?? 0, style: .continuous))
+            .clipShape(RoundedRectangle(
+                cornerRadius: geometry?.cornerRadius ?? 0, style: .continuous
+            ))
             .shadow(
                 color: .black.opacity(0.35),
                 radius: geometry?.shadowRadius ?? 0,

@@ -134,33 +134,35 @@ struct NowPlayingView: View {
     // MARK: - Pieces
 
     private var grabber: some View {
-        Button {
-            router.isNowPlayingPresented = false
-        } label: {
-            Capsule()
-                .fill(.white.opacity(0.35))
-                .frame(width: 38, height: 5)
-                .frame(maxWidth: .infinity)
-                .frame(height: 32)
-                .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(t("fullscreen.switchButton"))
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 6)
-                .onChanged { value in
-                    guard value.translation.height > abs(value.translation.width) else { return }
-                    presentation.dragOffset = value.translation.height
-                }
-                .onEnded { value in
-                    let shouldDismiss = presentation.dragOffset > 100
-                        || (presentation.dragOffset > 0 && value.predictedEndTranslation.height > 200)
-                    withAnimation(reduceMotion ? .linear(duration: 0.15) : .spring(duration: 0.45, bounce: 0)) {
-                        if shouldDismiss { router.isNowPlayingPresented = false }
-                        presentation.dragOffset = 0
+        Capsule()
+            .fill(.white.opacity(0.35))
+            .frame(width: 38, height: 5)
+            .frame(maxWidth: .infinity)
+            .frame(height: 32)
+            .contentShape(.rect)
+            .accessibilityElement()
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel(t("fullscreen.switchButton"))
+            .accessibilityAction { router.isNowPlayingPresented = false }
+            // A horizontal or canceled pan must never activate the collapse tap.
+            .gesture(
+                DragGesture(minimumDistance: 6)
+                    .onChanged { value in
+                        guard value.translation.height > abs(value.translation.width) else { return }
+                        presentation.dragOffset = value.translation.height
                     }
-                }
-        )
+                    .onEnded { value in
+                        let shouldDismiss = presentation.dragOffset > 100
+                            || (presentation.dragOffset > 0 && value.predictedEndTranslation.height > 200)
+                        withAnimation(reduceMotion ? .linear(duration: 0.15) : .spring(duration: 0.45, bounce: 0)) {
+                            if shouldDismiss { router.isNowPlayingPresented = false }
+                            presentation.dragOffset = 0
+                        }
+                    }
+                    .exclusively(before: TapGesture().onEnded {
+                        router.isNowPlayingPresented = false
+                    })
+            )
     }
 
     /// Remote control and the sleep timer, when they apply.
