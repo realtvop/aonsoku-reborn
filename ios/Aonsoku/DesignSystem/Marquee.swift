@@ -23,7 +23,9 @@ struct MarqueeText: View {
 
     var body: some View {
         let allowsScrolling = !respectsReduceMotion || !reduceMotion
-        let scrolls = allowsScrolling && textWidth > availableWidth + 0.5
+        let scrolls = allowsScrolling
+            && availableWidth > 0
+            && textWidth > availableWidth + 0.5
         Text(text)
             .lineLimit(1)
             .hidden()
@@ -38,8 +40,11 @@ struct MarqueeText: View {
                             .fixedSize()
                     }
                     .offset(x: offset)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .mask { edgeFade(isScrolling: offset != 0) }
+                    .frame(width: availableWidth, alignment: .leading)
+                    .mask(alignment: .leading) {
+                        edgeFade(isScrolling: offset != 0)
+                            .frame(width: availableWidth)
+                    }
                 } else {
                     Text(text)
                         .lineLimit(1)
