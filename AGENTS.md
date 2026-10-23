@@ -132,9 +132,13 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   keeps the system search placement and adaptable sidebar.
   `NowPlayingPresentation` keeps the full-screen player in the same view
   tree as the tabs. Expansion and collapse animate only its Y offset at
-  the full viewport width; the drag handle ignores horizontal movement.
+  the full viewport width. Downward pans start anywhere on the surface
+  except the progress/volume slider touch targets; horizontal pans do not
+  dismiss it. Lyrics/queue lists scroll back to their top before dismissal.
   `PlayerPresentationState` owns the interactive dismissal offset, while
   `Router.isNowPlayingPresented` remains the presentation authority.
+  While the finger is down, artwork keeps its expanded size and moves only
+  with the container. Only a committed release retargets it to the mini player.
   A stationary full-viewport UIKit probe resolves the screen/window corner
   radius through iOS 26's public concentric corner APIs. Rounded viewports
   keep that radius throughout the Y slide; square viewports grow from 0 to

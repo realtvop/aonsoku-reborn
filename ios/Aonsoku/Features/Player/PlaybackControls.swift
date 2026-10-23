@@ -51,6 +51,7 @@ struct PlaybackScrubber: View {
                     .gesture(drag(width: proxy.size.width, current: progress, duration: duration))
             }
             .frame(height: 24)
+            .playerSliderRegion(.progress)
             HStack {
                 Text(Formatters.clock(position))
                 Spacer()
@@ -241,6 +242,7 @@ struct VolumeSlider: View {
                     .gesture(drag(width: proxy.size.width, current: value))
             }
             .frame(height: 24)
+            .playerSliderRegion(.volume)
             Image(systemName: "speaker.wave.3.fill")
         }
         .font(.caption)

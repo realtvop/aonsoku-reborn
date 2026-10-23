@@ -22,7 +22,6 @@ struct NowPlayingView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(Router.self) private var router
     @Environment(PlayerPresentationState.self) private var presentation
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { proxy in
@@ -43,6 +42,7 @@ struct NowPlayingView: View {
             }
         }
         .foregroundStyle(.white)
+        .scrollDisabled(presentation.dragOffset > 0)
         .background {
             NowPlayingBackground(
                 palette: palette,
@@ -144,25 +144,7 @@ struct NowPlayingView: View {
             .accessibilityAddTraits(.isButton)
             .accessibilityLabel(t("fullscreen.switchButton"))
             .accessibilityAction { router.isNowPlayingPresented = false }
-            // A horizontal or canceled pan must never activate the collapse tap.
-            .gesture(
-                DragGesture(minimumDistance: 6)
-                    .onChanged { value in
-                        guard value.translation.height > abs(value.translation.width) else { return }
-                        presentation.dragOffset = value.translation.height
-                    }
-                    .onEnded { value in
-                        let shouldDismiss = presentation.dragOffset > 100
-                            || (presentation.dragOffset > 0 && value.predictedEndTranslation.height > 200)
-                        withAnimation(reduceMotion ? .linear(duration: 0.15) : .spring(duration: 0.45, bounce: 0)) {
-                            if shouldDismiss { router.isNowPlayingPresented = false }
-                            presentation.dragOffset = 0
-                        }
-                    }
-                    .exclusively(before: TapGesture().onEnded {
-                        router.isNowPlayingPresented = false
-                    })
-            )
+            .onTapGesture { router.isNowPlayingPresented = false }
     }
 
     /// Remote control and the sleep timer, when they apply.

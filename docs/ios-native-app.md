@@ -144,8 +144,11 @@ with automatic foreground sync disabled.
   expanded accessory placements. Tapping it slides Now Playing up at the
   full viewport width; it also shows remote playback when controlling
   another device. `NowPlayingPresentation` keeps the player in the tabs'
-  view tree, and its drag handle changes only the vertical offset. Tapping
-  the handle or the accessibility escape action collapses it.
+  view tree. Downward drags start anywhere except the progress and volume
+  sliders; scrolled lyrics/queues return to their top first. The cover moves
+  with the expanded surface without shrinking while the finger is down.
+  Only release into a committed dismissal sends the cover toward the pill.
+  Tapping the handle or the accessibility escape action also collapses it.
   The player surface keeps the system-resolved viewport corner radius on
   rounded screens/windows. On square viewports its corners grow from 0 to
   32pt over the first 96pt of a downward slide, reversing on expansion.

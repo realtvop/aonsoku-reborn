@@ -9,6 +9,7 @@ final class PlayerPresentationState {
     var dragOffset: CGFloat = 0
     var artworkLocation: PlayerArtworkLocation = .cover
     var artworkFrames: [PlayerArtworkLocation: PlayerArtworkFrame] = [:]
+    var sliderFrames: [PlayerSliderRegion: CGRect] = [:]
 }
 
 nonisolated enum PlayerArtworkLocation: Hashable {
@@ -90,6 +91,16 @@ private struct NowPlayingPresentation: ViewModifier {
                             .padding(insets)
                             .frame(width: width, height: height)
                             .coordinateSpace(name: PlayerArtworkLocation.coordinateSpace)
+                            .contentShape(.rect)
+                            .gesture(PlayerDismissGesture(
+                                presentation: presentation,
+                                isEnabled: router.isNowPlayingPresented && router.sheet == nil
+                            ) { dismiss in
+                                withAnimation(artworkAnimation) {
+                                    if dismiss { router.isNowPlayingPresented = false }
+                                    presentation.dragOffset = 0
+                                }
+                            })
                             .modifier(PlayerSurfaceCorners(
                                 viewportRadius: viewportCornerRadius,
                                 slide: slide
@@ -155,8 +166,10 @@ private struct NowPlayingPresentation: ViewModifier {
         expanded.rect = expanded.rect.offsetBy(
             dx: -proxy.safeAreaInsets.leading, dy: -proxy.safeAreaInsets.top
         )
-        let progress = max(0, 1 - presentation.dragOffset / max(height, 1))
-        return mini.interpolated(to: expanded, progress: progress)
+        // During a pan the cover stays attached to the expanded surface.
+        // Only committing dismissal changes its destination to the pill.
+        expanded.rect = expanded.rect.offsetBy(dx: 0, dy: presentation.dragOffset)
+        return expanded
     }
 }
 
