@@ -53,7 +53,7 @@ class PlaybackRecoveryController {
 
     private var lastProgressTime: CMTime = .zero
     private var lastProgressAdvanceDate: Date?
-    private var isMonitoringProgress = false
+    private(set) var isMonitoringProgress = false
 
     init(recoveryScheduler: @escaping RecoveryScheduler = { delay, action in
         let work = DispatchWorkItem(block: action)

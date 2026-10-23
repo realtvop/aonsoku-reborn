@@ -741,9 +741,14 @@ final class PlayerStoreTestFixture {
     }
 
     func makeAudio(
-        playerFactory: @escaping AudioService.PlayerFactory = { AVPlayer(playerItem: $0) }
+        playerFactory: @escaping AudioService.PlayerFactory = { AVPlayer(playerItem: $0) },
+        recoveryController: PlaybackRecoveryController = PlaybackRecoveryController()
     ) -> AudioService {
-        Self.buildAudio(database: database, playerFactory: playerFactory)
+        Self.buildAudio(
+            database: database,
+            playerFactory: playerFactory,
+            recoveryController: recoveryController
+        )
     }
 
     func store(remote: PlayerRemoteSpy? = nil) -> PlayerStore {
@@ -772,7 +777,8 @@ final class PlayerStoreTestFixture {
 
     private static func buildAudio(
         database: TemporaryDatabase,
-        playerFactory: @escaping AudioService.PlayerFactory = { AVPlayer(playerItem: $0) }
+        playerFactory: @escaping AudioService.PlayerFactory = { AVPlayer(playerItem: $0) },
+        recoveryController: PlaybackRecoveryController = PlaybackRecoveryController()
     ) -> AudioService {
         let resolver = NativeSourceResolver(
             cacheDirectories: [database.directory],
@@ -795,6 +801,7 @@ final class PlayerStoreTestFixture {
             downloadManager: downloads,
             scrobbleBuffer: makeIsolatedScrobbleBuffer(),
             scrobbleSubmitter: makeIsolatedScrobbleSubmitter(),
+            recoveryController: recoveryController,
             playerFactory: playerFactory
         )
     }

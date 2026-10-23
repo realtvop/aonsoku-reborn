@@ -278,10 +278,14 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     songId: Self.songId(request.source)
                 )
                 self.applyReplayGain(nil)
-                self.recoveryController.startProgressMonitoring(
-                    generation: self.playbackGeneration,
-                    sourceKind: self.recoverySourceKind()
-                )
+                // A paused load is watched once play() is called; without
+                // progress it would be "recovered" into playing by itself.
+                if request.autoplay {
+                    self.recoveryController.startProgressMonitoring(
+                        generation: self.playbackGeneration,
+                        sourceKind: self.recoverySourceKind()
+                    )
+                }
                 self.emitPlaybackState(.loading, force: true)
 
                 let startPlayback = {
@@ -1659,10 +1663,14 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     songId: song.id
                 )
                 self.applyReplayGain(song.replayGain)
-                self.recoveryController.startProgressMonitoring(
-                    generation: self.playbackGeneration,
-                    sourceKind: self.recoverySourceKind()
-                )
+                // A paused load is watched once play() is called; without
+                // progress it would be "recovered" into playing by itself.
+                if autoplay {
+                    self.recoveryController.startProgressMonitoring(
+                        generation: self.playbackGeneration,
+                        sourceKind: self.recoverySourceKind()
+                    )
+                }
                 self.emitPlaybackState(.loading, force: true)
                 let begin = {
                     if autoplay {

@@ -365,6 +365,135 @@ final class AudioModePublishingTests: XCTestCase {
     }
 }
 
+// MARK: - Paused loads
+
+/// A song loaded paused has nothing to recover: nobody asked it to play. The
+/// progress monitor reads a player without progress as stalled and, after
+/// ten seconds, "recovers" it by playing, so it must wait for play().
+@MainActor
+final class PausedLoadMonitoringTests: XCTestCase {
+    func testPausedQueueLoadIsNotMonitored() async throws {
+        let fixture = try PlayerStoreTestFixture()
+        let recovery = PlaybackRecoveryController()
+        let audio = fixture.makeAudio(recoveryController: recovery)
+
+        audio.setContextQueue(
+            songs: try localSongs(["a", "b"], in: fixture),
+            currentIndex: 0,
+            autoplay: false
+        )
+
+        let paused = await eventually {
+            audio.fullState()?.currentSongId == "a"
+                && audio.playbackSnapshot().state == .paused
+        }
+        XCTAssertTrue(paused, "the queue should be loaded and paused")
+        XCTAssertFalse(recovery.isMonitoringProgress)
+        audio.shutdown()
+    }
+
+    func testSongsAddedToAnIdleQueueAreNotMonitored() async throws {
+        let fixture = try PlayerStoreTestFixture()
+        let recovery = PlaybackRecoveryController()
+        let audio = fixture.makeAudio(recoveryController: recovery)
+
+        audio.addToUserQueue(
+            songs: try localSongs(["a", "b"], in: fixture),
+            position: "last"
+        )
+
+        let paused = await eventually {
+            audio.fullState()?.currentSongId == "a"
+                && audio.playbackSnapshot().state == .paused
+        }
+        XCTAssertTrue(paused, "the first song should be loaded and paused")
+        XCTAssertFalse(recovery.isMonitoringProgress)
+        audio.shutdown()
+    }
+
+    func testPausedSourceLoadIsNotMonitored() throws {
+        let fixture = try PlayerStoreTestFixture()
+        let recovery = PlaybackRecoveryController()
+        let audio = fixture.makeAudio(recoveryController: recovery)
+        let url = try localAudioURL(for: "source", in: fixture)
+
+        audio.load(AudioLoadRequest(
+            source: .nativeFile(uri: url.absoluteString, songId: "source")
+        )) { _ in }
+
+        XCTAssertFalse(recovery.isMonitoringProgress)
+        audio.shutdown()
+    }
+
+    func testPlayStartsMonitoringAndPauseStopsIt() async throws {
+        try requireActivatableAudioSession()
+        let fixture = try PlayerStoreTestFixture()
+        let recovery = PlaybackRecoveryController()
+        let audio = fixture.makeAudio(recoveryController: recovery)
+        audio.setContextQueue(
+            songs: try localSongs(["a", "b"], in: fixture),
+            currentIndex: 0,
+            autoplay: false
+        )
+        let paused = await eventually {
+            audio.fullState()?.currentSongId == "a"
+                && audio.playbackSnapshot().state == .paused
+        }
+        XCTAssertTrue(paused, "the queue should be loaded and paused")
+
+        audio.play()
+        XCTAssertTrue(recovery.isMonitoringProgress)
+        audio.pause()
+        XCTAssertFalse(recovery.isMonitoringProgress)
+        audio.shutdown()
+    }
+
+    func testQueueLoadThatStartsPlayingIsMonitored() async throws {
+        try requireActivatableAudioSession()
+        let fixture = try PlayerStoreTestFixture()
+        let recovery = PlaybackRecoveryController()
+        let audio = fixture.makeAudio(recoveryController: recovery)
+
+        audio.setContextQueue(
+            songs: try localSongs(["a", "b"], in: fixture),
+            currentIndex: 0,
+            autoplay: true
+        )
+
+        let monitored = await eventually { recovery.isMonitoringProgress }
+        XCTAssertTrue(monitored)
+        audio.shutdown()
+    }
+
+    func testSourceLoadThatStartsPlayingIsMonitored() throws {
+        try requireActivatableAudioSession()
+        let fixture = try PlayerStoreTestFixture()
+        let recovery = PlaybackRecoveryController()
+        let audio = fixture.makeAudio(recoveryController: recovery)
+        let url = try localAudioURL(for: "source", in: fixture)
+
+        audio.load(AudioLoadRequest(
+            source: .nativeFile(uri: url.absoluteString, songId: "source"),
+            autoplay: true
+        )) { _ in }
+
+        XCTAssertTrue(recovery.isMonitoringProgress)
+        audio.shutdown()
+    }
+
+    /// Playing needs an active audio session, which a machine without an
+    /// output device may refuse; the monitor only starts once it is active.
+    private func requireActivatableAudioSession() throws {
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.playback, mode: .default)
+            try session.setActive(true)
+        } catch {
+            throw XCTSkip("The audio session cannot be activated here: \(error)")
+        }
+    }
+}
+
 // MARK: - Shared helpers
 
 /// Loading the first item keeps the main thread busy while the process starts
