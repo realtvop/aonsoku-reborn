@@ -132,8 +132,12 @@ with automatic foreground sync disabled.
 
 ## Navigation and screens
 
-- **Tabs**: Home, Library, Search (`Tab(role: .search)`). The tab bar
-  minimizes on scroll. iPad uses the sidebar-adaptable tab style.
+- **Tabs**: Home, Library, Search. On iPhone, Search shares the expanded tab
+  bar and gains `role: .search` when the bottom accessory moves inline,
+  placing it in a separate circle to the right of the mini player. The
+  system owns minimization on scroll; `MainTabAccessory` reports its
+  placement to `MainTabView`. iPad keeps the search role and the
+  sidebar-adaptable tab style.
 - **Mini player**: `tabViewBottomAccessory`, adapting to the inline and
   expanded accessory placements. Tapping it opens Now Playing with a zoom
   transition; it also shows remote playback when controlling another device.
