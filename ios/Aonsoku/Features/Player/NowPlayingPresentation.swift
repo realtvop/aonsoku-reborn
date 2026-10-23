@@ -26,8 +26,8 @@ nonisolated struct PlayerAccessoryLayout: Equatable {
     var isInline: Bool
 }
 
-/// The system accessory reserves space and supplies its native glass only.
-/// Both sets of player controls and the artwork live in the container above.
+/// The system accessory supplies layout only. The presentation container
+/// owns the sole glass surface, both control layouts, and the artwork.
 struct PlayerAccessorySlot: View {
     @Environment(PlayerPresentationState.self) private var presentation
     @Environment(\.tabViewBottomAccessoryPlacement) private var placement
@@ -35,6 +35,7 @@ struct PlayerAccessorySlot: View {
     var body: some View {
         Color.clear
             .frame(height: 36)
+            .background { PlayerAccessoryGlassSuppression() }
             .onGeometryChange(for: PlayerAccessoryLayout.self) { proxy in
                 PlayerAccessoryLayout(frame: proxy.frame(in: .global), isInline: placement == .inline)
             } action: { layout in
@@ -46,6 +47,51 @@ struct PlayerAccessorySlot: View {
             // Keep the last destination until a new positive frame replaces it.
             .allowsHitTesting(false)
             .accessibilityHidden(true)
+    }
+}
+
+/// Keep native accessory placement/minimization without leaving a second
+/// glass pill underneath the moving player. Scope this to the public
+/// bottomAccessory.contentView's immediate host, never the tab bar itself.
+private struct PlayerAccessoryGlassSuppression: UIViewRepresentable {
+    func makeUIView(context: Context) -> MarkerView { MarkerView() }
+
+    func updateUIView(_ view: MarkerView, context: Context) {
+        view.suppressAccessoryGlass()
+    }
+
+    final class MarkerView: UIView {
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            suppressAccessoryGlass()
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            suppressAccessoryGlass()
+        }
+
+        func suppressAccessoryGlass() {
+            guard let root = window?.rootViewController else { return }
+            suppressAccessoryGlass(in: root)
+        }
+
+        private func suppressAccessoryGlass(in controller: UIViewController) {
+            if let tabs = controller as? UITabBarController,
+               let content = tabs.bottomAccessory?.contentView,
+               isDescendant(of: content),
+               let host = content.superview,
+               host !== tabs.view,
+               !tabs.tabBar.isDescendant(of: host) {
+                host.isHidden = true
+                // Do not restore this during marker recycling: the native
+                // accessory remains layout-only for its entire lifetime.
+                return
+            }
+            for child in controller.children {
+                suppressAccessoryGlass(in: child)
+            }
+        }
     }
 }
 
@@ -150,6 +196,16 @@ private struct NowPlayingPresentation: ViewModifier {
                     .frame(width: width, height: height, alignment: .topLeading)
                     .coordinateSpace(name: PlayerArtworkLocation.containerCoordinateSpace)
                     .clipShape(shape)
+                    .background {
+                        Color.clear
+                            .frame(width: surface.width, height: surface.height)
+                            .glassEffect(.regular, in: RoundedRectangle(
+                                cornerRadius: radius, style: .continuous
+                            ))
+                            .position(x: surface.midX, y: surface.midY)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
                     .contentShape(shape)
                     .opacity(router.isNowPlayingPresented || presentation.accessory != nil ? 1 : 0)
                     .gesture(PlayerDismissGesture(

@@ -141,9 +141,11 @@ with automatic foreground sync disabled.
   searches immediately. iPad uses system search placement and the adaptable
   sidebar.
 - **Mini player**: the system `tabViewBottomAccessory` contains only a
-  layout marker and native glass. Its inline/expanded geometry positions
-  the actual mini controls inside `NowPlayingPresentation`, the same
-  persistent container as the full player, background and cover.
+  layout marker; its native glass host is hidden. Its inline/expanded
+  geometry positions the actual mini controls inside `NowPlayingPresentation`,
+  the same persistent container as the full player, background and cover. This
+  container owns the sole Liquid Glass surface, which moves and resizes
+  into the pill itself; no separate playback pill remains underneath.
   Tapping it slides Now Playing up at the
   full viewport width; it also shows remote playback when controlling
   another device. `NowPlayingPresentation` keeps the player in the tabs'

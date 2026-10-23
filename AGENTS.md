@@ -133,8 +133,12 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   `NowPlayingPresentation` keeps the full-screen player in the same view
   tree as the tabs. One persistent container owns `MiniPlayer`,
   `NowPlayingView`, their shared background and the sole `PlayerArtwork`.
-  The system accessory reserves space and supplies native glass, while its
-  reported geometry places the mini controls inside that same container.
+  The system accessory reserves space and reports native placement only.
+  A scoped UIKit marker hides the immediate host of the public
+  `UITabAccessory.contentView`, leaving tab bar layout/minimization intact.
+  The presentation container owns the sole Liquid Glass surface; its frame
+  and corners animate together with the player into the final pill, so no
+  stationary accessory glass remains underneath during a transition.
   Interactive expansion/collapse changes only its Y offset at
   the full viewport width. Downward pans start anywhere on the surface
   except the progress/volume slider touch targets; horizontal pans do not
