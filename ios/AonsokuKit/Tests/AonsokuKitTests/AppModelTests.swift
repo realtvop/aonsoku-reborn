@@ -521,7 +521,7 @@ final class AppModelTests: XCTestCase {
 
 @MainActor
 private final class AppModelFixture {
-    static let aliceAccount = ServerAccount(
+    nonisolated static let aliceAccount = ServerAccount(
         primaryUrl: "https://old.test",
         activeUrl: "https://old.test",
         username: "alice",

@@ -378,6 +378,7 @@ private func eventually(
     await waitForPlayerStoreTest(timeout: .seconds(60), condition: condition)
 }
 
+@MainActor
 private func localAudioURL(
     for id: String,
     in fixture: PlayerStoreTestFixture
@@ -393,6 +394,7 @@ private func localAudioURL(
 
 /// Writes silent audio where the fixture's source resolver looks for cached
 /// songs, so ids from the library resolve to local files.
+@MainActor
 private func cacheSilentAudio(
     for ids: [String],
     in fixture: PlayerStoreTestFixture
@@ -401,6 +403,7 @@ private func cacheSilentAudio(
 }
 
 /// Queue songs that point at local silent audio.
+@MainActor
 private func localSongs(
     _ ids: [String],
     in fixture: PlayerStoreTestFixture
