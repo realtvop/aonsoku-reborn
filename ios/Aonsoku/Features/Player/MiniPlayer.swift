@@ -47,11 +47,9 @@ struct MiniPlayer: View {
             Text(NowPlayingText.title(player, t))
                 .font(isInline ? .caption.weight(.semibold) : .footnote.weight(.semibold))
                 .lineLimit(1)
-            if !isInline {
-                subtitle
-                    .font(.caption)
-                    .lineLimit(1)
-            }
+            subtitle
+                .font(isInline ? .caption2 : .caption)
+                .lineLimit(1)
         }
     }
 
