@@ -62,20 +62,22 @@ struct MiniPlayer: View {
 
     private var titles: some View {
         let context = swipeContext ?? makeSwipeContext()
-        let viewportWidth = max(titlesWidth, 1)
-        return ZStack(alignment: .leading) {
-            metadata(context.current)
-                .frame(width: viewportWidth, alignment: .leading)
-                .offset(x: swipeOffset)
-            if let previous = context.previous {
-                metadata(previous.metadata)
+        return GeometryReader { proxy in
+            let viewportWidth = max(proxy.size.width, 1)
+            ZStack(alignment: .leading) {
+                metadata(context.current)
                     .frame(width: viewportWidth, alignment: .leading)
-                    .offset(x: swipeOffset - titlesWidth)
-            }
-            if let next = context.next {
-                metadata(next.metadata)
-                    .frame(width: viewportWidth, alignment: .leading)
-                    .offset(x: swipeOffset + titlesWidth)
+                    .offset(x: swipeOffset)
+                if let previous = context.previous {
+                    metadata(previous.metadata)
+                        .frame(width: viewportWidth, alignment: .leading)
+                        .offset(x: swipeOffset - viewportWidth)
+                }
+                if let next = context.next {
+                    metadata(next.metadata)
+                        .frame(width: viewportWidth, alignment: .leading)
+                        .offset(x: swipeOffset + viewportWidth)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
