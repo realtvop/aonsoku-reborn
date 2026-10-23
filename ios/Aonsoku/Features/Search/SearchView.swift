@@ -60,6 +60,19 @@ struct SearchView: View {
     private var resultsList: some View {
         List {
             if let results {
+                // Artists first, as in Apple Music: a name usually means
+                // the artist.
+                if !results.artists.isEmpty {
+                    Section {
+                        ForEach(results.artists) { artist in
+                            ArtistRow(artist: artist)
+                                .themedRow(plain: true)
+                        }
+                    } header: {
+                        SectionHeader(title: t("sidebar.artists"))
+                            .textCase(nil)
+                    }
+                }
                 if !results.albums.isEmpty {
                     Section {
                         ForEach(results.albums) { album in
@@ -79,17 +92,6 @@ struct SearchView: View {
                         }
                     } header: {
                         SectionHeader(title: t("sidebar.songs"), route: .songs(SongListQuery(search: query)))
-                            .textCase(nil)
-                    }
-                }
-                if !results.artists.isEmpty {
-                    Section {
-                        ForEach(results.artists) { artist in
-                            ArtistRow(artist: artist)
-                                .themedRow(plain: true)
-                        }
-                    } header: {
-                        SectionHeader(title: t("sidebar.artists"))
                             .textCase(nil)
                     }
                 }
