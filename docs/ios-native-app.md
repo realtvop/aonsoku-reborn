@@ -146,6 +146,11 @@ with automatic foreground sync disabled.
   another device. `NowPlayingPresentation` keeps the player in the tabs'
   view tree, and its drag handle changes only the vertical offset. Tapping
   the handle or the accessibility escape action collapses it.
+  The player surface keeps the system-resolved viewport corner radius on
+  rounded screens/windows. On square viewports its corners grow from 0 to
+  32pt over the first 96pt of a downward slide, reversing on expansion.
+  A stationary full-viewport probe uses public UIKit concentric corner APIs,
+  so the moving player's position never changes the measured baseline.
 - **Now Playing**: artwork-derived animated mesh gradient, artwork that
   shrinks while paused, marquee title, favorite and more menus, scrubber,
   transport, volume, and a bottom bar for lyrics, AirPlay, Aonsoku devices,

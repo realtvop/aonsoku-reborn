@@ -1,5 +1,6 @@
 import AonsokuKit
 import SwiftUI
+import UIKit
 
 /// Presentation state shared by the full-width player and its drag handle.
 @MainActor
@@ -71,6 +72,7 @@ private struct NowPlayingPresentation: ViewModifier {
     @Environment(Router.self) private var router
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var presentation = PlayerPresentationState()
+    @State private var viewportCornerRadius: CGFloat = 0
 
     func body(content: Content) -> some View {
         content
@@ -81,17 +83,28 @@ private struct NowPlayingPresentation: ViewModifier {
                     let insets = proxy.safeAreaInsets
                     let width = proxy.size.width + insets.leading + insets.trailing
                     let height = proxy.size.height + insets.top + insets.bottom
+                    let slide = router.isNowPlayingPresented
+                        ? presentation.dragOffset : height
                     ZStack(alignment: .topLeading) {
                         NowPlayingView()
                             .padding(insets)
                             .frame(width: width, height: height)
                             .coordinateSpace(name: PlayerArtworkLocation.coordinateSpace)
-                            .offset(x: -insets.leading, y: router.isNowPlayingPresented
-                                ? presentation.dragOffset - insets.top
-                                : proxy.size.height + insets.bottom)
+                            .modifier(PlayerSurfaceCorners(
+                                viewportRadius: viewportCornerRadius,
+                                slide: slide
+                            ))
+                            .offset(x: -insets.leading, y: slide - insets.top)
                             .allowsHitTesting(router.isNowPlayingPresented)
                             .accessibilityHidden(!router.isNowPlayingPresented)
                         sharedArtwork(in: proxy, height: height)
+                    }
+                    .background(alignment: .topLeading) {
+                        PlayerViewportCornerReader { viewportCornerRadius = $0 }
+                            .frame(width: width, height: height)
+                            .offset(x: -insets.leading, y: -insets.top)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
                     }
                 }
                 .ignoresSafeArea(.keyboard)
@@ -144,6 +157,70 @@ private struct NowPlayingPresentation: ViewModifier {
         )
         let progress = max(0, 1 - presentation.dragOffset / max(height, 1))
         return mini.interpolated(to: expanded, progress: progress)
+    }
+}
+
+/// Animate the radius from the actual slide, including programmatic
+/// opening/closing. Rounded viewports keep their system-resolved radius.
+private struct PlayerSurfaceCorners: ViewModifier, Animatable {
+    let viewportRadius: CGFloat
+    var slide: CGFloat
+
+    var animatableData: CGFloat {
+        get { slide }
+        set { slide = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        let radius = viewportRadius > 0 ? viewportRadius : min(max(slide, 0) / 3, 32)
+        content.clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+    }
+}
+
+/// A stationary, full-viewport probe, so dragging the player cannot change
+/// its baseline. UIKit resolves screen/window corners without device tables
+/// or private display properties, and invalidates layout when they change.
+private struct PlayerViewportCornerReader: UIViewRepresentable {
+    var onChange: (CGFloat) -> Void
+
+    func makeUIView(context: Context) -> CornerView {
+        CornerView(onChange: onChange)
+    }
+
+    func updateUIView(_ view: CornerView, context: Context) {
+        view.onChange = onChange
+    }
+
+    final class CornerView: UIView {
+        var onChange: (CGFloat) -> Void
+        private var lastRadius: CGFloat?
+
+        init(onChange: @escaping (CGFloat) -> Void) {
+            self.onChange = onChange
+            super.init(frame: .zero)
+            isUserInteractionEnabled = false
+            cornerConfiguration = .uniformCorners(radius: .containerConcentric())
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            guard window != nil, !bounds.isEmpty else { return }
+            let radius = effectiveRadius(corner: .allCorners)
+            guard radius != lastRadius else { return }
+            lastRadius = radius
+            // Do not mutate SwiftUI state from UIKit's layout pass.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.window != nil, self.lastRadius == radius else { return }
+                self.onChange(radius)
+            }
+        }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            setNeedsLayout()
+        }
     }
 }
 

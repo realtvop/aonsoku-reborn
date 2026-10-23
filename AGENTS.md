@@ -135,6 +135,11 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   the full viewport width; the drag handle ignores horizontal movement.
   `PlayerPresentationState` owns the interactive dismissal offset, while
   `Router.isNowPlayingPresented` remains the presentation authority.
+  A stationary full-viewport UIKit probe resolves the screen/window corner
+  radius through iOS 26's public concentric corner APIs. Rounded viewports
+  keep that radius throughout the Y slide; square viewports grow from 0 to
+  32pt over the first 96pt of downward movement. The surface clip precedes
+  the translation and never clips or recreates the shared artwork overlay.
   The same host renders one persistent `PlayerArtwork` at large resolution.
   The mini player, main player, lyrics and queue headers contain only
   `PlayerArtworkSlot` layout markers. Their geometry drives that image's
