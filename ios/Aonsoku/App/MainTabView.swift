@@ -26,7 +26,9 @@ struct MainTabView: View {
                         .appDestinations()
                 }
             }
-            Tab(t("sidebar.miniSearch"), systemImage: "magnifyingglass", value: AppTab.search) {
+            // Keep Search as a real tab while pinning it to the trailing edge
+            // when the adaptable tab bar is compact.
+            Tab(t("sidebar.miniSearch"), systemImage: "magnifyingglass", value: AppTab.search, role: .search) {
                 NavigationStack(path: $router.searchPath) {
                     SearchView()
                         .appDestinations()
