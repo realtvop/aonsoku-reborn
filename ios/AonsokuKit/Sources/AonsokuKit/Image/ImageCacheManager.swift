@@ -1,12 +1,12 @@
 import Foundation
 import GRDB
 
-extension Notification.Name {
+public extension Notification.Name {
     static let aonsokuCoverImageCached = Notification.Name("AonsokuCoverImageCached")
 }
 
-enum ImageCacheNotification {
-    static let coverArtIdKey = "coverArtId"
+public enum ImageCacheNotification {
+    public static let coverArtIdKey = "coverArtId"
 }
 
 final class ImageCacheManager: @unchecked Sendable {

@@ -99,6 +99,16 @@ struct ArtworkReader<Content: View>: View {
     var body: some View {
         content(currentImage)
             .task(id: key) { await load() }
+            .onReceive(
+                NotificationCenter.default.publisher(for: .aonsokuCoverImageCached)
+            ) { notification in
+                guard let id,
+                      notification.userInfo?[ImageCacheNotification.coverArtIdKey]
+                          as? String == id else {
+                    return
+                }
+                Task { await load() }
+            }
     }
 
     private var key: String? {
