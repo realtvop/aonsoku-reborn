@@ -25,6 +25,7 @@ struct MiniPlayer: View {
         }
         .padding(.leading, isInline ? 8 : 10)
         .padding(.trailing, isInline ? 4 : 8)
+        .foregroundStyle(.black)
         .contentShape(.rect)
         .onTapGesture {
             open()
@@ -45,7 +46,6 @@ struct MiniPlayer: View {
         VStack(alignment: .leading, spacing: 1) {
             Text(NowPlayingText.title(player, t))
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(player.hasMedia ? .primary : .secondary)
                 .lineLimit(1)
             if !isInline {
                 subtitle
@@ -61,10 +61,8 @@ struct MiniPlayer: View {
         if case let .remote(_, deviceName) = player.target {
             Label(deviceName, systemImage: "hifispeaker.fill")
                 .labelStyle(.titleAndIcon)
-                .foregroundStyle(.tint)
         } else if let subtitle = NowPlayingText.subtitle(player, t) {
             Text(subtitle)
-                .foregroundStyle(.secondary)
         }
     }
 
