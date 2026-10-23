@@ -168,6 +168,7 @@ final class FavoritesStoreTests: XCTestCase {
         let api = FakeSubsonicAPI()
         let started = expectation(description: "remote favorites started")
         let gate = TestAsyncGate()
+        api.starHandler = { _ in }
         api.starredHandler = {
             started.fulfill()
             await gate.wait()
@@ -199,6 +200,7 @@ final class FavoritesStoreTests: XCTestCase {
             SearchResults(songs: [makeMediaSong("recent")]),
             SearchResults(),
         ])
+        api.starHandler = { _ in }
         api.starredHandler = {
             responses.read(\.first) ?? SearchResults()
         }

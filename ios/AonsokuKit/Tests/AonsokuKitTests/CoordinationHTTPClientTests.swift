@@ -128,6 +128,7 @@ final class CoordinationHTTPClientTests: XCTestCase {
             historyLimit: 100
         )
         tokenStore.saveTokens(tokens)
+        client.bindRegistration(tokens)
 
         fakeTransport.addResponse(path: "/v1/devices", method: "GET", statusCode: 200,
                                  body: try JSONSerialization.data(withJSONObject: []))
@@ -206,6 +207,7 @@ final class CoordinationHTTPClientTests: XCTestCase {
             historyLimit: 100
         )
         tokenStore.saveTokens(tokens)
+        client.bindRegistration(tokens)
 
         fakeTransport.addResponse(path: "/v1/auth/token", method: "POST", statusCode: 200,
                                  body: try JSONSerialization.data(withJSONObject: [
@@ -238,6 +240,7 @@ final class CoordinationHTTPClientTests: XCTestCase {
             historyLimit: 100
         )
         tokenStore.saveTokens(tokens)
+        client.bindRegistration(tokens)
 
         fakeTransport.addResponse(path: "/v1/devices", method: "GET", statusCode: 200,
                                  body: try JSONSerialization.data(withJSONObject: []))
@@ -261,6 +264,7 @@ final class CoordinationHTTPClientTests: XCTestCase {
             historyLimit: 100
         )
         tokenStore.saveTokens(tokens)
+        client.bindRegistration(tokens)
 
         fakeTransport.addResponse(path: "/v1/devices", method: "GET", statusCode: 401,
                                  body: Data())
@@ -293,6 +297,7 @@ final class CoordinationHTTPClientTests: XCTestCase {
             historyLimit: 100
         )
         tokenStore.saveTokens(tokens)
+        client.bindRegistration(tokens)
 
         fakeTransport.addResponse(path: "/v1/devices", method: "GET", statusCode: 401,
                                  body: try JSONSerialization.data(withJSONObject: [
@@ -331,6 +336,7 @@ final class CoordinationHTTPClientTests: XCTestCase {
             historyLimit: 100
         )
         tokenStore.saveTokens(tokens)
+        client.bindRegistration(tokens)
 
         fakeTransport.addResponse(path: "/v1/auth/token", method: "POST", statusCode: 200,
                                  body: try JSONSerialization.data(withJSONObject: [
@@ -419,6 +425,7 @@ final class CoordinationHTTPClientTests: XCTestCase {
             historyLimit: 100
         )
         tokenStore.saveTokens(tokens)
+        client.bindRegistration(tokens)
 
         fakeTransport.addResponse(path: "/v1/auth/token", method: "POST", statusCode: 403,
                                  body: try JSONSerialization.data(withJSONObject: [
@@ -555,6 +562,7 @@ final class CoordinationHTTPClientTests: XCTestCase {
             historyLimit: 100
         )
         tokenStore.saveTokens(tokens)
+        client.bindRegistration(tokens)
 
         fakeTransport.addResponse(path: "/v1/auth/token", method: "POST", statusCode: 401,
                                  body: try JSONSerialization.data(withJSONObject: [
@@ -584,6 +592,7 @@ final class CoordinationHTTPClientTests: XCTestCase {
             historyLimit: 100
         )
         tokenStore.saveTokens(tokens)
+        client.bindRegistration(tokens)
 
         fakeTransport.addResponse(path: "/v1/devices", method: "GET", statusCode: 500,
                                  body: try JSONSerialization.data(withJSONObject: [
@@ -611,6 +620,7 @@ final class CoordinationHTTPClientTests: XCTestCase {
             historyLimit: 100
         )
         tokenStore.saveTokens(tokens)
+        client.bindRegistration(tokens)
 
         fakeTransport.addResponse(path: "/v1/devices", method: "GET", statusCode: 503,
                                  body: "Service Unavailable".data(using: .utf8)!)
@@ -669,6 +679,7 @@ final class CoordinationHTTPClientTests: XCTestCase {
             historyLimit: 100
         )
         tokenStore.saveTokens(tokens)
+        client.bindRegistration(tokens)
 
         fakeTransport.addResponse(path: "/v1/devices/special%2Fid", method: "PATCH", statusCode: 200,
                                  body: try JSONSerialization.data(withJSONObject: [
@@ -754,6 +765,7 @@ final class CoordinationHTTPClientTests: XCTestCase {
             historyLimit: 100
         )
         tokenStore.saveTokens(tokens)
+        client.bindRegistration(tokens)
 
         fakeTransport.addResponse(path: "/v1/devices/dev-456", method: "DELETE", statusCode: 204,
                                  body: Data())
@@ -775,6 +787,7 @@ final class CoordinationHTTPClientTests: XCTestCase {
             historyLimit: 100
         )
         tokenStore.saveTokens(tokens)
+        client.bindRegistration(tokens)
 
         fakeTransport.addResponse(path: "/v1/account", method: "DELETE", statusCode: 204,
                                  body: Data())
