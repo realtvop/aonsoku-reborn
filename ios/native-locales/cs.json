@@ -54,6 +54,22 @@
         "label": "Automaticky otevírat Právě hraje",
         "info": "Po spuštění alba, playlistu nebo skladby zobrazí Právě hraje."
       }
+    },
+    "accountSwitch": {
+      "different": {
+        "title": "Přepnout účet?",
+        "message": "Přihlášením jako {{user}} na serveru {{server}} vymažeš z tohoto zařízení knihovnu, staženou hudbu a historii přehrávání účtu {{previousUser}} na serveru {{previousServer}}. Ze serveru se nic neodstraní."
+      },
+      "server": {
+        "title": "Je to stejný server?",
+        "message": "V tomto zařízení je knihovna, stažená hudba a historie přehrávání účtu {{user}} na serveru {{previousServer}}. Ponech je, pokud je {{server}} stejný server na nové adrese, nebo je vymaž a začni znovu."
+      },
+      "unknown": {
+        "title": "Ponechat stávající knihovnu?",
+        "message": "V tomto zařízení je knihovna a stažená hudba z dřívějšího přihlášení. Ponech je, pokud patří účtu {{user}} na serveru {{server}}, nebo je vymaž a začni znovu."
+      },
+      "erase": "Vymazat a pokračovat",
+      "keep": "Ponechat knihovnu"
     }
   }
 }

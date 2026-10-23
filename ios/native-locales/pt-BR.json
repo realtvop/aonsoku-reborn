@@ -54,6 +54,22 @@
         "label": "Abrir “Tocando agora” automaticamente",
         "info": "Mostra “Tocando agora” quando você começa a tocar um álbum, uma playlist ou uma música."
       }
+    },
+    "accountSwitch": {
+      "different": {
+        "title": "Trocar de conta?",
+        "message": "Ao entrar como {{user}} em {{server}}, a biblioteca, os downloads e o histórico de reprodução de {{previousUser}} em {{previousServer}} serão apagados deste dispositivo. Nada é removido do servidor."
+      },
+      "server": {
+        "title": "É o mesmo servidor?",
+        "message": "Este dispositivo tem a biblioteca, os downloads e o histórico de reprodução de {{user}} em {{previousServer}}. Mantenha-os se {{server}} for o mesmo servidor em um novo endereço, ou apague-os e comece do zero."
+      },
+      "unknown": {
+        "title": "Manter a biblioteca existente?",
+        "message": "Este dispositivo tem uma biblioteca e downloads de um login anterior. Mantenha-os se pertencerem a {{user}} em {{server}}, ou apague-os e comece do zero."
+      },
+      "erase": "Apagar e continuar",
+      "keep": "Manter biblioteca"
     }
   }
 }

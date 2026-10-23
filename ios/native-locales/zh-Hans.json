@@ -54,6 +54,22 @@
         "label": "自动打开正在播放",
         "info": "开始播放专辑、播放列表或歌曲时显示正在播放。"
       }
+    },
+    "accountSwitch": {
+      "different": {
+        "title": "切换账户？",
+        "message": "以 {{server}} 上的 {{user}} 身份登录，将从此设备抹掉 {{previousServer}} 上 {{previousUser}} 的资料库、下载内容和播放历史。服务器上的内容不会被删除。"
+      },
+      "server": {
+        "title": "是同一台服务器吗？",
+        "message": "此设备上有 {{previousServer}} 上 {{user}} 的资料库、下载内容和播放历史。如果 {{server}} 是同一台服务器的新地址，请保留它们；否则请抹掉并重新开始。"
+      },
+      "unknown": {
+        "title": "保留现有资料库？",
+        "message": "此设备上有之前登录留下的资料库和下载内容。如果它们属于 {{server}} 上的 {{user}}，请保留；否则请抹掉并重新开始。"
+      },
+      "erase": "抹掉并继续",
+      "keep": "保留资料库"
     }
   }
 }

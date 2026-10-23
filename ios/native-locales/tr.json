@@ -54,6 +54,22 @@
         "label": "Şimdi Çalıyor'u otomatik aç",
         "info": "Bir albüm, çalma listesi veya şarkı çalmaya başladığında Şimdi Çalıyor'u gösterir."
       }
+    },
+    "accountSwitch": {
+      "different": {
+        "title": "Hesap değiştirilsin mi?",
+        "message": "{{server}} sunucusunda {{user}} olarak giriş yaparsan {{previousServer}} sunucusundaki {{previousUser}} hesabına ait kitaplık, indirilenler ve oynatma geçmişi bu cihazdan silinir. Sunucudan hiçbir şey kaldırılmaz."
+      },
+      "server": {
+        "title": "Bu aynı sunucu mu?",
+        "message": "Bu cihazda {{previousServer}} sunucusundaki {{user}} hesabına ait kitaplık, indirilenler ve oynatma geçmişi var. {{server}} yeni adresteki aynı sunucuysa bunları koru, değilse sil ve baştan başla."
+      },
+      "unknown": {
+        "title": "Mevcut kitaplık korunsun mu?",
+        "message": "Bu cihazda önceki bir girişten kalan bir kitaplık ve indirilenler var. {{server}} sunucusundaki {{user}} hesabına aitse bunları koru, değilse sil ve baştan başla."
+      },
+      "erase": "Sil ve devam et",
+      "keep": "Kitaplığı koru"
     }
   }
 }

@@ -54,6 +54,22 @@
         "label": "Ouvrir « À l’écoute » automatiquement",
         "info": "Affiche « À l’écoute » lorsque vous lancez la lecture d’un album, d’une liste de lecture ou d’un titre."
       }
+    },
+    "accountSwitch": {
+      "different": {
+        "title": "Changer de compte ?",
+        "message": "Si vous vous connectez en tant que {{user}} sur {{server}}, la bibliothèque, les téléchargements et l'historique d'écoute de {{previousUser}} sur {{previousServer}} seront effacés de cet appareil. Rien n'est supprimé du serveur."
+      },
+      "server": {
+        "title": "S'agit-il du même serveur ?",
+        "message": "Cet appareil contient la bibliothèque, les téléchargements et l'historique d'écoute de {{user}} sur {{previousServer}}. Conservez-les si {{server}} est le même serveur à une nouvelle adresse, ou effacez-les pour repartir de zéro."
+      },
+      "unknown": {
+        "title": "Conserver la bibliothèque existante ?",
+        "message": "Cet appareil contient une bibliothèque et des téléchargements d'une connexion précédente. Conservez-les s'ils appartiennent à {{user}} sur {{server}}, ou effacez-les pour repartir de zéro."
+      },
+      "erase": "Effacer et continuer",
+      "keep": "Conserver la bibliothèque"
     }
   }
 }

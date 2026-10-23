@@ -260,7 +260,11 @@ struct LoginView: View {
                     username: username,
                     password: password
                 )
-                toasts.success("toast.server.success")
+                // A sign-in that waits on the account-switch alert reports
+                // success once the user has decided.
+                if !app.isAwaitingAccountDecision {
+                    toasts.success("toast.server.success")
+                }
             } catch {
                 toasts.show(.key("toast.server.error"), style: .error)
             }

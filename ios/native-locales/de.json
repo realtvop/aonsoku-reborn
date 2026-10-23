@@ -54,6 +54,22 @@
         "label": "„Jetzt läuft“ automatisch öffnen",
         "info": "Zeigt „Jetzt läuft“, wenn Sie ein Album, eine Wiedergabeliste oder ein Lied abspielen."
       }
+    },
+    "accountSwitch": {
+      "different": {
+        "title": "Konto wechseln?",
+        "message": "Wenn Sie sich als {{user}} auf {{server}} anmelden, werden die Bibliothek, die Downloads und der Wiedergabeverlauf von {{previousUser}} auf {{previousServer}} von diesem Gerät gelöscht. Auf dem Server wird nichts entfernt."
+      },
+      "server": {
+        "title": "Ist das derselbe Server?",
+        "message": "Auf diesem Gerät befinden sich die Bibliothek, die Downloads und der Wiedergabeverlauf von {{user}} auf {{previousServer}}. Behalten Sie sie, wenn {{server}} derselbe Server unter einer neuen Adresse ist, oder löschen Sie sie und beginnen Sie neu."
+      },
+      "unknown": {
+        "title": "Vorhandene Bibliothek behalten?",
+        "message": "Auf diesem Gerät befinden sich eine Bibliothek und Downloads von einer früheren Anmeldung. Behalten Sie sie, wenn sie zu {{user}} auf {{server}} gehören, oder löschen Sie sie und beginnen Sie neu."
+      },
+      "erase": "Löschen und fortfahren",
+      "keep": "Bibliothek behalten"
     }
   }
 }

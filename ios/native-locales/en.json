@@ -54,6 +54,22 @@
         "label": "Open Now Playing Automatically",
         "info": "Shows Now Playing when you start playing an album, playlist or song."
       }
+    },
+    "accountSwitch": {
+      "different": {
+        "title": "Switch Accounts?",
+        "message": "Signing in as {{user}} on {{server}} erases the library, downloads and play history of {{previousUser}} on {{previousServer}} from this device. Nothing is removed from the server."
+      },
+      "server": {
+        "title": "Is This the Same Server?",
+        "message": "This device holds the library, downloads and play history of {{user}} on {{previousServer}}. Keep them if {{server}} is the same server at a new address, or erase them and start fresh."
+      },
+      "unknown": {
+        "title": "Keep the Existing Library?",
+        "message": "This device holds a library and downloads from an earlier sign-in. Keep them if they belong to {{user}} on {{server}}, or erase them and start fresh."
+      },
+      "erase": "Erase and Continue",
+      "keep": "Keep Library"
     }
   }
 }

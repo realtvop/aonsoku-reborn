@@ -74,6 +74,16 @@ caches, pins, lyrics selections and the prior coordination registration so
 process-wide services cannot expose the previous account's content. Signing
 back into the same account resumes its preserved coordination registration.
 
+That removal never happens without the user's say-so. When a sign-in or a
+launch restore finds a library recorded for another username, for the same
+username at another server address, or with no recorded owner, `AppModel`
+holds a pending `AccountSwitchRequest` instead of activating. `RootView` keeps
+the sign-in screen up and `AccountSwitchAlert` asks the user to erase the old
+library, keep it (offered only when it may be the same account, as after a
+server address change), or cancel the sign-in. The request survives a
+relaunch, and changing the server address in Settings → Server goes through
+`AppModel.updateServerUrls`, which moves the recorded owner with it.
+
 ## Services (AonsokuKit)
 
 | Service | Responsibility |

@@ -54,6 +54,22 @@
         "label": "Automatycznie otwieraj „Teraz odtwarzane”",
         "info": "Pokazuje „Teraz odtwarzane”, gdy zaczniesz odtwarzać album, playlistę lub utwór."
       }
+    },
+    "accountSwitch": {
+      "different": {
+        "title": "Przełączyć konto?",
+        "message": "Po zalogowaniu jako {{user}} na serwerze {{server}} biblioteka, pobrane utwory i historia odtwarzania konta {{previousUser}} z serwera {{previousServer}} zostaną usunięte z tego urządzenia. Z serwera nic nie zostanie usunięte."
+      },
+      "server": {
+        "title": "Czy to ten sam serwer?",
+        "message": "Na tym urządzeniu są biblioteka, pobrane utwory i historia odtwarzania konta {{user}} z serwera {{previousServer}}. Zachowaj je, jeśli {{server}} to ten sam serwer pod nowym adresem, albo je usuń i zacznij od nowa."
+      },
+      "unknown": {
+        "title": "Zachować istniejącą bibliotekę?",
+        "message": "Na tym urządzeniu są biblioteka i pobrane utwory z wcześniejszego logowania. Zachowaj je, jeśli należą do konta {{user}} na serwerze {{server}}, albo je usuń i zacznij od nowa."
+      },
+      "erase": "Usuń i kontynuuj",
+      "keep": "Zachowaj bibliotekę"
     }
   }
 }

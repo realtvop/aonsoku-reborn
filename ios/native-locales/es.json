@@ -54,6 +54,22 @@
         "label": "Abrir “Reproduciendo” automáticamente",
         "info": "Muestra “Reproduciendo” al empezar a reproducir un álbum, una lista de reproducción o una canción."
       }
+    },
+    "accountSwitch": {
+      "different": {
+        "title": "¿Cambiar de cuenta?",
+        "message": "Al iniciar sesión como {{user}} en {{server}}, se borrarán de este dispositivo la biblioteca, las descargas y el historial de reproducción de {{previousUser}} en {{previousServer}}. No se elimina nada del servidor."
+      },
+      "server": {
+        "title": "¿Es el mismo servidor?",
+        "message": "Este dispositivo tiene la biblioteca, las descargas y el historial de reproducción de {{user}} en {{previousServer}}. Consérvalos si {{server}} es el mismo servidor con una nueva dirección, o bórralos y empieza de cero."
+      },
+      "unknown": {
+        "title": "¿Conservar la biblioteca existente?",
+        "message": "Este dispositivo tiene una biblioteca y descargas de un inicio de sesión anterior. Consérvalas si pertenecen a {{user}} en {{server}}, o bórralas y empieza de cero."
+      },
+      "erase": "Borrar y continuar",
+      "keep": "Conservar biblioteca"
     }
   }
 }

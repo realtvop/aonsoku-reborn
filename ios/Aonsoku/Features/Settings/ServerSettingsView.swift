@@ -103,7 +103,9 @@ struct ServerSettingsView: View {
         Task {
             defer { isSaving = false }
             do {
-                try await session.updateServerUrls(
+                // Through the app model, so the library's recorded owner
+                // follows the new address and the next launch keeps it.
+                try await app.updateServerUrls(
                     primaryUrl: primary,
                     fallbackUrl: fallback.isEmpty ? nil : fallback
                 )

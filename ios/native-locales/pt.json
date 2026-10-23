@@ -54,6 +54,22 @@
         "label": "Abrir “A reproduzir” automaticamente",
         "info": "Mostra “A reproduzir” quando começa a reproduzir um álbum, uma playlist ou uma música."
       }
+    },
+    "accountSwitch": {
+      "different": {
+        "title": "Mudar de conta?",
+        "message": "Ao iniciar sessão como {{user}} em {{server}}, a biblioteca, as músicas descarregadas e o histórico de reprodução de {{previousUser}} em {{previousServer}} serão apagados deste dispositivo. Nada é removido do servidor."
+      },
+      "server": {
+        "title": "É o mesmo servidor?",
+        "message": "Este dispositivo tem a biblioteca, as músicas descarregadas e o histórico de reprodução de {{user}} em {{previousServer}}. Mantenha-os se {{server}} for o mesmo servidor num novo endereço, ou apague-os e comece do zero."
+      },
+      "unknown": {
+        "title": "Manter a biblioteca existente?",
+        "message": "Este dispositivo tem uma biblioteca e músicas descarregadas de um início de sessão anterior. Mantenha-as se pertencerem a {{user}} em {{server}}, ou apague-as e comece do zero."
+      },
+      "erase": "Apagar e continuar",
+      "keep": "Manter biblioteca"
     }
   }
 }

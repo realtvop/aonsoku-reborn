@@ -54,6 +54,22 @@
         "label": "Öppna Spelas nu automatiskt",
         "info": "Visar Spelas nu när du börjar spela ett album, en spellista eller en sång."
       }
+    },
+    "accountSwitch": {
+      "different": {
+        "title": "Byta konto?",
+        "message": "Om du loggar in som {{user}} på {{server}} raderas biblioteket, nedladdningarna och spelhistoriken för {{previousUser}} på {{previousServer}} från den här enheten. Ingenting tas bort från servern."
+      },
+      "server": {
+        "title": "Är det samma server?",
+        "message": "Den här enheten har biblioteket, nedladdningarna och spelhistoriken för {{user}} på {{previousServer}}. Behåll dem om {{server}} är samma server på en ny adress, eller radera dem och börja om."
+      },
+      "unknown": {
+        "title": "Behålla befintligt bibliotek?",
+        "message": "Den här enheten har ett bibliotek och nedladdningar från en tidigare inloggning. Behåll dem om de tillhör {{user}} på {{server}}, eller radera dem och börja om."
+      },
+      "erase": "Radera och fortsätt",
+      "keep": "Behåll bibliotek"
     }
   }
 }
