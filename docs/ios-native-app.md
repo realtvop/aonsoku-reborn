@@ -132,15 +132,21 @@ with automatic foreground sync disabled.
 
 ## Navigation and screens
 
-- **Tabs**: Home, Library, Search. On iPhone, Search shares the expanded tab
-  bar and gains `role: .search` when the bottom accessory moves inline,
-  placing it in a separate circle to the right of the mini player. The
-  system owns minimization on scroll; `MainTabAccessory` reports its
-  placement to `MainTabView`. iPad keeps the search role and the
-  sidebar-adaptable tab style.
-- **Mini player**: `tabViewBottomAccessory`, adapting to the inline and
-  expanded accessory placements. Tapping it opens Now Playing with a zoom
-  transition; it also shows remote playback when controlling another device.
+- **Tabs**: Home, Library, Search, with independent native navigation stacks.
+  Compact widths hide the system tab bar and use `CompactTabBar`. One
+  animated progress moves the existing controls and glass backgrounds from
+  an expanded tab row to a leading tab, center player and trailing Search
+  circle. Tab roles stay constant throughout the animation. Vertical user
+  scrolling minimizes/expands the dock; horizontal shelves and programmatic
+  scrolling do not. Tapping the minimized leading tab expands the choices;
+  tapping the selected expanded tab returns to its root. The dock hides with
+  the keyboard, respects Reduce Motion, and stays expanded at accessibility
+  text sizes. Regular widths retain the system sidebar-adaptable tab style.
+- **Mini player**: the same `MiniPlayer` in both layouts. The compact dock
+  animates its artwork, text, spacing and Next control with the dock's progress;
+  the regular-width system `tabViewBottomAccessory` supplies its placement.
+  Tapping it opens Now Playing with a zoom transition; it also shows remote
+  playback when controlling another device.
 - **Now Playing**: artwork-derived animated mesh gradient, artwork that
   shrinks while paused, marquee title, favorite and more menus, scrubber,
   transport, volume, and a bottom bar for lyrics, AirPlay, Aonsoku devices,

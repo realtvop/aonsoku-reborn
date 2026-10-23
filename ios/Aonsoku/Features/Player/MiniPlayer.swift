@@ -6,6 +6,10 @@ import SwiftUI
 /// tab bar it keeps the cover, title, artist and Play/Pause. Swipe the pill
 /// horizontally to move through the queue.
 struct MiniPlayer: View {
+    /// The iPhone dock animates this value without replacing the player.
+    /// The system accessory on iPad supplies its own placement instead.
+    var compactProgress: CGFloat?
+
     @Environment(PlayerStore.self) private var player
     @Environment(Router.self) private var router
     @Environment(Localizer.self) private var t
@@ -18,21 +22,24 @@ struct MiniPlayer: View {
     @State private var armedSwipe: MiniPlayerSwipeDirection?
     @State private var swipeHapticTrigger = 0
     @State private var settleTask: Task<Void, Never>?
+    @ScaledMetric(relativeTo: .footnote) private var titleSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .caption) private var subtitleSize: CGFloat = 12
+    @ScaledMetric(relativeTo: .title3) private var controlSize: CGFloat = 20
 
-    private var isInline: Bool {
-        placement == .inline
+    private var progress: CGFloat {
+        min(max(compactProgress ?? (placement == .inline ? 1 : 0), 0), 1)
     }
 
     var body: some View {
-        HStack(spacing: isInline ? 7 : 10) {
-            PlayerArtwork(cornerRadius: isInline ? 4 : 5, size: .small)
-                .frame(width: isInline ? 26 : 34, height: isInline ? 26 : 34)
+        HStack(spacing: 10 - 3 * progress) {
+            PlayerArtwork(cornerRadius: 5 - progress, size: .small)
+                .frame(width: 34 - 8 * progress, height: 34 - 8 * progress)
             titles
             Spacer(minLength: 4)
             controls
         }
-        .padding(.leading, isInline ? 7 : 10)
-        .padding(.trailing, isInline ? 3 : 7)
+        .padding(.leading, 10 - 3 * progress)
+        .padding(.trailing, 7 - 4 * progress)
         .foregroundStyle(.black)
         .contentShape(.rect)
         .onTapGesture {
@@ -81,7 +88,7 @@ struct MiniPlayer: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: isInline ? 28 : 32)
+        .frame(height: 32 - 4 * progress)
         .onGeometryChange(for: CGFloat.self, of: \.size.width) { titlesWidth = $0 }
         .clipped()
         .layoutPriority(1)
@@ -89,12 +96,12 @@ struct MiniPlayer: View {
 
     @ViewBuilder
     private func metadata(_ metadata: MiniPlayerMetadata) -> some View {
-        VStack(alignment: .leading, spacing: isInline ? 0 : 1) {
+        VStack(alignment: .leading, spacing: 1 - progress) {
             MarqueeText(text: metadata.title, respectsReduceMotion: false)
-                .font(isInline ? .caption.weight(.semibold) : .footnote.weight(.semibold))
+                .font(.system(size: titleSize * (1 - progress / 13), weight: .semibold))
             if let subtitle = metadata.subtitle {
                 subtitleView(subtitle)
-                    .font(isInline ? .caption2 : .caption)
+                    .font(.system(size: subtitleSize * (1 - progress / 12)))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -272,23 +279,26 @@ struct MiniPlayer: View {
             player.togglePlayPause()
         } label: {
             Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                .font(isInline ? .body : .title3)
+                .font(.system(size: controlSize * (1 - 0.15 * progress)))
                 .contentTransition(.symbolEffect(.replace))
                 .frame(width: 36, height: 36)
                 .contentShape(.rect)
         }
         .accessibilityLabel(t(player.isPlaying ? "player.tooltips.pause" : "player.tooltips.play"))
-        if !isInline {
-            Button {
-                player.next()
-            } label: {
-                Image(systemName: "forward.fill")
-                    .font(.title3)
-                    .frame(width: 36, height: 36)
-                    .contentShape(.rect)
-            }
-            .accessibilityLabel(t("player.tooltips.next"))
+        Button {
+            player.next()
+        } label: {
+            Image(systemName: "forward.fill")
+                .font(.system(size: controlSize))
+                .frame(width: 36, height: 36)
+                .contentShape(.rect)
         }
+        .frame(width: 36 * (1 - progress))
+        .opacity(1 - progress)
+        .clipped()
+        .allowsHitTesting(progress < 0.5)
+        .accessibilityHidden(progress >= 0.5)
+        .accessibilityLabel(t("player.tooltips.next"))
     }
 }
 

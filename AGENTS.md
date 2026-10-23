@@ -122,10 +122,14 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   shared `src/` SPA or Capacitor. SwiftUI owns presentation; `AonsokuKit` owns
   networking, persistence, playback, sync, downloads, coordination, settings,
   and observable stores. See `docs/ios-native-app.md`.
-  `MainTabView` keeps Search inside the expanded iPhone tab bar and applies
-  its search role only while `MainTabAccessory` reports inline placement,
-  so the minimized search circle stays separate from the player. iPad keeps
-  the search role for its adaptable sidebar.
+  At compact widths, `MainTabView` uses `CompactTabBar`: persistent controls
+  and glass backgrounds share one animated layout progress, moving Search
+  from the expanded tab row into a separate circle beside the mini player.
+  Never change a tab's role while minimizing: that rebuilds the system tab
+  layout during the animation. `compactTabBarPage()` hides the system bar
+  at each root/pushed page and forwards vertical user scrolling to the dock;
+  keyboard presentation hides the dock. Regular-width layouts retain the
+  native tab bar, bottom accessory, search role, and adaptable sidebar.
 - Android native pages use the application-scoped
   `github.realtvop.aonsoku.plugins.data.LibraryService` for Room queries,
   metadata sync, lyrics, and image-cache ownership. It is created with the
