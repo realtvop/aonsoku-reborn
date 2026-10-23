@@ -150,7 +150,10 @@ with automatic foreground sync disabled.
   shrinks while paused, marquee title, favorite and more menus, scrubber,
   transport, volume, and a bottom bar for lyrics, AirPlay, Aonsoku devices,
   and the queue. Lyrics and queue replace the large artwork with a compact
-  header, as in Apple Music.
+  header, as in Apple Music. One persistent `PlayerArtwork` in the presentation
+  host moves and resizes between layout-only slots in the mini player, main
+  page, lyrics and queue headers. It keeps the same large-resolution image
+  reader through every transition, including paused scaling and dismissal.
 - **Home**: other devices' playback, featured albums, pinned items, Recently
   Played, Most Played, Recently Added, Explore. Pull to refresh runs an
   incremental sync. The avatar opens the account sheet.

@@ -135,6 +135,11 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   the full viewport width; the drag handle ignores horizontal movement.
   `PlayerPresentationState` owns the interactive dismissal offset, while
   `Router.isNowPlayingPresented` remains the presentation authority.
+  The same host renders one persistent `PlayerArtwork` at large resolution.
+  The mini player, main player, lyrics and queue headers contain only
+  `PlayerArtworkSlot` layout markers. Their geometry drives that image's
+  position, size, corner radius and shadow, including paused scaling and
+  interactive collapse; never add separate current-track images to them.
 - Android native pages use the application-scoped
   `github.realtvop.aonsoku.plugins.data.LibraryService` for Room queries,
   metadata sync, lyrics, and image-cache ownership. It is created with the

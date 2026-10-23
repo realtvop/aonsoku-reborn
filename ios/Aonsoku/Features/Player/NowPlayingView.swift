@@ -14,7 +14,6 @@ struct NowPlayingView: View {
 
     @State private var panel: Panel?
     @State private var palette: ArtworkPalette?
-    @Namespace private var artworkSpace
 
     @Environment(PlayerStore.self) private var player
     @Environment(LyricsStore.self) private var lyrics
@@ -39,18 +38,22 @@ struct NowPlayingView: View {
                 }
             }
             .animation(.spring(duration: 0.5, bounce: 0.15), value: panel)
+            .onChange(of: isWide || panel == nil, initial: true) { _, usesLargeCover in
+                presentation.artworkLocation = usesLargeCover ? .cover : .header
+            }
         }
         .foregroundStyle(.white)
         .background {
             NowPlayingBackground(
                 palette: palette,
                 intensity: settings.settings.appearance.nowPlayingColorIntensity,
-                isAnimating: player.isPlaying
+                isAnimating: player.isPlaying && router.isNowPlayingPresented
             )
         }
         .environment(\.colorScheme, .dark)
         .artworkPalette(coverArtId, into: $palette)
-        .task(id: player.currentSong?.id) {
+        .task(id: router.isNowPlayingPresented ? player.currentSong?.id : nil) {
+            guard router.isNowPlayingPresented else { return }
             await lyrics.load(for: player.currentSong)
         }
         .onChange(of: player.hasMedia) { _, hasMedia in
@@ -186,9 +189,7 @@ struct NowPlayingView: View {
     }
 
     private var largeArtwork: some View {
-        PlayerArtwork(cornerRadius: 14, size: .large)
-            .matchedGeometryEffect(id: "artwork", in: artworkSpace)
-            .shadow(color: .black.opacity(0.35), radius: 26, y: 14)
+        PlayerArtworkSlot(location: .cover, cornerRadius: 14, shadowRadius: 26)
             .scaleEffect(player.isPlaying || !player.hasMedia ? 1 : 0.8)
             .animation(.spring(duration: 0.55, bounce: 0.3), value: player.isPlaying)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -215,10 +216,8 @@ struct NowPlayingView: View {
             Button {
                 panel = nil
             } label: {
-                PlayerArtwork(cornerRadius: 8, size: .medium)
-                    .matchedGeometryEffect(id: "artwork", in: artworkSpace)
+                PlayerArtworkSlot(location: .header, cornerRadius: 8, shadowRadius: 10)
                     .frame(width: 64, height: 64)
-                    .shadow(color: .black.opacity(0.3), radius: 10, y: 5)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(t("fullscreen.playing"))
