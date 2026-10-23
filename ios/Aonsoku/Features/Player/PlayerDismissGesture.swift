@@ -19,7 +19,9 @@ private struct PlayerSliderRegionModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) {
+            .onGeometryChange(for: CGRect.self, of: {
+                $0.frame(in: .named(PlayerArtworkLocation.containerCoordinateSpace))
+            }) {
                 presentation.sliderFrames[region] = $0
             }
             .onDisappear { presentation.sliderFrames.removeValue(forKey: region) }
@@ -34,7 +36,7 @@ struct PlayerDismissGesture: UIGestureRecognizerRepresentable {
     let settle: (_ dismiss: Bool) -> Void
 
     func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator {
-        Coordinator(presentation: presentation)
+        Coordinator(presentation: presentation, converter: converter)
     }
 
     func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
@@ -67,17 +69,15 @@ struct PlayerDismissGesture: UIGestureRecognizerRepresentable {
 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         let presentation: PlayerPresentationState
+        let converter: CoordinateSpaceConverter
         private weak var scrollView: UIScrollView?
 
-        init(presentation: PlayerPresentationState) {
+        init(presentation: PlayerPresentationState, converter: CoordinateSpaceConverter) {
             self.presentation = presentation
+            self.converter = converter
         }
 
         func gestureRecognizer(_ gesture: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-            let point = touch.location(in: gesture.view?.window)
-            guard !presentation.sliderFrames.values.contains(where: { $0.contains(point) }) else {
-                return false
-            }
             scrollView = nil
             var view = touch.view
             while let current = view {
@@ -92,6 +92,14 @@ struct PlayerDismissGesture: UIGestureRecognizerRepresentable {
 
         func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
             guard let pan = gesture as? UIPanGestureRecognizer else { return false }
+            // UIKit window points and SwiftUI global points can have different
+            // safe-area origins. Compare both in this stationary container.
+            let location = converter.location(in: .local)
+            let translation = converter.translation(in: .local) ?? .zero
+            let start = CGPoint(x: location.x - translation.x, y: location.y - translation.y)
+            guard !presentation.sliderFrames.values.contains(where: { $0.contains(start) }) else {
+                return false
+            }
             let velocity = pan.velocity(in: pan.view?.window)
             guard velocity.y > abs(velocity.x) else { return false }
             // A scrolled lyrics/queue list scrolls back to its top first.

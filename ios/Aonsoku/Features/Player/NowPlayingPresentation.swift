@@ -21,6 +21,7 @@ nonisolated enum PlayerArtworkLocation: Hashable {
 
     static let coordinateSpace = "nowPlayingArtwork"
     static let miniCoordinateSpace = "miniPlayerArtwork"
+    static let containerCoordinateSpace = "playerContainer"
 }
 
 nonisolated struct PlayerAccessoryLayout: Equatable {
@@ -157,6 +158,7 @@ private struct NowPlayingPresentation: ViewModifier {
                         sharedArtwork(in: proxy)
                     }
                     .frame(width: width, height: height, alignment: .topLeading)
+                    .coordinateSpace(name: PlayerArtworkLocation.containerCoordinateSpace)
                     .clipShape(shape)
                     .contentShape(shape)
                     .opacity(router.isNowPlayingPresented || presentation.accessory != nil ? 1 : 0)
