@@ -295,39 +295,181 @@ final class NativeIntegrationTests: XCTestCase {
         XCTAssertEqual(preferences.getString("theme"), "dark")
     }
 
-    func testAccountIdentityRequiresResetOnlyAcrossOwnersOrUnknownLoginData() {
+    func testAccountDecisionAdoptsMatchingOwnersAndEmptyLibraries() {
         let alice = LibraryAccountIdentity(
             serverUrl: "https://one.test",
             username: "alice"
         )
-        let bob = LibraryAccountIdentity(
-            serverUrl: "https://two.test",
-            username: "bob"
+
+        for explicitLogin in [true, false] {
+            for hasLibraryData in [true, false] {
+                XCTAssertEqual(
+                    AppModel.accountSwitchDecision(
+                        previous: alice,
+                        next: alice,
+                        hasLibraryData: hasLibraryData,
+                        explicitLogin: explicitLogin
+                    ),
+                    .adopt
+                )
+            }
+            XCTAssertEqual(
+                AppModel.accountSwitchDecision(
+                    previous: nil,
+                    next: alice,
+                    hasLibraryData: false,
+                    explicitLogin: explicitLogin
+                ),
+                .adopt
+            )
+        }
+    }
+
+    func testAccountDecisionConfirmsAnUnknownOwnerOnlyForExplicitSignIn() {
+        let alice = LibraryAccountIdentity(
+            serverUrl: "https://one.test",
+            username: "alice"
         )
 
-        XCTAssertFalse(AppModel.requiresAccountReset(
-            previous: alice,
-            next: alice,
-            hasLibraryData: true,
-            explicitLogin: true
-        ))
-        XCTAssertTrue(AppModel.requiresAccountReset(
-            previous: alice,
-            next: bob,
-            hasLibraryData: true,
-            explicitLogin: true
-        ))
-        XCTAssertTrue(AppModel.requiresAccountReset(
-            previous: nil,
-            next: alice,
-            hasLibraryData: true,
-            explicitLogin: true
-        ))
-        XCTAssertFalse(AppModel.requiresAccountReset(
-            previous: nil,
-            next: alice,
-            hasLibraryData: true,
-            explicitLogin: false
-        ))
+        XCTAssertEqual(
+            AppModel.accountSwitchDecision(
+                previous: nil,
+                next: alice,
+                hasLibraryData: true,
+                explicitLogin: true
+            ),
+            .confirm(.unknownOwner)
+        )
+        // Restoring at launch keeps adopting the library silently.
+        XCTAssertEqual(
+            AppModel.accountSwitchDecision(
+                previous: nil,
+                next: alice,
+                hasLibraryData: true,
+                explicitLogin: false
+            ),
+            .adopt
+        )
+    }
+
+    func testAccountDecisionConfirmsAnotherServerOrAnotherUser() {
+        let alice = LibraryAccountIdentity(
+            serverUrl: "https://one.test",
+            username: "alice"
+        )
+
+        for explicitLogin in [true, false] {
+            for hasLibraryData in [true, false] {
+                // The same user name at another address: keepable.
+                XCTAssertEqual(
+                    AppModel.accountSwitchDecision(
+                        previous: alice,
+                        next: LibraryAccountIdentity(
+                            serverUrl: "https://two.test",
+                            username: " ALICE "
+                        ),
+                        hasLibraryData: hasLibraryData,
+                        explicitLogin: explicitLogin
+                    ),
+                    .confirm(.differentServer(previousServer: "https://one.test"))
+                )
+                // Another user, on the same server or another one.
+                for server in ["https://one.test", "https://two.test"] {
+                    XCTAssertEqual(
+                        AppModel.accountSwitchDecision(
+                            previous: alice,
+                            next: LibraryAccountIdentity(
+                                serverUrl: server,
+                                username: "bob"
+                            ),
+                            hasLibraryData: hasLibraryData,
+                            explicitLogin: explicitLogin
+                        ),
+                        .confirm(.differentAccount(
+                            previousServer: "https://one.test",
+                            previousUsername: "alice"
+                        ))
+                    )
+                }
+            }
+        }
+    }
+
+    func testAccountDecisionTreatsEquivalentSpellingsAsTheSameOwner() {
+        let owner = LibraryAccountIdentity(
+            serverUrl: "https://Music.Example.com:443/",
+            username: "Alice"
+        )
+
+        for server in [
+            "https://music.example.com",
+            "http://music.example.com",
+            "http://MUSIC.example.com:80/",
+            "https://music.example.com:443",
+            " https://music.example.com// ",
+        ] {
+            for username in ["alice", " ALICE ", "Alice\n"] {
+                XCTAssertEqual(
+                    AppModel.accountSwitchDecision(
+                        previous: owner,
+                        next: LibraryAccountIdentity(
+                            serverUrl: server,
+                            username: username
+                        ),
+                        hasLibraryData: true,
+                        explicitLogin: true
+                    ),
+                    .adopt,
+                    "\(server) / \(username)"
+                )
+            }
+        }
+    }
+
+    func testAccountIdentityNormalizationKeepsWhatIdentifiesTheServer() {
+        func identity(_ server: String, _ username: String = "alice") -> LibraryAccountIdentity {
+            LibraryAccountIdentity(serverUrl: server, username: username)
+        }
+        let base = identity("https://music.example.com")
+
+        XCTAssertEqual(base.normalizedServer, "music.example.com")
+        XCTAssertEqual(
+            identity("http://Music.Example.COM:80//").normalizedServer,
+            "music.example.com"
+        )
+        XCTAssertEqual(
+            identity("https://music.example.com:4533/Navidrome/").normalizedServer,
+            "music.example.com:4533/Navidrome"
+        )
+        // A port that is the default for the other scheme still counts.
+        XCTAssertFalse(base.isSameServer(as: identity("https://music.example.com:80")))
+        XCTAssertFalse(base.isSameServer(as: identity("http://music.example.com:443")))
+        XCTAssertFalse(base.isSameServer(as: identity("https://music.example.com:4533")))
+        XCTAssertFalse(base.isSameServer(as: identity("https://other.example.com")))
+        // The path is part of the address and keeps its case.
+        XCTAssertFalse(base.isSameServer(as: identity("https://music.example.com/navidrome")))
+        XCTAssertFalse(
+            identity("https://music.example.com/Navidrome")
+                .isSameServer(as: identity("https://music.example.com/navidrome"))
+        )
+        XCTAssertTrue(
+            identity("https://music.example.com/navidrome")
+                .isSameServer(as: identity("http://MUSIC.example.com/navidrome/"))
+        )
+        XCTAssertTrue(
+            identity("a", " Alice ").isSameUsername(as: identity("b", "aLICE"))
+        )
+        XCTAssertFalse(
+            identity("a", "alice").isSameUsername(as: identity("a", "alice2"))
+        )
+        // The synthesized Equatable still compares the stored strings.
+        XCTAssertNotEqual(
+            identity("https://music.example.com/", "Alice"),
+            identity("https://music.example.com", "alice")
+        )
+        XCTAssertTrue(
+            identity("https://music.example.com/", "Alice")
+                .isSameAccount(as: identity("https://music.example.com", "alice"))
+        )
     }
 }

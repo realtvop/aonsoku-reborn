@@ -11,6 +11,13 @@ public final class AppModel {
     public private(set) var isStarted = false
     /// The signed-in account's stores are running.
     public private(set) var isActive = false
+    /// A sign-in that waits for the user to keep or erase the library on
+    /// this device. `session.account` is already the new account, but its
+    /// stores do not run and the library is untouched until
+    /// `confirmAccountSwitch()` or `keepLibraryData()`. `cancelAccountSwitch()`
+    /// and `signOut()` drop the request. It survives a relaunch.
+    public private(set) var pendingAccountSwitch: AccountSwitchRequest?
+    public var isAwaitingAccountDecision: Bool { pendingAccountSwitch != nil }
 
     @ObservationIgnored public let services: AppServices
     @ObservationIgnored public let api: any SubsonicAPI
@@ -41,6 +48,7 @@ public final class AppModel {
     @ObservationIgnored private var smartDownloadsNeedFavoritesReload = false
 
     static let libraryOwnerStorageKey = "session.library-owner.v1"
+    static let pendingAccountSwitchStorageKey = "session.pending-account-switch.v1"
 
     public convenience init(services: AppServices = .shared, bundle: Bundle = .main) {
         let api = LiveSubsonicAPI(
@@ -145,7 +153,9 @@ public final class AppModel {
     // MARK: Lifecycle
 
     /// Migrates legacy settings, loads settings and the session, and starts
-    /// the account's stores when signed in. Calling it again has no effect.
+    /// the account's stores when signed in. A sign-in that was waiting for
+    /// the user's decision when the app closed is restored as
+    /// `pendingAccountSwitch` instead. Calling it again has no effect.
     public func start() {
         guard !isStarted else { return }
         SettingsMigration(preferences: services.preferences).run()
@@ -157,26 +167,30 @@ public final class AppModel {
         network.start()
         session.restore()
         isStarted = true
-        if let account = session.account {
-            do {
-                try prepareAccountData(for: account, explicitLogin: false)
-                activate()
-            } catch {
-                resetAccountStores()
-                session.signOut()
-                toasts.show(error: error)
-            }
+        guard let account = session.account else {
+            services.preferences.remove(Self.pendingAccountSwitchStorageKey)
+            return
+        }
+        do {
+            try admit(account, explicitLogin: false)
+        } catch {
+            resetAccountStores()
+            session.signOut()
+            toasts.show(error: error)
         }
     }
 
-    /// Signs in and starts the account's stores.
+    /// Signs in. The account's stores start right away when the library on
+    /// this device is theirs or empty; otherwise `pendingAccountSwitch` is
+    /// set and nothing starts or is erased until the user decides. A sign-in
+    /// still waiting for a decision is dropped first, like an active session.
     public func signIn(
         serverUrl: String,
         fallbackUrl: String?,
         username: String,
         password: String
     ) async throws {
-        if isActive {
+        if isActive || isAwaitingAccountDecision {
             signOut()
         }
         try await session.signIn(
@@ -187,17 +201,81 @@ public final class AppModel {
         )
         guard let account = session.account else { return }
         do {
-            try prepareAccountData(for: account, explicitLogin: true)
+            try admit(account, explicitLogin: true)
         } catch {
             session.signOut()
             throw error
         }
+    }
+
+    /// Erases the library, downloads and other data of the previous owner,
+    /// records the pending account as the owner and starts its stores. If
+    /// the erase fails the request stays pending and the error is rethrown,
+    /// so it can be shown and retried. Does nothing without a request.
+    public func confirmAccountSwitch() throws {
+        guard let request = pendingAccountSwitch,
+              let account = account(for: request) else { return }
+        try eraseAccountData()
+        try recordLibraryOwner(LibraryAccountIdentity(account: account))
+        clearPendingAccountSwitch()
+        resetAccountStores()
         activate()
     }
 
+    /// Keeps the library on this device, records the pending account as its
+    /// owner and starts its stores. Only allowed when the owner is unknown
+    /// or has the same user name at another address; another user's library
+    /// is never adopted, so `.differentAccount` throws
+    /// `AccountSwitchError.libraryBelongsToAnotherAccount` and changes
+    /// nothing. Does nothing without a request.
+    public func keepLibraryData() throws {
+        guard let request = pendingAccountSwitch else { return }
+        if case .differentAccount = request.reason {
+            throw AccountSwitchError.libraryBelongsToAnotherAccount
+        }
+        guard let account = account(for: request) else { return }
+        try recordLibraryOwner(LibraryAccountIdentity(account: account))
+        clearPendingAccountSwitch()
+        resetAccountStores()
+        activate()
+    }
+
+    /// Signs the pending account out. Nothing is erased and the recorded
+    /// owner stays as it was.
+    public func cancelAccountSwitch() {
+        guard isAwaitingAccountDecision else { return }
+        signOut()
+    }
+
+    /// Saves new server addresses for the signed-in account (see
+    /// `SessionStore.updateServerUrls`). The credentials stay the same, so
+    /// it is still the same account: when the library's recorded owner
+    /// matched the account before the change, the new address is recorded
+    /// as the owner and the library survives the next launch. A failed
+    /// change is rethrown and leaves the owner alone. Throws
+    /// `AccountSwitchError.decisionPending` while a sign-in waits for the
+    /// user's decision.
+    public func updateServerUrls(primaryUrl: String, fallbackUrl: String?) async throws {
+        guard !isAwaitingAccountDecision else {
+            throw AccountSwitchError.decisionPending
+        }
+        let before = session.account.map(LibraryAccountIdentity.init(account:))
+        let owner = libraryOwner()
+        try await session.updateServerUrls(primaryUrl: primaryUrl, fallbackUrl: fallbackUrl)
+        guard let before, let owner, owner.isSameAccount(as: before),
+              let account = session.account else { return }
+        let updated = LibraryAccountIdentity(account: account)
+        guard updated.isSameUsername(as: before) else { return }
+        // If this write fails the address change still stands; the next
+        // launch then asks whether to keep the library instead of erasing it.
+        try? recordLibraryOwner(updated)
+    }
+
     /// Stops playback and coordination and removes the credentials. The
-    /// library and downloads stay on the device, as on the web.
+    /// library and downloads stay on the device, as on the web. Also drops a
+    /// pending account switch.
     public func signOut() {
+        clearPendingAccountSwitch()
         activation?.cancel()
         activation = nil
         isActive = false
@@ -255,43 +333,137 @@ public final class AppModel {
         }
     }
 
-    private func prepareAccountData(
-        for account: ServerAccount,
-        explicitLogin: Bool
-    ) throws {
-        let next = LibraryAccountIdentity(account: account)
-        let previous = services.preferences.getJSON(
-            Self.libraryOwnerStorageKey,
-            as: LibraryAccountIdentity.self
-        )
-        let hasLibraryData = services.library.availability().available
-        if Self.requiresAccountReset(
-            previous: previous,
-            next: next,
-            hasLibraryData: hasLibraryData,
+    /// Applies `accountSwitchDecision` to the signed-in account: records it
+    /// as the library's owner and starts its stores, or leaves it pending
+    /// for the user's decision. Never erases anything and records the owner
+    /// only once the account may use the library.
+    private func admit(_ account: ServerAccount, explicitLogin: Bool) throws {
+        let identity = LibraryAccountIdentity(account: account)
+        let owner = libraryOwner()
+        resetAccountStores()
+        if !explicitLogin,
+           let restored = restoredPendingRequest(for: identity, owner: owner) {
+            pendingAccountSwitch = restored
+            return
+        }
+        pendingAccountSwitch = nil
+        services.preferences.remove(Self.pendingAccountSwitchStorageKey)
+        switch Self.accountSwitchDecision(
+            previous: owner,
+            next: identity,
+            hasLibraryData: services.library.availability().available,
             explicitLogin: explicitLogin
         ) {
-            player.clearAll()
-            services.coordination.resetRegistration()
-            try services.library.resetAccountData()
-            _ = try services.audio.clearAudioFiles()
-            services.preferences.remove("pinned.v1")
-            services.preferences.remove("lyrics.selections.v1")
-            history.clear()
-            artwork.purgeMemory()
+        case .adopt:
+            try recordLibraryOwner(identity)
+            activate()
+        case .confirm(let reason):
+            let request = AccountSwitchRequest(
+                reason: reason,
+                serverUrl: identity.serverUrl,
+                username: identity.username
+            )
+            try services.preferences.setJSON(
+                PendingAccountSwitchRecord(request),
+                for: Self.pendingAccountSwitchStorageKey
+            )
+            pendingAccountSwitch = request
         }
-        try services.preferences.setJSON(next, for: Self.libraryOwnerStorageKey)
-        resetAccountStores()
     }
 
-    nonisolated static func requiresAccountReset(
+    /// What may happen when `next` signs in on a device whose library was
+    /// recorded for `previous`. Never erases: the confirm cases wait for the
+    /// user. Accounts match by normalized address and user name (see
+    /// `LibraryAccountIdentity`).
+    ///
+    /// - A matching owner, or no owner and no library data: adopt.
+    /// - No owner but library data: confirm `.unknownOwner` after an
+    ///   explicit sign-in, adopt when restoring at launch.
+    /// - The same user name at another server: confirm `.differentServer`.
+    /// - Another user name: confirm `.differentAccount`.
+    nonisolated static func accountSwitchDecision(
         previous: LibraryAccountIdentity?,
         next: LibraryAccountIdentity,
         hasLibraryData: Bool,
         explicitLogin: Bool
-    ) -> Bool {
-        if let previous { return previous != next }
-        return explicitLogin && hasLibraryData
+    ) -> AccountSwitchDecision {
+        guard let previous else {
+            return explicitLogin && hasLibraryData ? .confirm(.unknownOwner) : .adopt
+        }
+        if previous.isSameAccount(as: next) { return .adopt }
+        if previous.isSameUsername(as: next) {
+            return .confirm(.differentServer(previousServer: previous.serverUrl))
+        }
+        return .confirm(
+            .differentAccount(
+                previousServer: previous.serverUrl,
+                previousUsername: previous.username
+            )
+        )
+    }
+
+    /// The request saved before the app closed, when it belongs to the
+    /// restored account and the library still has another owner. A marker
+    /// for another account, or one whose owner has since been recorded, is
+    /// stale.
+    private func restoredPendingRequest(
+        for identity: LibraryAccountIdentity,
+        owner: LibraryAccountIdentity?
+    ) -> AccountSwitchRequest? {
+        guard let record = services.preferences.getJSON(
+            Self.pendingAccountSwitchStorageKey,
+            as: PendingAccountSwitchRecord.self
+        ),
+            let request = record.request,
+            record.identity.isSameAccount(as: identity),
+            owner?.isSameAccount(as: identity) != true else { return nil }
+        return request
+    }
+
+    /// The signed-in account that `request` was made for. When the session
+    /// no longer has it, the app signs out rather than start anything.
+    private func account(for request: AccountSwitchRequest) -> ServerAccount? {
+        let requested = LibraryAccountIdentity(
+            serverUrl: request.serverUrl,
+            username: request.username
+        )
+        if let account = session.account,
+           LibraryAccountIdentity(account: account).isSameAccount(as: requested) {
+            return account
+        }
+        signOut()
+        return nil
+    }
+
+    private func clearPendingAccountSwitch() {
+        pendingAccountSwitch = nil
+        services.preferences.remove(Self.pendingAccountSwitchStorageKey)
+    }
+
+    private func libraryOwner() -> LibraryAccountIdentity? {
+        services.preferences.getJSON(
+            Self.libraryOwnerStorageKey,
+            as: LibraryAccountIdentity.self
+        )
+    }
+
+    private func recordLibraryOwner(_ identity: LibraryAccountIdentity) throws {
+        try services.preferences.setJSON(identity, for: Self.libraryOwnerStorageKey)
+    }
+
+    /// Removes the previous owner's server metadata, playback and history
+    /// rows, audio and artwork caches, pins, lyrics selections and
+    /// coordination registration, so the process-wide services cannot
+    /// expose them to the next account.
+    private func eraseAccountData() throws {
+        player.clearAll()
+        services.coordination.resetRegistration()
+        try services.library.resetAccountData()
+        _ = try services.audio.clearAudioFiles()
+        services.preferences.remove("pinned.v1")
+        services.preferences.remove("lyrics.selections.v1")
+        history.clear()
+        artwork.purgeMemory()
     }
 
     private func resetAccountStores() {
@@ -400,20 +572,5 @@ public final class AppModel {
                 )
                 : nil
         )
-    }
-}
-
-struct LibraryAccountIdentity: Codable, Equatable, Sendable {
-    var serverUrl: String
-    var username: String
-
-    init(account: ServerAccount) {
-        serverUrl = account.primaryUrl
-        username = account.username
-    }
-
-    init(serverUrl: String, username: String) {
-        self.serverUrl = serverUrl
-        self.username = username
     }
 }
