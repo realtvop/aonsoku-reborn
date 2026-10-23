@@ -273,7 +273,6 @@ struct NowPlayingView: View {
         .buttonStyle(.plain)
         .accessibilityLabel(label)
         .accessibilityAddTraits(isOn ? .isSelected : [])
-        .haptic(.selection, trigger: isOn)
     }
 
     @ViewBuilder

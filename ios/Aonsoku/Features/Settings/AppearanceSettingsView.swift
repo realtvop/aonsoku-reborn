@@ -118,7 +118,6 @@ private struct ThemeGrid: View {
             }
         }
         .padding(.vertical, 6)
-        .haptic(.selection, trigger: selection)
     }
 }
 

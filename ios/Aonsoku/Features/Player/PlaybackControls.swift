@@ -71,7 +71,6 @@ struct PlaybackScrubber: View {
             .foregroundStyle(.white.opacity(0.6))
         }
         .animation(.spring(duration: 0.3), value: dragProgress != nil)
-        .haptic(.impact(weight: .light), trigger: dragProgress != nil)
         .accessibilityElement()
         .accessibilityLabel(t("player.tooltips.progress"))
         .accessibilityValue("\(Formatters.clock(position)) / \(Formatters.clock(duration))")
@@ -189,11 +188,8 @@ private struct TransportButton: View {
     let label: String
     let action: () -> Void
 
-    @State private var taps = 0
-
     var body: some View {
         Button {
-            taps += 1
             action()
         } label: {
             Image(systemName: symbol)
@@ -204,7 +200,6 @@ private struct TransportButton: View {
         }
         .buttonStyle(TransportButtonStyle())
         .accessibilityLabel(label)
-        .haptic(.impact(weight: .light), trigger: taps)
     }
 }
 

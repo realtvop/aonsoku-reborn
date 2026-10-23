@@ -267,7 +267,6 @@ private struct QueueModeToggle: View {
         .buttonStyle(.pressable)
         .accessibilityAddTraits(isOn ? .isSelected : [])
         .accessibilityHint(hint)
-        .haptic(.selection, trigger: isOn)
         .animation(.smooth(duration: 0.25), value: isOn)
     }
 }
