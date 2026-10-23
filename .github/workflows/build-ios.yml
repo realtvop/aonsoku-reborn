@@ -1,6 +1,13 @@
 name: "build-ios"
 
 on:
+  workflow_call:
+    inputs:
+      publish_release:
+        description: "Attach the unsigned IPA to the current GitHub release"
+        required: false
+        type: boolean
+        default: false
   push:
     branches:
       - "**"
@@ -68,3 +75,15 @@ jobs:
           name: Aonsoku-unsigned-ipa
           path: ${{ runner.temp }}/Aonsoku-unsigned.ipa
           if-no-files-found: error
+
+      - name: Name iOS release artifact
+        if: ${{ inputs.publish_release }}
+        run: mv "$RUNNER_TEMP/Aonsoku-unsigned.ipa" "$RUNNER_TEMP/Aonsoku-${GITHUB_REF_NAME}-ios-unsigned.ipa"
+
+      - name: Upload iOS artifact to Release
+        if: ${{ inputs.publish_release }}
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ runner.temp }}/Aonsoku-${{ github.ref_name }}-ios-unsigned.ipa
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

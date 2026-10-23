@@ -208,7 +208,8 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   file-system, database, and
   lifecycle boundaries and do not require real network access. The test script
   parses its `.xcresult` and requires a non-zero executed test count;
-  `build-ios.yml` preserves that result bundle before packaging.
+  `build-ios.yml` preserves that result bundle before packaging, and the tag
+  release workflow calls it to attach the unsigned native iOS IPA.
 - Platform/runtime detection is centralized in `src/utils/capabilities.ts`,
   with lower-level helpers in `src/utils/desktop.ts` and
   `src/utils/platform.ts`.

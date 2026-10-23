@@ -204,6 +204,7 @@ pnpm run lint
 
 `.github/workflows/build-ios.yml` runs the same tests and strings check on an
 Xcode 26 runner, archives `ios/Aonsoku.xcodeproj` with the short commit hash in
-`AonsokuBuildHash`, and publishes an unsigned `Aonsoku-unsigned.ipa`. Release
-versioning updates `MARKETING_VERSION` in the native Xcode project; Capacitor
-versioning remains Android-only.
+`AonsokuBuildHash`, and publishes an unsigned `Aonsoku-unsigned.ipa`. Tag
+releases call that workflow and attach a versioned unsigned iOS IPA to the
+GitHub release. Release versioning updates `MARKETING_VERSION` in the native
+Xcode project; Capacitor versioning remains Android-only.
