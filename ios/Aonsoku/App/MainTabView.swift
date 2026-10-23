@@ -26,7 +26,7 @@ struct MainTabView: View {
                         .appDestinations()
                 }
             }
-            Tab(t("sidebar.miniSearch"), systemImage: "magnifyingglass", value: AppTab.search, role: .search) {
+            Tab(t("sidebar.miniSearch"), systemImage: "magnifyingglass", value: AppTab.search) {
                 NavigationStack(path: $router.searchPath) {
                     SearchView()
                         .appDestinations()
@@ -36,7 +36,7 @@ struct MainTabView: View {
         .tabViewStyle(.sidebarAdaptable)
         .tabBarMinimizeBehavior(.onScrollDown)
         .tabViewBottomAccessory {
-            MiniPlayer()
+            BottomAccessoryView()
         }
         .fullScreenCover(isPresented: $router.isNowPlayingPresented) {
             NowPlayingView()
@@ -60,5 +60,41 @@ struct MainTabView: View {
             get: { router.selectedTab },
             set: { router.select($0) }
         )
+    }
+}
+
+private struct BottomAccessoryView: View {
+    @Environment(\.tabViewBottomAccessoryPlacement) private var placement
+    @Environment(Router.self) private var router
+    @Environment(Localizer.self) private var t
+
+    var body: some View {
+        if placement == .inline {
+            HStack(spacing: 8) {
+                MiniPlayer()
+                    .frame(maxWidth: .infinity)
+
+                Divider()
+                    .frame(height: 24)
+
+                searchButton
+            }
+        } else {
+            MiniPlayer()
+        }
+    }
+
+    private var searchButton: some View {
+        Button {
+            router.select(.search)
+        } label: {
+            Image(systemName: "magnifyingglass")
+                .font(.body.weight(.semibold))
+                .frame(width: 40, height: 40)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.black)
+        .glassEffect(.regular.interactive(), in: .circle)
+        .accessibilityLabel(t("sidebar.miniSearch"))
     }
 }
