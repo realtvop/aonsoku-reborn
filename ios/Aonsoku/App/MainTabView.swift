@@ -26,7 +26,7 @@ struct MainTabView: View {
                         .appDestinations()
                 }
             }
-            Tab(t("sidebar.miniSearch"), systemImage: "magnifyingglass", value: AppTab.search) {
+            Tab(t("sidebar.miniSearch"), systemImage: "magnifyingglass", value: AppTab.search, role: .search) {
                 NavigationStack(path: $router.searchPath) {
                     SearchView()
                         .appDestinations()

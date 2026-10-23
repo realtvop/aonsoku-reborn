@@ -24,18 +24,6 @@ struct MiniPlayer: View {
     }
 
     var body: some View {
-        HStack(spacing: isInline ? 8 : 0) {
-            miniPlayer
-                .frame(maxWidth: .infinity, alignment: .leading)
-            if isInline {
-                Divider()
-                    .frame(height: 24)
-                searchButton
-            }
-        }
-    }
-
-    private var miniPlayer: some View {
         HStack(spacing: isInline ? 7 : 10) {
             PlayerArtwork(cornerRadius: isInline ? 4 : 5, size: .small)
                 .frame(width: isInline ? 26 : 34, height: isInline ? 26 : 34)
@@ -65,20 +53,6 @@ struct MiniPlayer: View {
         .accessibilityAction(named: t("fullscreen.switchButton")) {
             open()
         }
-    }
-
-    private var searchButton: some View {
-        Button {
-            router.select(.search)
-        } label: {
-            Image(systemName: "magnifyingglass")
-                .font(.body.weight(.semibold))
-                .frame(width: 36, height: 36)
-                .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.black)
-        .accessibilityLabel(t("sidebar.miniSearch"))
     }
 
     private func open() {
