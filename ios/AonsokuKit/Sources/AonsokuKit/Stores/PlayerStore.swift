@@ -144,6 +144,12 @@ public final class PlayerStore {
     @ObservationIgnored private var lastSnapshot: AudioQueueSnapshot?
     @ObservationIgnored private var refreshGeneration = 0
     @ObservationIgnored private var selectionGeneration = 0
+    /// Song ids whose repository lookup is running, so overlapping queue
+    /// refreshes do not look up the same song twice.
+    @ObservationIgnored private var enrichingSongIds = Set<String>()
+    /// Bumped only by `clearAll()`: a lookup that started under an earlier
+    /// value belongs to the previous account and must not touch the cache.
+    @ObservationIgnored private var enrichmentGeneration = 0
 
     public init(
         audio: AudioService,
@@ -222,6 +228,8 @@ public final class PlayerStore {
     public func clearAll() {
         refreshGeneration += 1
         selectionGeneration += 1
+        enrichmentGeneration += 1
+        enrichingSongIds.removeAll()
         audio.stop()
         audio.cancelSleepTimer()
         audio.clear()
@@ -881,30 +889,41 @@ public final class PlayerStore {
             audio.setLikeActive(false)
         }
         if enrich {
-            enrichSongs(in: snapshot, generation: refreshGeneration)
+            enrichSongs(in: snapshot)
         }
     }
 
-    private func enrichSongs(
-        in snapshot: AudioQueueSnapshot,
-        generation: Int
-    ) {
+    /// Looks up the queue's songs that are neither cached nor already being
+    /// looked up. Results from before the last `clearAll()` are dropped.
+    private func enrichSongs(in snapshot: AudioQueueSnapshot) {
         let all = snapshot.contextSongs + snapshot.userQueue + snapshot.playedUserQueueHistory
         var seen = Set<String>()
-        let ids = all.map(\.id).filter { songCache[$0] == nil && seen.insert($0).inserted }
+        let ids = all.map(\.id).filter {
+            songCache[$0] == nil
+                && !enrichingSongIds.contains($0)
+                && seen.insert($0).inserted
+        }
         guard !ids.isEmpty else { return }
+        enrichingSongIds.formUnion(ids)
+        let generation = enrichmentGeneration
         Task { @MainActor [weak self] in
             guard let self else { return }
+            let songs: [Song]
             do {
-                let songs = try await repository.songs(ids: ids)
-                guard generation == refreshGeneration else { return }
-                for song in songs { songCache[song.id] = song }
-                guard let current = lastSnapshot else { return }
-                localQueue = Self.playerQueue(from: current, songs: songCache)
-                localSong = currentQueueSong(in: current).map(song(from:))
+                songs = try await repository.songs(ids: ids)
             } catch {
                 // The queue's compact song values remain usable offline.
+                if generation == enrichmentGeneration {
+                    enrichingSongIds.subtract(ids)
+                }
+                return
             }
+            guard generation == enrichmentGeneration else { return }
+            enrichingSongIds.subtract(ids)
+            for song in songs { songCache[song.id] = song }
+            guard let current = lastSnapshot else { return }
+            localQueue = Self.playerQueue(from: current, songs: songCache)
+            localSong = currentQueueSong(in: current).map(song(from:))
         }
     }
 

@@ -597,6 +597,55 @@ final class PlayerStoreTests: XCTestCase {
         fixture.audio.shutdown()
     }
 
+    func testOverlappingEnrichmentsLookUpEachSharedSongOnce() async throws {
+        let fixture = try PlayerStoreTestFixture()
+        let gate = PlayerSongGate()
+        let lookups = LockedTestBox<[String]>([])
+        fixture.api.songHandler = { id in
+            lookups.update { $0.append(id) }
+            // Keeps the first lookup running while a second refresh starts.
+            if id == "a" { await gate.wait() }
+            return Song(id: id, title: "Enriched \(id)")
+        }
+        fixture.audio.setContextQueue(
+            songs: [fixture.queueSong("a"), fixture.queueSong("b")],
+            currentIndex: 0,
+            autoplay: false
+        )
+        let loaded = await waitForPlayerStoreTest {
+            fixture.audio.fullState()?.currentSongId == "a"
+        }
+        XCTAssertTrue(loaded)
+        let store = fixture.store()
+        store.start()
+        let firstLookupRunning = await waitForPlayerStoreTest {
+            lookups.read { $0.contains("a") }
+        }
+        XCTAssertTrue(firstLookupRunning)
+
+        // The second refresh sees "a" and "b" again, still being looked up,
+        // plus the newly queued "c". Only "c" may be fetched while "a" is
+        // held open, so "c" showing up proves the shared ids were skipped.
+        fixture.audio.addToUserQueue(
+            songs: [fixture.queueSong("c")],
+            position: "last"
+        )
+        let secondLookupRan = await waitForPlayerStoreTest {
+            lookups.read { $0.contains("c") }
+        }
+        XCTAssertTrue(secondLookupRan)
+
+        await gate.open()
+        let enriched = await waitForPlayerStoreTest {
+            store.localQueue.current?.song.title == "Enriched a"
+                && store.localQueue.upNext.first?.song.title == "Enriched b"
+                && store.localQueue.userQueue.first?.song.title == "Enriched c"
+        }
+        XCTAssertTrue(enriched)
+        XCTAssertEqual(lookups.read { $0.sorted() }, ["a", "b", "c"])
+        fixture.audio.shutdown()
+    }
+
     func testStartAdoptsQueueRestoredAfterTheStoreSubscribes() async throws {
         let fixture = try PlayerStoreTestFixture()
         let engine = NativeQueueEngine()
