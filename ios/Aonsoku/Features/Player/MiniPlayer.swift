@@ -44,23 +44,29 @@ struct MiniPlayer: View {
 
     private var titles: some View {
         VStack(alignment: .leading, spacing: isInline ? 0 : 1) {
-            Text(NowPlayingText.title(player, t))
+            MarqueeText(
+                text: NowPlayingText.title(player, t),
+                respectsReduceMotion: false
+            )
                 .font(isInline ? .caption.weight(.semibold) : .footnote.weight(.semibold))
-                .lineLimit(1)
             subtitle
                 .font(isInline ? .caption2 : .caption)
-                .lineLimit(1)
         }
+        .layoutPriority(1)
     }
 
     /// The controlled device, the artist, or Radio.
     @ViewBuilder
     private var subtitle: some View {
         if case let .remote(_, deviceName) = player.target {
-            Label(deviceName, systemImage: "hifispeaker.fill")
-                .labelStyle(.titleAndIcon)
+            HStack(spacing: 4) {
+                Image(systemName: "hifispeaker.fill")
+                MarqueeText(text: deviceName, respectsReduceMotion: false)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(deviceName)
         } else if let subtitle = NowPlayingText.subtitle(player, t) {
-            Text(subtitle)
+            MarqueeText(text: subtitle, respectsReduceMotion: false)
         }
     }
 

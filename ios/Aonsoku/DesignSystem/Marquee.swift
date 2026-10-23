@@ -11,6 +11,8 @@ struct MarqueeText: View {
     var speed: CGFloat = 32
     /// Seconds at rest before each pass.
     var pause: Double = 2.5
+    /// Whether the system Reduce Motion setting disables scrolling.
+    var respectsReduceMotion = true
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var textWidth: CGFloat = 0
@@ -20,7 +22,8 @@ struct MarqueeText: View {
     private let fade: CGFloat = 12
 
     var body: some View {
-        let scrolls = !reduceMotion && textWidth > availableWidth + 0.5
+        let allowsScrolling = !respectsReduceMotion || !reduceMotion
+        let scrolls = allowsScrolling && textWidth > availableWidth + 0.5
         Text(text)
             .lineLimit(1)
             .hidden()
