@@ -19,18 +19,18 @@ struct QueuePanel: View {
             List {
                 if !history.songs.isEmpty {
                     Section {
+                        QueueSectionHeader(title: t("fullscreen.queueHistory")) {
+                            Button(t("generic.clear")) {
+                                history.clear()
+                            }
+                        }
+                        .queueHeaderRow()
                         // Oldest first, ending right above what plays now.
                         ForEach(Array(history.songs.enumerated().reversed()), id: \.offset) { _, song in
                             QueueSongRow(song: song) {
                                 player.playFromHistory(song)
                             }
                             .queueRow()
-                        }
-                    } header: {
-                        QueueSectionHeader(title: t("fullscreen.queueHistory")) {
-                            Button(t("generic.clear")) {
-                                history.clear()
-                            }
                         }
                     }
                 }
@@ -44,6 +44,12 @@ struct QueuePanel: View {
 
                 if !queue.userQueue.isEmpty {
                     Section {
+                        QueueSectionHeader(title: t("fullscreen.queue")) {
+                            Button(t("generic.clear")) {
+                                player.remove(entries: queue.userQueue)
+                            }
+                        }
+                        .queueHeaderRow()
                         ForEach(queue.userQueue) { entry in
                             QueueSongRow(song: entry.song, isMovable: true) {
                                 player.play(entry: entry)
@@ -59,17 +65,18 @@ struct QueuePanel: View {
                         .onDelete { offsets in
                             player.remove(entries: offsets.map { queue.userQueue[$0] })
                         }
-                    } header: {
-                        QueueSectionHeader(title: t("fullscreen.queue")) {
-                            Button(t("generic.clear")) {
-                                player.remove(entries: queue.userQueue)
-                            }
-                        }
                     }
                 }
 
                 if !queue.upNext.isEmpty {
                     Section {
+                        QueueSectionHeader(
+                            title: t("fullscreen.queueContinue"),
+                            subtitle: queue.sourceName.map { t("fullscreen.queueFromSource", ["source": $0]) }
+                        ) {
+                            EmptyView()
+                        }
+                        .queueHeaderRow()
                         ForEach(queue.upNext) { entry in
                             QueueSongRow(song: entry.song, isMovable: true) {
                                 player.play(entry: entry)
@@ -84,13 +91,6 @@ struct QueuePanel: View {
                         }
                         .onDelete { offsets in
                             player.remove(entries: offsets.map { queue.upNext[$0] })
-                        }
-                    } header: {
-                        QueueSectionHeader(
-                            title: t("fullscreen.queueContinue"),
-                            subtitle: queue.sourceName.map { t("fullscreen.queueFromSource", ["source": $0]) }
-                        ) {
-                            EmptyView()
                         }
                     }
                 }
@@ -133,8 +133,17 @@ private extension View {
             .listRowSeparatorTint(.white.opacity(0.1))
             .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
     }
+
+    func queueHeaderRow() -> some View {
+        listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 14, leading: 20, bottom: 2, trailing: 20))
+    }
 }
 
+/// A section's title, as the section's first row rather than a plain
+/// list's pinned header: pinned headers have no background over the
+/// artwork colors, so the rows scrolling under them showed through.
 private struct QueueSectionHeader<Actions: View>: View {
     let title: String
     var subtitle: String?
@@ -159,8 +168,6 @@ private struct QueueSectionHeader<Actions: View>: View {
                 .foregroundStyle(.white.opacity(0.7))
                 .buttonStyle(.plain)
         }
-        .textCase(nil)
-        .padding(.horizontal, 4)
     }
 }
 
