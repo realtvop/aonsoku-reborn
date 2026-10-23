@@ -16,15 +16,15 @@ struct MiniPlayer: View {
     }
 
     var body: some View {
-        HStack(spacing: isInline ? 8 : 12) {
-            PlayerArtwork(cornerRadius: isInline ? 5 : 6, size: .small)
-                .frame(width: isInline ? 28 : 36, height: isInline ? 28 : 36)
+        HStack(spacing: isInline ? 7 : 10) {
+            PlayerArtwork(cornerRadius: isInline ? 4 : 5, size: .small)
+                .frame(width: isInline ? 26 : 34, height: isInline ? 26 : 34)
             titles
             Spacer(minLength: 4)
             controls
         }
-        .padding(.leading, isInline ? 8 : 10)
-        .padding(.trailing, isInline ? 4 : 8)
+        .padding(.leading, isInline ? 7 : 10)
+        .padding(.trailing, isInline ? 3 : 7)
         .foregroundStyle(.black)
         .contentShape(.rect)
         .onTapGesture {
@@ -43,13 +43,13 @@ struct MiniPlayer: View {
     }
 
     private var titles: some View {
-        VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .leading, spacing: isInline ? 0 : 1) {
             Text(NowPlayingText.title(player, t))
-                .font(.subheadline.weight(.semibold))
+                .font(isInline ? .caption.weight(.semibold) : .footnote.weight(.semibold))
                 .lineLimit(1)
             if !isInline {
                 subtitle
-                    .font(.footnote)
+                    .font(.caption)
                     .lineLimit(1)
             }
         }
