@@ -487,9 +487,44 @@ public final class AudioService: NSObject, @unchecked Sendable {
 
     public func addToUserQueue(songs: [QueueSong], position: String) {
         stateQueue.async { [weak self] in
-            self?.queueEngine.addToUserQueue(songs: songs, position: position)
-            self?.persistence.markStateDirty()
+            self?.addToUserQueueOnStateQueue(songs: songs, position: position)
         }
+    }
+
+    /// Adds songs to the user queue. Runs on `stateQueue`; the public
+    /// method and the remote `.addToQueue` command share it.
+    ///
+    /// While a queue is active the songs are appended. While nothing is
+    /// queued there is no snapshot to append to (`fullState()` is nil, so
+    /// the songs would be invisible), so the songs become the queue: the
+    /// first one is current in the user tier and is loaded paused, the way
+    /// restore and handoff preparation load a song, and the new queue is
+    /// published. The repeat mode survives; the rest of the engine state is
+    /// replaced, as `setContextQueue` replaces it.
+    private func addToUserQueueOnStateQueue(songs: [QueueSong], position: String) {
+        guard !isQueueActive, let first = songs.first else {
+            queueEngine.addToUserQueue(songs: songs, position: position)
+            persistence.markStateDirty()
+            return
+        }
+        var state = PlaybackPersistState(from: queueEngine, currentTime: 0)
+        state.contextSongs = []
+        state.currentIndex = 0
+        state.userQueue = songs
+        state.originalContextSongs = []
+        state.originalUserSongs = []
+        state.isShuffleActive = false
+        state.shuffleHistory = []
+        state.shuffleStartHistory = []
+        state.isInUserQueue = true
+        state.playedUserQueueHistory = []
+        state.sourceId = nil
+        state.sourceName = nil
+        queueEngine.restoreState(from: state)
+        queueEngine.clearRestoredFlag()
+        isQueueActive = true
+        loadQueueSong(first, autoplay: false, startTime: nil)
+        publishQueueChange(reason: "queue-edit")
     }
 
     public func removeFromUserQueue(indices: [Int]) {
@@ -887,8 +922,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     return
                 }
                 if !songs.isEmpty {
-                    self.queueEngine.addToUserQueue(songs: songs, position: position)
-                    self.persistence.markStateDirty()
+                    self.addToUserQueueOnStateQueue(songs: songs, position: position)
                 }
                 completion(true)
             }
@@ -2412,6 +2446,16 @@ public final class AudioService: NSObject, @unchecked Sendable {
         }
     }
 
+    /// Persists the queue and tells event subscribers, state listeners and
+    /// `.aonsokuAudioStateDidChange` observers that its contents or modes
+    /// changed. The queue engine delegate uses it for every content change.
+    private func publishQueueChange(reason: String) {
+        persistence.markStateDirty()
+        emit(.queueContentsChanged(reason: reason))
+        publishStateUpdate()
+        NotificationCenter.default.post(name: .aonsokuAudioStateDidChange, object: self)
+    }
+
     private var currentTime: Double {
         guard let player else { return savedRestoreTime ?? 0 }
         let seconds = player.currentTime().seconds
@@ -2819,10 +2863,7 @@ extension AudioService: NativeQueueEngineDelegate {
         _ engine: NativeQueueEngine,
         didChangeContents reason: String
     ) {
-        persistence.markStateDirty()
-        emit(.queueContentsChanged(reason: reason))
-        publishStateUpdate()
-        NotificationCenter.default.post(name: .aonsokuAudioStateDidChange, object: self)
+        publishQueueChange(reason: reason)
     }
 
     func queueEngineDidExhaustQueue(_ engine: NativeQueueEngine) {

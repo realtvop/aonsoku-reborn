@@ -156,6 +156,31 @@ final class QueueTests: XCTestCase {
         XCTAssertTrue(delegate.loads.isEmpty)
         XCTAssertEqual(engine.currentSong?.id, "a")
     }
+
+    func testRepeatAllHasNothingToWrapToWithoutContextSongs() {
+        let engine = NativeQueueEngine()
+        let delegate = QueueDelegateSpy()
+        engine.delegate = delegate
+        // Only user-queued songs, as a handoff or an add to an idle queue makes.
+        var state = PlaybackPersistState(from: engine, currentTime: 0)
+        state.userQueue = [makeSong("u1"), makeSong("u2")]
+        state.isInUserQueue = true
+        state.loopState = LoopState.all.rawValue
+        engine.restoreState(from: state)
+
+        engine.skipToNext()
+        XCTAssertEqual(engine.currentSong?.id, "u2")
+        engine.skipToNext()
+
+        XCTAssertNil(engine.currentSong)
+        XCTAssertFalse(engine.isInUserQueue)
+        XCTAssertEqual(delegate.loads.map(\.song.id), ["u2"])
+
+        let empty = NativeQueueEngine()
+        empty.setLoopState(.all)
+        empty.skipToNext()
+        XCTAssertNil(empty.currentSong)
+    }
 }
 
 private final class QueueDelegateSpy: NativeQueueEngineDelegate {

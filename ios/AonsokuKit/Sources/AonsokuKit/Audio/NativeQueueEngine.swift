@@ -435,6 +435,8 @@ class NativeQueueEngine {
     }
 
     private func wrapToStart() {
+        // A queue made only of user-queued songs has no context to wrap to.
+        guard !contextSongs.isEmpty else { return }
         let lastPlayedId = contextSongs[currentIndex].id
         currentIndex = 0
         reshuffleForWrap(lastPlayedSongId: lastPlayedId)
