@@ -102,10 +102,14 @@ private struct ThemeGrid: View {
                                         .padding(6)
                                 }
                             }
+                        // Long names such as "Catppuccin Mocha" shrink to
+                        // fit the card rather than lose their ending.
                         Text(t(theme.labelKey))
                             .font(.caption)
                             .foregroundStyle(isSelected ? .primary : .secondary)
                             .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                            .allowsTightening(true)
                     }
                 }
                 .buttonStyle(.plain)
@@ -162,10 +166,13 @@ struct LanguageSettingsView: View {
                 languageRow(title: t("theme.modeSystem"), subtitle: nil, code: nil, isSelected: selected == nil)
             }
             Section {
+                // Like the system's list: each language in its own words,
+                // then in the current one. Languages aren't countries, so
+                // no flags.
                 ForEach(AppLanguage.all) { language in
                     languageRow(
-                        title: "\(language.flagEmoji)  \(language.nativeName)",
-                        subtitle: nil,
+                        title: language.nativeName,
+                        subtitle: t.locale.localizedString(forIdentifier: language.code),
                         code: language.code,
                         isSelected: selected == language.code
                     )
@@ -181,8 +188,15 @@ struct LanguageSettingsView: View {
             settings.update { $0.languageCode = code }
         } label: {
             HStack {
-                Text(verbatim: title)
-                    .foregroundStyle(.primary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: title)
+                        .foregroundStyle(.primary)
+                    if let subtitle, subtitle != title {
+                        Text(verbatim: subtitle)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 Spacer()
                 if isSelected {
                     Image(systemName: "checkmark")
