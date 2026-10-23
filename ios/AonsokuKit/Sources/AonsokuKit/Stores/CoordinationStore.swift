@@ -141,6 +141,8 @@ public final class CoordinationStore: RemotePlaybackSource {
 
     public func disconnect() {
         stopControlling(showToast: false)
+        // A handoff cannot finish once the connection is gone.
+        handoffStatus = .idle
         service.disconnect()
     }
 

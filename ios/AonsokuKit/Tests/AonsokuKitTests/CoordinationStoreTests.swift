@@ -131,6 +131,16 @@ final class CoordinationStoreTests: XCTestCase {
         )
     }
 
+    func testDisconnectEndsAHandoffThatCannotFinish() throws {
+        let fixture = try CoordinationStoreFixture()
+        fixture.store.handle(.handoffFailed(transactionId: "tx", code: "timeout"))
+        XCTAssertEqual(fixture.store.handoffStatus, .failed(code: "timeout"))
+
+        fixture.store.disconnect()
+
+        XCTAssertEqual(fixture.store.handoffStatus, .idle)
+    }
+
     func testCommandAcknowledgementErrorsAreThrownToThePlayer() {
         XCTAssertNoThrow(
             try CoordinationStore.requireSuccessfulCommand(.ok)
