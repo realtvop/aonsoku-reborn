@@ -152,10 +152,17 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   the whole expanded container. The same mask encloses background, controls
   and artwork throughout, without recreating the image reader.
   The same host renders one persistent `PlayerArtwork` at large resolution.
-  The mini player, main player, lyrics and queue headers contain only
-  `PlayerArtworkSlot` layout markers. Their geometry drives that image's
-  position, size, corner radius and shadow, including paused scaling and
-  interactive collapse; never add separate current-track images to them.
+  The main player, lyrics and queue headers contain only `PlayerArtworkSlot`
+  layout markers; the compact cover destination is derived directly from
+  the stationary native accessory. Keep its last valid frame while native
+  accessory hosts are recycled, so a closing player cannot lose its target.
+  Only the artwork shares geometry between layouts. Full and compact
+  controls have independent layouts anchored at the container's top;
+  the background fades with downward movement and becomes transparent in
+  the pill. Cover transitions use the container's zero-bounce timing.
+  The markers drive the image's position, size, corner radius and shadow,
+  including paused scaling and interactive collapse; never add separate
+  current-track images to them.
 - Android native pages use the application-scoped
   `github.realtvop.aonsoku.plugins.data.LibraryService` for Room queries,
   metadata sync, lyrics, and image-cache ownership. It is created with the

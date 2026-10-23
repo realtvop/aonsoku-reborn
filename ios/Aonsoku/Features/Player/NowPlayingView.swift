@@ -160,7 +160,7 @@ struct NowPlayingView: View {
     private var largeArtwork: some View {
         PlayerArtworkSlot(location: .cover, cornerRadius: 14, shadowRadius: 26)
             .scaleEffect(player.isPlaying || !player.hasMedia ? 1 : 0.8)
-            .animation(.spring(duration: 0.55, bounce: 0.3), value: player.isPlaying)
+            .animation(.spring(duration: 0.45, bounce: 0), value: player.isPlaying)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .accessibilityHidden(true)
     }

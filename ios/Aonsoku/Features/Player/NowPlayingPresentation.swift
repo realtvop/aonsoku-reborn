@@ -11,16 +11,13 @@ final class PlayerPresentationState {
     var artworkFrames: [PlayerArtworkLocation: PlayerArtworkFrame] = [:]
     var sliderFrames: [PlayerSliderRegion: CGRect] = [:]
     var accessory: PlayerAccessoryLayout?
-    var accessoryOwner: UUID?
 }
 
 nonisolated enum PlayerArtworkLocation: Hashable {
-    case mini
     case cover
     case header
 
     static let coordinateSpace = "nowPlayingArtwork"
-    static let miniCoordinateSpace = "miniPlayerArtwork"
     static let containerCoordinateSpace = "playerContainer"
 }
 
@@ -34,7 +31,6 @@ nonisolated struct PlayerAccessoryLayout: Equatable {
 struct PlayerAccessorySlot: View {
     @Environment(PlayerPresentationState.self) private var presentation
     @Environment(\.tabViewBottomAccessoryPlacement) private var placement
-    @State private var owner = UUID()
 
     var body: some View {
         Color.clear
@@ -42,15 +38,12 @@ struct PlayerAccessorySlot: View {
             .onGeometryChange(for: PlayerAccessoryLayout.self) { proxy in
                 PlayerAccessoryLayout(frame: proxy.frame(in: .global), isInline: placement == .inline)
             } action: { layout in
-                presentation.accessoryOwner = owner
-                presentation.accessory = layout
-            }
-            .onDisappear {
-                if presentation.accessoryOwner == owner {
-                    presentation.accessory = nil
-                    presentation.accessoryOwner = nil
+                if layout.frame.width > 0, layout.frame.height > 0 {
+                    presentation.accessory = layout
                 }
             }
+            // Native accessory hosts are recycled while changing placement.
+            // Keep the last destination until a new positive frame replaces it.
             .allowsHitTesting(false)
             .accessibilityHidden(true)
     }
@@ -77,8 +70,8 @@ nonisolated struct PlayerArtworkFrame: Equatable {
 }
 
 /// Layout only: the image itself lives once, above the tabs and player.
-/// Both layouts report coordinates before their presentation transforms,
-/// keeping destination geometry stable throughout the shared-container morph.
+/// Expanded layouts report coordinates before their presentation transforms.
+/// The compact destination comes directly from the stationary native accessory.
 struct PlayerArtworkSlot: View {
     let location: PlayerArtworkLocation
     var cornerRadius: CGFloat = 8
@@ -90,9 +83,7 @@ struct PlayerArtworkSlot: View {
         Color.clear
             .aspectRatio(1, contentMode: .fit)
             .onGeometryChange(for: CGRect.self) { proxy in
-                location == .mini
-                    ? proxy.frame(in: .named(PlayerArtworkLocation.miniCoordinateSpace))
-                    : proxy.frame(in: .named(PlayerArtworkLocation.coordinateSpace))
+                proxy.frame(in: .named(PlayerArtworkLocation.coordinateSpace))
             } action: { rect in
                 guard rect.width > 0, rect.height > 0 else { return }
                 presentation.artworkFrames[location] = PlayerArtworkFrame(
@@ -139,7 +130,7 @@ private struct NowPlayingPresentation: ViewModifier {
                         )
                         .frame(width: surface.width, height: surface.height)
                         .position(x: surface.midX, y: surface.midY)
-                        .opacity(router.isNowPlayingPresented ? 1 : 0)
+                        .opacity(backgroundOpacity(viewportHeight: height))
                         NowPlayingView()
                             .padding(insets)
                             .frame(width: width, height: height)
@@ -150,7 +141,6 @@ private struct NowPlayingPresentation: ViewModifier {
                             .accessibilityHidden(!router.isNowPlayingPresented)
                         MiniPlayer(isInline: presentation.accessory?.isInline ?? false)
                             .frame(width: accessory.width, height: accessory.height)
-                            .coordinateSpace(name: PlayerArtworkLocation.miniCoordinateSpace)
                             .position(x: surface.midX, y: surface.minY + 6 + accessory.height / 2)
                             .opacity(router.isNowPlayingPresented ? 0 : 1)
                             .allowsHitTesting(!router.isNowPlayingPresented)
@@ -204,6 +194,11 @@ private struct NowPlayingPresentation: ViewModifier {
         reduceMotion ? .linear(duration: 0.15) : .spring(duration: 0.45, bounce: 0)
     }
 
+    private func backgroundOpacity(viewportHeight: CGFloat) -> Double {
+        guard router.isNowPlayingPresented else { return 0 }
+        return Double(1 - min(presentation.dragOffset / max(viewportHeight, 1), 1))
+    }
+
     private func accessoryFrame(in proxy: GeometryProxy) -> CGRect {
         let origin = proxy.frame(in: .global).origin
         return presentation.accessory?.frame.offsetBy(
@@ -225,25 +220,25 @@ private struct NowPlayingPresentation: ViewModifier {
                 y: (geometry?.shadowRadius ?? 0) / 2
             )
             .position(x: geometry?.rect.midX ?? 0, y: geometry?.rect.midY ?? 0)
-            .opacity(geometry == nil ? 0 : 1)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
-            .animation(artworkAnimation, value: presentation.artworkLocation)
-            .animation(artworkAnimation, value: presentation.artworkFrames[.cover])
-            .animation(artworkAnimation, value: presentation.artworkFrames[.header])
-    }
-
-    private var artworkAnimation: Animation {
-        reduceMotion ? .linear(duration: 0.15) : .spring(duration: 0.5, bounce: 0.15)
+            .animation(presentationAnimation, value: presentation.artworkLocation)
+            .animation(presentationAnimation, value: presentation.artworkFrames[.cover])
+            .animation(presentationAnimation, value: presentation.artworkFrames[.header])
     }
 
     private func artworkFrame(in proxy: GeometryProxy) -> PlayerArtworkFrame? {
         guard router.isNowPlayingPresented,
               var expanded = presentation.artworkFrames[presentation.artworkLocation] else {
-            guard var mini = presentation.artworkFrames[.mini] else { return nil }
             let accessory = accessoryFrame(in: proxy)
-            mini.rect = mini.rect.offsetBy(dx: accessory.minX, dy: accessory.minY)
-            return mini
+            let isInline = presentation.accessory?.isInline ?? false
+            let side: CGFloat = isInline ? 26 : 34
+            return PlayerArtworkFrame(
+                rect: CGRect(x: accessory.minX + (isInline ? 7 : 10),
+                             y: accessory.midY - side / 2, width: side, height: side),
+                cornerRadius: isInline ? 4 : 5,
+                shadowRadius: 0
+            )
         }
         // During a pan the cover stays attached to the expanded surface.
         // Only committing dismissal changes its destination to the pill.

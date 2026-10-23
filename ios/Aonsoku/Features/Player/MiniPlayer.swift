@@ -21,7 +21,7 @@ struct MiniPlayer: View {
 
     var body: some View {
         HStack(spacing: isInline ? 7 : 10) {
-            PlayerArtworkSlot(location: .mini, cornerRadius: isInline ? 4 : 5)
+            Color.clear
                 .frame(width: isInline ? 26 : 34, height: isInline ? 26 : 34)
             titles
             Spacer(minLength: 4)

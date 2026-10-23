@@ -153,6 +153,11 @@ with automatic foreground sync disabled.
   Only release into a committed dismissal sends the cover toward the pill.
   At that point the shared container mask morphs into the pill bounds;
   canceling the drag restores the entire expanded container instead.
+  Only the cover shares geometry across layouts. Other controls use their
+  own layouts at the container's top. The background fades as the container
+  moves down and becomes transparent in the pill. Cover and container use
+  the same zero-bounce settling animation. The last valid native accessory
+  frame survives host recycling to keep the compact destination stable.
   Tapping the handle or the accessibility escape action also collapses it.
   The player surface keeps the system-resolved viewport corner radius on
   rounded screens/windows. On square viewports its corners grow from 0 to
@@ -164,9 +169,10 @@ with automatic foreground sync disabled.
   transport, volume, and a bottom bar for lyrics, AirPlay, Aonsoku devices,
   and the queue. Lyrics and queue replace the large artwork with a compact
   header, as in Apple Music. One persistent `PlayerArtwork` in the presentation
-  host moves and resizes between layout-only slots in the mini player, main
-  page, lyrics and queue headers. It keeps the same large-resolution image
-  reader through every transition, including paused scaling and dismissal.
+  host moves and resizes between the native accessory destination and
+  layout-only slots in the main page, lyrics and queue headers. It keeps the
+  same large-resolution image reader through every transition, including
+  paused scaling and dismissal.
 - **Home**: other devices' playback, featured albums, pinned items, Recently
   Played, Most Played, Recently Added, Explore. Pull to refresh runs an
   incremental sync. The avatar opens the account sheet.
