@@ -48,7 +48,7 @@ struct MainTabView: View {
         .tabViewSearchActivation(.searchTabSelection)
         .tabBarMinimizeBehavior(.onScrollDown)
         .tabViewBottomAccessory {
-            MiniPlayer()
+            PlayerAccessorySlot()
         }
         .nowPlayingPresentation()
         .sheet(isPresented: $router.isAccountPresented) {

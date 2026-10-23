@@ -10,6 +10,8 @@ final class PlayerPresentationState {
     var artworkLocation: PlayerArtworkLocation = .cover
     var artworkFrames: [PlayerArtworkLocation: PlayerArtworkFrame] = [:]
     var sliderFrames: [PlayerSliderRegion: CGRect] = [:]
+    var accessory: PlayerAccessoryLayout?
+    var accessoryOwner: UUID?
 }
 
 nonisolated enum PlayerArtworkLocation: Hashable {
@@ -18,6 +20,39 @@ nonisolated enum PlayerArtworkLocation: Hashable {
     case header
 
     static let coordinateSpace = "nowPlayingArtwork"
+    static let miniCoordinateSpace = "miniPlayerArtwork"
+}
+
+nonisolated struct PlayerAccessoryLayout: Equatable {
+    var frame: CGRect
+    var isInline: Bool
+}
+
+/// The system accessory reserves space and supplies its native glass only.
+/// Both sets of player controls and the artwork live in the container above.
+struct PlayerAccessorySlot: View {
+    @Environment(PlayerPresentationState.self) private var presentation
+    @Environment(\.tabViewBottomAccessoryPlacement) private var placement
+    @State private var owner = UUID()
+
+    var body: some View {
+        Color.clear
+            .frame(height: 36)
+            .onGeometryChange(for: PlayerAccessoryLayout.self) { proxy in
+                PlayerAccessoryLayout(frame: proxy.frame(in: .global), isInline: placement == .inline)
+            } action: { layout in
+                presentation.accessoryOwner = owner
+                presentation.accessory = layout
+            }
+            .onDisappear {
+                if presentation.accessoryOwner == owner {
+                    presentation.accessory = nil
+                    presentation.accessoryOwner = nil
+                }
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
 }
 
 nonisolated struct PlayerArtworkFrame: Equatable {
@@ -41,8 +76,8 @@ nonisolated struct PlayerArtworkFrame: Equatable {
 }
 
 /// Layout only: the image itself lives once, above the tabs and player.
-/// Global mini-player geometry also works across the system accessory's
-/// hosting boundary. Expanded slots use coordinates before the Y slide.
+/// Both layouts report coordinates before their presentation transforms,
+/// keeping destination geometry stable throughout the shared-container morph.
 struct PlayerArtworkSlot: View {
     let location: PlayerArtworkLocation
     var cornerRadius: CGFloat = 8
@@ -55,7 +90,7 @@ struct PlayerArtworkSlot: View {
             .aspectRatio(1, contentMode: .fit)
             .onGeometryChange(for: CGRect.self) { proxy in
                 location == .mini
-                    ? proxy.frame(in: .global)
+                    ? proxy.frame(in: .named(PlayerArtworkLocation.miniCoordinateSpace))
                     : proxy.frame(in: .named(PlayerArtworkLocation.coordinateSpace))
             } action: { rect in
                 guard rect.width > 0, rect.height > 0 else { return }
@@ -67,13 +102,16 @@ struct PlayerArtworkSlot: View {
     }
 }
 
-/// Keeps the player in the tabs' view tree. Its width never changes during
-/// presentation or dismissal; only its vertical offset is animated.
+/// One persistent container owns the mini player, full player, background,
+/// and artwork. Only the committed release morphs it back into the pill.
 private struct NowPlayingPresentation: ViewModifier {
     @Environment(Router.self) private var router
+    @Environment(PlayerStore.self) private var player
+    @Environment(SettingsStore.self) private var settings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var presentation = PlayerPresentationState()
     @State private var viewportCornerRadius: CGFloat = 0
+    @State private var palette: ArtworkPalette?
 
     func body(content: Content) -> some View {
         content
@@ -84,54 +122,96 @@ private struct NowPlayingPresentation: ViewModifier {
                     let insets = proxy.safeAreaInsets
                     let width = proxy.size.width + insets.leading + insets.trailing
                     let height = proxy.size.height + insets.top + insets.bottom
-                    let slide = router.isNowPlayingPresented
-                        ? presentation.dragOffset : height
+                    let full = CGRect(x: 0, y: 0, width: width, height: height)
+                    let accessory = accessoryFrame(in: proxy)
+                    let pill = accessory.insetBy(dx: 0, dy: -6)
+                    let surface = router.isNowPlayingPresented
+                        ? full.offsetBy(dx: 0, dy: presentation.dragOffset) : pill
+                    let radius = router.isNowPlayingPresented
+                        ? expandedRadius : pill.height / 2
+                    let shape = PlayerSurfaceShape(frame: surface, cornerRadius: radius)
                     ZStack(alignment: .topLeading) {
+                        NowPlayingBackground(
+                            palette: palette,
+                            intensity: settings.settings.appearance.nowPlayingColorIntensity,
+                            isAnimating: player.isPlaying && router.isNowPlayingPresented
+                        )
+                        .frame(width: surface.width, height: surface.height)
+                        .position(x: surface.midX, y: surface.midY)
+                        .opacity(router.isNowPlayingPresented ? 1 : 0)
                         NowPlayingView()
                             .padding(insets)
                             .frame(width: width, height: height)
                             .coordinateSpace(name: PlayerArtworkLocation.coordinateSpace)
-                            .contentShape(.rect)
-                            .gesture(PlayerDismissGesture(
-                                presentation: presentation,
-                                isEnabled: router.isNowPlayingPresented && router.sheet == nil
-                            ) { dismiss in
-                                withAnimation(artworkAnimation) {
-                                    if dismiss { router.isNowPlayingPresented = false }
-                                    presentation.dragOffset = 0
-                                }
-                            })
-                            .modifier(PlayerSurfaceCorners(
-                                viewportRadius: viewportCornerRadius,
-                                slide: slide
-                            ))
-                            .offset(x: -insets.leading, y: slide - insets.top)
+                            .offset(y: surface.minY)
+                            .opacity(router.isNowPlayingPresented ? 1 : 0)
                             .allowsHitTesting(router.isNowPlayingPresented)
                             .accessibilityHidden(!router.isNowPlayingPresented)
-                        sharedArtwork(in: proxy, height: height)
+                        MiniPlayer(isInline: presentation.accessory?.isInline ?? false)
+                            .frame(width: accessory.width, height: accessory.height)
+                            .coordinateSpace(name: PlayerArtworkLocation.miniCoordinateSpace)
+                            .position(x: surface.midX, y: surface.minY + 6 + accessory.height / 2)
+                            .opacity(router.isNowPlayingPresented ? 0 : 1)
+                            .allowsHitTesting(!router.isNowPlayingPresented)
+                            .accessibilityHidden(router.isNowPlayingPresented)
+                        sharedArtwork(in: proxy)
                     }
+                    .frame(width: width, height: height, alignment: .topLeading)
+                    .clipShape(shape)
+                    .contentShape(shape)
+                    .opacity(router.isNowPlayingPresented || presentation.accessory != nil ? 1 : 0)
+                    .gesture(PlayerDismissGesture(
+                        presentation: presentation,
+                        isEnabled: router.isNowPlayingPresented && router.sheet == nil
+                    ) { dismiss in
+                        withAnimation(presentationAnimation) {
+                            if dismiss { router.isNowPlayingPresented = false }
+                            presentation.dragOffset = 0
+                        }
+                    })
                     .background(alignment: .topLeading) {
                         PlayerViewportCornerReader { viewportCornerRadius = $0 }
                             .frame(width: width, height: height)
-                            .offset(x: -insets.leading, y: -insets.top)
                             .allowsHitTesting(false)
                             .accessibilityHidden(true)
                     }
+                    .offset(x: -insets.leading, y: -insets.top)
                 }
                 .ignoresSafeArea(.keyboard)
                 .animation(
-                    reduceMotion ? .linear(duration: 0.15) : .spring(duration: 0.45, bounce: 0),
+                    presentationAnimation,
                     value: router.isNowPlayingPresented
                 )
             }
             .environment(presentation)
+            .artworkPalette(coverArtId, into: $palette)
             .onChange(of: router.isNowPlayingPresented) {
                 presentation.dragOffset = 0
             }
     }
 
-    private func sharedArtwork(in proxy: GeometryProxy, height: CGFloat) -> some View {
-        let geometry = artworkFrame(in: proxy, height: height)
+    private var coverArtId: String? {
+        player.currentSong?.coverArtId(preferAlbum: settings.settings.playback.useAlbumCoverForSongs)
+    }
+
+    private var expandedRadius: CGFloat {
+        viewportCornerRadius > 0 ? viewportCornerRadius : min(presentation.dragOffset / 3, 32)
+    }
+
+    private var presentationAnimation: Animation {
+        reduceMotion ? .linear(duration: 0.15) : .spring(duration: 0.45, bounce: 0)
+    }
+
+    private func accessoryFrame(in proxy: GeometryProxy) -> CGRect {
+        let origin = proxy.frame(in: .global).origin
+        return presentation.accessory?.frame.offsetBy(
+            dx: proxy.safeAreaInsets.leading - origin.x,
+            dy: proxy.safeAreaInsets.top - origin.y
+        ) ?? CGRect(x: 20, y: proxy.size.height - 100, width: max(proxy.size.width - 40, 0), height: 36)
+    }
+
+    private func sharedArtwork(in proxy: GeometryProxy) -> some View {
+        let geometry = artworkFrame(in: proxy)
         return PlayerArtwork(cornerRadius: 0, size: .large)
             .frame(width: geometry?.rect.width ?? 0, height: geometry?.rect.height ?? 0)
             .clipShape(RoundedRectangle(
@@ -155,17 +235,14 @@ private struct NowPlayingPresentation: ViewModifier {
         reduceMotion ? .linear(duration: 0.15) : .spring(duration: 0.5, bounce: 0.15)
     }
 
-    private func artworkFrame(in proxy: GeometryProxy, height: CGFloat) -> PlayerArtworkFrame? {
-        let origin = proxy.frame(in: .global).origin
-        guard var mini = presentation.artworkFrames[.mini] else { return nil }
-        mini.rect = mini.rect.offsetBy(dx: -origin.x, dy: -origin.y)
+    private func artworkFrame(in proxy: GeometryProxy) -> PlayerArtworkFrame? {
         guard router.isNowPlayingPresented,
               var expanded = presentation.artworkFrames[presentation.artworkLocation] else {
+            guard var mini = presentation.artworkFrames[.mini] else { return nil }
+            let accessory = accessoryFrame(in: proxy)
+            mini.rect = mini.rect.offsetBy(dx: accessory.minX, dy: accessory.minY)
             return mini
         }
-        expanded.rect = expanded.rect.offsetBy(
-            dx: -proxy.safeAreaInsets.leading, dy: -proxy.safeAreaInsets.top
-        )
         // During a pan the cover stays attached to the expanded surface.
         // Only committing dismissal changes its destination to the pill.
         expanded.rect = expanded.rect.offsetBy(dx: 0, dy: presentation.dragOffset)
@@ -173,20 +250,22 @@ private struct NowPlayingPresentation: ViewModifier {
     }
 }
 
-/// Animate the radius from the actual slide, including programmatic
-/// opening/closing. Rounded viewports keep their system-resolved radius.
-private struct PlayerSurfaceCorners: ViewModifier, Animatable {
-    let viewportRadius: CGFloat
-    var slide: CGFloat
+/// The same mask encloses the background, both control layouts, and cover.
+/// Its bounds stay full-width during a pan and morph only after release.
+nonisolated private struct PlayerSurfaceShape: Shape {
+    var frame: CGRect
+    var cornerRadius: CGFloat
 
-    var animatableData: CGFloat {
-        get { slide }
-        set { slide = newValue }
+    var animatableData: AnimatablePair<CGRect.AnimatableData, CGFloat> {
+        get { AnimatablePair(frame.animatableData, cornerRadius) }
+        set {
+            frame.animatableData = newValue.first
+            cornerRadius = newValue.second
+        }
     }
 
-    func body(content: Content) -> some View {
-        let radius = viewportRadius > 0 ? viewportRadius : min(max(slide, 0) / 3, 32)
-        content.clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+    func path(in rect: CGRect) -> Path {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).path(in: frame)
     }
 }
 

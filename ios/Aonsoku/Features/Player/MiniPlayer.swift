@@ -6,10 +6,11 @@ import SwiftUI
 /// tab bar it keeps the cover, title, artist and Play/Pause. Swipe the pill
 /// horizontally to move through the queue.
 struct MiniPlayer: View {
+    var isInline = false
+
     @Environment(PlayerStore.self) private var player
     @Environment(Router.self) private var router
     @Environment(Localizer.self) private var t
-    @Environment(\.tabViewBottomAccessoryPlacement) private var placement
 
     @State private var swipeContext: MiniPlayerSwipeContext?
     @State private var swipeOffset: CGFloat = 0
@@ -17,10 +18,6 @@ struct MiniPlayer: View {
     @State private var armedSwipe: MiniPlayerSwipeDirection?
     @State private var swipeHapticTrigger = 0
     @State private var settleTask: Task<Void, Never>?
-
-    private var isInline: Bool {
-        placement == .inline
-    }
 
     var body: some View {
         HStack(spacing: isInline ? 7 : 10) {

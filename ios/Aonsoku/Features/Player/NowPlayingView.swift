@@ -13,11 +13,9 @@ struct NowPlayingView: View {
     }
 
     @State private var panel: Panel?
-    @State private var palette: ArtworkPalette?
 
     @Environment(PlayerStore.self) private var player
     @Environment(LyricsStore.self) private var lyrics
-    @Environment(SettingsStore.self) private var settings
     @Environment(Localizer.self) private var t
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(Router.self) private var router
@@ -43,15 +41,7 @@ struct NowPlayingView: View {
         }
         .foregroundStyle(.white)
         .scrollDisabled(presentation.dragOffset > 0)
-        .background {
-            NowPlayingBackground(
-                palette: palette,
-                intensity: settings.settings.appearance.nowPlayingColorIntensity,
-                isAnimating: player.isPlaying && router.isNowPlayingPresented
-            )
-        }
         .environment(\.colorScheme, .dark)
-        .artworkPalette(coverArtId, into: $palette)
         .task(id: router.isNowPlayingPresented ? player.currentSong?.id : nil) {
             guard router.isNowPlayingPresented else { return }
             await lyrics.load(for: player.currentSong)
@@ -70,11 +60,6 @@ struct NowPlayingView: View {
             router.isNowPlayingPresented = false
         }
         .globalPresentations(.nowPlaying)
-    }
-
-    private var coverArtId: String? {
-        guard let song = player.currentSong else { return nil }
-        return song.coverArtId(preferAlbum: settings.settings.playback.useAlbumCoverForSongs)
     }
 
     // MARK: - Layouts
@@ -494,7 +479,6 @@ struct NowPlayingBackground: View {
             }
             .opacity(opacity)
         }
-        .ignoresSafeArea()
         .animation(.smooth(duration: 0.8), value: palette)
     }
 

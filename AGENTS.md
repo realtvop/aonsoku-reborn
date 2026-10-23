@@ -123,7 +123,7 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   networking, persistence, playback, sync, downloads, coordination, settings,
   and observable stores. See `docs/ios-native-app.md`.
   `MainTabView` uses the system tab bar, a fixed search-role tab and the
-  native bottom accessory for `MiniPlayer`. Search stays separate from the
+  native bottom accessory for a layout-only `PlayerAccessorySlot`. Search stays separate from the
   other tabs; minimization and transitions are system-owned. The Search
   stack's `searchable` toolbar field sits at the bottom on iPhone when Search
   is selected. `SearchView` shares its text/query bindings with that field;
@@ -131,7 +131,11 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   scoped to the Search stack so other tabs do not gain a search field. iPad
   keeps the system search placement and adaptable sidebar.
   `NowPlayingPresentation` keeps the full-screen player in the same view
-  tree as the tabs. Expansion and collapse animate only its Y offset at
+  tree as the tabs. One persistent container owns `MiniPlayer`,
+  `NowPlayingView`, their shared background and the sole `PlayerArtwork`.
+  The system accessory reserves space and supplies native glass, while its
+  reported geometry places the mini controls inside that same container.
+  Interactive expansion/collapse changes only its Y offset at
   the full viewport width. Downward pans start anywhere on the surface
   except the progress/volume slider touch targets; horizontal pans do not
   dismiss it. Lyrics/queue lists scroll back to their top before dismissal.
@@ -142,8 +146,11 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   A stationary full-viewport UIKit probe resolves the screen/window corner
   radius through iOS 26's public concentric corner APIs. Rounded viewports
   keep that radius throughout the Y slide; square viewports grow from 0 to
-  32pt over the first 96pt of downward movement. The surface clip precedes
-  the translation and never clips or recreates the shared artwork overlay.
+  32pt over the first 96pt of downward movement. After release into a
+  committed dismissal, one animatable surface mask morphs into the pill's
+  bounds while the cover retargets its mini slot; a canceled drag restores
+  the whole expanded container. The same mask encloses background, controls
+  and artwork throughout, without recreating the image reader.
   The same host renders one persistent `PlayerArtwork` at large resolution.
   The mini player, main player, lyrics and queue headers contain only
   `PlayerArtworkSlot` layout markers. Their geometry drives that image's

@@ -140,14 +140,19 @@ with automatic foreground sync disabled.
   no duplicate top field. Typing retains the 500ms debounce; submitting
   searches immediately. iPad uses system search placement and the adaptable
   sidebar.
-- **Mini player**: `tabViewBottomAccessory`, adapting to the inline and
-  expanded accessory placements. Tapping it slides Now Playing up at the
+- **Mini player**: the system `tabViewBottomAccessory` contains only a
+  layout marker and native glass. Its inline/expanded geometry positions
+  the actual mini controls inside `NowPlayingPresentation`, the same
+  persistent container as the full player, background and cover.
+  Tapping it slides Now Playing up at the
   full viewport width; it also shows remote playback when controlling
   another device. `NowPlayingPresentation` keeps the player in the tabs'
   view tree. Downward drags start anywhere except the progress and volume
   sliders; scrolled lyrics/queues return to their top first. The cover moves
   with the expanded surface without shrinking while the finger is down.
   Only release into a committed dismissal sends the cover toward the pill.
+  At that point the shared container mask morphs into the pill bounds;
+  canceling the drag restores the entire expanded container instead.
   Tapping the handle or the accessibility escape action also collapses it.
   The player surface keeps the system-resolved viewport corner radius on
   rounded screens/windows. On square viewports its corners grow from 0 to
