@@ -407,18 +407,35 @@ public final class AudioService: NSObject, @unchecked Sendable {
 
     public func setRepeatMode(_ mode: AudioRepeatMode) {
         stateQueue.async { [weak self] in
-            guard let self else { return }
-            self.queueEngine.setLoopState(LoopState(rawValue: mode.rawValue) ?? .off)
-            self.persistence.markStateDirty()
+            self?.setRepeatModeOnStateQueue(mode)
         }
     }
 
     public func setShuffle(_ enabled: Bool) {
         stateQueue.async { [weak self] in
-            guard let self else { return }
-            self.queueEngine.setShuffleActive(enabled)
-            self.persistence.markStateDirty()
+            self?.setShuffleOnStateQueue(enabled)
         }
+    }
+
+    /// Applies a repeat mode on `stateQueue`; the public method and the
+    /// remote `.setRepeat` command share it. A change is published, because
+    /// a paused player has no progress or playback event to carry the new
+    /// mode to `PlayerStore`, state listeners or the coordination snapshot.
+    /// Setting the mode already in effect changes nothing and is not
+    /// published.
+    private func setRepeatModeOnStateQueue(_ mode: AudioRepeatMode) {
+        let state = LoopState(rawValue: mode.rawValue) ?? .off
+        guard queueEngine.loopState != state else { return }
+        queueEngine.setLoopState(state)
+        publishQueueChange(reason: "repeat")
+    }
+
+    /// Applies shuffle on `stateQueue`; the public method and the remote
+    /// `.setShuffle` command share it. The queue engine reports every
+    /// change it makes (reordering or clearing the flag), which publishes it.
+    private func setShuffleOnStateQueue(_ enabled: Bool) {
+        queueEngine.setShuffleActive(enabled)
+        persistence.markStateDirty()
     }
 
     public func markAsShuffled(originalSongs: [QueueSong]) {
@@ -827,8 +844,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     completion(false)
                     return
                 }
-                self.queueEngine.setShuffleActive(enabled)
-                self.persistence.markStateDirty()
+                self.setShuffleOnStateQueue(enabled)
                 completion(true)
             }
         case .setRepeat(let mode):
@@ -837,10 +853,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     completion(false)
                     return
                 }
-                self.queueEngine.setLoopState(
-                    LoopState(rawValue: mode.rawValue) ?? .off
-                )
-                self.persistence.markStateDirty()
+                self.setRepeatModeOnStateQueue(mode)
                 completion(true)
             }
         case .setVolume(let value):

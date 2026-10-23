@@ -495,7 +495,11 @@ class NativeQueueEngine {
 
     private func applyUnshuffle() {
         guard !originalContextSongs.isEmpty else {
+            // Nothing to put back in order, but the flag is part of the
+            // published queue state.
+            guard isShuffleActive else { return }
             isShuffleActive = false
+            delegate?.queueEngine(self, didChangeContents: "unshuffle")
             return
         }
 

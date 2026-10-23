@@ -181,6 +181,72 @@ final class QueueTests: XCTestCase {
         empty.skipToNext()
         XCTAssertNil(empty.currentSong)
     }
+
+    func testShuffleAndUnshuffleReportContentChanges() {
+        let engine = NativeQueueEngine()
+        let delegate = QueueDelegateSpy()
+        engine.delegate = delegate
+        let songs = ["a", "b", "c", "d"].map { makeSong($0) }
+        engine.setContextQueue(
+            songs: songs,
+            currentIndex: 0,
+            autoplay: false,
+            startTime: nil
+        )
+        delegate.contentReasons.removeAll()
+
+        engine.setShuffleActive(true)
+        XCTAssertTrue(engine.isShuffleActive)
+        engine.setShuffleActive(false)
+
+        XCTAssertFalse(engine.isShuffleActive)
+        XCTAssertEqual(delegate.contentReasons, ["shuffle", "unshuffle"])
+        XCTAssertEqual(engine.contextSongs.map(\.id), ["a", "b", "c", "d"])
+    }
+
+    func testClearingShuffleWithNothingToRestoreIsStillReported() {
+        let engine = NativeQueueEngine()
+        let delegate = QueueDelegateSpy()
+        engine.delegate = delegate
+        engine.setContextQueue(
+            songs: [makeSong("a"), makeSong("b")],
+            currentIndex: 0,
+            autoplay: false,
+            startTime: nil
+        )
+        // Flagged as shuffled, with no original order to put back.
+        engine.markAsShuffled(originalSongs: [])
+        delegate.contentReasons.removeAll()
+
+        engine.setShuffleActive(false)
+
+        XCTAssertFalse(engine.isShuffleActive)
+        XCTAssertEqual(delegate.contentReasons, ["unshuffle"])
+        engine.setShuffleActive(false)
+        XCTAssertEqual(delegate.contentReasons, ["unshuffle"])
+    }
+
+    func testShuffleChangesNothingWhenThereIsNothingToShuffle() {
+        let engine = NativeQueueEngine()
+        let delegate = QueueDelegateSpy()
+        engine.delegate = delegate
+
+        engine.setShuffleActive(true)
+        XCTAssertFalse(engine.isShuffleActive)
+
+        engine.setContextQueue(
+            songs: [makeSong("only")],
+            currentIndex: 0,
+            autoplay: false,
+            startTime: nil
+        )
+        delegate.contentReasons.removeAll()
+        engine.setShuffleActive(true)
+        engine.setShuffleActive(false)
+
+        XCTAssertFalse(engine.isShuffleActive)
+        XCTAssertTrue(delegate.contentReasons.isEmpty)
+    }
 }
 
 private final class QueueDelegateSpy: NativeQueueEngineDelegate {
