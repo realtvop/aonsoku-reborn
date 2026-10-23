@@ -7,7 +7,7 @@ with them, only the server protocols (Subsonic/OpenSubsonic, coordination
 `/v1/*` + WebSocket protocol version 1) and the translation files.
 
 Apple Music is the interaction reference: tab bar with a search tab, a mini
-player in the tab bar accessory, a zoom-transition Now Playing screen, and
+player in the tab bar accessory, a vertically sliding Now Playing screen, and
 context menus on every song, album, artist, and playlist.
 
 ## Platform
@@ -141,8 +141,11 @@ with automatic foreground sync disabled.
   searches immediately. iPad uses system search placement and the adaptable
   sidebar.
 - **Mini player**: `tabViewBottomAccessory`, adapting to the inline and
-  expanded accessory placements. Tapping it opens Now Playing with a zoom
-  transition; it also shows remote playback when controlling another device.
+  expanded accessory placements. Tapping it slides Now Playing up at the
+  full viewport width; it also shows remote playback when controlling
+  another device. `NowPlayingPresentation` keeps the player in the tabs'
+  view tree, and its drag handle changes only the vertical offset. Tapping
+  the handle or the accessibility escape action collapses it.
 - **Now Playing**: artwork-derived animated mesh gradient, artwork that
   shrinks while paused, marquee title, favorite and more menus, scrubber,
   transport, volume, and a bottom bar for lyrics, AirPlay, Aonsoku devices,

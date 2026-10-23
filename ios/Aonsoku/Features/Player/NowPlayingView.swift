@@ -7,8 +7,6 @@ import SwiftUI
 /// and the queue. Lyrics and the queue move the cover into a compact
 /// header; on a wide iPad they open beside it.
 struct NowPlayingView: View {
-    static let transitionID = "nowPlaying"
-
     enum Panel: Hashable {
         case lyrics
         case queue
@@ -23,7 +21,9 @@ struct NowPlayingView: View {
     @Environment(SettingsStore.self) private var settings
     @Environment(Localizer.self) private var t
     @Environment(\.horizontalSizeClass) private var sizeClass
-    @Environment(\.dismiss) private var dismiss
+    @Environment(Router.self) private var router
+    @Environment(PlayerPresentationState.self) private var presentation
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { proxy in
@@ -55,7 +55,7 @@ struct NowPlayingView: View {
         }
         .onChange(of: player.hasMedia) { _, hasMedia in
             if !hasMedia {
-                dismiss()
+                router.isNowPlayingPresented = false
             }
         }
         .onChange(of: player.isRadio) { _, isRadio in
@@ -64,7 +64,7 @@ struct NowPlayingView: View {
             }
         }
         .accessibilityAction(.escape) {
-            dismiss()
+            router.isNowPlayingPresented = false
         }
         .globalPresentations(.nowPlaying)
     }
@@ -131,12 +131,33 @@ struct NowPlayingView: View {
     // MARK: - Pieces
 
     private var grabber: some View {
-        Capsule()
-            .fill(.white.opacity(0.35))
-            .frame(width: 38, height: 5)
-            .padding(.top, 8)
-            .padding(.bottom, 6)
-            .accessibilityHidden(true)
+        Button {
+            router.isNowPlayingPresented = false
+        } label: {
+            Capsule()
+                .fill(.white.opacity(0.35))
+                .frame(width: 38, height: 5)
+                .frame(maxWidth: .infinity)
+                .frame(height: 32)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(t("fullscreen.switchButton"))
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 6)
+                .onChanged { value in
+                    guard value.translation.height > abs(value.translation.width) else { return }
+                    presentation.dragOffset = value.translation.height
+                }
+                .onEnded { value in
+                    let shouldDismiss = presentation.dragOffset > 100
+                        || (presentation.dragOffset > 0 && value.predictedEndTranslation.height > 200)
+                    withAnimation(reduceMotion ? .linear(duration: 0.15) : .spring(duration: 0.45, bounce: 0)) {
+                        if shouldDismiss { router.isNowPlayingPresented = false }
+                        presentation.dragOffset = 0
+                    }
+                }
+        )
     }
 
     /// Remote control and the sleep timer, when they apply.

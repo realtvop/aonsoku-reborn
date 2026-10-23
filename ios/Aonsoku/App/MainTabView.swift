@@ -9,7 +9,6 @@ struct MainTabView: View {
     @Environment(PlayerStore.self) private var player
     @Environment(SettingsStore.self) private var settings
     @Environment(Localizer.self) private var t
-    @Namespace private var playerNamespace
     @State private var searchText = ""
     @State private var searchQuery = ""
 
@@ -51,10 +50,7 @@ struct MainTabView: View {
         .tabViewBottomAccessory {
             MiniPlayer()
         }
-        .fullScreenCover(isPresented: $router.isNowPlayingPresented) {
-            NowPlayingView()
-                .navigationTransition(.zoom(sourceID: NowPlayingView.transitionID, in: playerNamespace))
-        }
+        .nowPlayingPresentation()
         .sheet(isPresented: $router.isAccountPresented) {
             AccountView()
         }
@@ -63,7 +59,6 @@ struct MainTabView: View {
                 router.presentNowPlaying()
             }
         }
-        .environment(\.playerNamespace, playerNamespace)
         .globalPresentations(.root)
     }
 

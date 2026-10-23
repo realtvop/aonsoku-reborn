@@ -10,7 +10,6 @@ struct MiniPlayer: View {
     @Environment(Router.self) private var router
     @Environment(Localizer.self) private var t
     @Environment(\.tabViewBottomAccessoryPlacement) private var placement
-    @Environment(\.playerNamespace) private var namespace
 
     @State private var swipeContext: MiniPlayerSwipeContext?
     @State private var swipeOffset: CGFloat = 0
@@ -48,7 +47,6 @@ struct MiniPlayer: View {
             guard settleTask == nil, swipeContext != nil else { return }
             resetSwipe(animated: false)
         }
-        .zoomSource(in: namespace)
         .accessibilityElement(children: .contain)
         .accessibilityAction(named: t("fullscreen.switchButton")) {
             open()
@@ -390,14 +388,3 @@ enum NowPlayingText {
     }
 }
 
-extension View {
-    /// Marks the view the Now Playing zoom transition grows from.
-    @ViewBuilder
-    func zoomSource(in namespace: Namespace.ID?) -> some View {
-        if let namespace {
-            matchedTransitionSource(id: NowPlayingView.transitionID, in: namespace)
-        } else {
-            self
-        }
-    }
-}

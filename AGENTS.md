@@ -130,6 +130,11 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   typing debounces and submitting searches immediately. Keep `searchable`
   scoped to the Search stack so other tabs do not gain a search field. iPad
   keeps the system search placement and adaptable sidebar.
+  `NowPlayingPresentation` keeps the full-screen player in the same view
+  tree as the tabs. Expansion and collapse animate only its Y offset at
+  the full viewport width; the drag handle ignores horizontal movement.
+  `PlayerPresentationState` owns the interactive dismissal offset, while
+  `Router.isNowPlayingPresented` remains the presentation authority.
 - Android native pages use the application-scoped
   `github.realtvop.aonsoku.plugins.data.LibraryService` for Room queries,
   metadata sync, lyrics, and image-cache ownership. It is created with the

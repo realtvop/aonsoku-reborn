@@ -37,12 +37,6 @@ extension View {
     }
 }
 
-extension EnvironmentValues {
-    /// The namespace the mini player and Now Playing share for the zoom
-    /// transition.
-    @Entry var playerNamespace: Namespace.ID?
-}
-
 extension View {
     /// Plays `feedback` when `trigger` changes, if haptics are enabled.
     func haptic<T: Equatable>(_ feedback: SensoryFeedback, trigger: T) -> some View {
