@@ -5,9 +5,10 @@ import SwiftUI
 /// browse, like Apple Music's categories; typing searches albums, songs
 /// and artists, each linking to its full results.
 struct SearchView: View {
-    @State private var text = ""
-    /// `text` once typing pauses.
-    @State private var query = ""
+    /// Shared with the Search stack's native bottom search field.
+    @Binding var text: String
+    /// `text` once typing pauses or the native search field submits.
+    @Binding var query: String
     @State private var results: SearchResults?
     @State private var phase = LoadPhase.idle
 
@@ -16,17 +17,14 @@ struct SearchView: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        VStack(spacing: 0) {
-            searchField
-            Group {
-                if Self.isSearchable(query) {
-                    resultsList
-                } else {
-                    BrowseGenres()
-                }
+        Group {
+            if Self.isSearchable(query) {
+                resultsList
+            } else {
+                BrowseGenres()
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .offlineBanner()
         .themedBackground()
         .navigationTitle(t("sidebar.miniSearch"))
@@ -43,35 +41,6 @@ struct SearchView: View {
         .task(id: query) {
             await search()
         }
-    }
-
-    private var searchField: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-            TextField(t("command.inputPlaceholder"), text: $text)
-                .submitLabel(.search)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-                .onSubmit {
-                    query = trimmedText
-                }
-            if !text.isEmpty {
-                Button {
-                    text = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(t("generic.clear"))
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .pageMargins()
-        .padding(.vertical, 12)
     }
 
     private var trimmedText: String {

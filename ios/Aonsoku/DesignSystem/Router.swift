@@ -185,7 +185,6 @@ extension View {
     func appDestinations() -> some View {
         navigationDestination(for: AppRoute.self) { route in
             RouteView(route: route)
-                .compactTabBarPage()
         }
     }
 
