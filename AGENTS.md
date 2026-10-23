@@ -179,8 +179,12 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   `AonsokuKit.AppServices`. `AudioService` owns AVPlayer, the queue, downloads,
   scrobbling, playback persistence, system media controls, direct-stream
   background caching, and staged `PlaybackRecoveryController` seek/reload
-  fallback. SwiftUI reads `@Observable` stores created by `AppModel`; views do
-  not locate services through a bridge or open the database directly.
+  fallback. Adding songs to the queue while none is active, locally or through
+  the remote `add_to_queue_next`/`add_to_queue_last` commands, starts a queue
+  from them and loads the first song paused, so the coordination snapshot
+  exists at once and playback begins only on a later play. SwiftUI reads
+  `@Observable` stores created by `AppModel`; views do not locate services
+  through a bridge or open the database directly.
 - `LibraryService` is the public iOS library boundary for native UI. It owns
   GRDB repository access, metadata sync/scheduling, typed library queries, and
   cover/avatar caching through `AppServices.library`; native UI must not open
@@ -190,8 +194,13 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   same-account offline data; activating a different account first clears
   server metadata, playback/history state, downloads, artwork, pins, and
   lyrics selections plus the old coordination registration so the singleton
-  service graph cannot leak prior-account content. Restarting the same account
-  resumes its preserved coordination registration after sign-out.
+  service graph cannot leak prior-account content. Sign-in never erases another
+  account's library without the user confirming: `AppModel` holds a
+  `pendingAccountSwitch` request (stored under
+  `session.pending-account-switch.v1`, so it survives a relaunch) until the
+  user erases or keeps the library or cancels, and changing the server address
+  in Settings keeps the library. Restarting the same account resumes its
+  preserved coordination registration after sign-out.
 - `AppLifecycleService` is the App/Scene lifecycle boundary shared by the iOS
   host and `AppServices`. It starts/restores audio once, flushes playback state
   on background/termination, validates coordination with a foreground ping and
