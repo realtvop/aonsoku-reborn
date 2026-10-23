@@ -7,6 +7,13 @@ public final class AudioService: NSObject, @unchecked Sendable {
     public typealias EventHandler = @Sendable (AudioServiceEvent) -> Void
     typealias PlayerFactory = (AVPlayerItem) -> AVPlayer
 
+    private struct PreparedQueueItem {
+        let song: QueueSong
+        let url: URL
+        let kind: String
+        let item: AVPlayerItem
+    }
+
     private let audioSession = AVAudioSession.sharedInstance()
     private let databaseManager: DatabaseManager
     private let queueEngine: NativeQueueEngine
@@ -34,6 +41,12 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private var stateListeners: [UUID: @Sendable (AudioPlaybackSnapshot) -> Void] = [:]
     private var player: AVPlayer?
     private var playerItem: AVPlayerItem?
+    private var preparedQueueItem: PreparedQueueItem?
+    private var currentQueueSong: QueueSong?
+    private var preloadRevision = 0
+    private var transitionStateSuppressionGeneration: Int?
+    private var transitionLoadingWorkItem: DispatchWorkItem?
+    private var isHandlingQueueEnd = false
     private var timeObserver: Any?
     private var statusObservation: NSKeyValueObservation?
     private var timeControlObservation: NSKeyValueObservation?
@@ -101,7 +114,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
         scrobbleBuffer: NativeScrobbleBuffer = NativeScrobbleBuffer(),
         scrobbleSubmitter: NativeScrobbleSubmitter = NativeScrobbleSubmitter(),
         recoveryController: PlaybackRecoveryController = PlaybackRecoveryController(),
-        playerFactory: @escaping PlayerFactory = { AVPlayer(playerItem: $0) }
+        playerFactory: @escaping PlayerFactory = { AVQueuePlayer(items: [$0]) }
     ) {
         self.databaseManager = databaseManager
         self.queueEngine = queueEngine
@@ -266,6 +279,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                 if request.autoplay { try self.activateAudioSession() }
 
                 self.isQueueActive = false
+                self.currentQueueSong = nil
                 self.currentRequestId = request.requestId
                 self.currentSource = request.source
                 self.currentSourceURL = resolved.url
@@ -275,7 +289,9 @@ public final class AudioService: NSObject, @unchecked Sendable {
                 self.installPlayer(
                     url: resolved.url,
                     kind: self.currentSourceKind,
-                    songId: Self.songId(request.source)
+                    songId: Self.songId(request.source),
+                    queueSong: nil,
+                    autoplay: request.autoplay
                 )
                 self.applyReplayGain(nil)
                 // A paused load is watched once play() is called; without
@@ -354,6 +370,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
 
     public func pause() {
         dispatchMain { [weak self] in
+            self?.cancelTransitionStateSuppression()
             self?.recoveryController.reportUserPause()
             self?.player?.pause()
             self?.scrobbleBuffer.pauseTracking()
@@ -365,6 +382,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     public func stop() {
         dispatchMain { [weak self] in
             guard let self else { return }
+            self.cancelTransitionStateSuppression()
             self.player?.pause()
             self.recoveryController.reportUserPause()
             self.scrobbleBuffer.pauseTracking()
@@ -432,6 +450,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
         guard queueEngine.loopState != state else { return }
         queueEngine.setLoopState(state)
         publishQueueChange(reason: "repeat")
+        dispatchMain { [weak self] in self?.scheduleNextItemPreload() }
     }
 
     /// Applies shuffle on `stateQueue`; the public method and the remote
@@ -618,6 +637,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
             self.currentSource = nil
             self.currentSourceURL = nil
             self.currentSourceKind = nil
+            self.currentQueueSong = nil
             self.remoteProjection = nil
             self.metadata = AudioMetadata()
             self.loadedDuration = nil
@@ -1344,6 +1364,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
             if mode == "endOfTrack" {
                 self.sleepTimerEndDate = nil
                 self.sleepTimer = nil
+                self.invalidateNextItemPreload(removeFromQueue: true)
             } else {
                 self.sleepTimerEndDate = Date().addingTimeInterval(seconds)
                 self.sleepTimer = Timer.scheduledTimer(
@@ -1360,6 +1381,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
             self?.sleepTimer = nil
             self?.sleepTimerEndDate = nil
             self?.sleepTimerMode = "duration"
+            self?.scheduleNextItemPreload()
         }
     }
 
@@ -1367,21 +1389,108 @@ public final class AudioService: NSObject, @unchecked Sendable {
         sleepTimerEndDate.map { max(0, $0.timeIntervalSinceNow) } ?? 0
     }
 
-    private func installPlayer(url: URL, kind: String?, songId: String?) {
-        clearPlayer(deactivateSession: false)
-        let generation = playbackGeneration
+    /// Installs the requested item while retaining the long-lived player.
+    /// Returns true when an already-buffering AVQueuePlayer item was adopted,
+    /// so callers can preserve the visible playing state across the boundary.
+    @discardableResult
+    private func installPlayer(
+        url: URL,
+        kind: String?,
+        songId: String?,
+        queueSong: QueueSong?,
+        autoplay: Bool
+    ) -> Bool {
+        let resolvedKind = kind ?? "stream"
+        let prepared = queueSong.flatMap { song -> PreparedQueueItem? in
+            guard let preparedQueueItem,
+                  preparedQueueItem.song == song,
+                  preparedQueueItem.url == url,
+                  preparedQueueItem.kind == resolvedKind,
+                  let queuePlayer = player as? AVQueuePlayer,
+                  queuePlayer.items().contains(where: { $0 === preparedQueueItem.item }) else {
+                return nil
+            }
+            return preparedQueueItem
+        }
+        let isSeamlessTransition = prepared != nil
+
+        beginPlayerItemTransition()
         currentSourceURL = url
         currentSourceKind = kind
         if kind == "stream", let songId { startBackgroundCache(songId: songId) }
+
+        let item: AVPlayerItem
+        if let prepared,
+           let queuePlayer = player as? AVQueuePlayer {
+            item = prepared.item
+            preparedQueueItem = nil
+            if queuePlayer.currentItem !== item {
+                queuePlayer.advanceToNextItem()
+            }
+        } else {
+            invalidateNextItemPreload(removeFromQueue: false)
+            item = makePlayerItem(url: url, kind: kind)
+            if let player {
+                player.pause()
+                if !replaceCurrentItem(item, on: player) {
+                    self.player = nil
+                }
+            }
+        }
+
+        let activePlayer: AVPlayer
+        if let player {
+            activePlayer = player
+        } else {
+            activePlayer = playerFactory(item)
+            self.player = activePlayer
+        }
+        if let queuePlayer = activePlayer as? AVQueuePlayer {
+            // Keep the current item available for repeat-one, queue
+            // exhaustion and fallback handling until a next item is staged.
+            queuePlayer.actionAtItemEnd = .pause
+        }
+        playerItem = item
+        if isSeamlessTransition, autoplay {
+            transitionStateSuppressionGeneration = playbackGeneration
+        }
+        observe(item: item, player: activePlayer, generation: playbackGeneration)
+        updateNowPlayingInfo()
+        return isSeamlessTransition
+    }
+
+    private func makePlayerItem(url: URL, kind: String?) -> AVPlayerItem {
         let item = AVPlayerItem(url: url)
         item.preferredForwardBufferDuration = kind == "radio"
             ? 0
             : .greatestFiniteMagnitude
-        let player = playerFactory(item)
-        self.playerItem = item
-        self.player = player
-        observe(item: item, player: player, generation: generation)
-        updateNowPlayingInfo()
+        return item
+    }
+
+    private func replaceCurrentItem(
+        _ item: AVPlayerItem,
+        on player: AVPlayer
+    ) -> Bool {
+        guard let queuePlayer = player as? AVQueuePlayer else {
+            player.replaceCurrentItem(with: item)
+            return true
+        }
+        queuePlayer.removeAllItems()
+        guard queuePlayer.canInsert(item, after: nil) else { return false }
+        queuePlayer.insert(item, after: nil)
+        return true
+    }
+
+    private func beginPlayerItemTransition() {
+        playbackGeneration += 1
+        bufferMismatchFirstSeen = nil
+        endOfStreamTracker.reset()
+        isSeeking = false
+        cancelTransitionStateSuppression()
+        removePlayerObservers()
+        persistence.stopProgressTracking()
+        recoveryController.stopProgressMonitoring()
+        recoveryController.reset()
     }
 
     private func observe(
@@ -1396,6 +1505,8 @@ public final class AudioService: NSObject, @unchecked Sendable {
                   item === self.playerItem,
                   generation == self.playbackGeneration else { return }
             DispatchQueue.main.async {
+                guard item === self.playerItem,
+                      generation == self.playbackGeneration else { return }
                 switch item.status {
                 case .readyToPlay:
                     self.emitDuration()
@@ -1422,8 +1533,11 @@ public final class AudioService: NSObject, @unchecked Sendable {
                   player === self.player,
                   generation == self.playbackGeneration else { return }
             DispatchQueue.main.async {
+                guard player === self.player,
+                      generation == self.playbackGeneration else { return }
                 switch player.timeControlStatus {
                 case .playing:
+                    self.cancelTransitionStateSuppression()
                     self.endOfStreamTracker.reset()
                     self.recoveryController.reportPlaybackResumed(
                         generation: generation
@@ -1433,19 +1547,31 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     self.emitPlaybackState(.playing)
                 case .paused:
                     self.scrobbleBuffer.pauseTracking()
-                    if self.playbackState != .ended && self.playbackState != .stopped {
+                    if self.transitionStateSuppressionGeneration != generation,
+                       self.playbackState != .ended,
+                       self.playbackState != .stopped {
                         self.emitPlaybackState(.paused)
                     }
                 case .waitingToPlayAtSpecifiedRate:
-                    self.emit(.bufferingChanged(true, requestId: self.currentRequestId))
-                    self.emitPlaybackState(.loading)
+                    self.handleWaitingToPlay(
+                        player: player,
+                        item: item,
+                        generation: generation
+                    )
                 @unknown default:
                     break
                 }
             }
         }
         durationObservation = item.observe(\.duration, options: [.new]) {
-            [weak self] _, _ in DispatchQueue.main.async { self?.emitDuration() }
+            [weak self, weak item] _, _ in
+            DispatchQueue.main.async {
+                guard let self,
+                      let item,
+                      item === self.playerItem,
+                      generation == self.playbackGeneration else { return }
+                self.emitDuration()
+            }
         }
         bufferEmptyObservation = item.observe(
             \.isPlaybackBufferEmpty,
@@ -1559,19 +1685,60 @@ public final class AudioService: NSObject, @unchecked Sendable {
         }
     }
 
+    private func handleWaitingToPlay(
+        player: AVPlayer,
+        item: AVPlayerItem,
+        generation: Int
+    ) {
+        guard transitionStateSuppressionGeneration == generation else {
+            emit(.bufferingChanged(true, requestId: currentRequestId))
+            emitPlaybackState(.loading)
+            return
+        }
+
+        transitionLoadingWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self, weak player, weak item] in
+            guard let self,
+                  let player,
+                  let item,
+                  generation == self.playbackGeneration,
+                  player === self.player,
+                  item === self.playerItem,
+                  player.timeControlStatus == .waitingToPlayAtSpecifiedRate else {
+                return
+            }
+            self.transitionStateSuppressionGeneration = nil
+            self.transitionLoadingWorkItem = nil
+            self.emit(.bufferingChanged(true, requestId: self.currentRequestId))
+            self.emitPlaybackState(.loading)
+        }
+        transitionLoadingWorkItem = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + .milliseconds(350),
+            execute: workItem
+        )
+    }
+
+    private func cancelTransitionStateSuppression() {
+        transitionLoadingWorkItem?.cancel()
+        transitionLoadingWorkItem = nil
+        transitionStateSuppressionGeneration = nil
+    }
+
     private func clearPlayer(deactivateSession: Bool) {
-        playbackGeneration += 1
-        bufferMismatchFirstSeen = nil
-        endOfStreamTracker.reset()
-        isSeeking = false
-        removePlayerObservers()
+        preloadRevision += 1
+        preparedQueueItem = nil
+        currentQueueSong = nil
+        isHandlingQueueEnd = false
+        beginPlayerItemTransition()
         player?.pause()
-        player?.replaceCurrentItem(with: nil)
+        if let queuePlayer = player as? AVQueuePlayer {
+            queuePlayer.removeAllItems()
+        } else {
+            player?.replaceCurrentItem(with: nil)
+        }
         player = nil
         playerItem = nil
-        persistence.stopProgressTracking()
-        recoveryController.stopProgressMonitoring()
-        recoveryController.reset()
         if deactivateSession { try? audioSession.setActive(false) }
     }
 
@@ -1596,15 +1763,92 @@ public final class AudioService: NSObject, @unchecked Sendable {
         stalledObserver = nil
     }
 
+    private func scheduleNextItemPreload() {
+        preloadRevision += 1
+        let revision = preloadRevision
+        guard isQueueActive,
+              sleepTimerMode != "endOfTrack",
+              let currentQueueSong,
+              let queuePlayer = player as? AVQueuePlayer,
+              queuePlayer.currentItem === playerItem else {
+            invalidateNextItemPreload(removeFromQueue: true)
+            return
+        }
+
+        stateQueue.async { [weak self] in
+            guard let self,
+                  self.queueEngine.currentSong == currentQueueSong,
+                  let nextSong = self.queueEngine.nextSongForAutomaticAdvance,
+                  let resolved = self.sourceResolver.resolveSource(for: nextSong) else {
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, revision == self.preloadRevision else { return }
+                    self.invalidateNextItemPreload(removeFromQueue: true)
+                }
+                return
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self,
+                      revision == self.preloadRevision,
+                      self.isQueueActive,
+                      self.currentQueueSong == currentQueueSong,
+                      self.sleepTimerMode != "endOfTrack",
+                      let queuePlayer = self.player as? AVQueuePlayer,
+                      queuePlayer.currentItem === self.playerItem else { return }
+
+                let kind = resolved.kind
+                if let prepared = self.preparedQueueItem,
+                   prepared.song == nextSong,
+                   prepared.url == resolved.url,
+                   prepared.kind == kind,
+                   queuePlayer.items().contains(where: { $0 === prepared.item }) {
+                    return
+                }
+
+                self.invalidateNextItemPreload(removeFromQueue: true)
+                let item = self.makePlayerItem(url: resolved.url, kind: kind)
+                guard queuePlayer.canInsert(item, after: self.playerItem) else {
+                    return
+                }
+                queuePlayer.insert(item, after: self.playerItem)
+                queuePlayer.actionAtItemEnd = .advance
+                self.preparedQueueItem = PreparedQueueItem(
+                    song: nextSong,
+                    url: resolved.url,
+                    kind: kind,
+                    item: item
+                )
+            }
+        }
+    }
+
+    private func invalidateNextItemPreload(removeFromQueue: Bool) {
+        preloadRevision += 1
+        (player as? AVQueuePlayer)?.actionAtItemEnd = .pause
+        guard let preparedQueueItem else { return }
+        if removeFromQueue,
+           let queuePlayer = player as? AVQueuePlayer,
+           queuePlayer.currentItem !== preparedQueueItem.item,
+           queuePlayer.items().contains(where: { $0 === preparedQueueItem.item }) {
+            queuePlayer.remove(preparedQueueItem.item)
+        }
+        if (player as? AVQueuePlayer)?.currentItem !== preparedQueueItem.item {
+            self.preparedQueueItem = nil
+        }
+    }
+
     private func handleEnded() {
+        guard !isHandlingQueueEnd else { return }
+        isHandlingQueueEnd = true
         endOfStreamTracker.reset()
         if sleepTimerMode == "endOfTrack" {
+            isHandlingQueueEnd = false
             fireSleepTimer(reason: "endOfTrack")
             return
         }
         if isQueueActive {
             stateQueue.async { [weak self] in self?.queueEngine.handleEnded() }
         } else {
+            isHandlingQueueEnd = false
             player?.pause()
             player?.seek(to: .zero) { [weak self] _ in
                 guard let self else { return }
@@ -1624,6 +1868,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
         startTime: Double?
     ) {
         guard let resolved = sourceResolver.resolveSource(for: song) else {
+            dispatchMain { [weak self] in self?.isHandlingQueueEnd = false }
             emitError(
                 code: "invalid_source",
                 message: "Cannot resolve audio source for song: \(song.id)"
@@ -1646,6 +1891,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     : .stream(url: resolved.url.absoluteString, songId: song.id)
                 self.currentSourceURL = resolved.url
                 self.currentSourceKind = resolved.kind
+                self.currentQueueSong = song
                 self.metadata = AudioMetadata(
                     title: song.title,
                     artist: song.artist,
@@ -1657,10 +1903,12 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     coverArtId: song.coverArtId
                 )
                 self.loadedDuration = song.duration
-                self.installPlayer(
+                let usedPreloadedItem = self.installPlayer(
                     url: resolved.url,
                     kind: resolved.kind,
-                    songId: song.id
+                    songId: song.id,
+                    queueSong: song,
+                    autoplay: autoplay
                 )
                 self.applyReplayGain(song.replayGain)
                 // A paused load is watched once play() is called; without
@@ -1671,7 +1919,9 @@ public final class AudioService: NSObject, @unchecked Sendable {
                         sourceKind: self.recoverySourceKind()
                     )
                 }
-                self.emitPlaybackState(.loading, force: true)
+                if !usedPreloadedItem {
+                    self.emitPlaybackState(.loading, force: true)
+                }
                 let begin = {
                     if autoplay {
                         self.player?.play()
@@ -1682,6 +1932,8 @@ public final class AudioService: NSObject, @unchecked Sendable {
                         self.scrobbleSubmitter.sendNowPlaying(songId: song.id)
                         self.persistence.startProgressTracking()
                     }
+                    self.isHandlingQueueEnd = false
+                    self.scheduleNextItemPreload()
                 }
                 if let startTime, startTime > 0 {
                     self.player?.seek(to: self.makeTime(startTime)) { _ in begin() }
@@ -1689,6 +1941,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     begin()
                 }
             } catch {
+                self.isHandlingQueueEnd = false
                 self.emitError(
                     code: "audio_session_failed",
                     message: error.localizedDescription
@@ -2885,11 +3138,14 @@ extension AudioService: NativeQueueEngineDelegate {
         didChangeContents reason: String
     ) {
         publishQueueChange(reason: reason)
+        dispatchMain { [weak self] in self?.scheduleNextItemPreload() }
     }
 
     func queueEngineDidExhaustQueue(_ engine: NativeQueueEngine) {
         dispatchMain { [weak self] in
             guard let self else { return }
+            self.isHandlingQueueEnd = false
+            self.invalidateNextItemPreload(removeFromQueue: true)
             if let entry = self.scrobbleBuffer.stopTracking() {
                 self.scrobbleSubmitter.submitIfEligible(
                     entry: entry,
@@ -2914,7 +3170,9 @@ extension AudioService: NativeQueueEngineDelegate {
         seekToStart song: QueueSong
     ) {
         dispatchMain { [weak self] in
-            self?.player?.seek(to: .zero) { _ in self?.player?.play() }
+            guard let self else { return }
+            self.isHandlingQueueEnd = false
+            self.player?.seek(to: .zero) { _ in self.player?.play() }
         }
     }
 }
@@ -2980,16 +3238,25 @@ extension AudioService: PlaybackRecoveryDelegate {
                     return
                 }
                 self.isRecoveryReload = true
+                self.invalidateNextItemPreload(removeFromQueue: true)
                 self.removePlayerObservers()
-                let item = AVPlayerItem(url: resolved.url)
-                item.preferredForwardBufferDuration = resolved.kind == "radio"
-                    ? 0
-                    : .greatestFiniteMagnitude
-                player.replaceCurrentItem(with: item)
+                let item = self.makePlayerItem(
+                    url: resolved.url,
+                    kind: resolved.kind
+                )
+                guard self.replaceCurrentItem(item, on: player) else {
+                    self.isRecoveryReload = false
+                    controller.reloadDidComplete(
+                        success: false,
+                        generation: generation
+                    )
+                    return
+                }
                 self.playerItem = item
                 self.currentSourceURL = resolved.url
                 self.currentSourceKind = resolved.kind
                 self.observe(item: item, player: player, generation: generation)
+                self.scheduleNextItemPreload()
                 player.seek(
                     to: savedPosition,
                     toleranceBefore: .zero,

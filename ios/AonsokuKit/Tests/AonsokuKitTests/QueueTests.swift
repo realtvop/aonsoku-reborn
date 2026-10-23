@@ -63,6 +63,45 @@ final class QueueTests: XCTestCase {
         XCTAssertTrue(engine.isInUserQueue)
     }
 
+    func testAutomaticPreloadPredictionMatchesQueueAdvanceSemantics() {
+        let engine = NativeQueueEngine()
+        engine.setContextQueue(
+            songs: [makeSong("a"), makeSong("b")],
+            currentIndex: 0,
+            autoplay: false,
+            startTime: nil
+        )
+        XCTAssertEqual(engine.nextSongForAutomaticAdvance?.id, "b")
+
+        engine.addToUserQueue(songs: [makeSong("u1"), makeSong("u2")], position: "last")
+        XCTAssertEqual(engine.nextSongForAutomaticAdvance?.id, "u1")
+        engine.skipToNext()
+        XCTAssertEqual(engine.nextSongForAutomaticAdvance?.id, "u2")
+        engine.skipToNext()
+        XCTAssertEqual(engine.nextSongForAutomaticAdvance?.id, "b")
+    }
+
+    func testAutomaticPreloadPredictionAvoidsUnpredictableOrLoopedBoundaries() {
+        let engine = NativeQueueEngine()
+        engine.setContextQueue(
+            songs: [makeSong("a"), makeSong("b"), makeSong("c")],
+            currentIndex: 0,
+            autoplay: false,
+            startTime: nil
+        )
+        engine.setLoopState(.one)
+        XCTAssertNil(engine.nextSongForAutomaticAdvance)
+
+        engine.addToUserQueue(songs: [makeSong("u")], position: "last")
+        XCTAssertEqual(engine.nextSongForAutomaticAdvance?.id, "u")
+
+        engine.clearUserQueue()
+        engine.setLoopState(.all)
+        engine.setShuffleActive(true)
+        engine.playAtIndex(engine.contextSongs.count - 1, startTime: nil)
+        XCTAssertNil(engine.nextSongForAutomaticAdvance)
+    }
+
     func testPreviousRestartsAfterThresholdBeforeChangingQueuePosition() {
         let engine = NativeQueueEngine()
         let delegate = QueueDelegateSpy()

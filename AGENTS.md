@@ -176,10 +176,15 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   the remaining TypeScript/WebView responsibilities are documented in
   `docs/android-native-services.md`.
 - The iOS app owns long-lived native services through
-  `AonsokuKit.AppServices`. `AudioService` owns AVPlayer, the queue, downloads,
-  scrobbling, playback persistence, system media controls, direct-stream
-  background caching, and staged `PlaybackRecoveryController` seek/reload
-  fallback. Adding songs to the queue while none is active, locally or through
+  `AonsokuKit.AppServices`. `AudioService` owns a long-lived `AVQueuePlayer`,
+  the queue, downloads, scrobbling, playback persistence, system media
+  controls, direct-stream background caching, and staged
+  `PlaybackRecoveryController` seek/reload fallback. It resolves and enqueues
+  the next deterministic `NativeQueueEngine` song one item ahead, then adopts
+  that buffered `AVPlayerItem` without recreating the player; repeat-one,
+  shuffled wrap, end-of-track sleep and unresolved sources fall back to the
+  normal item-loading path. Adding songs to the queue while none is active,
+  locally or through
   the remote `add_to_queue_next`/`add_to_queue_last` commands, starts a queue
   from them and loads the first song paused, so the coordination snapshot
   exists at once and playback begins only on a later play. SwiftUI reads

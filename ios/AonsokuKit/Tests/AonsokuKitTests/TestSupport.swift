@@ -48,8 +48,11 @@ func makeSongRecord(_ id: String, title: String? = nil) -> SongRecord {
     )
 }
 
-func makeSilentWAVData() -> Data {
-    let samples = Data(repeating: 0, count: 800)
+func makeSilentWAVData(duration: Double = 0.05) -> Data {
+    let samples = Data(
+        repeating: 0,
+        count: max(2, Int(16_000 * max(0, duration)))
+    )
     let dataSize = UInt32(samples.count)
     var data = Data()
     data.append(contentsOf: Array("RIFF".utf8))

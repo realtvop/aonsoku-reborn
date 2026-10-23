@@ -88,7 +88,7 @@ relaunch, and changing the server address in Settings → Server goes through
 
 | Service | Responsibility |
 | --- | --- |
-| `AudioService` | AVPlayer playback, queue engine, shuffle/repeat, downloads, stream cache, scrobbling, playback persistence, sleep timer, Now Playing info and remote commands, handoff preparation/rollback. |
+| `AudioService` | Long-lived AVQueuePlayer playback with deterministic next-item preloading and gapless adoption, queue engine, shuffle/repeat, downloads, stream cache, scrobbling, playback persistence, recovery, sleep timer, Now Playing info and remote commands, handoff preparation/rollback. |
 | `LibraryService` | GRDB library database, metadata sync and scheduling, typed library queries, lyrics cache, cover/avatar disk cache. |
 | `AuthenticationService` | Keychain credentials, login with token/password and primary/fallback probing, server info, authenticated Subsonic requests and URL building. |
 | `PreferencesService` | Key/value preferences in the library database, play history, change notifications. |

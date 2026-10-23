@@ -148,6 +148,42 @@ class NativeQueueEngine {
         return false
     }
 
+    /// The item that natural end-of-track advancement will select, when it
+    /// can be known without mutating the queue. AudioService uses this to
+    /// stage exactly one AVQueuePlayer item ahead of the current song.
+    ///
+    /// Repeat-one only advances while a user-queued song remains. A shuffled
+    /// repeat-all wrap is intentionally not predicted because `wrapToStart()`
+    /// reshuffles before selecting the next song.
+    var nextSongForAutomaticAdvance: QueueSong? {
+        if loopState == .one {
+            if isInUserQueue {
+                return userQueue.count > 1 ? userQueue[1] : nil
+            }
+            return userQueue.first
+        }
+
+        if isInUserQueue {
+            if userQueue.count > 1 { return userQueue[1] }
+            if currentIndex < contextSongs.count - 1 {
+                return contextSongs[currentIndex + 1]
+            }
+            if loopState == .all, !isShuffleActive {
+                return contextSongs.first
+            }
+            return nil
+        }
+
+        if let queued = userQueue.first { return queued }
+        if currentIndex < contextSongs.count - 1 {
+            return contextSongs[currentIndex + 1]
+        }
+        if loopState == .all, !isShuffleActive {
+            return contextSongs.first
+        }
+        return nil
+    }
+
     // MARK: - Queue Setup
 
     func setContextQueue(
