@@ -56,6 +56,9 @@ struct DownloadsView: View {
         }
         .themedBackground()
         .navigationTitle(t("offline.badge.downloaded"))
+        // A large title would sit under the blur of the bar holding the
+        // picker, so the title stays inline.
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
