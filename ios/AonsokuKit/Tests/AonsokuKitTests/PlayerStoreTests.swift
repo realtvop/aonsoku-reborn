@@ -387,12 +387,10 @@ final class PlayerStoreTests: XCTestCase {
         fixture.audio.shutdown()
     }
 
-    func testClearRejectsAnInFlightPlaybackSnapshot() async throws {
+    func testClearRejectsAPendingPlaybackSnapshot() async throws {
         let fixture = try PlayerStoreTestFixture()
-        let started = expectation(description: "snapshot started")
-        let release = DispatchSemaphore(value: 0)
-        let shouldDelay = LockedTestBox(true)
-        let audio = fixture.audio
+        defer { fixture.audio.shutdown() }
+        let reads = LockedTestBox(0)
         let oldSnapshot = AudioPlaybackSnapshot(
             state: .playing,
             currentTime: 12,
@@ -411,29 +409,64 @@ final class PlayerStoreTests: XCTestCase {
             authentication: .shared,
             streamURL: { _ in nil },
             playbackSnapshot: {
-                var delay = false
-                shouldDelay.update {
-                    delay = $0
-                    $0 = false
-                }
-                if delay {
-                    started.fulfill()
-                    release.wait()
-                    return oldSnapshot
-                }
-                return audio.playbackSnapshot()
+                reads.update { $0 += 1 }
+                return oldSnapshot
             }
         )
 
         store.start()
-        await fulfillment(of: [started], timeout: 1)
         store.clearAll()
-        release.signal()
         try? await Task.sleep(for: .milliseconds(50))
 
+        XCTAssertEqual(reads.read { $0 }, 0)
         XCTAssertFalse(store.hasMedia)
         XCTAssertTrue(store.queue.isEmpty)
-        fixture.audio.shutdown()
+    }
+
+    func testNewPauseEventWinsOverTheSnapshotBeingRead() async throws {
+        let fixture = try PlayerStoreTestFixture()
+        defer { fixture.audio.shutdown() }
+        let audio = fixture.audio
+        let snapshot = AudioPlaybackSnapshot(
+            state: .playing,
+            currentTime: 12,
+            duration: 180,
+            bufferedTime: 30,
+            metadata: AudioMetadata(title: "Current song"),
+            queue: makePlayerSnapshot(
+                context: [fixture.queueSong("current")],
+                currentIndex: 0
+            )
+        )
+        let store = PlayerStore(
+            audio: audio,
+            repository: fixture.repository,
+            settings: fixture.settings,
+            authentication: .shared,
+            streamURL: { _ in nil },
+            playbackSnapshot: {
+                // A newer pause arrives just after the snapshot is sampled.
+                // Reading and adopting in one actor turn must finish before
+                // that event is handled, rather than overwrite it afterward.
+                if Thread.isMainThread {
+                    audio.pause()
+                } else {
+                    DispatchQueue.main.sync { audio.pause() }
+                }
+                return snapshot
+            }
+        )
+
+        store.start()
+        let adopted = await waitForPlayerStoreTest {
+            store.localSong?.id == "current"
+        }
+        XCTAssertTrue(adopted)
+        // Let the event emitted during the read reach the store as well.
+        await Task.yield()
+        XCTAssertFalse(store.localIsPlaying)
+        XCTAssertFalse(store.isBuffering)
+        XCTAssertEqual(store.localClock.rate, 0)
     }
 
     func testLocalEnqueueMoveRemoveAndCoverReplayGainConversion() async throws {

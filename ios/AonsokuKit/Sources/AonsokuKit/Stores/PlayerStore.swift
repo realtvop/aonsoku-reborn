@@ -848,13 +848,13 @@ public final class PlayerStore {
     private func refreshFromAudio(enrich: Bool) {
         refreshGeneration += 1
         let generation = refreshGeneration
-        let playbackSnapshot = playbackSnapshot
-        Task.detached { [weak self] in
-            let playback = playbackSnapshot()
-            await MainActor.run { [weak self] in
-                guard let self, generation == self.refreshGeneration else { return }
-                self.adopt(playback, enrich: enrich)
-            }
+        Task { @MainActor [weak self] in
+            guard let self, generation == self.refreshGeneration else { return }
+            // The native snapshot already reads on the main thread. Adopt it
+            // in the same actor turn so newer events cannot be overwritten
+            // while a detached reader waits to return to the main actor.
+            let playback = self.playbackSnapshot()
+            self.adopt(playback, enrich: enrich)
         }
     }
 
