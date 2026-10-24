@@ -175,14 +175,23 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   including paused scaling and interactive collapse; never add separate
   current-track images to them.
   Full-screen cover, lyrics and queue transitions keep one metadata row and
-  one fixed transport/slider layout. On compact layouts, `PlayerContentLayout` positions the
-  metadata and both persistent artwork markers above those controls; the
+  one compact transport/slider layout (`TransportControls(scale: 0.85)` with
+  6pt vertical transport padding) across all pages. On compact layouts,
+  `PlayerContentLayout` positions the metadata and both persistent artwork
+  markers above those controls; the
   sole artwork and metadata use the same zero-bounce panel animation.
   Metadata fades during travel and panel content reveals as the cover settles,
   driven by that interruptible animation progress rather than delayed tasks.
   Visited compact lyrics/queue panels stay mounted and crossfade in place, preserving
   scrolling; hidden lyrics stop their playback-following task. Reduce Motion
   uses a short linear transition.
+  Manually scrolling down through synced or plain lyrics collapses the entire
+  footer (progress, transport, volume and bottom actions) and expands the lyrics
+  viewport. Scrolling back or tapping lyrics restores it, as do changing panels,
+  songs or fullscreen presentation. Playback-following scrolls and viewport
+  resize callbacks do not toggle the footer. The footer stays mounted to retain
+  slider state, with hit testing and accessibility disabled while collapsed.
+  Collapsed sliders also stop excluding touches from the player dismiss pan.
 - Android native pages use the application-scoped
   `github.realtvop.aonsoku.plugins.data.LibraryService` for Room queries,
   metadata sync, lyrics, and image-cache ownership. It is created with the

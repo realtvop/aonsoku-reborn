@@ -14,6 +14,7 @@ final class PlayerPresentationState {
     var artworkLocation: PlayerArtworkLocation = .cover
     var artworkFrames: [PlayerArtworkLocation: PlayerArtworkFrame] = [:]
     var sliderFrames: [PlayerSliderRegion: CGRect] = [:]
+    var arePlaybackControlsVisible = true
     var accessory: PlayerAccessoryLayout?
 }
 

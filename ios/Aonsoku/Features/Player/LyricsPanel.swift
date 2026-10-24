@@ -6,6 +6,7 @@ import SwiftUI
 /// plays from it, and scrolling by hand pauses the following for a moment.
 struct LyricsPanel: View {
     var isActive = true
+    var onControlsHiddenChange: (Bool) -> Void = { _ in }
 
     @Environment(PlayerStore.self) private var player
     @Environment(LyricsStore.self) private var lyrics
@@ -31,13 +32,23 @@ struct LyricsPanel: View {
                 }
             case let .loaded(songLyrics):
                 if songLyrics.isSynced {
-                    SyncedLyrics(lyrics: songLyrics, showsTranslation: showsTranslation, isActive: isActive)
+                    SyncedLyrics(
+                        lyrics: songLyrics, showsTranslation: showsTranslation,
+                        isActive: isActive, onControlsHiddenChange: onControlsHiddenChange
+                    )
                 } else {
-                    PlainLyrics(lyrics: songLyrics, showsTranslation: showsTranslation)
+                    PlainLyrics(
+                        lyrics: songLyrics, showsTranslation: showsTranslation,
+                        isActive: isActive, onControlsHiddenChange: onControlsHiddenChange
+                    )
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(.rect)
+        .simultaneousGesture(TapGesture().onEnded {
+            if isActive { onControlsHiddenChange(false) }
+        })
     }
 
     private var showsTranslation: Bool {
@@ -78,6 +89,7 @@ private struct SyncedLyrics: View {
     let lyrics: SongLyrics
     let showsTranslation: Bool
     let isActive: Bool
+    let onControlsHiddenChange: (Bool) -> Void
 
     @Environment(PlayerStore.self) private var player
     @Environment(LyricsStore.self) private var store
@@ -108,6 +120,9 @@ private struct SyncedLyrics: View {
                 .padding(.bottom, 320)
             }
             .scrollIndicators(.hidden)
+            .modifier(LyricsControlsScrollObserver(
+                isActive: isActive, onControlsHiddenChange: onControlsHiddenChange
+            ))
             .onScrollPhaseChange { _, phase in
                 if phase == .interacting {
                     manualScrollAt = .now
@@ -191,6 +206,8 @@ private struct LyricLineView: View {
 private struct PlainLyrics: View {
     let lyrics: SongLyrics
     let showsTranslation: Bool
+    let isActive: Bool
+    let onControlsHiddenChange: (Bool) -> Void
 
     var body: some View {
         ScrollView {
@@ -215,8 +232,69 @@ private struct PlainLyrics: View {
             .padding(.vertical, 40)
         }
         .scrollIndicators(.hidden)
+        .modifier(LyricsControlsScrollObserver(
+            isActive: isActive, onControlsHiddenChange: onControlsHiddenChange
+        ))
         .mask(EdgeFade())
     }
+}
+
+/// React only to browsing gestures, never playback following or viewport
+/// changes caused by the footer itself. Accumulation filters finger jitter.
+private struct LyricsControlsScrollObserver: ViewModifier {
+    let isActive: Bool
+    let onControlsHiddenChange: (Bool) -> Void
+
+    @State private var isUserScrolling = false
+    @State private var travel: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .onScrollPhaseChange { _, phase in
+                isUserScrolling = phase == .interacting || phase == .decelerating
+                if !isUserScrolling { travel = 0 }
+            }
+            .onScrollGeometryChange(for: LyricsScrollMetrics.self) { geometry in
+                let maximum = max(
+                    geometry.contentSize.height + geometry.contentInsets.top
+                        + geometry.contentInsets.bottom - geometry.containerSize.height, 0
+                )
+                return LyricsScrollMetrics(
+                    offset: min(max(geometry.contentOffset.y + geometry.contentInsets.top, 0), maximum),
+                    viewportHeight: geometry.containerSize.height,
+                    contentHeight: geometry.contentSize.height
+                )
+            } action: { old, new in
+                guard isActive, isUserScrolling,
+                      abs(new.viewportHeight - old.viewportHeight) < 0.5,
+                      abs(new.contentHeight - old.contentHeight) < 0.5 else {
+                    travel = 0
+                    return
+                }
+                let delta = new.offset - old.offset
+                guard delta != 0 else { return }
+                if new.offset <= 0 {
+                    onControlsHiddenChange(false)
+                    travel = 0
+                } else {
+                    travel = delta > 0 ? max(travel, 0) + delta : min(travel, 0) + delta
+                    if abs(travel) >= 20 {
+                        onControlsHiddenChange(travel > 0)
+                        travel = 0
+                    }
+                }
+            }
+            .onChange(of: isActive) {
+                isUserScrolling = false
+                travel = 0
+            }
+    }
+}
+
+private struct LyricsScrollMetrics: Equatable {
+    let offset: CGFloat
+    let viewportHeight: CGFloat
+    let contentHeight: CGFloat
 }
 
 /// Who wrote the lyrics, when known, and where they came from.

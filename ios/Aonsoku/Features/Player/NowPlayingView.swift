@@ -14,6 +14,8 @@ struct NowPlayingView: View {
 
     @State private var panel: Panel?
     @State private var loadedPanels: Set<Panel> = []
+    @State private var lyricsControlsHidden = false
+    @State private var bottomControlsHeight: CGFloat?
 
     @Environment(PlayerStore.self) private var player
     @Environment(LyricsStore.self) private var lyrics
@@ -37,6 +39,7 @@ struct NowPlayingView: View {
                 }
             }
             .animation(panelAnimation, value: panel)
+            .animation(panelAnimation, value: bottomControlsHidden)
             .onChange(of: isWide || panel == nil, initial: true) { _, usesLargeCover in
                 withAnimation(panelAnimation) {
                     presentation.artworkLocation = usesLargeCover ? .cover : .header
@@ -59,6 +62,12 @@ struct NowPlayingView: View {
             if isRadio {
                 panel = nil
             }
+        }
+        .onChange(of: panel) { lyricsControlsHidden = false }
+        .onChange(of: router.isNowPlayingPresented) { lyricsControlsHidden = false }
+        .onChange(of: player.currentSong?.id) { lyricsControlsHidden = false }
+        .onChange(of: bottomControlsHidden, initial: true) {
+            presentation.arePlaybackControlsVisible = !bottomControlsHidden
         }
         .accessibilityAction(.escape) {
             router.isNowPlayingPresented = false
@@ -85,9 +94,7 @@ struct NowPlayingView: View {
                 panels
             }
             .frame(maxHeight: .infinity)
-            controls
-                .padding(.top, 14)
-            bottomBar
+            bottomControls
         }
     }
 
@@ -100,9 +107,7 @@ struct NowPlayingView: View {
                     .padding(.vertical, 20)
                     .frame(maxHeight: .infinity)
                 titleRow
-                controls
-                    .padding(.top, 14)
-                bottomBar
+                bottomControls
             }
             .frame(maxWidth: 500)
             if panel != nil {
@@ -220,11 +225,31 @@ struct NowPlayingView: View {
     private var controls: some View {
         VStack(spacing: 0) {
             PlaybackScrubber()
-            TransportControls()
-                .padding(.vertical, 16)
+            TransportControls(scale: 0.85)
+                .padding(.vertical, 6)
             VolumeSlider()
         }
         .padding(.horizontal, 30)
+    }
+
+    private var bottomControlsHidden: Bool {
+        panel == .lyrics && lyricsControlsHidden
+    }
+
+    /// Keep slider state alive while the entire footer gives space to lyrics.
+    private var bottomControls: some View {
+        VStack(spacing: 0) {
+            controls
+                .padding(.top, 8)
+            bottomBar
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .onGeometryChange(for: CGFloat.self, of: \.size.height) { bottomControlsHeight = $0 }
+        .frame(height: bottomControlsHidden ? 0 : bottomControlsHeight, alignment: .top)
+        .opacity(bottomControlsHidden ? 0 : 1)
+        .clipped()
+        .allowsHitTesting(!bottomControlsHidden)
+        .accessibilityHidden(bottomControlsHidden)
     }
 
     private var bottomBar: some View {
@@ -273,7 +298,9 @@ struct NowPlayingView: View {
     private var panels: some View {
         ZStack {
             if loadedPanels.contains(.lyrics) {
-                LyricsPanel(isActive: panel == .lyrics && router.isNowPlayingPresented)
+                LyricsPanel(isActive: panel == .lyrics && router.isNowPlayingPresented) { hidden in
+                    lyricsControlsHidden = hidden
+                }
                     .opacity(panel == .lyrics ? 1 : 0)
                     .allowsHitTesting(panel == .lyrics)
                     .accessibilityHidden(panel != .lyrics)

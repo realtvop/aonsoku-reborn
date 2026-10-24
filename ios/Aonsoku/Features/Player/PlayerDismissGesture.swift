@@ -97,7 +97,8 @@ struct PlayerDismissGesture: UIGestureRecognizerRepresentable {
             let location = converter.location(in: .local)
             let translation = converter.translation(in: .local) ?? .zero
             let start = CGPoint(x: location.x - translation.x, y: location.y - translation.y)
-            guard !presentation.sliderFrames.values.contains(where: { $0.contains(start) }) else {
+            if presentation.arePlaybackControlsVisible,
+               presentation.sliderFrames.values.contains(where: { $0.contains(start) }) {
                 return false
             }
             let velocity = pan.velocity(in: pan.view?.window)
