@@ -34,7 +34,7 @@ private struct ArtworkGlowBackground: ViewModifier {
             }
             .background {
                 ZStack(alignment: .top) {
-                    theme.isCustom ? theme.palette.background : Color(.systemBackground)
+                    theme.palette.background
                     if let color = palette?.dominant {
                         LinearGradient(
                             stops: [

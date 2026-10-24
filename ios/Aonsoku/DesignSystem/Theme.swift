@@ -118,7 +118,9 @@ struct ThemePalette: Hashable {
 
 // MARK: - Environment
 
-/// The theme in effect for the current color scheme.
+/// The theme in effect for the current color scheme. Every theme, the
+/// default light and dark ones included, paints its own backgrounds, so the
+/// app wears the same colors as the web app.
 struct ThemeContext: Equatable {
     var theme: AppTheme
     var palette: ThemePalette
@@ -127,10 +129,6 @@ struct ThemeContext: Equatable {
         self.theme = theme
         palette = theme.palette
     }
-
-    /// The default light and dark themes use the system materials; the
-    /// others paint their own backgrounds.
-    var isCustom: Bool { theme != .light && theme != .dark }
 }
 
 extension EnvironmentValues {
@@ -166,14 +164,14 @@ extension View {
         modifier(ThemeRootModifier())
     }
 
-    /// Paints a custom theme's background behind a scroll view or list.
+    /// Paints the theme's background behind a scroll view or list.
     func themedBackground(grouped: Bool = false) -> some View {
         modifier(ThemedBackgroundModifier(grouped: grouped))
     }
 
-    /// Gives list rows a custom theme's surface: raised in a grouped list,
-    /// the page's own background in a plain one. Apply to a `Section` or
-    /// row.
+    /// Gives list rows the theme's surface: raised in a grouped list, the
+    /// page's own background in a plain one, with separators in the theme's
+    /// border color. Apply to a `Section` or row.
     func themedRow(plain: Bool = false) -> some View {
         modifier(ThemedRowModifier(plain: plain))
     }
@@ -185,12 +183,10 @@ private struct ThemedBackgroundModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .scrollContentBackground(theme.isCustom ? .hidden : .automatic)
+            .scrollContentBackground(.hidden)
             .background {
-                if theme.isCustom {
-                    (grouped ? theme.palette.groupedBackground : theme.palette.background)
-                        .ignoresSafeArea()
-                }
+                (grouped ? theme.palette.groupedBackground : theme.palette.background)
+                    .ignoresSafeArea()
             }
     }
 }
@@ -200,7 +196,9 @@ private struct ThemedRowModifier: ViewModifier {
     let plain: Bool
 
     func body(content: Content) -> some View {
-        content.listRowBackground(theme.isCustom ? (plain ? Color.clear : theme.palette.elevated) : nil)
+        content
+            .listRowBackground(plain ? Color.clear : theme.palette.elevated)
+            .listRowSeparatorTint(theme.palette.border)
     }
 }
 

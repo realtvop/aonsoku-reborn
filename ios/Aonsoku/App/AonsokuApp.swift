@@ -51,11 +51,13 @@ struct AonsokuApp: App {
     }
 }
 
-/// The first frame shown while the native service graph and database open.
+/// The first frame shown while the native service graph and database open,
+/// on the launch screen's color: the default theme's background, since the
+/// settings are not read yet.
 private struct LaunchView: View {
     var body: some View {
         ZStack {
-            Color(.systemBackground)
+            Color("LaunchBackground")
                 .ignoresSafeArea()
             VStack(spacing: 24) {
                 AonsokuMark()

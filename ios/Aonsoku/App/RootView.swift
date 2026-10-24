@@ -6,12 +6,13 @@ struct RootView: View {
     @Environment(AppModel.self) private var app
     @Environment(SessionStore.self) private var session
     @Environment(Router.self) private var router
+    @Environment(\.themeContext) private var theme
 
     var body: some View {
         ZStack {
             switch screen {
             case .restoring:
-                Color(.systemBackground)
+                theme.palette.background
                     .ignoresSafeArea()
             case .login:
                 LoginView()

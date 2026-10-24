@@ -39,6 +39,18 @@
 	</dict>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+	<!-- Poppins, the web app's typeface, for headings. -->
+	<key>UIAppFonts</key>
+	<array>
+		<string>Poppins-Medium.ttf</string>
+		<string>Poppins-SemiBold.ttf</string>
+		<string>Poppins-Bold.ttf</string>
+	</array>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

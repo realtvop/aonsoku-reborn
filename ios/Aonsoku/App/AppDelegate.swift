@@ -2,7 +2,8 @@ import AonsokuKit
 import UIKit
 
 /// Owns the process-level hooks that SwiftUI does not expose: background
-/// task registration, background URLSession relaunches, and termination.
+/// task registration, background URLSession relaunches, termination and
+/// the navigation bar typeface.
 final class AppDelegate: NSObject, UIApplicationDelegate {
     private var services: AppServices { .shared }
 
@@ -11,6 +12,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         SyncScheduler.register()
+        BrandFont.applyToNavigationBars()
         return true
     }
 
