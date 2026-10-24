@@ -21,6 +21,8 @@ struct QueuePanel<CurrentMetadata: View>: View {
 
     @State private var viewportHeight: CGFloat = 0
     @State private var snapFeedback = 0
+    @State private var historyTopPadding: CGFloat = 0
+    @State private var snapAnimation = QueueScrollSnapAnimation()
 
     private let currentID = "current-track"
     private let modesID = "modes"
@@ -30,6 +32,14 @@ struct QueuePanel<CurrentMetadata: View>: View {
         ScrollViewReader { proxy in
             List {
                 if !history.songs.isEmpty {
+                    // Let even a short history occupy the whole viewport,
+                    // with the current track completely below its lower edge.
+                    Color.clear
+                        .frame(height: historyTopPadding)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .accessibilityHidden(true)
                     Section {
                         // Oldest first, ending right above what plays now.
                         ForEach(Array(history.songs.enumerated().reversed()), id: \.offset) { _, song in
@@ -72,6 +82,10 @@ struct QueuePanel<CurrentMetadata: View>: View {
                             QueueHeaderTrackingReader(
                                 isActive: isActive,
                                 reduceMotion: reduceMotion,
+                                hasHistory: !history.songs.isEmpty,
+                                historyPadding: historyTopPadding,
+                                snapAnimation: snapAnimation,
+                                onHistoryPadding: { padding in historyTopPadding = padding },
                                 onLayout: { owner, frame, visible, pinned in
                                     if let frame {
                                         presentation.queueHeaderOwner = owner
@@ -186,6 +200,9 @@ struct QueuePanel<CurrentMetadata: View>: View {
                 }
             }
             .listStyle(.plain)
+            // The leading history spacer must also support zero height.
+            // queueRow retains the ordinary 44pt minimum including insets.
+            .environment(\.defaultMinListRowHeight, 0)
             .listSectionSpacing(0)
             .contentMargins(.vertical, 0, for: .scrollContent)
             .scrollContentBackground(.hidden)
@@ -208,10 +225,17 @@ struct QueuePanel<CurrentMetadata: View>: View {
             .haptic(.selection, trigger: snapFeedback)
             .onAppear { registerPreparation(proxy) }
             .onChange(of: currentHeaderHeight) { registerPreparation(proxy) }
-            .onDisappear { presentation.prepareQueueForPresentation = nil }
+            .onChange(of: historyTopPadding) {
+                if presentation.isQueueHeaderPinned { presentation.prepareQueueForPresentation?() }
+            }
+            .onDisappear {
+                snapAnimation.cancel()
+                presentation.prepareQueueForPresentation = nil
+            }
             .onChange(of: isActive) { _, active in
                 // Also handles reopening fullscreen while Queue is selected.
                 if active { presentation.prepareQueueForPresentation?() }
+                else { snapAnimation.cancel() }
             }
             .task(id: history.songs.isEmpty) {
                 // Prepare the initial offset when history finishes loading.
@@ -250,7 +274,8 @@ struct QueuePanel<CurrentMetadata: View>: View {
 
 private extension View {
     func queueRow(isActive: Bool) -> some View {
-        listRowBackground(Color.clear)
+        frame(minHeight: 32)
+            .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
             .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
             .modifier(PlayerPageContent(isVisible: isActive))

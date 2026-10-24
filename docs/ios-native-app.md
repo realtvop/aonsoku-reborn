@@ -245,6 +245,11 @@ with automatic foreground sync disabled.
   current track at the top, including reopening fullscreen with Queue selected.
   Once settled at that anchor, a downward pan on the current-track row dismisses
   the player and cancels the List pan; other rows still scroll into history.
+  Releasing more than 44pt into history automatically moves the entire current
+  row below the viewport. Measured leading space supports short histories;
+  the panel drives a 380ms cubic ease-in/out with selection feedback through
+  the shared haptics setting. Artwork follows the same native offsets. New
+  touches cancel the animation, and Reduce Motion settles immediately.
   It prepares the offset and artwork destination before selection and tracks
   its artwork marker while hidden; switching never inserts a new
   List, replaces the metadata layout slots, or delays the cover destination
@@ -311,6 +316,7 @@ into native storage; a failed read is retried on the next launch.
 ```bash
 # AonsokuKit unit tests (first available iPhone simulator, or IOS_SIMULATOR_ID)
 ./scripts/test-ios-native.sh
+bash scripts/test-ios-queue-scroll.sh # Queue/history geometry; no Simulator required
 
 # App build for the simulator
 xcodebuild -project ios/Aonsoku.xcodeproj -scheme Aonsoku \

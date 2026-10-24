@@ -6,6 +6,10 @@ import UIKit
 struct QueueHeaderTrackingReader: UIViewRepresentable {
     let isActive: Bool
     let reduceMotion: Bool
+    let hasHistory: Bool
+    let historyPadding: CGFloat
+    let snapAnimation: QueueScrollSnapAnimation
+    let onHistoryPadding: (CGFloat) -> Void
     let onLayout: (UUID, CGRect?, Bool, Bool) -> Void
     let onSnap: () -> Void
 
@@ -16,6 +20,10 @@ struct QueueHeaderTrackingReader: UIViewRepresentable {
     func updateUIView(_ view: MarkerView, context: Context) {
         view.isActive = isActive
         view.reduceMotion = reduceMotion
+        view.hasHistory = hasHistory
+        view.historyPadding = historyPadding
+        view.snapAnimation = snapAnimation
+        view.onHistoryPadding = onHistoryPadding
         view.onLayout = onLayout
         view.onSnap = onSnap
         view.updateObservation()
@@ -25,11 +33,24 @@ struct QueueHeaderTrackingReader: UIViewRepresentable {
         view.stopObserving(reportRemoval: true)
         view.onLayout = nil
         view.onSnap = nil
+        view.onHistoryPadding = nil
     }
 
     final class MarkerView: UIView {
-        var isActive = false
+        var isActive = false {
+            didSet {
+                if !isActive {
+                    pendingSnap?.cancel()
+                    pendingSnap = nil
+                    awaitingSettlement = false
+                }
+            }
+        }
         var reduceMotion = false
+        var hasHistory = false
+        var historyPadding: CGFloat = 0
+        weak var snapAnimation: QueueScrollSnapAnimation?
+        var onHistoryPadding: ((CGFloat) -> Void)?
         var onLayout: ((UUID, CGRect?, Bool, Bool) -> Void)?
         var onSnap: (() -> Void)?
 
@@ -39,7 +60,9 @@ struct QueueHeaderTrackingReader: UIViewRepresentable {
         private var lastVisible = false
         private var lastPinned = false
         private var pendingSnap: DispatchWorkItem?
-        private var awaitingSettlement = false
+        private var awaitingSettlement = false {
+            didSet { updateLink?.requiresContinuousUpdates = awaitingSettlement && isActive }
+        }
         private var releasedAt: CFTimeInterval = 0
         private var movedAway = false
         private var sentFeedback = false
@@ -85,6 +108,7 @@ struct QueueHeaderTrackingReader: UIViewRepresentable {
             let link = UIUpdateLink(view: scrollView) { [weak self] _, _ in
                 self?.sampleLayout()
             }
+            link.requiresContinuousUpdates = awaitingSettlement && isActive
             link.isEnabled = true
             updateLink = link
         }
@@ -114,11 +138,25 @@ struct QueueHeaderTrackingReader: UIViewRepresentable {
             let visible = frame.intersects(CGRect(origin: .zero, size: scrollView.bounds.size))
             let pinned = abs(frame.minY - scrollView.adjustedContentInset.top - 8) <= 1
                 && !scrollView.isDragging && !scrollView.isDecelerating
+                && snapAnimation?.isAnimating != true
             if frame != lastFrame || visible != lastVisible || pinned != lastPinned {
                 lastFrame = frame
                 lastVisible = visible
                 lastPinned = pinned
                 onLayout?(owner, frame, visible, pinned)
+            }
+            if isActive, !scrollView.isTracking, !scrollView.isDragging,
+               !scrollView.isDecelerating, snapAnimation?.isAnimating != true {
+                let padding = anchors(in: scrollView).historyPadding
+                if abs(padding - historyPadding) > 0.5 { onHistoryPadding?(padding) }
+            }
+            // A current-track cell can be recycled while browsing history,
+            // then reappear after the release. Its new marker still observes
+            // the deceleration and settles any partially exposed row.
+            if isActive, snapAnimation?.isAnimating != true,
+               scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating {
+                awaitingSettlement = true
+                releasedAt = CACurrentMediaTime()
             }
             if awaitingSettlement, CACurrentMediaTime() - releasedAt > 0.08,
                !scrollView.isTracking, !scrollView.isDragging, !scrollView.isDecelerating {
@@ -131,12 +169,14 @@ struct QueueHeaderTrackingReader: UIViewRepresentable {
             guard isActive, let scrollView else { return }
             switch pan.state {
             case .began:
+                snapAnimation?.cancel()
                 pendingSnap?.cancel()
                 awaitingSettlement = false
                 movedAway = false
                 sentFeedback = false
             case .changed:
-                let distance = abs(nearestAnchor(in: scrollView) - scrollView.contentOffset.y)
+                let distance = abs(anchors(in: scrollView).nearest(to: scrollView.contentOffset.y)
+                    - scrollView.contentOffset.y)
                 if distance > 18 { movedAway = true }
                 if movedAway, distance < 6 { feedback() }
             case .ended:
@@ -160,23 +200,21 @@ struct QueueHeaderTrackingReader: UIViewRepresentable {
             }
         }
 
-        private func nearestAnchor(in scroll: UIScrollView) -> CGFloat {
-            let header = convert(bounds, to: scroll)
-            let minimum = -scroll.adjustedContentInset.top
-            let maximum = max(minimum, scroll.contentSize.height + scroll.adjustedContentInset.bottom - scroll.bounds.height)
-            let current = header.minY - scroll.adjustedContentInset.top - 8
-            let upcoming = current + header.height + 16
-            return [current, upcoming]
-                .map { min(max($0, minimum), maximum) }
-                .min(by: { abs($0 - scroll.contentOffset.y) < abs($1 - scroll.contentOffset.y) }) ?? minimum
+        private func anchors(in scroll: UIScrollView) -> QueueScrollAnchors {
+            QueueScrollAnchors(
+                header: convert(bounds, to: scroll), viewportHeight: scroll.bounds.height,
+                contentHeight: scroll.contentSize.height,
+                topInset: scroll.adjustedContentInset.top, bottomInset: scroll.adjustedContentInset.bottom,
+                hasHistory: hasHistory, appliedHistoryPadding: historyPadding
+            )
         }
 
         private func snapIfClose() {
             guard isActive, let scrollView, !scrollView.isTracking else { return }
-            let target = nearestAnchor(in: scrollView)
-            let distance = abs(target - scrollView.contentOffset.y)
-            guard distance > 0.75, distance <= 44 else { return }
-            scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: target), animated: !reduceMotion)
+            guard snapAnimation?.isAnimating != true,
+                  let target = anchors(in: scrollView).snapTarget(for: scrollView.contentOffset.y),
+                  abs(target - scrollView.contentOffset.y) > 0.75 else { return }
+            snapAnimation?.start(scrollView, target: target, reduceMotion: reduceMotion)
             feedback()
         }
 
@@ -185,5 +223,44 @@ struct QueueHeaderTrackingReader: UIViewRepresentable {
             sentFeedback = true
             onSnap?()
         }
+    }
+}
+
+/// Owned by the mounted panel, so a row leaving the viewport cannot interrupt
+/// its last few animation frames. Every tick updates native scroll geometry,
+/// keeping the sole artwork on the same curve as the metadata.
+@MainActor
+final class QueueScrollSnapAnimation {
+    private var updateLink: UIUpdateLink?
+    var isAnimating: Bool { updateLink != nil }
+
+    func start(_ scroll: UIScrollView, target: CGFloat, reduceMotion: Bool) {
+        cancel()
+        let start = scroll.contentOffset
+        // Stop native deceleration before taking ownership of the offset.
+        scroll.setContentOffset(start, animated: false)
+        guard !reduceMotion else {
+            scroll.setContentOffset(CGPoint(x: start.x, y: target), animated: false)
+            return
+        }
+        let startedAt = CACurrentMediaTime()
+        let link = UIUpdateLink(view: scroll) { [weak self, weak scroll] _, _ in
+            guard let self, let scroll else { self?.cancel(); return }
+            guard !scroll.isTracking, !scroll.isDragging else { self.cancel(); return }
+            let progress = CGFloat((CACurrentMediaTime() - startedAt) / 0.38)
+            let eased = QueueScrollAnchors.easedProgress(progress)
+            scroll.setContentOffset(
+                CGPoint(x: start.x, y: start.y + (target - start.y) * eased), animated: false
+            )
+            if progress >= 1 { self.cancel() }
+        }
+        link.requiresContinuousUpdates = true
+        updateLink = link
+        link.isEnabled = true
+    }
+
+    func cancel() {
+        updateLink?.isEnabled = false
+        updateLink = nil
     }
 }

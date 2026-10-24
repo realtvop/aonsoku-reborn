@@ -78,6 +78,7 @@ IOS_TEST_RESULT_BUNDLE=/tmp/AonsokuNativeTests.xcresult ./scripts/test-ios-nativ
 xcodebuild -project ios/Aonsoku.xcodeproj -scheme Aonsoku \
   -destination 'generic/platform=iOS Simulator' build
 node scripts/check-ios-strings.mjs # Every translation key the app uses exists
+bash scripts/test-ios-queue-scroll.sh # Queue/history snap geometry and animation curve (macOS, no Simulator)
 
 # Electron desktop native audio
 pnpm native-audio:build   # Build the Node-API libmpv addon
@@ -242,8 +243,15 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   the artwork's top-row destination synchronously, before List layout catches
   up. It also keeps sampling its marker while hidden.
   `QueueHeaderTrackingReader` observes the existing pan without replacing its
-  delegate, attracts slow/settled releases within 44pt of the current/upcoming
-  boundary, and retains native rubber banding, row moves and swipe deletion.
+  delegate and retains native rubber banding, row moves and swipe deletion.
+  Slow/settled releases within 44pt snap to the current/upcoming boundary.
+  Moving more than 44pt into history instead settles with the entire current
+  row below the viewport; measured leading space makes this possible even
+  for short histories. A panel-owned `UIUpdateLink` drives the offset with a
+  380ms cubic ease-in/out, keeping artwork and metadata in step even when
+  the row is recycled. New touches or leaving Queue cancel the animation;
+  Reduce Motion settles immediately. Fully hidden rows leave history free
+  to scroll normally. `QueueScrollAnchors` owns the measured destinations.
   Snap/mode-button selection feedback uses the shared `haptic` modifier and
   respects the playback haptics setting. Queue list pans stay within the list,
   except downward pans starting on the current-track row while it is settled
