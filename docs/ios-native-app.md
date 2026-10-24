@@ -6,9 +6,39 @@ and Electron keep using the shared TypeScript app; iOS shares no runtime code
 with them, only the server protocols (Subsonic/OpenSubsonic, coordination
 `/v1/*` + WebSocket protocol version 1) and the translation files.
 
-Apple Music is the interaction reference: tab bar with a search tab, a mini
-player in the tab bar accessory, a vertically sliding Now Playing screen, and
-context menus on every song, album, artist, and playlist.
+Interaction stays native: tab bar with a search tab, a mini player in the tab
+bar accessory, a vertically sliding Now Playing screen, Liquid Glass bars and
+controls, swipe actions, and context menus on every song, album, artist, and
+playlist. The visual language follows the web app instead, so Aonsoku looks
+the same on every platform (see [Design language](#design-language)).
+
+## Design language
+
+- **Colors**: every theme, the default light and dark ones included, paints
+  the web palette from `src/themes.css` (`DesignSystem/Theme.swift`). Pages
+  use the web body color `--background-foreground` (`ThemePalette.page`),
+  bars and cards use `--background`, hairlines `--border`, secondary text
+  `--muted-foreground`, and the accent is `--primary`. `ThemeColor` exposes
+  these as shape styles; `ThemedForm`/`ThemedList` give grouped settings
+  pages raised rows in the theme's colors.
+- **Type**: Poppins, the web typeface, is bundled for headings only
+  (`DesignSystem/Typography.swift`): navigation bar titles, page, section and
+  card titles, scaled with Dynamic Type. Glyphs Poppins lacks, such as CJK,
+  cascade to the system fonts for the preferred languages at the same
+  weight. Body text, rows and controls keep the system font.
+- **Components**: shelves of three tiles with a "See more" link, two-column
+  grids, song rows without separators and with the web's bouncing equalizer
+  for the current song, icon tiles on library and settings rows, bordered
+  cards (`cardSurface`) and small uppercase captions for search results and
+  the device overview.
+- **Detail headers**: album, playlist and artist pages share `DetailHeader`,
+  the web image header: the cover (round for artists) over a band of the
+  cover's RMS average color washed with the theme background, which reaches
+  under the navigation bar and fades into the page. Text, and the bar while
+  the header is visible, switch between light and dark to stay readable on
+  the band. Below it, a long Play capsule on Liquid Glass sits between bare
+  Shuffle and heart (or download) symbols.
+- The mini player and Now Playing keep their own presentation.
 
 ## Platform
 
@@ -28,13 +58,14 @@ ios/
                          Swift file under ios/Aonsoku needs no project edit.
   Aonsoku/               App target: views, navigation, composition root.
     App/                 @main app, AppDelegate, root and tab views.
-    DesignSystem/        Router, theme, artwork, rows, shelves, menus
-                         chrome, marquee, toasts, formatters.
+    DesignSystem/        Router, theme and typography, artwork, rows,
+                         shelves, surfaces, detail chrome, marquee, toasts,
+                         formatters.
     Features/<Area>/     One folder per screen family: Account, Album,
                          Artist, Devices, Home, Library, Login, Menus,
                          Player (mini player, Now Playing, lyrics, queue),
                          Playlist, Search, Settings, Song.
-    Resources/           Asset catalog, Info.plist.
+    Resources/           Asset catalog, Info.plist, Poppins headings.
   native-locales/        Strings only the native app uses, under `native.*`.
   AonsokuKit/            Swift package. All logic and observable state.
     Sources/AonsokuKit/  Services, API client, stores (see below).
@@ -208,16 +239,20 @@ with automatic foreground sync disabled.
   its artwork marker while hidden; switching never inserts a new
   List, replaces the metadata layout slots, or delays the cover destination
   by a frame.
-- **Home**: other devices' playback, featured albums, pinned items, Recently
-  Played, Most Played, Recently Added, Explore. Pull to refresh runs an
-  incremental sync. The avatar opens the account sheet.
-- **Library**: Playlists, Artists, Albums, Songs, Favorites, Downloaded,
-  Genres, Radio (unless hidden), followed by a Recently Added grid.
+- **Home**: other devices' playback as cards, the featured album carousel
+  (the web header card: cover beside title, artist and details over its own
+  blurred art, advancing every ten seconds unless Reduce Motion or
+  VoiceOver is on), pinned items, Recently Played, Most Played, Recently
+  Added, Explore. Pull to refresh runs an incremental sync. The avatar opens
+  the account sheet.
+- **Library**: Artists, Songs, Albums, Favorites, Genres, Radio (unless
+  hidden) and Downloaded as icon-tile rows, followed by the playlists with a
+  "See more" link to the full list and a New Playlist button.
 - **Detail screens**: album, artist, playlist, genre, album lists by filter,
   artist discography and tracks, song info.
-- **Search**: browse genres when idle, scoped results (top, artists, albums,
-  songs) while typing.
-- **Account sheet** (the avatar on Home and Library, as in Apple Music):
+- **Search**: browse genres when idle; while typing, artists, albums and
+  songs under the web's small uppercase captions with "See more" links.
+- **Account sheet** (the avatar on Home and Library):
   user and server, connection and sync status, then Server, Appearance,
   Language, Playback, Lyrics, Content, Storage (with the cache manager),
   Cross-Device, Privacy, About, and Sign Out. Shaking the device opens the

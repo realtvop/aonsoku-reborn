@@ -122,6 +122,12 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   shared `src/` SPA or Capacitor. SwiftUI owns presentation; `AonsokuKit` owns
   networking, persistence, playback, sync, downloads, coordination, settings,
   and observable stores. See `docs/ios-native-app.md`.
+  Screens keep native interaction but follow the web's visual language:
+  every theme paints the `src/themes.css` palette (pages on
+  `--background-foreground`), bundled Poppins sets headings only, and album,
+  playlist and artist pages share the web image header (`DetailHeader`).
+  Keep new screens on the `ThemeColor`, `displayFont` and `ThemedForm`
+  tokens rather than system grays and fonts.
   `MainTabView` uses the system tab bar, a fixed search-role tab and the
   native bottom accessory for a layout-only `PlayerAccessorySlot`. Search stays separate from the
   other tabs; minimization and transitions are system-owned. `SearchView`
