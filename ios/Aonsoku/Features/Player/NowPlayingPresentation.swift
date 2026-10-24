@@ -498,11 +498,11 @@ private struct NowPlayingPresentation: ViewModifier {
     private func compactArtworkFrame(in proxy: GeometryProxy) -> PlayerArtworkFrame {
         let accessory = accessoryFrame(in: proxy)
         let progress = presentation.accessory?.compactProgress ?? 0
-        let side: CGFloat = 34 - 8 * progress
+        let side: CGFloat = 30 - 6 * progress
         return PlayerArtworkFrame(
-            rect: CGRect(x: accessory.minX + 10 - 3 * progress,
+            rect: CGRect(x: accessory.minX + 20 - 6 * progress,
                          y: accessory.midY - side / 2, width: side, height: side),
-            cornerRadius: 5 - progress,
+            cornerRadius: 4.5 - progress,
             shadowRadius: 0
         )
     }

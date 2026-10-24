@@ -31,12 +31,12 @@ struct MiniPlayer: View {
     var body: some View {
         HStack(spacing: mix(10, 7)) {
             Color.clear
-                .frame(width: mix(34, 26), height: mix(34, 26))
+                .frame(width: mix(30, 24), height: mix(30, 24))
             titles
             Spacer(minLength: 4)
             controls
         }
-        .padding(.leading, mix(10, 7))
+        .padding(.leading, mix(20, 14))
         .padding(.trailing, mix(7, 3))
         .foregroundStyle(.primary)
         .contentShape(.rect)
@@ -400,5 +400,42 @@ enum NowPlayingText {
             return t("radios.label")
         }
         return nil
+    }
+}
+
+#Preview("MiniPlayer") {
+    MiniPlayerPreviewContainer()
+}
+
+private struct MiniPlayerPreviewContainer: View {
+    @State private var app = AppModel(services: AppServices.shared)
+    @State private var router = Router()
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Color.black.ignoresSafeArea()
+
+            ZStack(alignment: .leading) {
+                HStack {
+                    MiniPlayer(compactProgress: 0)
+                }
+                .frame(height: 36)
+                .padding(.vertical, 6)
+                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+
+                RoundedRectangle(cornerRadius: 4.5, style: .continuous)
+                    .fill(.fill.tertiary)
+                    .overlay {
+                        Image(systemName: "music.note")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(width: 30, height: 30)
+                    .padding(.leading, 20)
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+        }
+        .appEnvironment(app, router: router)
     }
 }
