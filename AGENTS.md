@@ -339,6 +339,14 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   each new request; existing transfers are not restarted by a setting change.
   Buffer-range mismatches recover at the current position instead of
   synthesizing a track-end event or seeking to zero, including near the tail.
+  Cache resolution skips empty files and files rejected by playback. Failed,
+  truncated or repeatedly stalled local items fall back through source
+  resolution instead of reloading the same cache; one cache repair download
+  is allowed per song/load. Completed replacements clear the rejection.
+  Known positive library durations detect truncated local items with a
+  rounding/container tolerance; zero/unknown durations do not imply damage.
+  Downloads reject empty payloads and text/JSON/XML error responses before
+  publishing cache files. Arbitrary local files are not deleted by recovery.
   Empty buffers and completed cache downloads do not
   imply end of track. The empty-buffer queue fallback requires a position
   within one second of a known duration. It resolves and enqueues

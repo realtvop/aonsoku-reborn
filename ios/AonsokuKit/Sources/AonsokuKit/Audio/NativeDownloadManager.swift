@@ -11,6 +11,7 @@ enum DownloadError: Error {
     case invalidURL
     case httpError(Int)
     case fileMoveFailed
+    case invalidAudioFile
 }
 
 class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
@@ -296,6 +297,19 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
         }
 
         let contentType = httpResponse?.value(forHTTPHeaderField: "Content-Type") ?? "audio/mpeg"
+        let normalizedType = contentType.split(separator: ";").first?
+            .trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        let attributes = try? fileManager.attributesOfItem(atPath: location.path)
+        let downloadedSize = (attributes?[.size] as? NSNumber)?.int64Value ?? 0
+        guard downloadedSize > 0,
+              !normalizedType.hasPrefix("text/"),
+              !["application/json", "application/xml", "application/xhtml+xml"].contains(normalizedType) else {
+            delegate?.downloadManager(
+                self, didFail: songId, requestId: context.requestId,
+                error: DownloadError.invalidAudioFile
+            )
+            return
+        }
         let ext = AudioCacheUtils.fileExtension(for: contentType)
         let cacheId = AudioCacheUtils.cacheId(for: songId)
 

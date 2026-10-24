@@ -9,6 +9,8 @@ class NativeSourceResolver {
     private var cachedCredentials: ServerCredentials?
     private var credentialsCacheTime: Date?
     private let credentialsTTL: TimeInterval
+    private let cacheLock = NSLock()
+    private var rejectedCachedFiles = Set<URL>()
 
     init(
         cacheDirectories: [URL]? = nil,
@@ -71,29 +73,14 @@ class NativeSourceResolver {
     }
 
     func resolveSource(for song: QueueSong) -> (url: URL, kind: String)? {
-        if let cachedUri = song.cachedFileUri, !cachedUri.isEmpty {
-            let fileUrl = fileURL(from: cachedUri)
-            if fileManager.fileExists(atPath: fileUrl.path) {
-                return (fileUrl, "native-file")
-            }
+        if let fileUrl = cachedFile(songId: song.id, explicitURI: song.cachedFileUri) {
+            NativeLogger.shared.info(
+                "SourceResolver: found cached file for \(song.id) at \(fileUrl.lastPathComponent)",
+                source: "Audio"
+            )
+            return (fileUrl, "native-file")
         }
-
-        let cacheId = cacheId(for: song.id)
-        let extensions = ["mp3", "flac", "m4a", "aac", "ogg", "opus", "wav", "audio"]
-        for directory in cacheDirectories {
-            guard fileManager.fileExists(atPath: directory.path) else {
-                NativeLogger.shared.debug("SourceResolver: directory not found: \(directory.path)", source: "Audio")
-                continue
-            }
-            for ext in extensions {
-                let fileUrl = directory.appendingPathComponent("\(cacheId).\(ext)")
-                if fileManager.fileExists(atPath: fileUrl.path) {
-                    NativeLogger.shared.info("SourceResolver: found cached file for \(song.id) at \(fileUrl.lastPathComponent)", source: "Audio")
-                    return (fileUrl, "native-file")
-                }
-            }
-        }
-        NativeLogger.shared.debug("SourceResolver: no cache hit for \(song.id), cacheId=\(cacheId)", source: "Audio")
+        NativeLogger.shared.debug("SourceResolver: no usable cache for \(song.id)", source: "Audio")
 
         if song.streamUrl.hasPrefix("http://") ||
             song.streamUrl.hasPrefix("https://") {
@@ -126,6 +113,40 @@ class NativeSourceResolver {
         }
 
         return nil
+    }
+
+    func cachedFile(songId: String, explicitURI: String? = nil) -> URL? {
+        if let explicitURI, !explicitURI.isEmpty {
+            let url = fileURL(from: explicitURI)
+            if isUsableCachedFile(at: url) { return url }
+        }
+        let cacheId = cacheId(for: songId)
+        for directory in cacheDirectories {
+            for ext in ["mp3", "flac", "m4a", "aac", "ogg", "opus", "wav", "audio"] {
+                let url = directory.appendingPathComponent("\(cacheId).\(ext)")
+                if isUsableCachedFile(at: url) { return url }
+            }
+        }
+        return nil
+    }
+
+    func isUsableCachedFile(at url: URL) -> Bool {
+        guard url.isFileURL,
+              !cacheLock.withLock({ rejectedCachedFiles.contains(url.standardizedFileURL) }),
+              let attributes = try? fileManager.attributesOfItem(atPath: url.path),
+              attributes[.type] as? FileAttributeType == .typeRegular,
+              let size = attributes[.size] as? NSNumber else { return false }
+        return size.int64Value > 0
+    }
+
+    /// Exclude the failing source without deleting a user-provided local file.
+    /// A completed replacement download makes its canonical cache URL usable again.
+    func rejectCachedFile(at url: URL) {
+        cacheLock.withLock { _ = rejectedCachedFiles.insert(url.standardizedFileURL) }
+    }
+
+    func acceptDownloadedFile(at url: URL) {
+        cacheLock.withLock { _ = rejectedCachedFiles.remove(url.standardizedFileURL) }
     }
 
     func buildStreamUrl(songId: String) -> String? {

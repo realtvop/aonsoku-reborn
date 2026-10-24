@@ -92,6 +92,8 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private var preparedHandoffBefore: (PlaybackPersistState, Bool)?
     private var handoffGeneration = 0
     private var backgroundCacheSongIds = Set<String>()
+    private var cacheRepairAttemptedSongIds = Set<String>()
+    private weak var rejectedCachedPlayerItem: AVPlayerItem?
     private var sleepTimer: Timer?
     private var sleepTimerEndDate: Date?
     private var sleepTimerMode = "duration"
@@ -1554,6 +1556,8 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private func beginPlayerItemTransition() {
         playbackGeneration += 1
         pausedResumePosition = nil
+        cacheRepairAttemptedSongIds.removeAll()
+        rejectedCachedPlayerItem = nil
         bufferMismatchFirstSeen = nil
         endOfStreamTracker.reset()
         isSeeking = false
@@ -1631,6 +1635,9 @@ public final class AudioService: NSObject, @unchecked Sendable {
             DispatchQueue.main.async {
                 guard item === self.playerItem,
                       generation == self.playbackGeneration else { return }
+                if self.recoverTruncatedCachedItem(item: item, player: player, generation: generation) {
+                    return
+                }
                 self.pendingItemSeek?()
                 switch item.status {
                 case .readyToPlay:
@@ -1695,6 +1702,9 @@ public final class AudioService: NSObject, @unchecked Sendable {
                       let item,
                       item === self.playerItem,
                       generation == self.playbackGeneration else { return }
+                if self.recoverTruncatedCachedItem(item: item, player: player, generation: generation) {
+                    return
+                }
                 self.emitDuration()
             }
         }
@@ -1774,7 +1784,15 @@ public final class AudioService: NSObject, @unchecked Sendable {
             forName: .AVPlayerItemDidPlayToEndTime,
             object: item,
             queue: .main
-        ) { [weak self] _ in self?.handleEnded() }
+        ) { [weak self] _ in
+            guard let self,
+                  generation == self.playbackGeneration,
+                  item === self.playerItem else { return }
+            if self.recoverTruncatedCachedItem(item: item, player: player, generation: generation) {
+                return
+            }
+            self.handleEnded()
+        }
         failedObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemFailedToPlayToEndTime,
             object: item,
@@ -2956,6 +2974,10 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     private func checkEndOfStreamFallback(player: AVPlayer) {
+        if let item = playerItem,
+           recoverTruncatedCachedItem(item: item, player: player, generation: playbackGeneration) {
+            return
+        }
         let shouldEnd = endOfStreamTracker.shouldAdvanceQueue(
             now: Date(),
             isQueueActive: isQueueActive,
@@ -3031,14 +3053,28 @@ public final class AudioService: NSObject, @unchecked Sendable {
 
     private func resolve(_ source: AudioSource) throws -> (url: URL, kind: String) {
         switch source {
-        case .nativeFile(let uri, _):
+        case .nativeFile(let uri, let songId):
             guard let url = URL(string: uri), url.isFileURL else {
                 throw AudioServiceError(
                     code: "invalid_source",
                     message: "Native audio source must be a file URL."
                 )
             }
-            return (url, "native-file")
+            if sourceResolver.isUsableCachedFile(at: url) {
+                return (url, "native-file")
+            }
+            if let songId,
+               let resolved = sourceResolver.resolveSource(for: QueueSong(
+                   id: songId, title: "", artist: "", album: "", duration: 0,
+                   streamUrl: sourceResolver.buildStreamUrl(songId: songId) ?? "",
+                   cachedFileUri: uri
+               )) {
+                return resolved
+            }
+            throw AudioServiceError(
+                code: "invalid_source",
+                message: "Native audio source is unavailable or unusable."
+            )
         case .blob(let url, _), .radio(let url, _):
             guard let resolved = URL(string: url) else {
                 throw AudioServiceError(code: "invalid_source", message: "Invalid audio URL.")
@@ -3066,21 +3102,65 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     private func startBackgroundCache(songId: String) {
-        let cacheId = AudioCacheUtils.cacheId(for: songId)
-        let extensions = [
-            "mp3", "flac", "m4a", "aac", "ogg", "opus", "wav", "audio",
-        ]
-        for directory in sourceResolver.cacheDirectories {
-            for fileExtension in extensions where FileManager.default.fileExists(
-                atPath: directory
-                    .appendingPathComponent("\(cacheId).\(fileExtension)")
-                    .path
-            ) {
-                return
-            }
-        }
+        guard sourceResolver.cachedFile(songId: songId) == nil else { return }
         guard backgroundCacheSongIds.insert(songId).inserted else { return }
         downloadManager.download(songId: songId)
+    }
+
+    private func cachedItemIsTruncated(_ item: AVPlayerItem) -> Bool {
+        guard currentSourceKind == "native-file" else { return false }
+        let expected = loadedDuration ?? metadata.duration ?? 0
+        let actual = item.duration.seconds
+        // Unknown/zero server durations cannot establish completeness. Allow
+        // normal metadata rounding and small encoder/container differences.
+        return expected.isFinite && expected > 0 && actual.isFinite && actual > 0
+            && expected - actual > max(2, expected * 0.01)
+    }
+
+    private func rejectCurrentCachedFile() {
+        guard currentSourceKind == "native-file", let url = currentSourceURL else { return }
+        // The repair download may already have replaced this path while the
+        // rejected player item is still waiting for its scheduled reload.
+        if let item = playerItem, rejectedCachedPlayerItem === item { return }
+        rejectedCachedPlayerItem = playerItem
+        sourceResolver.rejectCachedFile(at: url)
+        NativeLogger.shared.warn(
+            "Rejecting unusable audio cache; recovery will resolve another source.",
+            source: "AudioService"
+        )
+        if let songId = currentQueueSong?.id ?? currentSource.flatMap(Self.songId),
+           sourceResolver.cachedFile(songId: songId) == nil,
+           cacheRepairAttemptedSongIds.insert(songId).inserted {
+            startBackgroundCache(songId: songId)
+        }
+    }
+
+    private func recoverTruncatedCachedItem(
+        item: AVPlayerItem,
+        player: AVPlayer,
+        generation: Int
+    ) -> Bool {
+        guard generation == playbackGeneration,
+              item === playerItem, player === self.player,
+              recoveryController.isMonitoringProgress,
+              cachedItemIsTruncated(item) else { return false }
+        // Multiple status/end callbacks for the rejected item must neither
+        // consume another retry nor advance the logical queue.
+        if rejectedCachedPlayerItem === item { return true }
+        let position = recoveryController.resumePosition ?? item.currentTime()
+        player.pause()
+        pendingItemSeek = nil
+        isRecoveryReload = false
+        rejectCurrentCachedFile()
+        if case .level2 = recoveryController.state {
+            recoveryController.reloadDidComplete(success: false, generation: generation)
+        } else {
+            recoveryController.triggerRecovery(
+                currentTime: position, generation: generation,
+                sourceKind: .nativeFile, requiresReload: true
+            )
+        }
+        return true
     }
 
     private func recoverStreamAfterCacheComplete(songId: String) {
@@ -3335,19 +3415,32 @@ extension AudioService: PlaybackRecoveryDelegate {
         let revision = controller.revision
         guard generation == playbackGeneration,
               controller.isCurrentAttempt(generation: generation, revision: revision) else { return }
+        var retryingLocalItem = false
         if case .level2(let attempt) = controller.state {
             emit(.recoveryAttempt(level: 2, attempt: attempt, maxAttempts: 2))
+            retryingLocalItem = attempt > 1
         }
+
+        if currentSourceKind == "native-file",
+           let item = playerItem,
+           item.status == .failed || cachedItemIsTruncated(item)
+                || retryingLocalItem {
+            // Retry a stalled local item once, then stop resolving that same
+            // file. A failed or demonstrably short item is rejected at once.
+            rejectCurrentCachedFile()
+        }
+        let queueSong = isQueueActive
+            ? stateQueue.sync(execute: { queueEngine.currentSong })
+            : nil
+        let source = currentSource
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             self.sourceResolver.invalidateCredentialsCache()
             let resolved: (url: URL, kind: String)?
-            if self.isQueueActive, let song = self.stateQueue.sync(
-                execute: { self.queueEngine.currentSong }
-            ) {
+            if let song = queueSong {
                 resolved = self.sourceResolver.resolveSource(for: song)
-            } else if let source = self.currentSource,
+            } else if let source,
                       let source = try? self.resolve(source) {
                 resolved = source
             } else {
@@ -3507,6 +3600,7 @@ extension AudioService: NativeDownloadManagerDelegate {
         )
         dispatchMain { [weak self] in
             guard let self else { return }
+            self.sourceResolver.acceptDownloadedFile(at: fileUrl)
             if requestId == nil, self.backgroundCacheSongIds.remove(songId) != nil {
                 self.emit(.streamCacheCompleted(songId: songId, file: file))
                 self.recoverStreamAfterCacheComplete(songId: songId)
