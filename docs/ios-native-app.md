@@ -169,7 +169,9 @@ with automatic foreground sync disabled.
   32pt over the first 96pt of a downward slide, reversing on expansion.
   A stationary full-viewport probe uses public UIKit concentric corner APIs,
   so the moving player's position never changes the measured baseline.
-- **Now Playing**: artwork-derived animated mesh gradient, artwork that
+- **Now Playing**: one opaque color blending the cover palette with the dark
+  theme background, shared by all pages and pinned queue headers. Queue scroll
+  edges have no system material or gradient mask. Artwork
   shrinks while paused, marquee title, favorite and more menus, scrubber,
   transport, volume, and a bottom bar for lyrics, AirPlay, Aonsoku devices,
   and the queue. The pinned SliderControl package supplies `.progressLabels`
@@ -184,6 +186,11 @@ with automatic foreground sync disabled.
   layout-only slots in the main page, lyrics and queue headers. It keeps the
   same large-resolution image reader through every transition, including
   paused scaling and dismissal.
+  Page selection and artwork destination share `PlayerPresentationState`.
+  Lyrics and queue mount before the first switch, and content/metadata/artwork
+  use the same interruptible transition. The queue prepares its history offset
+  and tracks its artwork marker while hidden; switching never inserts a new
+  List, removes the main metadata, or delays the cover destination by a frame.
 - **Home**: other devices' playback, featured albums, pinned items, Recently
   Played, Most Played, Recently Added, Explore. Pull to refresh runs an
   incremental sync. The avatar opens the account sheet.

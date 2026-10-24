@@ -135,11 +135,11 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   Full-screen pages and pinned queue headers share one solid background rule:
   the cover's RMS average color blended at the configured intensity over the
   selected dark theme background, matching the web player's color treatment
-  while retaining the native player's light controls. Pinned queue headers use
-  this solid color without vignette or gradient masks, keeping the queue page
-  middle completely solid. Palette changes crossfade;
-  only a very low-opacity edge vignette is layered over the solid color; no mesh
-  gradient or continuous background animation runs.
+  while retaining the native player's light controls. `NowPlayingBackground`
+  blends these colors into one opaque fill shared by the surface and pinned
+  headers. There is no vignette, material or gradient mask in the queue;
+  its iOS scroll-edge effects are explicitly hidden. Palette changes animate
+  the fill without inserting or removing color layers.
   The system accessory reserves space and reports native geometry only.
   A scoped UIKit marker hides the immediate host of the public
   `UITabAccessory.contentView`, leaving tab bar layout/minimization intact.
@@ -193,11 +193,11 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   markers above those controls; the
   sole artwork and metadata use the same zero-bounce panel animation.
   Metadata transitions its scale non-linearly between the expanded title and compact header
-  text while staying visible during travel; panel content reveals as the cover settles,
-  driven by that interruptible animation progress rather than delayed tasks.
-  Visited compact lyrics/queue panels stay mounted and crossfade in place, preserving
-  scrolling; hidden lyrics stop their playback-following task. Reduce Motion
-  uses a short linear transition.
+  text while staying visible during travel. `PlayerPresentationState.panel`
+  is the single page selection and derives the artwork destination synchronously.
+  Lyrics/queue panels mount before their first transition and crossfade with
+  the same interruptible animation as the cover, preserving scrolling; hidden
+  lyrics stop their playback-following task. Reduce Motion uses a short linear transition.
   Manually scrolling down through synced or plain lyrics collapses the entire
   footer (progress, transport, volume and bottom actions) and expands the lyrics
   viewport. Scrolling back or tapping lyrics restores it, as do changing panels,
@@ -207,10 +207,16 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   Collapsed sliders also stop excluding touches from the player dismiss pan.
   The compact queue is one native `List`: history, a current-track metadata
   row with an artwork layout marker, then the upcoming section with pinned
-  mode/title controls. Cover/lyrics metadata leaves the view tree while the
-  queue owns that row, so native scrolling also starts on its buttons. The sole
+  mode/title controls. Cover/lyrics metadata stays mounted but is invisible,
+  noninteractive and accessibility-hidden while the queue owns that row, so
+  native scrolling also starts on its buttons. The sole
   artwork follows the marker's native scroll frame via a passive `UIUpdateLink`
   during dragging and deceleration; no second current-track image is created.
+  A persistent animatable rectangular mask clips queue artwork to its viewport
+  and expands to the full surface on other pages; never conditionally replace
+  the artwork's mask or let a scrolling cover paint over transport controls.
+  The mounted queue positions its initial history offset before activation,
+  and keeps sampling its marker while hidden so reentry has a valid target.
   `QueueHeaderTrackingReader` observes the existing pan without replacing its
   delegate, attracts slow/settled releases within 44pt of the current/upcoming
   boundary, and retains native rubber banding, row moves and swipe deletion.

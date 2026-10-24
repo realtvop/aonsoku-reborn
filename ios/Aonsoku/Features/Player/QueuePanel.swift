@@ -9,7 +9,6 @@ struct QueuePanel<CurrentMetadata: View>: View {
     var isActive = true
     var showsCurrentTrack = true
     var currentHeaderHeight: CGFloat = 64
-    var palette: ArtworkPalette? = nil
     var onShowCover: () -> Void = {}
     @ViewBuilder let currentMetadata: CurrentMetadata
 
@@ -43,7 +42,7 @@ struct QueuePanel<CurrentMetadata: View>: View {
                         QueueSectionHeader(title: t("fullscreen.queueHistory")) {
                             Button(t("generic.clear")) { history.clear() }
                         }
-                        .queuePinnedHeader(palette: palette)
+                        .queuePinnedHeader()
                     }
                 }
 
@@ -174,16 +173,18 @@ struct QueuePanel<CurrentMetadata: View>: View {
                             }
                         }
                     }
-                    .queuePinnedHeader(palette: palette)
+                    .queuePinnedHeader()
                 }
             }
             .listStyle(.plain)
             .listSectionSpacing(0)
             .contentMargins(.vertical, 0, for: .scrollContent)
             .scrollContentBackground(.hidden)
+            // iOS 26 adds its own material at scroll edges, independently
+            // of the List background and our opaque section headers.
+            .scrollEdgeEffectHidden()
             .scrollIndicators(.hidden)
             .scrollBounceBehavior(.always)
-            .mask(EdgeFade(length: 20))
             .onGeometryChange(for: CGRect.self) {
                 $0.frame(in: .named(PlayerArtworkLocation.coordinateSpace))
             } action: { frame in
@@ -191,14 +192,13 @@ struct QueuePanel<CurrentMetadata: View>: View {
                 if showsCurrentTrack { presentation.queueViewportFrame = frame }
             }
             .haptic(.selection, trigger: snapFeedback)
-            .task(id: isActive) {
-                guard isActive else { return }
-                presentation.isQueueHeaderVisible = true
-                guard !history.songs.isEmpty, !didPositionInitially else {
-                    didPositionInitially = true
-                    return
-                }
+            .task(id: history.songs.isEmpty) {
+                // Position while the mounted page is still hidden. Waiting
+                // for activation makes the cover travel to the old row
+                // position, then jump when scrollTo updates it a frame later.
+                guard !history.songs.isEmpty, !didPositionInitially else { return }
                 await Task.yield()
+                guard !Task.isCancelled else { return }
                 var transaction = Transaction()
                 transaction.disablesAnimations = true
                 withTransaction(transaction) {
@@ -217,12 +217,12 @@ private extension View {
             .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
     }
 
-    func queuePinnedHeader(palette: ArtworkPalette?) -> some View {
+    func queuePinnedHeader() -> some View {
         textCase(nil)
             .padding(.vertical, 10)
             .foregroundStyle(.white)
             .background {
-                QueuePinnedHeaderBackground(palette: palette)
+                NowPlayingBackground()
                     .padding(.horizontal, -20)
                     .padding(.vertical, -10)
             }
@@ -234,23 +234,6 @@ private extension View {
         listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
             .listRowInsets(EdgeInsets(top: 14, leading: 20, bottom: 2, trailing: 20))
-    }
-}
-
-/// A completely solid backdrop for pinned headers that directly matches the player's
-/// background without radial vignette or palette transition delays.
-private struct QueuePinnedHeaderBackground: View {
-    let palette: ArtworkPalette?
-    @Environment(SettingsStore.self) private var settings
-
-    var body: some View {
-        ZStack {
-            settings.settings.appearance.darkTheme.palette.background
-            if let color = palette?.average ?? palette?.colors.first {
-                Color(color)
-                    .opacity(min(max(settings.settings.appearance.nowPlayingColorIntensity, 0), 1))
-            }
-        }
     }
 }
 

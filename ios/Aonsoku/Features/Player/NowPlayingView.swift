@@ -7,13 +7,6 @@ import SwiftUI
 /// and the queue. Lyrics and the queue move the cover into a compact
 /// header; on a wide iPad they open beside it.
 struct NowPlayingView: View {
-    enum Panel: Hashable {
-        case lyrics
-        case queue
-    }
-
-    @State private var panel: Panel?
-    @State private var loadedPanels: Set<Panel> = []
     @State private var lyricsControlsHidden = false
     @State private var bottomControlsHeight: CGFloat?
     @State private var metadataHeight: CGFloat = 64
@@ -25,7 +18,8 @@ struct NowPlayingView: View {
     @Environment(Router.self) private var router
     @Environment(PlayerPresentationState.self) private var presentation
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.nowPlayingPalette) private var palette
+
+    private var panel: PlayerPanel? { presentation.panel }
 
     var body: some View {
         GeometryReader { proxy in
@@ -42,9 +36,9 @@ struct NowPlayingView: View {
             }
             .animation(panelAnimation, value: panel)
             .animation(panelAnimation, value: bottomControlsHidden)
-            .onChange(of: artworkLocation(isWide: isWide), initial: true) { _, location in
+            .onChange(of: isWide, initial: true) { _, isWide in
                 withAnimation(panelAnimation) {
-                    presentation.artworkLocation = location
+                    presentation.usesWideLayout = isWide
                 }
             }
         }
@@ -62,7 +56,7 @@ struct NowPlayingView: View {
         }
         .onChange(of: player.isRadio) { _, isRadio in
             if isRadio {
-                panel = nil
+                selectPanel(nil)
             }
         }
         .onChange(of: panel) { lyricsControlsHidden = false }
@@ -95,13 +89,8 @@ struct NowPlayingView: View {
                 Color.clear
                     .frame(height: metadataHeight)
                     .overlay {
-                        if panel != .queue {
-                            measuredTitleRow(isCompact: panel != nil)
-                                .modifier(PlayerPanelTransition(
-                                    progress: panel == nil ? 0 : 1, element: .metadata, reduceMotion: reduceMotion
-                                ))
-                                .transition(.opacity.animation(.easeInOut(duration: reduceMotion ? 0.15 : 0.2)))
-                        }
+                        measuredTitleRow(isCompact: panel != nil)
+                            .opacity(panel == .queue ? 0 : 1)
                     }
                     .allowsHitTesting(panel != .queue)
                     .accessibilityHidden(panel == .queue)
@@ -114,7 +103,7 @@ struct NowPlayingView: View {
     }
 
     private var wideLayout: some View {
-        HStack(spacing: 56) {
+        HStack(spacing: panel == nil ? 0 : 56) {
             VStack(spacing: 0) {
                 grabber
                 statusCapsules
@@ -125,12 +114,9 @@ struct NowPlayingView: View {
                 bottomControls
             }
             .frame(maxWidth: 500)
-            if panel != nil {
-                panels(showsQueueHeader: false)
-                    .frame(maxWidth: 620, maxHeight: .infinity)
-                    .padding(.vertical, 40)
-                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .trailing)))
-            }
+            panels(showsQueueHeader: false)
+                .frame(maxWidth: panel == nil ? 0 : 620, maxHeight: .infinity)
+                .padding(.vertical, 40)
         }
         .padding(.horizontal, 48)
         .frame(maxWidth: .infinity)
@@ -142,9 +128,11 @@ struct NowPlayingView: View {
         PlayerPresentationState.panelAnimation(reduceMotion: reduceMotion)
     }
 
-    private func artworkLocation(isWide: Bool) -> PlayerArtworkLocation {
-        if isWide || panel == nil { return .cover }
-        return panel == .queue ? .queue : .header
+    private func selectPanel(_ panel: PlayerPanel?) {
+        withAnimation(panelAnimation) {
+            lyricsControlsHidden = false
+            presentation.panel = panel
+        }
     }
 
     private var grabber: some View {
@@ -216,10 +204,7 @@ struct NowPlayingView: View {
 
     private var headerArtwork: some View {
         Button {
-            withAnimation(panelAnimation) {
-                panel = nil
-                presentation.artworkLocation = .cover
-            }
+            selectPanel(nil)
         } label: {
             PlayerArtworkSlot(location: .header, cornerRadius: 8, shadowRadius: 10)
                 .contentShape(.rect)
@@ -305,19 +290,10 @@ struct NowPlayingView: View {
         .padding(.bottom, 10)
     }
 
-    private func panelButton(_ target: Panel, symbol: String, label: String) -> some View {
+    private func panelButton(_ target: PlayerPanel, symbol: String, label: String) -> some View {
         let isOn = panel == target
         return Button {
-            withAnimation(panelAnimation) {
-                loadedPanels.insert(target)
-                let newPanel = isOn ? nil : target
-                panel = newPanel
-                if newPanel == nil {
-                    presentation.artworkLocation = .cover
-                } else {
-                    presentation.artworkLocation = newPanel == .queue ? .queue : .header
-                }
-            }
+            selectPanel(isOn ? nil : target)
         } label: {
             Image(systemName: symbol)
                 .font(.title3.weight(.medium))
@@ -331,41 +307,27 @@ struct NowPlayingView: View {
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
-    /// Keep visited pages mounted so switching preserves scroll position.
-    /// The header and transport stay outside this crossfade.
+    /// Mount both pages before the first transition. Inserting a List inside
+    /// an animation adds an implicit insertion fade and defers its geometry.
     private func panels(showsQueueHeader: Bool) -> some View {
         ZStack {
-            if loadedPanels.contains(.lyrics) {
-                LyricsPanel(isActive: panel == .lyrics && router.isNowPlayingPresented) { hidden in
-                    lyricsControlsHidden = hidden
-                }
-                .padding(.top, showsQueueHeader ? (metadataHeight + 16) : 0)
-                .opacity(panel == .lyrics ? 1 : 0)
-                .allowsHitTesting(panel == .lyrics)
-                .accessibilityHidden(panel != .lyrics)
+            LyricsPanel(isActive: panel == .lyrics && router.isNowPlayingPresented) { hidden in
+                lyricsControlsHidden = hidden
             }
-            if loadedPanels.contains(.queue) {
-                QueuePanel(
-                    isActive: panel == .queue && router.isNowPlayingPresented,
-                    showsCurrentTrack: showsQueueHeader,
-                    currentHeaderHeight: max(64, metadataHeight),
-                    palette: palette,
-                    onShowCover: {
-                        withAnimation(panelAnimation) {
-                            panel = nil
-                            presentation.artworkLocation = .cover
-                        }
-                    }
-                ) { measuredTitleRow(isCompact: true) }
-                    .opacity(panel == .queue ? 1 : 0)
-                    .allowsHitTesting(panel == .queue)
-                    .accessibilityHidden(panel != .queue)
-            }
+            .padding(.top, showsQueueHeader ? (metadataHeight + 16) : 0)
+            .opacity(panel == .lyrics ? 1 : 0)
+            .allowsHitTesting(panel == .lyrics)
+            .accessibilityHidden(panel != .lyrics)
+            QueuePanel(
+                isActive: panel == .queue && router.isNowPlayingPresented,
+                showsCurrentTrack: showsQueueHeader,
+                currentHeaderHeight: max(64, metadataHeight),
+                onShowCover: { selectPanel(nil) }
+            ) { titleRow(isCompact: true) }
+            .opacity(panel == .queue ? 1 : 0)
+            .allowsHitTesting(panel == .queue)
+            .accessibilityHidden(panel != .queue)
         }
-        .animation(.easeInOut(duration: reduceMotion ? 0.15 : 0.2), value: panel)
-        .modifier(PlayerPanelTransition(
-            progress: panel == nil ? 0 : 1, element: .content, reduceMotion: reduceMotion
-        ))
         .allowsHitTesting(panel != nil)
         .accessibilityHidden(panel == nil)
         .clipped()
@@ -396,34 +358,6 @@ private struct MetadataScaleModifier: AnimatableModifier {
 
         return content
             .scaleEffect(scale, anchor: .leading)
-    }
-}
-
-/// Tie visibility to the same interruptible progress as the cover movement.
-/// Panel content appears as the cover settles.
-private struct PlayerPanelTransition: AnimatableModifier {
-    enum Element {
-        case metadata
-        case content
-    }
-
-    var progress: Double
-    let element: Element
-    let reduceMotion: Bool
-
-    var animatableData: Double {
-        get { progress }
-        set { progress = newValue }
-    }
-
-    func body(content: Content) -> some View {
-        let opacity: Double = switch element {
-        case .metadata:
-            1
-        case .content:
-            min(max(progress, 0), 1)
-        }
-        content.opacity(opacity)
     }
 }
 
@@ -639,38 +573,20 @@ private struct DevicesButton: View {
 
 // MARK: - Background
 
-/// All player pages and pinned queue headers use the same solid backdrop.
-/// A very soft edge vignette keeps the surface from looking cut out, like
-/// Apple Music, without turning the whole page into a moving gradient.
+/// One opaque fill for every player page and pinned header. Blending the
+/// colors before drawing avoids translucent layers and conditional insertion
+/// transitions exposing the dark theme underneath.
 struct NowPlayingBackground: View {
-    var showsVignette = true
     @Environment(\.nowPlayingPalette) private var palette
     @Environment(SettingsStore.self) private var settings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        ZStack {
-            // The player keeps light controls in every app appearance.
-            settings.settings.appearance.darkTheme.palette.background
-            if let color = palette?.average ?? palette?.colors.first {
-                Color(color)
-                    .opacity(min(max(settings.settings.appearance.nowPlayingColorIntensity, 0), 1))
-            }
-            if showsVignette {
-                GeometryReader { proxy in
-                    RadialGradient(
-                        stops: [
-                            .init(color: .clear, location: 0.55),
-                            .init(color: .black.opacity(0.08), location: 1),
-                        ],
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: max(proxy.size.width, proxy.size.height) * 0.72
-                    )
-                }
-            }
-        }
-        .animation(reduceMotion ? .linear(duration: 0.15) : .smooth(duration: 1), value: palette)
+        let appearance = settings.settings.appearance
+        let base = appearance.darkTheme.palette.background
+        let cover = (palette?.average ?? palette?.colors.first).map(Color.init) ?? base
+        base.mix(with: cover, by: min(max(appearance.nowPlayingColorIntensity, 0), 1), in: .device)
+            .animation(reduceMotion ? .linear(duration: 0.15) : .smooth(duration: 0.6), value: palette)
     }
 }
 

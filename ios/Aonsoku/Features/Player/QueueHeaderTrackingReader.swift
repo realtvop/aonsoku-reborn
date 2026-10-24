@@ -57,7 +57,9 @@ struct QueueHeaderTrackingReader: UIViewRepresentable {
         }
 
         func updateObservation() {
-            guard window != nil, isActive else {
+            // Keep geometry warm while the mounted queue fades out. Panel
+            // activation controls gestures, not the artwork destination.
+            guard window != nil else {
                 stopObserving(reportRemoval: window == nil)
                 return
             }
@@ -105,7 +107,7 @@ struct QueueHeaderTrackingReader: UIViewRepresentable {
         }
 
         private func sampleLayout() {
-            guard isActive, let scrollView, !bounds.isEmpty else { return }
+            guard let scrollView, !bounds.isEmpty else { return }
             let contentFrame = convert(bounds, to: scrollView)
             let frame = contentFrame.offsetBy(dx: -scrollView.bounds.minX, dy: -scrollView.bounds.minY)
             let visible = frame.intersects(CGRect(origin: .zero, size: scrollView.bounds.size))

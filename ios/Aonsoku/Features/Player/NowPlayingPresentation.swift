@@ -11,7 +11,12 @@ final class PlayerPresentationState {
     }
 
     var dragOffset: CGFloat = 0
-    var artworkLocation: PlayerArtworkLocation = .cover
+    var panel: PlayerPanel?
+    var usesWideLayout = false
+    var artworkLocation: PlayerArtworkLocation {
+        if usesWideLayout || panel == nil { return .cover }
+        return panel == .queue ? .queue : .header
+    }
     var artworkFrames: [PlayerArtworkLocation: PlayerArtworkFrame] = [:]
     var sliderFrames: [PlayerSliderRegion: CGRect] = [:]
     var arePlaybackControlsVisible = true
@@ -21,6 +26,11 @@ final class PlayerPresentationState {
     var queueViewportFrame: CGRect?
     var isQueueHeaderVisible = true
     var accessory: PlayerAccessoryLayout?
+}
+
+enum PlayerPanel: Hashable {
+    case lyrics
+    case queue
 }
 
 nonisolated enum PlayerArtworkLocation: Hashable {
@@ -370,6 +380,11 @@ private struct NowPlayingPresentation: ViewModifier {
                 y: (geometry?.shadowRadius ?? 0) / 2
             )
             .position(x: geometry?.rect.midX ?? 0, y: geometry?.rect.midY ?? 0)
+            // Keep one animatable mask throughout the transition. Replacing
+            // Rectangle/EdgeFade branches invalidates the artwork's render
+            // subtree; omitting the mask lets queue scrolling paint over the
+            // transport controls. This mask follows the same geometry clock.
+            .clipShape(PlayerSurfaceShape(frame: artworkViewport(in: proxy), cornerRadius: 0))
             .allowsHitTesting(false)
             .accessibilityHidden(true)
             .opacity(
@@ -379,6 +394,19 @@ private struct NowPlayingPresentation: ViewModifier {
             .animation(presentationAnimation, value: presentation.artworkLocation)
             .animation(presentationAnimation, value: presentation.artworkFrames[.cover])
             .animation(presentationAnimation, value: presentation.artworkFrames[.header])
+    }
+
+    private func artworkViewport(in proxy: GeometryProxy) -> CGRect {
+        if router.isNowPlayingPresented, presentation.artworkLocation == .queue,
+           let viewport = presentation.queueViewportFrame {
+            return viewport.offsetBy(dx: 0, dy: presentation.dragOffset)
+        }
+        let insets = proxy.safeAreaInsets
+        return CGRect(
+            x: 0, y: 0,
+            width: proxy.size.width + insets.leading + insets.trailing,
+            height: proxy.size.height + insets.top + insets.bottom
+        )
     }
 
     private func artworkFrame(in proxy: GeometryProxy) -> PlayerArtworkFrame? {
