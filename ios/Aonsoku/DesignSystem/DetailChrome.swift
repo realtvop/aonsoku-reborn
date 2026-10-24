@@ -253,7 +253,7 @@ struct FavoriteToolbarButton: View {
 
 /// The heart beside Play: red and filled while the item is a favorite, as
 /// on the web.
-struct FavoriteRoundButton: View {
+struct FavoriteActionButton: View {
     let kind: FavoriteKind
     let id: String
 
@@ -262,13 +262,13 @@ struct FavoriteRoundButton: View {
 
     var body: some View {
         let isFavorite = favorites.isFavorite(kind, id: id)
-        RoundIconButton(
+        ActionIconButton(
             systemImage: isFavorite ? "heart.fill" : "heart",
-            label: t(isFavorite ? "options.unlike" : "options.like")
+            label: t(isFavorite ? "options.unlike" : "options.like"),
+            foreground: isFavorite ? AnyShapeStyle(Color.red) : AnyShapeStyle(.tint)
         ) {
             Task { await favorites.toggle(kind, id: id) }
         }
-        .foregroundStyle(isFavorite ? AnyShapeStyle(.red) : AnyShapeStyle(.tint))
         .symbolEffect(.bounce, value: isFavorite)
         .haptic(.impact(weight: .light), trigger: isFavorite)
     }
@@ -286,29 +286,27 @@ struct PlaylistDownloadButton: View {
         let _ = downloads.revision
         switch downloads.state(ofPlaylist: playlistId) {
         case .notCached:
-            RoundIconButton(systemImage: "arrow.down", label: t("options.downloadPlaylist")) {
+            ActionIconButton(systemImage: "arrow.down.circle", label: t("options.downloadPlaylist")) {
                 Task { await downloads.download(playlistId: playlistId) }
             }
         case let .downloading(completed, total):
-            RoundIconButton(systemImage: "arrow.down", label: t("offline.badge.downloading")) {}
-                .overlay {
-                    ProgressRing(progress: total > 0 ? Double(completed) / Double(total) : nil, diameter: 44)
-                        .allowsHitTesting(false)
-                }
-                .disabled(true)
+            ProgressRing(progress: total > 0 ? Double(completed) / Double(total) : nil, diameter: 22)
+                .frame(width: 48, height: 48)
+                .accessibilityElement()
+                .accessibilityLabel(t("offline.badge.downloading"))
         case .cached:
             Menu {
                 Button(t("options.removeDownload"), systemImage: "trash", role: .destructive) {
                     Task { await downloads.remove(playlistId: playlistId) }
                 }
             } label: {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 18, weight: .semibold))
-                    .frame(width: 30, height: 30)
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(.tint)
+                    .frame(width: 48, height: 48)
+                    .contentShape(.rect)
             }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
-            .controlSize(.large)
+            .buttonStyle(.plain)
             .accessibilityLabel(t("offline.badge.downloaded"))
         }
     }

@@ -141,7 +141,7 @@ struct ArtistDetailView: View {
         } shuffle: {
             play(shuffle: true)
         } trailing: {
-            FavoriteRoundButton(kind: .artist, id: artistId)
+            FavoriteActionButton(kind: .artist, id: artistId)
         }
     }
 

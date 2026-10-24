@@ -849,8 +849,9 @@ extension View {
 
 // MARK: - Play buttons
 
-/// The web's action row, centered: a round Shuffle, the large primary Play
-/// and any `trailing` actions, such as the favorite heart, in Liquid Glass.
+/// The web's action row, centered: Shuffle, the long primary Play and any
+/// `trailing` actions, such as the favorite heart. Only Play sits on Liquid
+/// Glass; the others are bare symbols in the accent color.
 struct PlayShuffleButtons<Trailing: View>: View {
     /// False for a single song, which has nothing to shuffle.
     var canShuffle = true
@@ -863,8 +864,8 @@ struct PlayShuffleButtons<Trailing: View>: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        HStack(spacing: 18) {
-            RoundIconButton(systemImage: "shuffle", label: t("shortcuts.playback.shuffle"), action: shuffle)
+        HStack(spacing: 20) {
+            ActionIconButton(systemImage: "shuffle", label: t("shortcuts.playback.shuffle"), action: shuffle)
                 .disabled(!canShuffle)
             PlayButton(label: t("options.play"), action: play)
             trailing
@@ -886,46 +887,50 @@ extension PlayShuffleButtons where Trailing == EmptyView {
     }
 }
 
-/// The large round Play in the theme's primary color. Themes with a light
-/// primary get a dark symbol.
+/// The long Play capsule in the theme's primary color, on Liquid Glass.
+/// Themes with a light primary get a dark label.
 struct PlayButton: View {
     let label: String
-    var diameter: CGFloat = 40
     let action: () -> Void
 
     @Environment(\.themeContext) private var theme
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: "play.fill")
-                .font(.system(size: diameter * 0.5))
+            Label(label, systemImage: "play.fill")
+                .labelStyle(.titleAndIcon)
+                .font(.headline)
                 .foregroundStyle(theme.palette.primaryForeground)
-                .frame(width: diameter, height: diameter)
+                .lineLimit(1)
+                .frame(minWidth: 112, minHeight: 30)
         }
         .buttonStyle(.glassProminent)
-        .buttonBorderShape(.circle)
+        .buttonBorderShape(.capsule)
         .controlSize(.large)
-        .accessibilityLabel(label)
     }
 }
 
-/// A round glass button beside Play, for Shuffle or the heart.
-struct RoundIconButton: View {
+/// A bare symbol beside Play, for Shuffle, the heart or a download: the
+/// accent color unless `foreground` says otherwise, dimmed while disabled.
+struct ActionIconButton: View {
     let systemImage: String
     let label: String
-    var diameter: CGFloat = 30
+    var foreground: AnyShapeStyle = AnyShapeStyle(.tint)
     let action: () -> Void
+
+    @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: diameter * 0.6, weight: .semibold))
-                .frame(width: diameter, height: diameter)
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(foreground)
+                .frame(width: 48, height: 48)
+                .contentShape(.rect)
                 .contentTransition(.symbolEffect(.replace))
         }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.circle)
-        .controlSize(.large)
+        .buttonStyle(.plain)
+        .opacity(isEnabled ? 1 : 0.4)
         .accessibilityLabel(label)
     }
 }

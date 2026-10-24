@@ -195,7 +195,7 @@ struct AlbumDetailView: View {
         } shuffle: {
             play(album, shuffle: true)
         } trailing: {
-            FavoriteRoundButton(kind: .album, id: album.id)
+            FavoriteActionButton(kind: .album, id: album.id)
         }
         .disabled(songs.isEmpty)
     }
