@@ -188,7 +188,8 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   `PlayerContentLayout` positions the cover/lyrics metadata and both persistent artwork
   markers above those controls; the
   sole artwork and metadata use the same zero-bounce panel animation.
-  Metadata fades during travel and panel content reveals as the cover settles,
+  Metadata transitions its scale non-linearly between the expanded title and compact header
+  text while staying visible during travel; panel content reveals as the cover settles,
   driven by that interruptible animation progress rather than delayed tasks.
   Visited compact lyrics/queue panels stay mounted and crossfade in place, preserving
   scrolling; hidden lyrics stop their playback-following task. Reduce Motion

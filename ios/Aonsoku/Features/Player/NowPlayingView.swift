@@ -95,7 +95,7 @@ struct NowPlayingView: View {
                     .frame(height: metadataHeight)
                     .overlay {
                         if panel != .queue {
-                            measuredTitleRow
+                            measuredTitleRow(isCompact: panel != nil)
                                 .modifier(PlayerPanelTransition(
                                     progress: panel == nil ? 0 : 1, element: .metadata, reduceMotion: reduceMotion
                                 ))
@@ -120,7 +120,7 @@ struct NowPlayingView: View {
                 largeArtwork
                     .padding(.vertical, 20)
                     .frame(maxHeight: .infinity)
-                titleRow
+                titleRow(isCompact: false)
                 bottomControls
             }
             .frame(maxWidth: 500)
@@ -193,7 +193,7 @@ struct NowPlayingView: View {
             .accessibilityHidden(true)
     }
 
-    private var titleRow: some View {
+    private func titleRow(isCompact: Bool) -> some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 MarqueeText(text: NowPlayingText.title(player, t))
@@ -201,13 +201,14 @@ struct NowPlayingView: View {
                     .accessibilityAddTraits(.isHeader)
                 ArtistMenu()
             }
+            .modifier(MetadataScaleModifier(progress: isCompact ? 1 : 0, reduceMotion: reduceMotion))
             Spacer(minLength: 0)
             songButtons
         }
     }
 
-    private var measuredTitleRow: some View {
-        titleRow
+    private func measuredTitleRow(isCompact: Bool) -> some View {
+        titleRow(isCompact: isCompact)
             .fixedSize(horizontal: false, vertical: true)
             .onGeometryChange(for: CGFloat.self, of: \.size.height) { metadataHeight = $0 }
     }
@@ -336,7 +337,7 @@ struct NowPlayingView: View {
                     showsCurrentTrack: showsQueueHeader,
                     currentHeaderHeight: max(64, metadataHeight),
                     onShowCover: { panel = nil }
-                ) { measuredTitleRow }
+                ) { measuredTitleRow(isCompact: true) }
                     .opacity(panel == .queue ? 1 : 0)
                     .allowsHitTesting(panel == .queue)
                     .accessibilityHidden(panel != .queue)
@@ -352,8 +353,35 @@ struct NowPlayingView: View {
     }
 }
 
+/// Smoothly transitions track metadata between the large cover title and the compact
+/// headline text at the top using a non-linear ease-in-out curve.
+private struct MetadataScaleModifier: AnimatableModifier {
+    var progress: Double
+    let reduceMotion: Bool
+
+    var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        let scale: CGFloat
+        if reduceMotion {
+            scale = progress > 0.5 ? (17.0 / 20.0) : 1.0
+        } else {
+            // Cubic ease-in-out non-linear curve for fluid acceleration and settling
+            let t = min(max(progress, 0), 1)
+            let eased = t < 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2
+            scale = 1.0 - CGFloat(eased) * (1.0 - 17.0 / 20.0)
+        }
+
+        return content
+            .scaleEffect(scale, anchor: .leading)
+    }
+}
+
 /// Tie visibility to the same interruptible progress as the cover movement.
-/// Text fades out during travel; panel content appears as the cover settles.
+/// Panel content appears as the cover settles.
 private struct PlayerPanelTransition: AnimatableModifier {
     enum Element {
         case metadata
@@ -373,7 +401,7 @@ private struct PlayerPanelTransition: AnimatableModifier {
         let reveal = min(max((progress - 0.9) / 0.1, 0), 1)
         let opacity: Double = switch element {
         case .metadata:
-            reduceMotion ? 1 : max(1 - progress / 0.25, reveal)
+            1
         case .content:
             reduceMotion ? progress : reveal
         }
