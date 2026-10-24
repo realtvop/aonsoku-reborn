@@ -216,7 +216,10 @@ struct NowPlayingView: View {
 
     private var headerArtwork: some View {
         Button {
-            panel = nil
+            withAnimation(panelAnimation) {
+                panel = nil
+                presentation.artworkLocation = .cover
+            }
         } label: {
             PlayerArtworkSlot(location: .header, cornerRadius: 8, shadowRadius: 10)
                 .contentShape(.rect)
@@ -305,8 +308,16 @@ struct NowPlayingView: View {
     private func panelButton(_ target: Panel, symbol: String, label: String) -> some View {
         let isOn = panel == target
         return Button {
-            loadedPanels.insert(target)
-            panel = isOn ? nil : target
+            withAnimation(panelAnimation) {
+                loadedPanels.insert(target)
+                let newPanel = isOn ? nil : target
+                panel = newPanel
+                if newPanel == nil {
+                    presentation.artworkLocation = .cover
+                } else {
+                    presentation.artworkLocation = newPanel == .queue ? .queue : .header
+                }
+            }
         } label: {
             Image(systemName: symbol)
                 .font(.title3.weight(.medium))
@@ -339,7 +350,12 @@ struct NowPlayingView: View {
                     showsCurrentTrack: showsQueueHeader,
                     currentHeaderHeight: max(64, metadataHeight),
                     palette: palette,
-                    onShowCover: { panel = nil }
+                    onShowCover: {
+                        withAnimation(panelAnimation) {
+                            panel = nil
+                            presentation.artworkLocation = .cover
+                        }
+                    }
                 ) { measuredTitleRow(isCompact: true) }
                     .opacity(panel == .queue ? 1 : 0)
                     .allowsHitTesting(panel == .queue)
@@ -401,12 +417,11 @@ private struct PlayerPanelTransition: AnimatableModifier {
     }
 
     func body(content: Content) -> some View {
-        let reveal = min(max((progress - 0.3) / 0.7, 0), 1)
         let opacity: Double = switch element {
         case .metadata:
             1
         case .content:
-            reduceMotion ? progress : reveal
+            min(max(progress, 0), 1)
         }
         content.opacity(opacity)
     }

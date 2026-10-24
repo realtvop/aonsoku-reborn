@@ -372,16 +372,6 @@ private struct NowPlayingPresentation: ViewModifier {
             .position(x: geometry?.rect.midX ?? 0, y: geometry?.rect.midY ?? 0)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
-            .mask {
-                if router.isNowPlayingPresented, presentation.artworkLocation == .queue,
-                   let viewport = presentation.queueViewportFrame {
-                    EdgeFade(length: 20)
-                        .frame(width: viewport.width, height: viewport.height)
-                        .position(x: viewport.midX, y: viewport.midY + presentation.dragOffset)
-                } else {
-                    Rectangle()
-                }
-            }
             .opacity(
                 presentation.artworkLocation == .queue && router.isNowPlayingPresented
                     && presentation.queueHeaderFrame != nil && !presentation.isQueueHeaderVisible ? 0 : 1
