@@ -11,6 +11,7 @@ final class PlayerPresentationState {
     }
 
     var dragOffset: CGFloat = 0
+    var isExpanded = false
     var panel: PlayerPanel?
     var usesWideLayout = false
     var artworkLocation: PlayerArtworkLocation {
@@ -327,6 +328,8 @@ private struct NowPlayingPresentation: ViewModifier {
                                 MiniPlayer(compactProgress: presentation.accessory?.compactProgress ?? 0)
                                     .frame(width: accessory.width, height: accessory.height)
                                     .padding(.top, 6)
+                                    .offset(y: isExpanded ? 8 : 0)
+                                    .scaleEffect(isExpanded ? 0.94 : 1.0)
                                     .opacity(isExpanded ? 0 : 1)
                             }
                             .glassEffect(.regular.interactive(), in: RoundedRectangle(
@@ -389,6 +392,7 @@ private struct NowPlayingPresentation: ViewModifier {
         withAnimation(presentationAnimation, completionCriteria: .logicallyComplete) {
             artworkTransition = snapshot
             isExpanded = expanded
+            presentation.isExpanded = expanded
             presentation.dragOffset = 0
         } completion: {
             // An interrupted opening/closing owns a newer pair of endpoints.

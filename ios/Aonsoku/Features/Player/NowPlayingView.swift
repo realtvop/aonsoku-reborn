@@ -275,6 +275,25 @@ struct NowPlayingView: View {
         panel == .lyrics && lyricsControlsHidden
     }
 
+    private var presentationAnimation: Animation {
+        PlayerPresentationState.panelAnimation(reduceMotion: reduceMotion)
+    }
+
+    private var controlsTransitionOffset: CGFloat {
+        if reduceMotion { return 0 }
+        let baseOffset: CGFloat = presentation.isExpanded ? 0 : 40
+        let dragShift = min(max(presentation.dragOffset * 0.25, 0), 60)
+        return baseOffset + dragShift
+    }
+
+    private var controlsTransitionOpacity: Double {
+        guard presentation.isExpanded else { return 0 }
+        if presentation.dragOffset > 0 {
+            return max(0, 1 - Double(presentation.dragOffset) / 220.0)
+        }
+        return 1
+    }
+
     /// Keep slider state alive while the entire footer gives space to lyrics.
     private var bottomControls: some View {
         VStack(spacing: 0) {
@@ -285,10 +304,13 @@ struct NowPlayingView: View {
         .fixedSize(horizontal: false, vertical: true)
         .onGeometryChange(for: CGFloat.self, of: \.size.height) { bottomControlsHeight = $0 }
         .frame(height: bottomControlsHidden ? 0 : bottomControlsHeight, alignment: .top)
-        .opacity(bottomControlsHidden ? 0 : 1)
+        .offset(y: controlsTransitionOffset)
+        .opacity(bottomControlsHidden ? 0 : controlsTransitionOpacity)
+        .animation(presentationAnimation, value: presentation.isExpanded)
+        .animation(presentationAnimation, value: presentation.dragOffset == 0)
         .clipped()
-        .allowsHitTesting(!bottomControlsHidden)
-        .accessibilityHidden(bottomControlsHidden)
+        .allowsHitTesting(!bottomControlsHidden && presentation.isExpanded)
+        .accessibilityHidden(bottomControlsHidden || !presentation.isExpanded)
     }
 
     private var bottomBar: some View {
