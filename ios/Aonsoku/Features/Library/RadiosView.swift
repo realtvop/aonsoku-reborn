@@ -64,6 +64,7 @@ struct RadiosView: View {
         .offlineBanner()
         .themedBackground()
         .navigationTitle(t("sidebar.radios"))
+        .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(t("radios.addRadio"), systemImage: "plus") {

@@ -34,6 +34,7 @@ struct GenresView: View {
         .offlineBanner()
         .themedBackground()
         .navigationTitle(t("table.columns.genres"))
+        .navigationBarTitleDisplayMode(.large)
         .searchable(text: $searchText, prompt: Text(t("album.list.genre.search")))
         .refreshable { await load() }
         .task {

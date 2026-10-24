@@ -42,6 +42,7 @@ struct SongsListView: View {
         .offlineBanner()
         .themedBackground()
         .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.large)
         .searchable(text: $searchText, prompt: Text(t("songs.list.search.placeholder")))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

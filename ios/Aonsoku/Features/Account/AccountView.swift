@@ -182,15 +182,29 @@ struct SettingsPageView: View {
 }
 
 extension View {
-    /// The account avatar at the top trailing edge, as on Apple Music's
-    /// Home and Library.
-    func accountToolbar() -> some View {
-        toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                AccountButton()
+    /// The web's root page header, for Home and Library: the title at the
+    /// leading edge of the navigation bar, on the same row as the account
+    /// avatar. It stays there when the page scrolls under the bar instead
+    /// of moving to the middle. Pages pushed on top set their own title
+    /// display mode, since they would otherwise inherit this inline one.
+    func rootPageHeader(_ title: String) -> some View {
+        navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(removing: .title)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Text(title)
+                        .displayFont(.rootTitle)
+                        .foregroundStyle(Color.primary)
+                        .lineLimit(1)
+                        .accessibilityAddTraits(.isHeader)
+                }
+                .sharedBackgroundVisibility(.hidden)
+                ToolbarItem(placement: .topBarTrailing) {
+                    AccountButton()
+                }
+                .sharedBackgroundVisibility(.hidden)
             }
-            .sharedBackgroundVisibility(.hidden)
-        }
     }
 }
 

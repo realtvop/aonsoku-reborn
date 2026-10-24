@@ -39,8 +39,7 @@ struct LibraryView: View {
         }
         .offlineBanner()
         .themedBackground()
-        .navigationTitle(t("sidebar.library"))
-        .accountToolbar()
+        .rootPageHeader(t("sidebar.library"))
         .refreshable {
             await playlists.reload()
             if network.isOnline, !sync.isSyncing {

@@ -41,6 +41,7 @@ struct AlbumsListView: View {
         .themedBackground()
         .navigationTitle(title)
         .navigationSubtitle(subtitle)
+        .navigationBarTitleDisplayMode(.large)
         .searchable(isSortable, text: $searchText, prompt: t("album.list.search.placeholder"))
         .toolbar {
             if isSortable {

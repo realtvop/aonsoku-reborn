@@ -50,8 +50,7 @@ struct HomeView: View {
         .overlay { states }
         .offlineBanner()
         .themedBackground()
-        .navigationTitle(t("sidebar.home"))
-        .accountToolbar()
+        .rootPageHeader(t("sidebar.home"))
         .refreshable {
             await home.refresh()
             await pinned.resolve()
