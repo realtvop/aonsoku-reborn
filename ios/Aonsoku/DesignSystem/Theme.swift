@@ -227,6 +227,10 @@ private struct ThemedBackgroundModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .scrollContentBackground(.hidden)
+            // iOS 27's automatic top edge effect is a hard boundary. Keep
+            // the soft gradient-blur used by the previous system version
+            // where scrolling content passes behind the navigation bar.
+            .scrollEdgeEffectStyle(.soft, for: .top)
             .background {
                 (grouped ? theme.palette.groupedBackground : theme.palette.page)
                     .ignoresSafeArea()
