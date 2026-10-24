@@ -4,8 +4,18 @@ public final class AuthenticationService: @unchecked Sendable {
     public static let shared = AuthenticationService()
 
     private let httpClient = SubsonicHTTPClient()
+    private let credentialsProvider: () -> ServerCredentials?
+    private let estimateContentLengthProvider: () -> Bool
 
-    private init() {}
+    init(
+        credentialsProvider: @escaping () -> ServerCredentials? = { KeychainManager.retrieve() },
+        estimateContentLengthProvider: @escaping () -> Bool = {
+            PreferencesService.shared.estimateStreamContentLength
+        }
+    ) {
+        self.credentialsProvider = credentialsProvider
+        self.estimateContentLengthProvider = estimateContentLengthProvider
+    }
 
     // MARK: - Credential Management
 
@@ -268,7 +278,7 @@ public final class AuthenticationService: @unchecked Sendable {
     /// Build an authenticated URL for a Subsonic endpoint relative to
     /// `<server>/rest/`, preserving any base path in the stored server URL.
     public func url(path: String, query: [String: String] = [:]) -> URL? {
-        guard let credentials = KeychainManager.retrieve() else { return nil }
+        guard let credentials = credentialsProvider() else { return nil }
         return try? httpClient.buildURL(
             baseUrl: credentials.serverUrl,
             path: path,
@@ -279,7 +289,10 @@ public final class AuthenticationService: @unchecked Sendable {
 
     /// Build an authenticated stream URL for a song ID.
     public func streamURL(songId: String) -> URL? {
-        url(path: "stream.view", query: ["id": songId])
+        url(path: "stream.view", query: [
+            "id": songId,
+            "estimateContentLength": String(estimateContentLengthProvider()),
+        ])
     }
 
     /// Build an authenticated cover art URL.

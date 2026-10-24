@@ -329,6 +329,10 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   never-ready items remain bounded by the recovery attempt's progress deadline;
   late readiness cannot resume a canceled or expired attempt. Initial and
   queue loads with a saved start time use the same readiness gate.
+  `PlaybackSettings.estimateContentLength` defaults to true and can be disabled
+  in native Playback settings. Authentication stream URLs, queued/restored
+  Subsonic URLs, recovery loads and downloads read the persisted setting for
+  each new request; existing transfers are not restarted by a setting change.
   Empty buffers and completed cache downloads do not
   imply end of track. The empty-buffer queue fallback requires a position
   within one second of a known duration. It resolves and enqueues

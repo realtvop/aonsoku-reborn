@@ -47,6 +47,13 @@ public final class PreferencesService: @unchecked Sendable {
 
     // MARK: - Codable Preferences
 
+    /// Read for each new stream/download request so queued URLs and recovery
+    /// use the latest setting without depending on a SwiftUI store's lifetime.
+    var estimateStreamContentLength: Bool {
+        getJSON(SettingsStore.storageKey, as: AppSettings.self)?
+            .playback.estimateContentLength ?? true
+    }
+
     /// Get a Codable preference value decoded from JSON.
     public func getJSON<T: Decodable>(_ key: String, as type: T.Type) -> T? {
         guard let jsonString = prefs.getString(key),

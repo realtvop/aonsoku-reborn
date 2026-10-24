@@ -110,15 +110,19 @@ public struct PlaybackSettings: Codable, Hashable, Sendable {
     /// Shows the album cover instead of per-song artwork, and syncs only
     /// album covers.
     public var useAlbumCoverForSongs = false
+    /// Requests an estimated Content-Length for streaming and downloads.
+    public var estimateContentLength = true
 
     public init(
         hapticFeedback: Bool = true,
         autoOpenNowPlaying: Bool = false,
-        useAlbumCoverForSongs: Bool = false
+        useAlbumCoverForSongs: Bool = false,
+        estimateContentLength: Bool = true
     ) {
         self.hapticFeedback = hapticFeedback
         self.autoOpenNowPlaying = autoOpenNowPlaying
         self.useAlbumCoverForSongs = useAlbumCoverForSongs
+        self.estimateContentLength = estimateContentLength
     }
 
     public init(from decoder: Decoder) throws {
@@ -130,6 +134,7 @@ public struct PlaybackSettings: Codable, Hashable, Sendable {
             .useAlbumCoverForSongs,
             default: d.useAlbumCoverForSongs
         )
+        estimateContentLength = c.value(.estimateContentLength, default: d.estimateContentLength)
     }
 }
 

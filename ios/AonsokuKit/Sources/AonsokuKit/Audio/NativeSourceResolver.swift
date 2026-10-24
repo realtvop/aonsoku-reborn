@@ -4,6 +4,7 @@ class NativeSourceResolver {
     let cacheDirectories: [URL]
     private let fileManager: FileManager
     private let credentialsProvider: () -> ServerCredentials?
+    private let estimateContentLengthProvider: () -> Bool
     private let now: () -> Date
     private var cachedCredentials: ServerCredentials?
     private var credentialsCacheTime: Date?
@@ -15,11 +16,15 @@ class NativeSourceResolver {
         credentialsProvider: @escaping () -> ServerCredentials? = {
             KeychainManager.retrieve()
         },
+        estimateContentLengthProvider: @escaping () -> Bool = {
+            PreferencesService.shared.estimateStreamContentLength
+        },
         now: @escaping () -> Date = Date.init,
         credentialsTTL: TimeInterval = 30
     ) {
         self.fileManager = fileManager
         self.credentialsProvider = credentialsProvider
+        self.estimateContentLengthProvider = estimateContentLengthProvider
         self.now = now
         self.credentialsTTL = credentialsTTL
         if let cacheDirectories {
@@ -93,7 +98,10 @@ class NativeSourceResolver {
         if song.streamUrl.hasPrefix("http://") ||
             song.streamUrl.hasPrefix("https://") {
             guard let streamUrl = URL(string: song.streamUrl) else { return nil }
-            return (streamUrl, "stream")
+            // Queues may retain authenticated URLs created before the user
+            // changed this setting. Refresh only Subsonic stream endpoints;
+            // arbitrary HTTP/radio URLs must pass through unchanged.
+            return (updatingStreamOptions(in: streamUrl), "stream")
         }
 
         if song.streamUrl.hasPrefix("aonsoku-media://stream"),
@@ -124,6 +132,20 @@ class NativeSourceResolver {
         buildAuthenticatedStreamUrl(songId: songId, extra: [:])?.absoluteString
     }
 
+    private func updatingStreamOptions(in url: URL) -> URL {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              components.path.hasSuffix("/rest/stream") ||
+                components.path.hasSuffix("/rest/stream.view") else { return url }
+        var query = components.queryItems ?? []
+        query.removeAll { $0.name == "estimateContentLength" }
+        query.append(URLQueryItem(
+            name: "estimateContentLength",
+            value: String(estimateContentLengthProvider())
+        ))
+        components.queryItems = query
+        return components.url ?? url
+    }
+
     private func buildAuthenticatedStreamUrl(
         songId: String,
         extra: [String: String]
@@ -137,10 +159,8 @@ class NativeSourceResolver {
             protocolVersion: credentials.protocolVersion
         )
         params["id"] = songId
-        // Must be "true" for native AVPlayer: without Content-Length, AVPlayer cannot
-        // issue HTTP Range requests, causing buffer stalls and seek failures.
-        // (Web uses "false" to work around browser-specific streaming quirks.)
-        params["estimateContentLength"] = "true"
+        // This is a server hint, not a guarantee of HTTP Range support.
+        params["estimateContentLength"] = String(estimateContentLengthProvider())
         for (key, value) in extra {
             params[key] = value
         }

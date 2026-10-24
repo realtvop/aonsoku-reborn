@@ -12,6 +12,14 @@ struct PlaybackSettingsView: View {
         ThemedForm {
             Section {
                 SettingsToggle(
+                    title: t("native.settings.estimateContentLength.label"),
+                    info: t("native.settings.estimateContentLength.info"),
+                    isOn: settings.binding(\.playback.estimateContentLength)
+                )
+            }
+
+            Section {
+                SettingsToggle(
                     title: t("settings.audio.hapticFeedback.enabled.label"),
                     info: t("settings.audio.hapticFeedback.enabled.info"),
                     isOn: settings.binding(\.playback.hapticFeedback)

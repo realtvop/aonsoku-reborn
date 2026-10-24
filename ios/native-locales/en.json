@@ -50,6 +50,10 @@
       "volume": "Volume"
     },
     "settings": {
+      "estimateContentLength": {
+        "label": "Estimate Stream Size",
+        "info": "Ask the server to estimate stream size to help playback and seeking. Turn off if your server reports a zero duration or playback fails. Applies to new playback and download requests."
+      },
       "autoOpenNowPlaying": {
         "label": "Open Now Playing Automatically",
         "info": "Shows Now Playing when you start playing an album, playlist or song."

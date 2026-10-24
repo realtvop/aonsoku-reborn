@@ -38,6 +38,7 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
     private let lock = NSLock()
     private let sessionFactory: SessionFactory
     private let credentialsProvider: () -> ServerCredentials?
+    private let estimateContentLengthProvider: () -> Bool
     private let cacheDirectoryProvider: (Bool) throws -> URL
     private let fileManager: FileManager
     private let now: () -> Date
@@ -57,6 +58,9 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
         credentialsProvider: @escaping () -> ServerCredentials? = {
             KeychainManager.retrieve()
         },
+        estimateContentLengthProvider: @escaping () -> Bool = {
+            PreferencesService.shared.estimateStreamContentLength
+        },
         cacheDirectoryProvider: @escaping (Bool) throws -> URL = {
             try AudioCacheUtils.cacheDirectoryURL(createIfNeeded: $0)
         },
@@ -65,6 +69,7 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
     ) {
         self.sessionFactory = sessionFactory
         self.credentialsProvider = credentialsProvider
+        self.estimateContentLengthProvider = estimateContentLengthProvider
         self.cacheDirectoryProvider = cacheDirectoryProvider
         self.fileManager = fileManager
         self.now = now
@@ -236,7 +241,7 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
             protocolVersion: credentials.protocolVersion
         )
         params["id"] = songId
-        params["estimateContentLength"] = "true"
+        params["estimateContentLength"] = String(estimateContentLengthProvider())
         if let maxBitRate { params["maxBitRate"] = String(maxBitRate) }
         if let format { params["format"] = format }
 

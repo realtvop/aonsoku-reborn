@@ -50,6 +50,10 @@
       "volume": "音量"
     },
     "settings": {
+      "estimateContentLength": {
+        "label": "估算流媒体大小",
+        "info": "请求服务器估算流媒体大小，以改善播放和定位。若服务器返回时长为 0 或播放异常，可尝试关闭。更改对后续播放和下载请求生效。"
+      },
       "autoOpenNowPlaying": {
         "label": "自动打开正在播放",
         "info": "开始播放专辑、播放列表或歌曲时显示正在播放。"
