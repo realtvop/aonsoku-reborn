@@ -182,21 +182,24 @@ struct SettingsPageView: View {
 }
 
 extension View {
-    /// The web's root page header, for Home and Library: the title at the
-    /// leading edge of the navigation bar, on the same row as the account
-    /// avatar. It stays there when the page scrolls under the bar instead
-    /// of moving to the middle. Pages pushed on top set their own title
-    /// display mode, since they would otherwise inherit this inline one.
+    /// The web's root page header, for Home and Library: the large title at
+    /// the leading edge of the navigation bar, on the same row as the
+    /// account avatar. It stays there when the page scrolls under the bar
+    /// instead of moving to the middle, as the system's inline-large title
+    /// would. Pages pushed on top set their own title display mode, since
+    /// they would otherwise inherit this inline one.
     func rootPageHeader(_ title: String) -> some View {
         navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(removing: .title)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
+                    // At its ideal width: the bar collapses a flexible
+                    // title into its overflow button.
                     Text(title)
-                        .displayFont(.rootTitle)
-                        .foregroundStyle(Color.primary)
+                        .displayFont(.largeTitle)
                         .lineLimit(1)
+                        .fixedSize()
                         .accessibilityAddTraits(.isHeader)
                 }
                 .sharedBackgroundVisibility(.hidden)

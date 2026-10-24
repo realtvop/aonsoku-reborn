@@ -23,12 +23,14 @@ the same on every platform (see [Design language](#design-language)).
   pages raised rows in the theme's colors.
 - **Type**: Poppins, the web typeface, is bundled for headings only
   (`DesignSystem/Typography.swift`): navigation bar titles, page, section and
-  card titles, scaled with Dynamic Type. Home and Library put their title at
-  the leading edge of the navigation bar on the avatar's row, like the web's
-  root headers, and keep it there when content scrolls under the bar; pages
-  pushed on top keep large titles. Glyphs Poppins lacks, such as CJK,
-  cascade to the system fonts for the preferred languages at the same
-  weight. Body text, rows and controls keep the system font.
+  card titles, scaled with Dynamic Type. Home and Library put their title,
+  at large-title size, at the leading edge of the navigation bar on the
+  avatar's row, like the web's root headers, and keep it there when content
+  scrolls under the bar (the system's inline-large mode would move it to the
+  middle); pages pushed on top set their own title mode. Glyphs Poppins
+  lacks, such as CJK, cascade to the system fonts for the preferred
+  languages at the same weight. Body text, rows and controls keep the
+  system font.
 - **Components**: shelves of three tiles with a "See more" link, two-column
   grids, compact song rows (about the web's 56pt) without separators and
   with the web's bouncing equalizer for the current song, icon tiles on library and settings rows, bordered

@@ -77,8 +77,6 @@ enum BrandFont {
 enum DisplayStyle: Hashable {
     /// Large navigation titles.
     case largeTitle
-    /// Home and Library titles, in the navigation bar beside the avatar.
-    case rootTitle
     /// The name on an album, playlist or artist page.
     case title
     /// Shelf and section titles.
@@ -91,7 +89,6 @@ enum DisplayStyle: Hashable {
     var size: CGFloat {
         switch self {
         case .largeTitle: 30
-        case .rootTitle: 26
         case .title: 22
         case .section: 19
         case .card: 18
@@ -101,7 +98,7 @@ enum DisplayStyle: Hashable {
 
     var weight: BrandFont.Weight {
         switch self {
-        case .largeTitle, .rootTitle, .title, .card: .bold
+        case .largeTitle, .title, .card: .bold
         case .section, .inline: .semibold
         }
     }
@@ -109,7 +106,6 @@ enum DisplayStyle: Hashable {
     var textStyle: UIFont.TextStyle {
         switch self {
         case .largeTitle: .largeTitle
-        case .rootTitle: .title1
         case .title: .title2
         case .section, .card: .title3
         case .inline: .headline
