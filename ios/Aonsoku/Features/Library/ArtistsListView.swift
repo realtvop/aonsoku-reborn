@@ -84,9 +84,9 @@ struct ArtistRow: View {
                     }
                 }
             }
-            .padding(.vertical, 2)
         }
         .listRowSeparator(.hidden)
+        .compactRowInsets()
         .contextMenu {
             ArtistMenuItems(artist: artist)
         }

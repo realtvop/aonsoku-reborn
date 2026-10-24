@@ -23,6 +23,26 @@ extension View {
     func pageMargins() -> some View {
         modifier(PageMarginsModifier())
     }
+
+    /// List row insets as tight as the web's mobile rows: `vertical` above
+    /// and below and the page margins at the sides, less `trailingInset` for
+    /// a row whose trailing button brings its own padding. iOS 26's default
+    /// row insets make rows half again as tall.
+    func compactRowInsets(vertical: CGFloat = 6, trailingInset: CGFloat = 0) -> some View {
+        modifier(CompactRowInsetsModifier(vertical: vertical, trailingInset: trailingInset))
+    }
+}
+
+private struct CompactRowInsetsModifier: ViewModifier {
+    let vertical: CGFloat
+    let trailingInset: CGFloat
+
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    func body(content: Content) -> some View {
+        let margin = Layout.margin(sizeClass)
+        content.listRowInsets(EdgeInsets(top: vertical, leading: margin, bottom: vertical, trailing: margin - trailingInset))
+    }
 }
 
 private struct PageMarginsModifier: ViewModifier {
@@ -338,6 +358,7 @@ struct SongRow: View {
             .accessibilityLabel(t("playlist.buttons.options", ["name": song.title]))
         }
         .listRowSeparator(.hidden)
+        .compactRowInsets(vertical: 4, trailingInset: 8)
         .contextMenu {
             SongMenuItems(song: song, context: context)
         }

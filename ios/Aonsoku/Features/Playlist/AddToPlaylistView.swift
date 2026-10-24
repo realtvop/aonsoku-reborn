@@ -31,6 +31,8 @@ struct AddToPlaylistView: View {
                         PlaylistChoiceRow(playlist: playlist, isAdding: addingTo == playlist.id)
                     }
                     .buttonStyle(.plain)
+                    .listRowSeparator(.hidden)
+                    .compactRowInsets()
                 }
             }
             .listStyle(.plain)
@@ -128,15 +130,21 @@ private struct PlaylistChoiceRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            ArtworkImage(id: playlist.coverArt, size: .small, cornerRadius: 6, placeholder: "music.note.list")
-                .frame(width: 56, height: 56)
+            ArtworkImage(
+                id: playlist.coverArt,
+                size: .small,
+                cornerRadius: Layout.rowArtworkRadius,
+                placeholder: "music.note.list"
+            )
+            .frame(width: 48, height: 48)
             VStack(alignment: .leading, spacing: 2) {
                 Text(playlist.name)
-                    .foregroundStyle(.primary)
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(Color.primary)
                     .lineLimit(1)
                 Text(t("playlist.songCount", count: playlist.songCount))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(.footnote)
+                    .foregroundStyle(ThemeColor.mutedForeground)
                     .lineLimit(1)
             }
             Spacer(minLength: 0)

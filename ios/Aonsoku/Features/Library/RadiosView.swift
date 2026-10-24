@@ -138,7 +138,7 @@ private struct RadioRow: View {
             HStack(spacing: 12) {
                 RadioBadge(name: station.name)
                     .clipShape(.rect(cornerRadius: Layout.rowArtworkRadius, style: .continuous))
-                    .frame(width: 52, height: 52)
+                    .frame(width: 48, height: 48)
                     .overlay {
                         if isCurrent {
                             NowPlayingIndicator(isPlaying: isPlaying, size: 20)
@@ -165,6 +165,7 @@ private struct RadioRow: View {
         }
         .buttonStyle(.plain)
         .listRowSeparator(.hidden)
+        .compactRowInsets()
         .accessibilityLabel(station.name)
         .accessibilityHint(
             isCurrent && isPlaying

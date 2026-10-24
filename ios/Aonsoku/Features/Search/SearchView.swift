@@ -216,9 +216,9 @@ private struct AlbumResultRow: View {
                     .foregroundStyle(ThemeColor.mutedForeground)
                 }
             }
-            .padding(.vertical, 2)
         }
         .listRowSeparator(.hidden)
+        .compactRowInsets(vertical: 4)
         .contextMenu {
             AlbumMenuItems(album: album)
         }

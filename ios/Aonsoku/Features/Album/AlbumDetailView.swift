@@ -160,6 +160,7 @@ struct AlbumDetailView: View {
             } label: {
                 Text(album.artistLine)
             }
+            .buttonStyle(.plain)
         } else if let credit = credits.first, let id = credit.id {
             NavigationLink(value: AppRoute.artist(id: id, name: credit.name)) {
                 Text(album.artistLine)
@@ -223,23 +224,27 @@ struct AlbumDetailView: View {
         if !songs.isEmpty {
             let discs = Disc.groups(of: songs, titles: album.discTitles)
             let numbersTracks = songs.contains { ($0.track ?? 0) > 0 }
-            ForEach(discs) { disc in
-                if discs.count > 1 {
-                    discHeader(disc)
-                }
-                ForEach(disc.tracks) { track in
-                    SongRow(
-                        song: track.song,
-                        leading: .number(numbersTracks ? track.song.track : track.index + 1),
-                        subtitle: track.song.artistLine == album.artistLine ? .none : .artist,
-                        context: .album
-                    ) {
-                        play(album, startingAt: track.index, shuffle: false)
+            // One container, so padding applied to the tracks applies once
+            // rather than to every row.
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(discs) { disc in
+                    if discs.count > 1 {
+                        discHeader(disc)
                     }
-                    .frame(minHeight: 48)
-                    .padding(.vertical, 2)
-                    .padding(.leading, margin)
-                    .padding(.trailing, margin - 8)
+                    ForEach(disc.tracks) { track in
+                        SongRow(
+                            song: track.song,
+                            leading: .number(numbersTracks ? track.song.track : track.index + 1),
+                            subtitle: track.song.artistLine == album.artistLine ? .none : .artist,
+                            context: .album
+                        ) {
+                            play(album, startingAt: track.index, shuffle: false)
+                        }
+                        .frame(minHeight: 48)
+                        .padding(.vertical, 2)
+                        .padding(.leading, margin)
+                        .padding(.trailing, margin - 8)
+                    }
                 }
             }
         } else if detail == nil {

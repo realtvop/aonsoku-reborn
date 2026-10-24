@@ -232,7 +232,6 @@ struct PlaylistDetailView: View {
                         .tint(.red)
                     }
                 }
-                .listRowInsets(EdgeInsets(top: 4, leading: margin, bottom: 4, trailing: margin - 8))
                 .listRowBackground(Color.clear)
             }
         } else {

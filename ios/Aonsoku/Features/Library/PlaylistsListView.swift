@@ -90,7 +90,7 @@ struct NewPlaylistRow: View {
             HStack(spacing: 12) {
                 RoundedRectangle(cornerRadius: Layout.rowArtworkRadius, style: .continuous)
                     .fill(ThemeColor.border)
-                    .frame(width: 52, height: 52)
+                    .frame(width: 48, height: 48)
                     .overlay {
                         Image(systemName: "plus")
                             .font(.title3.weight(.semibold))
@@ -105,6 +105,7 @@ struct NewPlaylistRow: View {
         }
         .buttonStyle(.plain)
         .listRowSeparator(.hidden)
+        .compactRowInsets()
     }
 }
 
@@ -125,7 +126,7 @@ struct PlaylistRow: View {
                     cornerRadius: Layout.rowArtworkRadius,
                     placeholder: "music.note.list"
                 )
-                .frame(width: 52, height: 52)
+                .frame(width: 48, height: 48)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(playlist.name)
                         .font(.callout.weight(.medium))
@@ -141,6 +142,7 @@ struct PlaylistRow: View {
             }
         }
         .listRowSeparator(.hidden)
+        .compactRowInsets()
         .contextMenu {
             PlaylistMenuItems(playlist: playlist)
         }

@@ -385,7 +385,7 @@ private struct SongColumns: View {
         let isRegular = sizeClass == .regular
         ScrollView(.horizontal) {
             LazyHGrid(
-                rows: Array(repeating: GridItem(.fixed(58), spacing: 0), count: rows),
+                rows: Array(repeating: GridItem(.fixed(52), spacing: 0), count: rows),
                 spacing: Layout.shelfSpacing
             ) {
                 ForEach(Array(songs.enumerated()), id: \.offset) { index, song in
