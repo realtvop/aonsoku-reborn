@@ -210,7 +210,7 @@ struct NowPlayingView: View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 MarqueeText(text: NowPlayingText.title(player, t))
-                    .font(.title3.weight(.bold))
+                    .displayFont(.player)
                     .accessibilityAddTraits(.isHeader)
                 ArtistMenu()
             }
@@ -241,7 +241,7 @@ struct NowPlayingView: View {
     private var songButtons: some View {
         HStack(spacing: 10) {
             if let song = player.currentSong {
-                FavoriteToolbarButton(kind: .song, id: song.id)
+                NowPlayingFavoriteButton(songId: song.id)
                     .font(.body.weight(.semibold))
                     .frame(width: 34, height: 34)
                     .glassEffect(.regular.interactive(), in: .circle)
@@ -487,6 +487,19 @@ private struct ArtistMenu: View {
             MarqueeText(text: subtitle)
                 .foregroundStyle(.white.opacity(0.65))
         }
+    }
+}
+
+/// The current song's heart: red and filled while it is a favorite, as in
+/// the web player.
+private struct NowPlayingFavoriteButton: View {
+    let songId: String
+
+    @Environment(FavoritesStore.self) private var favorites
+
+    var body: some View {
+        FavoriteToolbarButton(kind: .song, id: songId)
+            .foregroundStyle(favorites.isFavorite(.song, id: songId) ? Color.red : Color.white)
     }
 }
 

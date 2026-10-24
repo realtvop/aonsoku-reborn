@@ -280,7 +280,7 @@ private struct QueueSectionHeader<Actions: View>: View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
-                    .font(.headline)
+                    .displayFont(.inline)
                     .foregroundStyle(.white)
                 if let subtitle {
                     Text(subtitle)

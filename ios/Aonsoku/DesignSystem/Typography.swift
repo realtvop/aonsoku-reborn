@@ -83,6 +83,8 @@ enum DisplayStyle: Hashable {
     case section
     /// Titles on featured cards.
     case card
+    /// The song title in the full-screen player.
+    case player
     /// Inline titles, matching the navigation bar's.
     case inline
 
@@ -92,13 +94,14 @@ enum DisplayStyle: Hashable {
         case .title: 22
         case .section: 19
         case .card: 18
+        case .player: 20
         case .inline: 17
         }
     }
 
     var weight: BrandFont.Weight {
         switch self {
-        case .largeTitle, .title, .card: .bold
+        case .largeTitle, .title, .card, .player: .bold
         case .section, .inline: .semibold
         }
     }
@@ -107,7 +110,7 @@ enum DisplayStyle: Hashable {
         switch self {
         case .largeTitle: .largeTitle
         case .title: .title2
-        case .section, .card: .title3
+        case .section, .card, .player: .title3
         case .inline: .headline
         }
     }

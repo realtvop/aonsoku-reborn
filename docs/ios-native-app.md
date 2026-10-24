@@ -43,7 +43,10 @@ the same on every platform (see [Design language](#design-language)).
   the header is visible, switch between light and dark to stay readable on
   the band. Below it, a long Play capsule on Liquid Glass sits between bare
   Shuffle and heart (or download) symbols.
-- The mini player and Now Playing keep their own presentation.
+- The mini player and Now Playing keep their own presentation. Now
+  Playing shares only the type and the web's like color: the song title and
+  queue section titles are set in Poppins, and the heart turns red and
+  filled while the song is a favorite.
 
 ## Platform
 
