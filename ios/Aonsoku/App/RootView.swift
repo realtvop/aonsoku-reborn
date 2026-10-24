@@ -12,7 +12,7 @@ struct RootView: View {
         ZStack {
             switch screen {
             case .restoring:
-                theme.palette.background
+                theme.palette.page
                     .ignoresSafeArea()
             case .login:
                 LoginView()

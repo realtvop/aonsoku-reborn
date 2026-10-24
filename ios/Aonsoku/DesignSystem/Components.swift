@@ -4,13 +4,18 @@ import SwiftUI
 // MARK: - Layout
 
 enum Layout {
-    /// Leading and trailing page margin in scrolling pages.
+    /// Leading and trailing page margin in scrolling pages: the web's 1rem
+    /// on a phone, which also lines up with the large title.
     static func margin(_ sizeClass: UserInterfaceSizeClass?) -> CGFloat {
-        sizeClass == .regular ? 32 : 20
+        sizeClass == .regular ? 32 : 16
     }
 
     static let shelfSpacing: CGFloat = 12
     static let sectionSpacing: CGFloat = 28
+    /// Covers in tiles and grids, close to the web's small radius.
+    static let artworkRadius: CGFloat = 6
+    /// Covers in rows.
+    static let rowArtworkRadius: CGFloat = 5
 }
 
 extension View {
@@ -43,40 +48,38 @@ extension ButtonStyle where Self == PressableStyle {
 
 // MARK: - Headers
 
-/// A shelf title. With a route it links to the full list, the way Apple
-/// Music's "Recently Added ›" does.
+/// A shelf title in Poppins, like the web's preview list headers. With a
+/// route, "See more" at the trailing edge links to the full list.
 struct SectionHeader: View {
     let title: String
     var route: AppRoute?
+    /// The link's label, "See more" by default.
+    var moreTitle: String?
+
+    @Environment(Localizer.self) private var t
 
     var body: some View {
-        if let route {
-            NavigationLink(value: route) {
-                label(showsChevron: true)
-            }
-            .buttonStyle(.plain)
-        } else {
-            label(showsChevron: false)
-        }
-    }
-
-    private func label(showsChevron: Bool) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
             // Concrete colors: a plain list's section header dims the
             // hierarchical .primary style to grey.
             Text(title)
-                .font(.title2.bold())
+                .displayFont(.section)
                 .foregroundStyle(Color.primary)
                 .lineLimit(1)
-            if showsChevron {
-                Image(systemName: "chevron.forward")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(Color.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityAddTraits(.isHeader)
+            if let route {
+                NavigationLink(value: route) {
+                    Text(moreTitle ?? t("generic.seeMore"))
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tint)
+                        .lineLimit(1)
+                        .padding(.vertical, 6)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(.rect)
-        .accessibilityAddTraits(.isHeader)
     }
 }
 
@@ -94,9 +97,9 @@ struct AlbumTile: View {
 
     var body: some View {
         NavigationLink(value: AppRoute.album(album)) {
-            VStack(alignment: .leading, spacing: 6) {
-                ArtworkImage(id: album.coverArt)
-                VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 8) {
+                ArtworkImage(id: album.coverArt, cornerRadius: Layout.artworkRadius)
+                VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 4) {
                         Text(album.name)
                             .lineLimit(1)
@@ -104,15 +107,15 @@ struct AlbumTile: View {
                             ExplicitBadge()
                         }
                     }
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.primary)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.primary)
                     HStack(spacing: 4) {
                         Text(captionText)
                             .lineLimit(1)
                         AlbumCacheBadge(albumId: album.id)
                     }
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(.caption)
+                    .foregroundStyle(ThemeColor.mutedForeground)
                 }
             }
             .contentShape(.rect)
@@ -139,20 +142,20 @@ struct PlaylistTile: View {
 
     var body: some View {
         NavigationLink(value: AppRoute.playlist(id: playlist.id)) {
-            VStack(alignment: .leading, spacing: 6) {
-                ArtworkImage(id: playlist.coverArt, placeholder: "music.note.list")
-                VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 8) {
+                ArtworkImage(id: playlist.coverArt, cornerRadius: Layout.artworkRadius, placeholder: "music.note.list")
+                VStack(alignment: .leading, spacing: 2) {
                     Text(playlist.name)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.primary)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.primary)
                         .lineLimit(1)
                     HStack(spacing: 4) {
                         Text(t("playlist.songCount", count: playlist.songCount))
                             .lineLimit(1)
                         PlaylistCacheBadge(playlistId: playlist.id)
                     }
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(.caption)
+                    .foregroundStyle(ThemeColor.mutedForeground)
                 }
             }
             .contentShape(.rect)
@@ -173,8 +176,8 @@ struct ArtistTile: View {
             VStack(spacing: 8) {
                 ArtworkImage(id: artist.coverArt, isCircular: true, placeholder: "music.mic")
                 Text(artist.name)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.primary)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.primary)
                     .lineLimit(1)
             }
             .contentShape(.rect)
@@ -200,11 +203,13 @@ struct AlbumShelf: View {
     }
 }
 
-/// A horizontal, snapping row of tiles: a little over two on a phone, so
-/// the next one peeks in, and five and a half on a wide iPad window.
+/// A horizontal, snapping row of tiles: three on a phone, like the web's
+/// preview lists, with the next one peeking in, and five and a half on a
+/// wide iPad window.
 struct Shelf<Item: Identifiable, Tile: View>: View {
     let items: [Item]
-    var compactSpan = 4
+    /// Tenths of the width each tile takes on a phone.
+    var compactSpan = 3
     @ViewBuilder let tile: (Item) -> Tile
 
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -217,7 +222,7 @@ struct Shelf<Item: Identifiable, Tile: View>: View {
                     tile(item)
                         .containerRelativeFrame(
                             .horizontal,
-                            count: isRegular ? 11 : 9,
+                            count: isRegular ? 11 : 10,
                             span: isRegular ? 2 : compactSpan,
                             spacing: Layout.shelfSpacing
                         )
@@ -252,7 +257,8 @@ struct AlbumGrid: View {
     }
 }
 
-/// An adaptive grid with the page margins, for tiles.
+/// An adaptive grid with the page margins, for tiles: two columns on a
+/// phone, as on the web.
 struct TileGrid<Content: View>: View {
     var minimumWidth: CGFloat = 150
     @ViewBuilder let content: Content
@@ -261,7 +267,7 @@ struct TileGrid<Content: View>: View {
         LazyVGrid(
             columns: [GridItem(.adaptive(minimum: minimumWidth), spacing: 16, alignment: .top)],
             alignment: .leading,
-            spacing: 20
+            spacing: 24
         ) {
             content
         }
@@ -286,8 +292,9 @@ enum SongRowSubtitle: Equatable {
     case none
 }
 
-/// A song in a list: cover or number, title and artist, its download
-/// state, length and a menu. Swipe right to queue it.
+/// A song in a list, like the web's mobile song rows: cover or number,
+/// title and artist, its download state, length and a menu, with no
+/// separators between rows. Swipe right to queue it.
 struct SongRow: View {
     let song: Song
     var leading: SongRowLeading = .artwork
@@ -309,9 +316,9 @@ struct SongRow: View {
                     SongCacheBadge(songId: song.id)
                     if showsDuration {
                         Text(Formatters.clock(TimeInterval(song.duration)))
-                            .font(.subheadline)
+                            .font(.footnote)
                             .monospacedDigit()
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(ThemeColor.mutedForeground)
                     }
                 }
                 .contentShape(.rect)
@@ -322,14 +329,15 @@ struct SongRow: View {
                 SongMenuItems(song: song, context: context)
             } label: {
                 Image(systemName: "ellipsis")
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 32, height: 40)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(ThemeColor.mutedForeground)
+                    .frame(width: 32, height: 44)
                     .contentShape(.rect)
             }
             .buttonStyle(.borderless)
             .accessibilityLabel(t("playlist.buttons.options", ["name": song.title]))
         }
+        .listRowSeparator(.hidden)
         .contextMenu {
             SongMenuItems(song: song, context: context)
         }
@@ -358,13 +366,13 @@ struct SongRow: View {
     private var leadingView: some View {
         switch leading {
         case .artwork:
-            SongArtwork(song: song)
-                .frame(width: 48, height: 48)
+            SongArtwork(song: song, cornerRadius: Layout.rowArtworkRadius)
+                .frame(width: 44, height: 44)
                 .overlay {
                     if isCurrent {
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        RoundedRectangle(cornerRadius: Layout.rowArtworkRadius, style: .continuous)
                             .fill(.black.opacity(0.4))
-                        NowPlayingIndicator(isPlaying: player.isPlaying)
+                        NowPlayingIndicator(isPlaying: player.isPlaying, size: 18)
                             .foregroundStyle(.white)
                     }
                 }
@@ -375,9 +383,9 @@ struct SongRow: View {
                         .foregroundStyle(.tint)
                 } else {
                     Text(number.map(String.init) ?? "")
-                        .font(.subheadline)
+                        .font(.subheadline.weight(.medium))
                         .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ThemeColor.mutedForeground)
                 }
             }
             .frame(minWidth: 26)
@@ -390,7 +398,8 @@ struct SongRow: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
                 Text(song.title)
-                    .foregroundStyle(isCurrent ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(isCurrent ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.primary))
                     .lineLimit(1)
                 if song.explicitStatus == .explicit {
                     ExplicitBadge()
@@ -398,8 +407,8 @@ struct SongRow: View {
             }
             if let subtitleText {
                 Text(subtitleText)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(.footnote)
+                    .foregroundStyle(ThemeColor.mutedForeground)
                     .lineLimit(1)
             }
         }
@@ -436,15 +445,50 @@ extension Song {
     }
 }
 
-/// Animated bars for the song that is playing; still while paused.
+/// The web's equalizer on the song that is playing: four bars bouncing
+/// from the bottom, still while paused or with Reduce Motion.
 struct NowPlayingIndicator: View {
     let isPlaying: Bool
+    var size: CGFloat = 16
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Each bar's height in the web icon's 24-point box, the scales its
+    /// keyframes move between and its delay.
+    private static let bars: [(height: CGFloat, from: CGFloat, to: CGFloat, delay: Double)] = [
+        (14, 0.4, 0.8, 0),
+        (20, 0.9, 0.4, 0.07),
+        (18, 0.7, 1, 0.14),
+        (12, 0.6, 1, 0.07),
+    ]
+    private static let period = 0.6
 
     var body: some View {
-        Image(systemName: "waveform")
-            .font(.subheadline.weight(.semibold))
-            .symbolEffect(.variableColor.iterative.dimInactiveLayers, isActive: isPlaying)
-            .accessibilityHidden(true)
+        let isAnimating = isPlaying && !reduceMotion
+        TimelineView(.animation(paused: !isAnimating)) { context in
+            Canvas { canvas, canvasSize in
+                let unit = canvasSize.width / 24
+                let time = context.date.timeIntervalSinceReferenceDate
+                for (index, bar) in Self.bars.enumerated() {
+                    var scale = bar.from
+                    if isAnimating {
+                        let phase = ((time - bar.delay) / Self.period).truncatingRemainder(dividingBy: 1)
+                        let eased = (1 - cos(2 * .pi * phase)) / 2
+                        scale = bar.from + (bar.to - bar.from) * eased
+                    }
+                    let height = bar.height * unit * scale
+                    let rect = CGRect(
+                        x: (1 + 6 * CGFloat(index)) * unit,
+                        y: canvasSize.height - 2 * unit - height,
+                        width: 4 * unit,
+                        height: height
+                    )
+                    canvas.fill(Path(roundedRect: rect, cornerRadius: unit), with: .foreground)
+                }
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
     }
 }
 
@@ -805,30 +849,76 @@ extension View {
 
 // MARK: - Play buttons
 
-/// The Play and Shuffle pair under a header, as in Apple Music.
-struct PlayShuffleButtons: View {
+/// The web's action row, centered: a round Shuffle, the large primary Play
+/// and any `trailing` actions, such as the favorite heart, in Liquid Glass.
+struct PlayShuffleButtons<Trailing: View>: View {
     /// False for a single song, which has nothing to shuffle.
     var canShuffle = true
     let play: () -> Void
     let shuffle: () -> Void
+    @ViewBuilder var trailing: Trailing
 
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        HStack(spacing: 12) {
-            Button(action: play) {
-                Label(t("options.play"), systemImage: "play.fill")
-                    .frame(maxWidth: .infinity)
-            }
-            Button(action: shuffle) {
-                Label(t("shortcuts.playback.shuffle"), systemImage: "shuffle")
-                    .frame(maxWidth: .infinity)
-            }
-            .disabled(!canShuffle)
+        HStack(spacing: 18) {
+            RoundIconButton(systemImage: "shuffle", label: t("shortcuts.playback.shuffle"), action: shuffle)
+                .disabled(!canShuffle)
+            PlayButton(label: t("options.play"), action: play)
+            trailing
         }
-        .font(.body.weight(.semibold))
-        .buttonStyle(.glass)
+        .frame(maxWidth: .infinity)
+    }
+}
+
+extension PlayShuffleButtons where Trailing == EmptyView {
+    init(canShuffle: Bool = true, play: @escaping () -> Void, shuffle: @escaping () -> Void) {
+        self.init(canShuffle: canShuffle, play: play, shuffle: shuffle) {
+            EmptyView()
+        }
+    }
+}
+
+/// The large round Play in the theme's primary color. Themes with a light
+/// primary get a dark symbol.
+struct PlayButton: View {
+    let label: String
+    var diameter: CGFloat = 40
+    let action: () -> Void
+
+    @Environment(\.themeContext) private var theme
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "play.fill")
+                .font(.system(size: diameter * 0.5))
+                .foregroundStyle(theme.palette.primaryForeground)
+                .frame(width: diameter, height: diameter)
+        }
+        .buttonStyle(.glassProminent)
+        .buttonBorderShape(.circle)
         .controlSize(.large)
-        .labelStyle(.titleAndIcon)
+        .accessibilityLabel(label)
+    }
+}
+
+/// A round glass button beside Play, for Shuffle or the heart.
+struct RoundIconButton: View {
+    let systemImage: String
+    let label: String
+    var diameter: CGFloat = 30
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: diameter * 0.6, weight: .semibold))
+                .frame(width: diameter, height: diameter)
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .controlSize(.large)
+        .accessibilityLabel(label)
     }
 }

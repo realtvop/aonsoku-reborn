@@ -34,7 +34,7 @@ private struct ArtworkGlowBackground: ViewModifier {
             }
             .background {
                 ZStack(alignment: .top) {
-                    theme.palette.background
+                    theme.palette.page
                     if let color = palette?.dominant {
                         LinearGradient(
                             stops: [
@@ -151,12 +151,12 @@ struct AboutCard: View {
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
-                    .font(.headline)
-                    .foregroundStyle(.primary)
+                    .displayFont(.inline)
+                    .foregroundStyle(Color.primary)
                     .lineLimit(1)
                 Text(text.plainText)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ThemeColor.mutedForeground)
                     .lineLimit(3)
                     .multilineTextAlignment(.leading)
                 Text(t("generic.seeMore"))
@@ -165,8 +165,7 @@ struct AboutCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
-            .background(.fill.quinary, in: .rect(cornerRadius: 18, style: .continuous))
-            .contentShape(.rect(cornerRadius: 18, style: .continuous))
+            .cardSurface()
         }
         .buttonStyle(.pressable)
         .accessibilityHint(t("generic.seeMore"))

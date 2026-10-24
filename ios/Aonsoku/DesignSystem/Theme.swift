@@ -56,7 +56,11 @@ struct HSL: Hashable, Sendable {
 /// variables; `groupedBackground` and `elevated` are derived for iOS
 /// grouped lists, where rows sit on a slightly different surface.
 struct ThemePalette: Hashable {
+    /// Bars, cards and menus: the web `--background`.
     let background: Color
+    /// Behind every page: the web `--background-foreground`, which the web
+    /// paints on its body.
+    let page: Color
     let foreground: Color
     let card: Color
     let primary: Color
@@ -77,6 +81,7 @@ struct ThemePalette: Hashable {
 
     init(
         background: HSL,
+        page: HSL,
         foreground: HSL,
         card: HSL,
         primary: HSL,
@@ -91,6 +96,7 @@ struct ThemePalette: Hashable {
         border: HSL
     ) {
         self.background = background.color
+        self.page = page.color
         self.foreground = foreground.color
         self.card = card.color
         self.primary = primary.color
@@ -107,11 +113,44 @@ struct ThemePalette: Hashable {
         // Dark themes raise rows toward the foreground; light themes sink
         // the page instead, so rows keep the theme's own background.
         if isDark {
-            groupedBackground = background.color
-            elevated = background.mixed(with: foreground, 0.07)
+            groupedBackground = page.color
+            elevated = page.mixed(with: foreground, 0.06)
         } else {
-            groupedBackground = background.mixed(with: foreground, 0.05)
+            groupedBackground = page.mixed(with: foreground, 0.035)
             elevated = background.color
+        }
+    }
+}
+
+/// A theme color as a shape style, resolved from the environment, so views
+/// can write `.foregroundStyle(ThemeColor.mutedForeground)`.
+enum ThemeColor: ShapeStyle {
+    case page
+    case background
+    case foreground
+    case card
+    case primary
+    case secondary
+    case muted
+    case mutedForeground
+    case accent
+    case border
+    case elevated
+
+    func resolve(in environment: EnvironmentValues) -> Color {
+        let palette = environment.themeContext.palette
+        return switch self {
+        case .page: palette.page
+        case .background: palette.background
+        case .foreground: palette.foreground
+        case .card: palette.card
+        case .primary: palette.primary
+        case .secondary: palette.secondary
+        case .muted: palette.muted
+        case .mutedForeground: palette.mutedForeground
+        case .accent: palette.accent
+        case .border: palette.border
+        case .elevated: palette.elevated
         }
     }
 }
@@ -185,7 +224,7 @@ private struct ThemedBackgroundModifier: ViewModifier {
         content
             .scrollContentBackground(.hidden)
             .background {
-                (grouped ? theme.palette.groupedBackground : theme.palette.background)
+                (grouped ? theme.palette.groupedBackground : theme.palette.page)
                     .ignoresSafeArea()
             }
     }
@@ -211,6 +250,7 @@ extension AppTheme {
         case .light:
             ThemePalette(
                 background: HSL(0, 0, 100),
+                page: HSL(210, 20, 98),
                 foreground: HSL(224, 10, 15),
                 card: HSL(0, 0, 100),
                 primary: HSL(161, 94, 30),
@@ -227,6 +267,7 @@ extension AppTheme {
         case .dark:
             ThemePalette(
                 background: HSL(224, 71.4, 8.1),
+                page: HSL(222, 47, 11),
                 foreground: HSL(210, 20, 95),
                 card: HSL(224, 71.4, 8.1),
                 primary: HSL(160, 84, 39),
@@ -243,6 +284,7 @@ extension AppTheme {
         case .black:
             ThemePalette(
                 background: HSL(240, 10, 3.9),
+                page: HSL(240, 5.9, 10),
                 foreground: HSL(0, 0, 98),
                 card: HSL(240, 10, 3.9),
                 primary: HSL(0, 0, 98),
@@ -259,6 +301,7 @@ extension AppTheme {
         case .oneDark:
             ThemePalette(
                 background: HSL(220, 13, 16),
+                page: HSL(220, 13, 18),
                 foreground: HSL(219, 14, 84),
                 card: HSL(220, 13, 16),
                 primary: HSL(220, 13, 86),
@@ -275,6 +318,7 @@ extension AppTheme {
         case .nightOwlLight:
             ThemePalette(
                 background: HSL(0, 0, 98),
+                page: HSL(0, 0, 96),
                 foreground: HSL(243, 14, 29),
                 card: HSL(0, 0, 96),
                 primary: HSL(243, 14, 29),
@@ -291,6 +335,7 @@ extension AppTheme {
         case .marmaladeBeaver:
             ThemePalette(
                 background: HSL(233, 18, 17),
+                page: HSL(233, 18, 19),
                 foreground: HSL(173, 24, 93),
                 card: HSL(233, 18, 17),
                 primary: HSL(44, 100, 71),
@@ -307,6 +352,7 @@ extension AppTheme {
         case .noctisLilac:
             ThemePalette(
                 background: HSL(249, 33, 96),
+                page: HSL(250, 100, 97.6),
                 foreground: HSL(247, 100, 21),
                 card: HSL(249, 33, 94),
                 primary: HSL(247, 78, 65),
@@ -323,6 +369,7 @@ extension AppTheme {
         case .materialTheme:
             ThemePalette(
                 background: HSL(200, 19, 16),
+                page: HSL(200, 19, 18),
                 foreground: HSL(180, 100, 97),
                 card: HSL(200, 19, 16),
                 primary: HSL(180, 100, 97),
@@ -339,6 +386,7 @@ extension AppTheme {
         case .monokaiPro:
             ThemePalette(
                 background: HSL(285, 5, 15),
+                page: HSL(285, 5, 17),
                 foreground: HSL(60, 25, 98),
                 card: HSL(285, 5, 15),
                 primary: HSL(45, 100, 70),
@@ -355,6 +403,7 @@ extension AppTheme {
         case .githubDark:
             ThemePalette(
                 background: HSL(216, 28, 5),
+                page: HSL(216, 28, 7),
                 foreground: HSL(210, 17, 82),
                 card: HSL(216, 28, 5),
                 primary: HSL(210, 17, 82),
@@ -371,6 +420,7 @@ extension AppTheme {
         case .shadesOfPurple:
             ThemePalette(
                 background: HSL(243, 33, 23),
+                page: HSL(243, 33, 25),
                 foreground: HSL(0, 0, 100),
                 card: HSL(243, 33, 23),
                 primary: HSL(50, 100, 49),
@@ -387,6 +437,7 @@ extension AppTheme {
         case .beardedSolarized:
             ThemePalette(
                 background: HSL(195, 46, 12),
+                page: HSL(195, 46, 14),
                 foreground: HSL(194, 37, 84),
                 card: HSL(195, 46, 12),
                 primary: HSL(175, 59, 55),
@@ -403,6 +454,7 @@ extension AppTheme {
         case .catppuccinMocha:
             ThemePalette(
                 background: HSL(240, 21, 13),
+                page: HSL(240, 21, 15),
                 foreground: HSL(226, 64, 88),
                 card: HSL(240, 21, 13),
                 primary: HSL(267, 84, 81),
@@ -419,6 +471,7 @@ extension AppTheme {
         case .nuclearDark:
             ThemePalette(
                 background: HSL(213, 30.3, 10.94),
+                page: HSL(213, 30.3, 12.94),
                 foreground: HSL(90, 40, 98.04),
                 card: HSL(213.91, 26.44, 17.06),
                 primary: HSL(331.18, 100, 55.1),
@@ -435,6 +488,7 @@ extension AppTheme {
         case .achiever:
             ThemePalette(
                 background: HSL(18, 51, 98),
+                page: HSL(33.3, 100, 98),
                 foreground: HSL(18, 50, 0),
                 card: HSL(18, 51, 98),
                 primary: HSL(18, 83, 58),
@@ -451,6 +505,7 @@ extension AppTheme {
         case .dracula:
             ThemePalette(
                 background: HSL(231, 15, 18),
+                page: HSL(231, 15, 20),
                 foreground: HSL(60, 30, 96),
                 card: HSL(232, 14, 31),
                 primary: HSL(265, 89, 78),
@@ -467,6 +522,7 @@ extension AppTheme {
         case .discord:
             ThemePalette(
                 background: HSL(221, 4, 15),
+                page: HSL(217.5, 9.09, 17.25),
                 foreground: HSL(334, 34, 98),
                 card: HSL(210, 9.09, 12.94),
                 primary: HSL(226.73, 58.43, 65.1),
@@ -483,6 +539,7 @@ extension AppTheme {
         case .tinaciousDesign:
             ThemePalette(
                 background: HSL(240, 100, 99),
+                page: HSL(240, 100, 98),
                 foreground: HSL(244, 18, 21),
                 card: HSL(240, 100, 97),
                 primary: HSL(330, 100, 60),
@@ -499,6 +556,7 @@ extension AppTheme {
         case .vueDark:
             ThemePalette(
                 background: HSL(192, 100, 10),
+                page: HSL(192, 100, 12),
                 foreground: HSL(0, 0, 90),
                 card: HSL(192, 100, 8),
                 primary: HSL(171, 82, 43),
@@ -515,6 +573,7 @@ extension AppTheme {
         case .vimDarkSoft:
             ThemePalette(
                 background: HSL(20, 3, 17),
+                page: HSL(20, 3, 19),
                 foreground: HSL(43, 59, 81),
                 card: HSL(20, 3, 17),
                 primary: HSL(43, 59, 81),
