@@ -216,14 +216,11 @@ private extension View {
             .padding(.vertical, 10)
             .foregroundStyle(.white)
             .background {
-                NowPlayingBackground()
-                    .mask(LinearGradient(
-                        stops: [.init(color: .black, location: 0.85), .init(color: .clear, location: 1)],
-                        startPoint: .top, endPoint: .bottom
-                    ))
+                NowPlayingBackground(showsVignette: false)
                     .padding(.horizontal, -20)
-                    .padding(.top, -20)
+                    .padding(.vertical, -10)
             }
+            .listRowBackground(NowPlayingBackground(showsVignette: false))
     }
 
     func queueHeaderRow() -> some View {
@@ -234,7 +231,7 @@ private extension View {
 }
 
 /// Shared titles for pinned history/upcoming headers and the user/context
-/// boundary. Pinned headers fade the same solid backdrop over the scrolling rows.
+/// boundary. Pinned headers use the same completely solid backdrop over the scrolling rows.
 private struct QueueSectionHeader<Actions: View>: View {
     let title: String
     var subtitle: String?

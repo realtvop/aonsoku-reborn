@@ -627,6 +627,7 @@ private struct DevicesButton: View {
 /// A very soft edge vignette keeps the surface from looking cut out, like
 /// Apple Music, without turning the whole page into a moving gradient.
 struct NowPlayingBackground: View {
+    var showsVignette = true
     @Environment(\.nowPlayingPalette) private var palette
     @Environment(SettingsStore.self) private var settings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -639,16 +640,18 @@ struct NowPlayingBackground: View {
                 Color(color)
                     .opacity(min(max(settings.settings.appearance.nowPlayingColorIntensity, 0), 1))
             }
-            GeometryReader { proxy in
-                RadialGradient(
-                    stops: [
-                        .init(color: .clear, location: 0.55),
-                        .init(color: .black.opacity(0.08), location: 1),
-                    ],
-                    center: .center,
-                    startRadius: 0,
-                    endRadius: max(proxy.size.width, proxy.size.height) * 0.72
-                )
+            if showsVignette {
+                GeometryReader { proxy in
+                    RadialGradient(
+                        stops: [
+                            .init(color: .clear, location: 0.55),
+                            .init(color: .black.opacity(0.08), location: 1),
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: max(proxy.size.width, proxy.size.height) * 0.72
+                    )
+                }
             }
         }
         .animation(reduceMotion ? .linear(duration: 0.15) : .smooth(duration: 1), value: palette)

@@ -135,7 +135,9 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   Full-screen pages and pinned queue headers share one solid background rule:
   the cover's RMS average color blended at the configured intensity over the
   selected dark theme background, matching the web player's color treatment
-  while retaining the native player's light controls. Palette changes crossfade;
+  while retaining the native player's light controls. Pinned queue headers use
+  this solid color without vignette or gradient masks, keeping the queue page
+  middle completely solid. Palette changes crossfade;
   only a very low-opacity edge vignette is layered over the solid color; no mesh
   gradient or continuous background animation runs.
   The system accessory reserves space and reports native geometry only.
