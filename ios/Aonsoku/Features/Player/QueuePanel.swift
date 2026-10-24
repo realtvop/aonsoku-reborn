@@ -5,12 +5,24 @@ import SwiftUI
 /// history, shuffle and repeat, the songs the user queued, then the rest
 /// of the album or playlist. Rows play on tap, move by dragging and leave
 /// with a swipe.
-struct QueuePanel: View {
+struct QueuePanel<CurrentMetadata: View>: View {
+    var isActive = true
+    var showsCurrentTrack = true
+    var currentHeaderHeight: CGFloat = 64
+    var onShowCover: () -> Void = {}
+    @ViewBuilder let currentMetadata: CurrentMetadata
+
     @Environment(PlayerStore.self) private var player
     @Environment(ListeningHistoryStore.self) private var history
     @Environment(Localizer.self) private var t
+    @Environment(PlayerPresentationState.self) private var presentation
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Scrolled to on appear, so the history stays above.
+    @State private var didPositionInitially = false
+    @State private var viewportHeight: CGFloat = 0
+    @State private var snapFeedback = 0
+
+    private let currentID = "current-track"
     private let modesID = "modes"
 
     var body: some View {
@@ -19,12 +31,6 @@ struct QueuePanel: View {
             List {
                 if !history.songs.isEmpty {
                     Section {
-                        QueueSectionHeader(title: t("fullscreen.queueHistory")) {
-                            Button(t("generic.clear")) {
-                                history.clear()
-                            }
-                        }
-                        .queueHeaderRow()
                         // Oldest first, ending right above what plays now.
                         ForEach(Array(history.songs.enumerated().reversed()), id: \.offset) { _, song in
                             QueueSongRow(song: song) {
@@ -32,24 +38,55 @@ struct QueuePanel: View {
                             }
                             .queueRow()
                         }
+                    } header: {
+                        QueueSectionHeader(title: t("fullscreen.queueHistory")) {
+                            Button(t("generic.clear")) { history.clear() }
+                        }
+                        .queuePinnedHeader()
+                    }
+                }
+
+                if showsCurrentTrack {
+                    Section {
+                        // Metadata belongs to the native row so drags on its
+                        // buttons still scroll the List. Artwork remains sole.
+                        HStack(spacing: 14) {
+                            Button(action: onShowCover) {
+                                Color.clear
+                                    .frame(width: 64, height: 64)
+                                    .contentShape(.rect)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(t("fullscreen.playing"))
+                            currentMetadata
+                        }
+                        .frame(height: currentHeaderHeight)
+                        .background {
+                            QueueHeaderTrackingReader(
+                                isActive: isActive && didPositionInitially,
+                                reduceMotion: reduceMotion,
+                                onLayout: { owner, frame, visible in
+                                    if let frame {
+                                        presentation.queueHeaderOwner = owner
+                                        presentation.queueHeaderFrame = frame
+                                        presentation.isQueueHeaderVisible = visible
+                                    } else if presentation.queueHeaderOwner == owner {
+                                        presentation.isQueueHeaderVisible = false
+                                    }
+                                },
+                                onSnap: { snapFeedback += 1 }
+                            )
+                            .allowsHitTesting(false)
+                        }
+                        .id(currentID)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 24, bottom: 8, trailing: 24))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                     }
                 }
 
                 Section {
-                    QueueModeButtons()
-                        .frame(maxWidth: .infinity)
-                        .id(modesID)
-                        .queueRow()
-                }
-
-                if !queue.userQueue.isEmpty {
-                    Section {
-                        QueueSectionHeader(title: t("fullscreen.queue")) {
-                            Button(t("generic.clear")) {
-                                player.remove(entries: queue.userQueue)
-                            }
-                        }
-                        .queueHeaderRow()
+                    if !queue.userQueue.isEmpty {
                         ForEach(queue.userQueue) { entry in
                             QueueSongRow(song: entry.song, isMovable: true) {
                                 player.play(entry: entry)
@@ -66,17 +103,14 @@ struct QueuePanel: View {
                             player.remove(entries: offsets.map { queue.userQueue[$0] })
                         }
                     }
-                }
-
-                if !queue.upNext.isEmpty {
-                    Section {
-                        QueueSectionHeader(
-                            title: t("fullscreen.queueContinue"),
-                            subtitle: queue.sourceName.map { t("fullscreen.queueFromSource", ["source": $0]) }
-                        ) {
-                            EmptyView()
+                    if !queue.upNext.isEmpty {
+                        if !queue.userQueue.isEmpty {
+                            QueueSectionHeader(
+                                title: t("fullscreen.queueContinue"),
+                                subtitle: queue.sourceName.map { t("fullscreen.queueFromSource", ["source": $0]) }
+                            ) { EmptyView() }
+                                .queueHeaderRow()
                         }
-                        .queueHeaderRow()
                         ForEach(queue.upNext) { entry in
                             QueueSongRow(song: entry.song, isMovable: true) {
                                 player.play(entry: entry)
@@ -93,9 +127,6 @@ struct QueuePanel: View {
                             player.remove(entries: offsets.map { queue.upNext[$0] })
                         }
                     }
-                }
-
-                Section {
                     if queue.remainingCount == 0 {
                         Text(t("fullscreen.emptyQueue"))
                             .font(.footnote)
@@ -114,14 +145,60 @@ struct QueuePanel: View {
                         QueueModeNote(title: t("fullscreen.queueShuffling"), systemImage: "shuffle")
                             .queueRow()
                     }
+                    // Even an empty/short queue can rest at the current-song
+                    // boundary instead of exposing history on initial entry.
+                    if showsCurrentTrack {
+                        Color.clear
+                            .frame(height: max(
+                                viewportHeight - currentHeaderHeight - 16 - 80
+                                    - CGFloat(queue.remainingCount) * 56, 0
+                            ))
+                            .listRowInsets(EdgeInsets())
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .accessibilityHidden(true)
+                    }
+                } header: {
+                    VStack(alignment: .leading, spacing: 12) {
+                        QueueModeButtons()
+                            .frame(maxWidth: .infinity)
+                            .id(modesID)
+                        QueueSectionHeader(
+                            title: t(queue.userQueue.isEmpty ? "fullscreen.queueContinue" : "fullscreen.queue"),
+                            subtitle: queue.userQueue.isEmpty
+                                ? queue.sourceName.map { t("fullscreen.queueFromSource", ["source": $0]) } : nil
+                        ) {
+                            if !queue.userQueue.isEmpty {
+                                Button(t("generic.clear")) { player.remove(entries: queue.userQueue) }
+                            }
+                        }
+                    }
+                    .queuePinnedHeader()
                 }
             }
             .listStyle(.plain)
+            .listSectionSpacing(0)
+            .contentMargins(.vertical, 0, for: .scrollContent)
             .scrollContentBackground(.hidden)
             .scrollIndicators(.hidden)
+            .scrollBounceBehavior(.always)
             .mask(EdgeFade(length: 20))
-            .onAppear {
-                proxy.scrollTo(modesID, anchor: .top)
+            .onGeometryChange(for: CGRect.self) {
+                $0.frame(in: .named(PlayerArtworkLocation.coordinateSpace))
+            } action: { frame in
+                viewportHeight = frame.height
+                if showsCurrentTrack { presentation.queueViewportFrame = frame }
+            }
+            .haptic(.selection, trigger: snapFeedback)
+            .task(id: isActive) {
+                guard isActive, !didPositionInitially else { return }
+                await Task.yield()
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    proxy.scrollTo(showsCurrentTrack ? currentID : modesID, anchor: .top)
+                }
+                didPositionInitially = true
             }
         }
     }
@@ -130,8 +207,24 @@ struct QueuePanel: View {
 private extension View {
     func queueRow() -> some View {
         listRowBackground(Color.clear)
-            .listRowSeparatorTint(.white.opacity(0.1))
+            .listRowSeparator(.hidden)
             .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
+    }
+
+    func queuePinnedHeader() -> some View {
+        textCase(nil)
+            .padding(.vertical, 10)
+            .foregroundStyle(.white)
+            .background {
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                    .mask(LinearGradient(
+                        stops: [.init(color: .black, location: 0.85), .init(color: .clear, location: 1)],
+                        startPoint: .top, endPoint: .bottom
+                    ))
+                    .padding(.horizontal, -20)
+                    .padding(.top, -20)
+            }
     }
 
     func queueHeaderRow() -> some View {
@@ -141,9 +234,8 @@ private extension View {
     }
 }
 
-/// A section's title, as the section's first row rather than a plain
-/// list's pinned header: pinned headers have no background over the
-/// artwork colors, so the rows scrolling under them showed through.
+/// Shared titles for pinned history/upcoming headers and the user/context
+/// boundary. Pinned headers supply their own fading material backdrop.
 private struct QueueSectionHeader<Actions: View>: View {
     let title: String
     var subtitle: String?
@@ -251,9 +343,13 @@ private struct QueueModeToggle: View {
     let isOn: Bool
     let hint: String
     let action: () -> Void
+    @State private var feedback = 0
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            feedback += 1
+            action()
+        } label: {
             Label(title, systemImage: systemImage)
                 .font(.subheadline.weight(.semibold))
                 .contentTransition(.symbolEffect(.replace))
@@ -268,6 +364,7 @@ private struct QueueModeToggle: View {
         .accessibilityAddTraits(isOn ? .isSelected : [])
         .accessibilityHint(hint)
         .animation(.smooth(duration: 0.25), value: isOn)
+        .haptic(.selection, trigger: feedback)
     }
 }
 

@@ -103,7 +103,10 @@ struct PlayerDismissGesture: UIGestureRecognizerRepresentable {
             }
             let velocity = pan.velocity(in: pan.view?.window)
             guard velocity.y > abs(velocity.x) else { return false }
-            // A scrolled lyrics/queue list scrolls back to its top first.
+            if scrollView != nil, presentation.queueOwnsScrollGestures {
+                return false
+            }
+            // A scrolled lyrics list scrolls back to its top first.
             if let scrollView, scrollView.contentOffset.y > -scrollView.adjustedContentInset.top + 1 {
                 return false
             }

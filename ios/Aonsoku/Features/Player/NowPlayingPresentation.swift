@@ -15,12 +15,18 @@ final class PlayerPresentationState {
     var artworkFrames: [PlayerArtworkLocation: PlayerArtworkFrame] = [:]
     var sliderFrames: [PlayerSliderRegion: CGRect] = [:]
     var arePlaybackControlsVisible = true
+    var queueOwnsScrollGestures = false
+    var queueHeaderFrame: CGRect?
+    var queueHeaderOwner: UUID?
+    var queueViewportFrame: CGRect?
+    var isQueueHeaderVisible = true
     var accessory: PlayerAccessoryLayout?
 }
 
 nonisolated enum PlayerArtworkLocation: Hashable {
     case cover
     case header
+    case queue
 
     static let coordinateSpace = "nowPlayingArtwork"
     static let containerCoordinateSpace = "playerContainer"
@@ -367,14 +373,43 @@ private struct NowPlayingPresentation: ViewModifier {
             .position(x: geometry?.rect.midX ?? 0, y: geometry?.rect.midY ?? 0)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
+            .mask {
+                if router.isNowPlayingPresented, presentation.artworkLocation == .queue,
+                   let viewport = presentation.queueViewportFrame {
+                    EdgeFade(length: 20)
+                        .frame(width: viewport.width, height: viewport.height)
+                        .position(x: viewport.midX, y: viewport.midY + presentation.dragOffset)
+                } else {
+                    Rectangle()
+                }
+            }
+            .opacity(
+                presentation.artworkLocation == .queue && router.isNowPlayingPresented
+                    && !presentation.isQueueHeaderVisible ? 0 : 1
+            )
             .animation(presentationAnimation, value: presentation.artworkLocation)
             .animation(presentationAnimation, value: presentation.artworkFrames[.cover])
             .animation(presentationAnimation, value: presentation.artworkFrames[.header])
     }
 
     private func artworkFrame(in proxy: GeometryProxy) -> PlayerArtworkFrame? {
+        if router.isNowPlayingPresented, presentation.artworkLocation == .queue,
+           let header = presentation.queueHeaderFrame,
+           let viewport = presentation.queueViewportFrame {
+            return PlayerArtworkFrame(
+                rect: CGRect(
+                    x: viewport.minX + header.minX,
+                    y: viewport.minY + header.midY - 32 + presentation.dragOffset,
+                    width: 64, height: 64
+                ),
+                cornerRadius: 8,
+                shadowRadius: 10
+            )
+        }
         guard router.isNowPlayingPresented,
-              var expanded = presentation.artworkFrames[presentation.artworkLocation] else {
+              var expanded = presentation.artworkFrames[
+                  presentation.artworkLocation == .queue ? .header : presentation.artworkLocation
+              ] else {
             let accessory = accessoryFrame(in: proxy)
             let progress = presentation.accessory?.compactProgress ?? 0
             let side: CGFloat = 34 - 8 * progress

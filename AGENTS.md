@@ -145,7 +145,8 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   Interactive expansion/collapse changes only its Y offset at
   the full viewport width. Downward pans start anywhere on the surface
   except the progress/volume slider touch targets; horizontal pans do not
-  dismiss it. Lyrics/queue lists scroll back to their top before dismissal.
+  dismiss it. Lyrics scroll back to their top before dismissal; the queue
+  keeps its own history/upcoming scroll gestures and dismisses via the grabber.
   Full-screen progress and volume use the app target's pinned
   `realtvop/slidercontrol` Swift package (`SliderControlView`). Progress uses
   `.progress` and seeks on release; volume uses `.volume`, including inertia
@@ -163,8 +164,9 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   the whole expanded container. The same mask encloses background, controls
   and artwork throughout, without recreating the image reader.
   The same host renders one persistent `PlayerArtwork` at large resolution.
-  The main player, lyrics and queue headers contain only `PlayerArtworkSlot`
-  layout markers; the compact cover destination is derived directly from
+  The main player and lyrics header contain only `PlayerArtworkSlot` layout
+  markers; the queue uses `QueueHeaderTrackingReader` for its native row.
+  The compact cover destination is derived directly from
   the stationary native accessory. Keep its last valid frame while native
   accessory hosts are recycled, so a closing player cannot lose its target.
   Only the artwork shares geometry between layouts. Full and compact
@@ -174,10 +176,10 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   The markers drive the image's position, size, corner radius and shadow,
   including paused scaling and interactive collapse; never add separate
   current-track images to them.
-  Full-screen cover, lyrics and queue transitions keep one metadata row and
-  one compact transport/slider layout (`TransportControls(scale: 0.85)` with
+  Full-screen layouts share one compact transport/slider layout
+  (`TransportControls(scale: 0.85)` with
   6pt vertical transport padding) across all pages. On compact layouts,
-  `PlayerContentLayout` positions the metadata and both persistent artwork
+  `PlayerContentLayout` positions the cover/lyrics metadata and both persistent artwork
   markers above those controls; the
   sole artwork and metadata use the same zero-bounce panel animation.
   Metadata fades during travel and panel content reveals as the cover settles,
@@ -192,6 +194,18 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   resize callbacks do not toggle the footer. The footer stays mounted to retain
   slider state, with hit testing and accessibility disabled while collapsed.
   Collapsed sliders also stop excluding touches from the player dismiss pan.
+  The compact queue is one native `List`: history, a current-track metadata
+  row with an artwork layout marker, then the upcoming section with pinned
+  mode/title controls. Cover/lyrics metadata leaves the view tree while the
+  queue owns that row, so native scrolling also starts on its buttons. The sole
+  artwork follows the marker's native scroll frame via a passive `UIUpdateLink`
+  during dragging and deceleration; no second current-track image is created.
+  `QueueHeaderTrackingReader` observes the existing pan without replacing its
+  delegate, attracts slow/settled releases within 44pt of the current/upcoming
+  boundary, and retains native rubber banding, row moves and swipe deletion.
+  Snap/mode-button selection feedback uses the shared `haptic` modifier and
+  respects the playback haptics setting. Queue list pans stay within the list;
+  the grabber still dismisses the player.
 - Android native pages use the application-scoped
   `github.realtvop.aonsoku.plugins.data.LibraryService` for Room queries,
   metadata sync, lyrics, and image-cache ownership. It is created with the

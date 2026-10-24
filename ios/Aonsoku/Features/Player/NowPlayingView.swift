@@ -16,6 +16,7 @@ struct NowPlayingView: View {
     @State private var loadedPanels: Set<Panel> = []
     @State private var lyricsControlsHidden = false
     @State private var bottomControlsHeight: CGFloat?
+    @State private var metadataHeight: CGFloat = 64
 
     @Environment(PlayerStore.self) private var player
     @Environment(LyricsStore.self) private var lyrics
@@ -40,9 +41,9 @@ struct NowPlayingView: View {
             }
             .animation(panelAnimation, value: panel)
             .animation(panelAnimation, value: bottomControlsHidden)
-            .onChange(of: isWide || panel == nil, initial: true) { _, usesLargeCover in
+            .onChange(of: artworkLocation(isWide: isWide), initial: true) { _, location in
                 withAnimation(panelAnimation) {
-                    presentation.artworkLocation = usesLargeCover ? .cover : .header
+                    presentation.artworkLocation = location
                 }
             }
         }
@@ -69,6 +70,9 @@ struct NowPlayingView: View {
         .onChange(of: bottomControlsHidden, initial: true) {
             presentation.arePlaybackControlsVisible = !bottomControlsHidden
         }
+        .onChange(of: panel == .queue && router.isNowPlayingPresented, initial: true) {
+            presentation.queueOwnsScrollGestures = panel == .queue && router.isNowPlayingPresented
+        }
         .accessibilityAction(.escape) {
             router.isNowPlayingPresented = false
         }
@@ -81,19 +85,29 @@ struct NowPlayingView: View {
         VStack(spacing: 0) {
             grabber
             statusCapsules
-            PlayerContentLayout(showsPanel: panel != nil) {
+            PlayerContentLayout(showsPanel: panel != nil, showsQueue: panel == .queue) {
                 largeArtwork
                 headerArtwork
-                    .opacity(panel == nil ? 0 : 1)
-                    .allowsHitTesting(panel != nil)
-                    .accessibilityHidden(panel == nil)
-                titleRow
-                    .modifier(PlayerPanelTransition(
-                        progress: panel == nil ? 0 : 1, element: .metadata, reduceMotion: reduceMotion
-                    ))
-                panels
+                    .opacity(panel == .lyrics ? 1 : 0)
+                    .allowsHitTesting(panel == .lyrics)
+                    .accessibilityHidden(panel != .lyrics)
+                Color.clear
+                    .frame(height: metadataHeight)
+                    .overlay {
+                        if panel != .queue {
+                            measuredTitleRow
+                                .modifier(PlayerPanelTransition(
+                                    progress: panel == nil ? 0 : 1, element: .metadata, reduceMotion: reduceMotion
+                                ))
+                                .transition(.opacity.animation(.easeOut(duration: reduceMotion ? 0.15 : 0.08)))
+                        }
+                    }
+                    .allowsHitTesting(panel != .queue)
+                    .accessibilityHidden(panel == .queue)
+                panels(showsQueueHeader: true)
             }
             .frame(maxHeight: .infinity)
+            .clipped()
             bottomControls
         }
     }
@@ -111,7 +125,7 @@ struct NowPlayingView: View {
             }
             .frame(maxWidth: 500)
             if panel != nil {
-                panels
+                panels(showsQueueHeader: false)
                     .frame(maxWidth: 620, maxHeight: .infinity)
                     .padding(.vertical, 40)
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .trailing)))
@@ -125,6 +139,11 @@ struct NowPlayingView: View {
 
     private var panelAnimation: Animation {
         PlayerPresentationState.panelAnimation(reduceMotion: reduceMotion)
+    }
+
+    private func artworkLocation(isWide: Bool) -> PlayerArtworkLocation {
+        if isWide || panel == nil { return .cover }
+        return panel == .queue ? .queue : .header
     }
 
     private var grabber: some View {
@@ -185,6 +204,12 @@ struct NowPlayingView: View {
             Spacer(minLength: 0)
             songButtons
         }
+    }
+
+    private var measuredTitleRow: some View {
+        titleRow
+            .fixedSize(horizontal: false, vertical: true)
+            .onGeometryChange(for: CGFloat.self, of: \.size.height) { metadataHeight = $0 }
     }
 
     private var headerArtwork: some View {
@@ -295,7 +320,7 @@ struct NowPlayingView: View {
 
     /// Keep visited pages mounted so switching preserves scroll position.
     /// The header and transport stay outside this crossfade.
-    private var panels: some View {
+    private func panels(showsQueueHeader: Bool) -> some View {
         ZStack {
             if loadedPanels.contains(.lyrics) {
                 LyricsPanel(isActive: panel == .lyrics && router.isNowPlayingPresented) { hidden in
@@ -306,7 +331,12 @@ struct NowPlayingView: View {
                     .accessibilityHidden(panel != .lyrics)
             }
             if loadedPanels.contains(.queue) {
-                QueuePanel()
+                QueuePanel(
+                    isActive: panel == .queue && router.isNowPlayingPresented,
+                    showsCurrentTrack: showsQueueHeader,
+                    currentHeaderHeight: max(64, metadataHeight),
+                    onShowCover: { panel = nil }
+                ) { measuredTitleRow }
                     .opacity(panel == .queue ? 1 : 0)
                     .allowsHitTesting(panel == .queue)
                     .accessibilityHidden(panel != .queue)
@@ -355,6 +385,7 @@ private struct PlayerPanelTransition: AnimatableModifier {
 /// exist, and the same metadata row moves between them; controls never reflow.
 private struct PlayerContentLayout: SwiftUI.Layout {
     var showsPanel: Bool
+    var showsQueue: Bool
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         proposal.replacingUnspecifiedDimensions()
@@ -367,7 +398,7 @@ private struct PlayerContentLayout: SwiftUI.Layout {
         let titleWidth = max(bounds.width - leading - trailing, 0)
         let titleSize = subviews[2].sizeThatFits(ProposedViewSize(width: titleWidth, height: nil))
         let headerHeight = max(64, titleSize.height)
-        let panelTop = headerHeight + 16
+        let panelTop = showsQueue ? 0 : headerHeight + 16
         let coverHeight = max(bounds.height - titleSize.height - 24, 0)
         let coverSide = max(min(bounds.width - 60, coverHeight), 0)
 
@@ -382,7 +413,8 @@ private struct PlayerContentLayout: SwiftUI.Layout {
         subviews[2].place(
             at: CGPoint(
                 x: bounds.minX + leading,
-                y: showsPanel ? bounds.minY + 8 + (headerHeight - titleSize.height) / 2 : bounds.maxY - titleSize.height
+                y: showsPanel ? bounds.minY + 8 + (headerHeight - titleSize.height) / 2
+                    : bounds.maxY - titleSize.height
             ),
             proposal: ProposedViewSize(width: titleWidth, height: titleSize.height)
         )
