@@ -1,9 +1,10 @@
 import AonsokuKit
 import SwiftUI
 
-/// An album, laid out like Apple Music's album page: the cover and title
-/// over the cover's glow, Play and Shuffle, the notes, the tracks by disc,
-/// the release details, then more albums by the artist and in the genre.
+/// An album, laid out like the web's album page: the cover and title over
+/// a band of the cover's color, Shuffle, Play and the heart, the notes, the
+/// tracks by disc, the release details, then more albums by the artist and
+/// in the genre.
 struct AlbumDetailView: View {
     let albumId: String
     /// What the link already knew, shown while the album loads.
@@ -50,6 +51,9 @@ struct AlbumDetailView: View {
             if let album {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     header(album)
+                    playButtons(album)
+                        .pageMargins()
+                        .padding(.top, 16)
                     if let notes = extras?.notes {
                         AboutCard(
                             title: t("album.info.about", ["name": album.name]),
@@ -85,11 +89,10 @@ struct AlbumDetailView: View {
             }
         }
         .artworkPalette(album?.coverArt, into: $palette)
-        .artworkGlowBackground(palette)
-        .scrollRevealedTitle(album?.name ?? "", threshold: sizeClass == .regular ? 220 : 330)
+        .themedBackground()
+        .scrollRevealedTitle(album?.name ?? "", threshold: sizeClass == .regular ? 200 : 290)
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                FavoriteToolbarButton(kind: .album, id: albumId)
+            ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     if let album {
                         AlbumMenuItems(album: album)
@@ -116,60 +119,29 @@ struct AlbumDetailView: View {
 
     // MARK: - Header
 
-    @ViewBuilder
     private func header(_ album: Album) -> some View {
-        if sizeClass == .regular {
-            HStack(alignment: .bottom, spacing: 28) {
-                cover(album)
-                    .frame(width: 260)
-                VStack(alignment: .leading, spacing: 4) {
-                    titles(album, font: .title.bold())
-                    playButtons(album)
-                        .frame(maxWidth: 340)
-                        .padding(.top, 18)
+        DetailHeader(
+            kind: t("album.headline"),
+            title: album.name,
+            metadata: metadata(album),
+            palette: palette
+        ) {
+            ArtworkImage(id: album.coverArt, size: .large, cornerRadius: Layout.artworkRadius)
+        } subtitle: {
+            HStack(spacing: 6) {
+                artistLink(album)
+                    .font(.callout.weight(.semibold))
+                    .lineLimit(2)
+                if album.explicitStatus == .explicit {
+                    ExplicitBadge()
                 }
-                Spacer(minLength: 0)
+                AlbumCacheBadge(albumId: album.id)
             }
-            .pageMargins()
-            .padding(.top, 12)
-        } else {
-            VStack(spacing: 0) {
-                cover(album)
-                    .frame(maxWidth: 290)
-                    .padding(.horizontal, 24)
-                VStack(spacing: 4) {
-                    titles(album, font: .title2.bold())
-                }
-                .multilineTextAlignment(.center)
-                .padding(.top, 18)
-                playButtons(album)
-                    .padding(.top, 18)
-            }
-            .frame(maxWidth: .infinity)
-            .pageMargins()
-            .padding(.top, 8)
         }
     }
 
-    private func cover(_ album: Album) -> some View {
-        ArtworkImage(id: album.coverArt, size: .large, cornerRadius: 10)
-            .shadow(color: .black.opacity(0.22), radius: 20, y: 10)
-    }
-
-    @ViewBuilder
-    private func titles(_ album: Album, font: Font) -> some View {
-        Text(album.name)
-            .font(font)
-            .lineLimit(3)
-        artistLink(album)
-            .font(.title3)
-            .lineLimit(2)
-        details(album)
-            .padding(.top, 2)
-    }
-
-    /// The artist in the tint color, linking to their page; a menu of them
-    /// when the album credits several.
+    /// The artist, linking to their page; a menu of them when the album
+    /// credits several.
     @ViewBuilder
     private func artistLink(_ album: Album) -> some View {
         let credits = album.creditedArtists.filter { $0.id?.isEmpty == false }
@@ -183,50 +155,47 @@ struct AlbumDetailView: View {
             } label: {
                 Text(album.artistLine)
             }
-            .foregroundStyle(.tint)
         } else if let credit = credits.first, let id = credit.id {
             NavigationLink(value: AppRoute.artist(id: id, name: credit.name)) {
                 Text(album.artistLine)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.tint)
         } else {
             Text(album.artistLine)
-                .foregroundStyle(.secondary)
+                .opacity(0.8)
         }
     }
 
-    /// "ROCK · 2021", with the explicit and download badges. The genre
+    /// "2021 · Rock · 12 songs · 45 min", the web's header badges. The genre
     /// links to its albums.
-    private func details(_ album: Album) -> some View {
-        HStack(spacing: 5) {
-            if let genre = album.primaryGenre {
-                NavigationLink(value: AppRoute.albums(.byGenre(genre))) {
-                    Text(genre.uppercased(with: locale))
-                }
-                .buttonStyle(.plain)
-            }
-            if let year = album.year, year > 0 {
-                if album.primaryGenre != nil {
-                    Text(verbatim: "·")
-                }
-                Text(verbatim: String(year))
-            }
-            if album.explicitStatus == .explicit {
-                ExplicitBadge()
-            }
-            AlbumCacheBadge(albumId: album.id)
+    private func metadata(_ album: Album) -> [MetadataItem] {
+        var items: [MetadataItem] = []
+        if let year = album.year, year > 0 {
+            items.append(MetadataItem(text: String(year)))
         }
-        .font(.footnote.weight(.semibold))
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
+        if let genre = album.primaryGenre {
+            items.append(MetadataItem(text: genre, route: .albums(.byGenre(genre))))
+        }
+        let count = max(album.songCount, songs.count)
+        if count > 0 {
+            items.append(MetadataItem(text: t("playlist.songCount", count: count)))
+        }
+        if album.duration > 0 {
+            items.append(MetadataItem(text: Formatters.totalDuration(album.duration, locale: locale)))
+        }
+        return items
     }
 
     private func playButtons(_ album: Album) -> some View {
-        PlayShuffleButtons(canShuffle: songs.count > 1) {
+        PlayShuffleButtons(
+            canShuffle: songs.count > 1,
+            alignment: sizeClass == .regular ? .leading : .center
+        ) {
             play(album, shuffle: false)
         } shuffle: {
             play(album, shuffle: true)
+        } trailing: {
+            FavoriteRoundButton(kind: .album, id: album.id)
         }
         .disabled(songs.isEmpty)
     }
@@ -262,14 +231,10 @@ struct AlbumDetailView: View {
                     ) {
                         play(album, startingAt: track.index, shuffle: false)
                     }
-                    .padding(.vertical, 5)
+                    .frame(minHeight: 48)
+                    .padding(.vertical, 2)
                     .padding(.leading, margin)
                     .padding(.trailing, margin - 8)
-                    if track.id != disc.tracks.last?.id {
-                        // Starts under the title, past the track number.
-                        Divider()
-                            .padding(.leading, margin + 38)
-                    }
                 }
             }
         } else if detail == nil {
@@ -293,8 +258,11 @@ struct AlbumDetailView: View {
         }
     }
 
+    /// The web's disc divider: a disc symbol and "Disc 2 · Title".
     private func discHeader(_ disc: Disc) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
+            Image(systemName: "opticaldisc")
+                .frame(width: 26)
             Text(t("album.table.discNumber", ["number": String(disc.number)]))
             if let title = disc.title {
                 Text(verbatim: "·")
@@ -302,8 +270,8 @@ struct AlbumDetailView: View {
                     .lineLimit(1)
             }
         }
-        .font(.subheadline.weight(.semibold))
-        .foregroundStyle(.secondary)
+        .font(.subheadline.weight(.medium))
+        .foregroundStyle(ThemeColor.mutedForeground)
         .padding(.top, disc.id == 0 ? 0 : 22)
         .padding(.bottom, 4)
         .pageMargins()
@@ -338,7 +306,7 @@ struct AlbumDetailView: View {
             }
         }
         .font(.footnote)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(ThemeColor.mutedForeground)
         .frame(maxWidth: .infinity, alignment: .leading)
         .pageMargins()
     }
@@ -361,8 +329,8 @@ struct AlbumDetailView: View {
 
     // MARK: - Shelves
 
-    /// More by the artist and more in the genre, on a band like the one
-    /// at the end of Apple Music's album pages.
+    /// More by the artist and more in the genre, like the preview lists at
+    /// the end of the web's album page.
     @ViewBuilder
     private func shelves(_ album: Album) -> some View {
         if let extras, !extras.moreByArtist.isEmpty || !extras.moreInGenre.isEmpty {
@@ -371,6 +339,7 @@ struct AlbumDetailView: View {
                     shelf(
                         title: t("album.more.listTitle"),
                         route: .albums(.discography(artistId: artistId)),
+                        moreTitle: t("album.more.discography"),
                         albums: extras.moreByArtist,
                         caption: .year
                     )
@@ -384,20 +353,19 @@ struct AlbumDetailView: View {
                     )
                 }
             }
-            .padding(.vertical, 24)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.fill.quinary)
         }
     }
 
     private func shelf(
         title: String,
         route: AppRoute,
+        moreTitle: String? = nil,
         albums: [Album],
         caption: AlbumTile.Caption
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: title, route: route)
+            SectionHeader(title: title, route: route, moreTitle: moreTitle)
                 .pageMargins()
             AlbumShelf(albums: albums, caption: caption)
         }

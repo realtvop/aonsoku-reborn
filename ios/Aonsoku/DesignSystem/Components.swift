@@ -854,6 +854,8 @@ extension View {
 struct PlayShuffleButtons<Trailing: View>: View {
     /// False for a single song, which has nothing to shuffle.
     var canShuffle = true
+    /// Centered on a phone; leading under an iPad header.
+    var alignment: Alignment = .center
     let play: () -> Void
     let shuffle: () -> Void
     @ViewBuilder var trailing: Trailing
@@ -867,13 +869,18 @@ struct PlayShuffleButtons<Trailing: View>: View {
             PlayButton(label: t("options.play"), action: play)
             trailing
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: alignment)
     }
 }
 
 extension PlayShuffleButtons where Trailing == EmptyView {
-    init(canShuffle: Bool = true, play: @escaping () -> Void, shuffle: @escaping () -> Void) {
-        self.init(canShuffle: canShuffle, play: play, shuffle: shuffle) {
+    init(
+        canShuffle: Bool = true,
+        alignment: Alignment = .center,
+        play: @escaping () -> Void,
+        shuffle: @escaping () -> Void
+    ) {
+        self.init(canShuffle: canShuffle, alignment: alignment, play: play, shuffle: shuffle) {
             EmptyView()
         }
     }

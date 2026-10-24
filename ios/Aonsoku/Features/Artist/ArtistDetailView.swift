@@ -1,9 +1,10 @@
 import AonsokuKit
 import SwiftUI
 
-/// An artist, laid out like Apple Music's artist page: the portrait across
-/// the top with the name and Play over it, then the latest release, the top
-/// songs, the albums, the biography and similar artists.
+/// An artist, laid out like the web's artist page: the portrait and name
+/// over a band of the portrait's color, Shuffle, Play and the heart, then
+/// the latest release, the top songs, the albums, the biography and similar
+/// artists.
 struct ArtistDetailView: View {
     let artistId: String
     /// The name from the link, shown while the artist loads.
@@ -13,17 +14,13 @@ struct ArtistDetailView: View {
     @State private var phase = LoadPhase.idle
     @State private var loadedRevision: Int?
     @State private var extras: Extras?
-    @State private var heroHeight: CGFloat = 420
-    @State private var isPastHero = false
-
-    @ScaledMetric(relativeTo: .largeTitle) private var nameSize: CGFloat = 34
+    @State private var palette: ArtworkPalette?
 
     @Environment(AppModel.self) private var app
     @Environment(LibrarySyncStore.self) private var sync
     @Environment(NetworkMonitor.self) private var network
     @Environment(PlayerStore.self) private var player
     @Environment(Localizer.self) private var t
-    @Environment(\.themeContext) private var theme
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     init(artistId: String, name: String) {
@@ -67,15 +64,16 @@ struct ArtistDetailView: View {
         .albums(.discography(artistId: artistId))
     }
 
-    /// How far the page scrolls before the name passes under the bar.
-    private var titleThreshold: CGFloat {
-        heroHeight - 120
-    }
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                hero
+                header
+                if albumCount > 0 {
+                    playButtons
+                        .pageMargins()
+                        .padding(.top, 16)
+                        .transition(.opacity)
+                }
                 if detail != nil {
                     sections
                         .padding(.vertical, 24)
@@ -83,20 +81,13 @@ struct ArtistDetailView: View {
                     placeholder
                 }
             }
+            .animation(.smooth, value: albumCount > 0)
         }
-        // The portrait runs under the status and navigation bars.
-        .ignoresSafeArea(edges: .top)
-        .scrollEdgeEffectHidden(!isPastHero, for: .top)
-        .onScrollGeometryChange(for: Bool.self) { geometry in
-            geometry.contentOffset.y + geometry.contentInsets.top > titleThreshold
-        } action: { _, isPast in
-            isPastHero = isPast
-        }
-        .scrollRevealedTitle(artistName, threshold: titleThreshold)
+        .artworkPalette(artist?.coverArt, into: $palette)
         .themedBackground()
+        .scrollRevealedTitle(artistName, threshold: sizeClass == .regular ? 200 : 290)
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                FavoriteToolbarButton(kind: .artist, id: artistId)
+            ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     if let artist {
                         ArtistMenuItems(artist: artist)
@@ -116,131 +107,42 @@ struct ArtistDetailView: View {
         }
     }
 
-    // MARK: - Hero
+    // MARK: - Header
 
-    /// The portrait with the name and the play buttons over its lower edge.
-    /// Pulling the page down stretches it.
-    private var hero: some View {
-        ZStack(alignment: .bottomLeading) {
-            heroArtwork
-            heroCaption
+    /// The round portrait, the name and the counts.
+    private var header: some View {
+        DetailHeader(
+            kind: t("artist.headline"),
+            title: artistName,
+            metadata: stats,
+            palette: palette
+        ) {
+            ArtworkImage(id: artist?.coverArt, size: .large, isCircular: true, placeholder: "music.mic")
+        } subtitle: {
+            EmptyView()
         }
-        .frame(maxWidth: .infinity)
-        .containerRelativeFrame(.vertical) { height, _ in
-            min(max(height * 0.55, 300), 520)
-        }
-        .onGeometryChange(for: CGFloat.self) { proxy in
-            proxy.size.height
-        } action: { height in
-            heroHeight = height
-        }
-    }
-
-    private var heroArtwork: some View {
-        ZStack {
-            LinearGradient(
-                colors: [Color(white: 0.5), Color(white: 0.24)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            Image(systemName: "music.mic")
-                .font(.system(size: 64, weight: .light))
-                .foregroundStyle(.white.opacity(0.3))
-            ArtworkBackdrop(id: artist?.coverArt, size: .large, focus: UnitPoint(x: 0.5, y: 0.3))
-        }
-        .overlay {
-            // Keeps the white name legible on light portraits.
-            LinearGradient(
-                stops: [
-                    .init(color: .clear, location: 0.4),
-                    .init(color: .black.opacity(0.6), location: 1),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        }
-        .visualEffect { content, proxy in
-            // Grows from the bottom edge into the gap above it.
-            let pull = proxy.frame(in: .scrollView(axis: .vertical)).minY
-            let height = max(proxy.size.height, 1)
-            return content.scaleEffect(pull > 0 ? 1 + pull / height : 1, anchor: .bottom)
-        }
-        .accessibilityHidden(true)
-    }
-
-    private var heroCaption: some View {
-        HStack(alignment: .bottom, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(artistName)
-                    .font(.system(
-                        size: sizeClass == .regular ? nameSize * 1.4 : nameSize,
-                        weight: .bold
-                    ))
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.5)
-                    .accessibilityAddTraits(.isHeader)
-                if albumCount > 0 {
-                    stats
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .shadow(color: .black.opacity(0.25), radius: 10, y: 2)
-            if albumCount > 0 {
-                playButtons
-                    .transition(.opacity.combined(with: .scale(scale: 0.8)))
-            }
-        }
-        .foregroundStyle(.white)
-        .environment(\.colorScheme, .dark)
-        .pageMargins()
-        .padding(.bottom, 20)
-        .animation(.smooth, value: albumCount > 0)
     }
 
     /// "12 albums · 148 songs", linking to the discography and the songs.
-    private var stats: some View {
-        HStack(spacing: 6) {
-            NavigationLink(value: discographyRoute) {
-                Text(t("artist.info.albumsCount", count: albumCount))
-            }
-            if songCount > 0 {
-                Text(verbatim: "·")
-                NavigationLink(value: songsRoute) {
-                    Text(t("playlist.songCount", count: songCount))
-                }
-            }
+    private var stats: [MetadataItem] {
+        var items: [MetadataItem] = []
+        if albumCount > 0 {
+            items.append(MetadataItem(text: t("artist.info.albumsCount", count: albumCount), route: discographyRoute))
         }
-        .buttonStyle(.plain)
-        .font(.subheadline.weight(.semibold))
-        .foregroundStyle(.white.opacity(0.85))
-        .lineLimit(1)
+        if songCount > 0 {
+            items.append(MetadataItem(text: t("playlist.songCount", count: songCount), route: songsRoute))
+        }
+        return items
     }
 
     private var playButtons: some View {
-        HStack(spacing: 12) {
-            Button {
-                play(shuffle: true)
-            } label: {
-                Image(systemName: "shuffle")
-                    .font(.title3.weight(.semibold))
-                    .frame(width: 30, height: 30)
-            }
-            .buttonStyle(.glass)
-            .accessibilityLabel(t("playlist.buttons.shuffle", ["name": artistName]))
-            Button {
-                play(shuffle: false)
-            } label: {
-                Image(systemName: "play.fill")
-                    .font(.title3)
-                    .frame(width: 30, height: 30)
-                    // Themes with a white accent need a dark symbol.
-                    .foregroundStyle(theme.palette.primaryForeground)
-            }
-            .buttonStyle(.glassProminent)
-            .accessibilityLabel(t("playlist.buttons.play", ["name": artistName]))
+        PlayShuffleButtons(alignment: sizeClass == .regular ? .leading : .center) {
+            play(shuffle: false)
+        } shuffle: {
+            play(shuffle: true)
+        } trailing: {
+            FavoriteRoundButton(kind: .artist, id: artistId)
         }
-        .buttonBorderShape(.circle)
-        .controlSize(.large)
     }
 
     /// Every song by the artist, like the web artist buttons.
@@ -254,6 +156,9 @@ struct ArtistDetailView: View {
         VStack(alignment: .leading, spacing: Layout.sectionSpacing) {
             if let latest = latestRelease {
                 LatestReleaseCard(album: latest)
+                    .padding(12)
+                    .frame(maxWidth: 560, alignment: .leading)
+                    .cardSurface()
                     .pageMargins()
             }
             if let topSongs = extras?.topSongs, !topSongs.isEmpty {
@@ -269,7 +174,7 @@ struct ArtistDetailView: View {
                 }
             }
             if !albums.isEmpty {
-                section(t("artist.recentAlbums"), route: discographyRoute) {
+                section(t("artist.recentAlbums"), route: discographyRoute, moreTitle: t("album.more.discography")) {
                     AlbumShelf(albums: Array(albums.prefix(20)), caption: .year)
                 }
             }
@@ -294,10 +199,11 @@ struct ArtistDetailView: View {
     private func section<Content: View>(
         _ title: String,
         route: AppRoute? = nil,
+        moreTitle: String? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: title, route: route)
+            SectionHeader(title: title, route: route, moreTitle: moreTitle)
                 .pageMargins()
             content()
         }
@@ -414,13 +320,13 @@ private struct LatestReleaseCard: View {
     var body: some View {
         NavigationLink(value: AppRoute.album(album)) {
             HStack(spacing: 14) {
-                ArtworkImage(id: album.coverArt, cornerRadius: 8)
-                    .frame(width: 96)
-                    .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+                ArtworkImage(id: album.coverArt, cornerRadius: Layout.artworkRadius)
+                    .frame(width: 88)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(t("native.artist.latestRelease"))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .font(.caption.weight(.bold))
+                        .tracking(0.6)
+                        .foregroundStyle(.tint)
                         .textCase(.uppercase)
                     HStack(spacing: 4) {
                         Text(album.name)
@@ -430,16 +336,15 @@ private struct LatestReleaseCard: View {
                         }
                     }
                     .font(.headline)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.primary)
                     Text(details)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ThemeColor.mutedForeground)
                         .lineLimit(1)
                 }
                 .multilineTextAlignment(.leading)
                 Spacer(minLength: 0)
             }
-            .frame(maxWidth: 560, alignment: .leading)
             .contentShape(.rect)
         }
         .buttonStyle(.pressable)
@@ -483,13 +388,6 @@ private struct SongColumns: View {
                         play(index)
                     }
                     .frame(maxHeight: .infinity)
-                    .overlay(alignment: .bottom) {
-                        // Between rows, starting under the title.
-                        if index % rows != rows - 1, index != songs.count - 1 {
-                            Divider()
-                                .padding(.leading, 60)
-                        }
-                    }
                     .containerRelativeFrame(
                         .horizontal,
                         count: isRegular ? 7 : 10,

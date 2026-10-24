@@ -1,62 +1,189 @@
 import AonsokuKit
 import SwiftUI
 
-// MARK: - Artwork glow
+// MARK: - Header
 
-extension View {
-    /// The background of a page about one album, playlist or artist: the
-    /// cover's color glowing down from the top and fading as the page
-    /// scrolls, the way Apple Music tints its album pages. List rows on
-    /// such a page use a clear background.
-    func artworkGlowBackground(_ palette: ArtworkPalette?) -> some View {
-        modifier(ArtworkGlowBackground(palette: palette))
+/// The top of an album, playlist or artist page, like the web's image
+/// header: the cover over a band of its average color, then the kind of
+/// page, the name, a subtitle and the details. Centered on a phone; the
+/// cover beside the text on iPad. In a scroll view the header draws its own
+/// band; a list draws it with `detailBand` instead.
+struct DetailHeader<Cover: View, Subtitle: View>: View {
+    /// "Album", "Playlist" or "Artist".
+    let kind: String
+    let title: String
+    var metadata: [MetadataItem] = []
+    let palette: ArtworkPalette?
+    var drawsBand = true
+    @ViewBuilder let cover: Cover
+    @ViewBuilder let subtitle: Subtitle
+
+    @Environment(\.themeContext) private var theme
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    var body: some View {
+        let isDark = DetailBand.isDark(palette, theme: theme.palette)
+        Group {
+            if sizeClass == .regular {
+                HStack(alignment: .bottom, spacing: 28) {
+                    framedCover(side: 220)
+                    texts(alignment: .leading, isDark: isDark)
+                    Spacer(minLength: 0)
+                }
+                .padding(.top, 16)
+            } else {
+                VStack(spacing: 16) {
+                    framedCover(side: 200)
+                    texts(alignment: .center, isDark: isDark)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 8)
+            }
+        }
+        .pageMargins()
+        .padding(.bottom, 8)
+        .foregroundStyle(isDark ? Color.white : Color.black)
+        .environment(\.colorScheme, isDark ? .dark : .light)
+        .background {
+            if drawsBand {
+                DetailBand(palette: palette)
+                    .padding(.top, -DetailBand.overscroll)
+                    .padding(.bottom, -DetailBand.fadeHeight)
+            }
+        }
+    }
+
+    private func framedCover(side: CGFloat) -> some View {
+        cover
+            .frame(width: side, height: side)
+            .shadow(color: .black.opacity(0.45), radius: 10, y: 3)
+    }
+
+    private func texts(alignment: HorizontalAlignment, isDark: Bool) -> some View {
+        let textAlignment: TextAlignment = alignment == .center ? .center : .leading
+        return VStack(alignment: alignment, spacing: 4) {
+            Text(kind)
+                .font(.caption.weight(.medium))
+                .opacity(0.8)
+            Text(title)
+                .displayFont(.title)
+                .lineLimit(3)
+                .multilineTextAlignment(textAlignment)
+                .shadow(color: .black.opacity(isDark ? 0.25 : 0), radius: 6, y: 1)
+                .accessibilityAddTraits(.isHeader)
+            subtitle
+                .multilineTextAlignment(textAlignment)
+            if !metadata.isEmpty {
+                MetadataLine(items: metadata, alignment: alignment)
+                    .font(.subheadline)
+                    .opacity(0.8)
+                    .padding(.top, 2)
+            }
+        }
     }
 }
 
-private struct ArtworkGlowBackground: ViewModifier {
+/// The band behind a detail header: the cover's average color washed with
+/// the theme's background the way the web header overlays it, reaching up
+/// under the navigation bar, so pulling the page down shows more of it,
+/// and fading into the page below the header.
+struct DetailBand: View {
     let palette: ArtworkPalette?
 
-    /// 0 at the top of the page, 1 once it has scrolled a screenful.
-    @State private var fade = 0.0
-
     @Environment(\.themeContext) private var theme
-    @Environment(\.colorScheme) private var colorScheme
+
+    /// How far the band reaches above the header, enough for the bars and
+    /// a long pull.
+    static let overscroll: CGFloat = 1200
+    /// The fade from the band into the page.
+    static let fadeHeight: CGFloat = 96
+    /// How much of the background the header's text sits on, on average.
+    private static let wash = 0.35
+
+    var body: some View {
+        let background = theme.palette.background
+        let color = palette?.average.map(Color.init) ?? theme.palette.page
+        VStack(spacing: 0) {
+            ZStack {
+                color
+                background.opacity(0.2)
+            }
+            .frame(height: Self.overscroll)
+            ZStack {
+                color
+                LinearGradient(
+                    colors: [background.opacity(0.2), background.opacity(0.35), background.opacity(0.5)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            ZStack {
+                color
+                LinearGradient(
+                    colors: [background.opacity(0.5), theme.palette.page],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            .frame(height: Self.fadeHeight)
+        }
+        .animation(.smooth(duration: 0.6), value: palette)
+        .accessibilityHidden(true)
+    }
+
+    /// Whether light text reads better on the washed band; the theme's own
+    /// answer until the cover's colors are known.
+    static func isDark(_ palette: ArtworkPalette?, theme: ThemePalette) -> Bool {
+        guard let average = palette?.average else { return theme.isDark }
+        let background = theme.backgroundRGB
+        let washed = RGBColor(
+            red: average.red * (1 - wash) + background.red * wash,
+            green: average.green * (1 - wash) + background.green * wash,
+            blue: average.blue * (1 - wash) + background.blue * wash
+        )
+        return washed.luminance < 0.179
+    }
+}
+
+extension View {
+    /// Draws a `DetailHeader`'s band behind a list whose first row is the
+    /// header, moving with the list's scroll. Apply before
+    /// `themedBackground`, which paints the page behind it.
+    func detailBand(_ palette: ArtworkPalette?, headerHeight: CGFloat) -> some View {
+        modifier(ListDetailBand(palette: palette, headerHeight: headerHeight))
+    }
+}
+
+private struct ListDetailBand: ViewModifier {
+    let palette: ArtworkPalette?
+    let headerHeight: CGFloat
+
+    private struct Scroll: Equatable {
+        var offset: CGFloat = 0
+        var inset: CGFloat = 0
+    }
+
+    @State private var scroll = Scroll()
 
     func body(content: Content) -> some View {
         content
-            .scrollContentBackground(.hidden)
-            .onScrollGeometryChange(for: Double.self) { geometry in
-                let offset = geometry.contentOffset.y + geometry.contentInsets.top
-                // Steps of 5% keep the fade from redrawing every frame.
-                return (min(max(offset / 360, 0), 1) * 20).rounded() / 20
+            .onScrollGeometryChange(for: Scroll.self) { geometry in
+                // Past the band, the value stops changing, so scrolling the
+                // rest of the list does not redraw it.
+                let limit = headerHeight + DetailBand.fadeHeight + 1
+                return Scroll(
+                    offset: min(geometry.contentOffset.y + geometry.contentInsets.top, limit),
+                    inset: geometry.contentInsets.top
+                )
             } action: { _, value in
-                fade = value
+                scroll = value
             }
-            .background {
-                ZStack(alignment: .top) {
-                    theme.palette.page
-                    if let color = palette?.dominant {
-                        LinearGradient(
-                            stops: [
-                                .init(color: color.opacity(strength), location: 0),
-                                .init(color: color.opacity(strength * 0.4), location: 0.5),
-                                .init(color: color.opacity(0), location: 1),
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                        .frame(height: 560)
-                        .opacity(1 - fade)
-                        .transition(.opacity)
-                    }
-                }
-                .ignoresSafeArea()
-                .animation(.smooth(duration: 0.6), value: palette)
+            .background(alignment: .top) {
+                DetailBand(palette: palette)
+                    .frame(height: DetailBand.overscroll + headerHeight + DetailBand.fadeHeight)
+                    .offset(y: scroll.inset - scroll.offset - DetailBand.overscroll)
+                    .ignoresSafeArea()
             }
-    }
-
-    private var strength: Double {
-        colorScheme == .dark ? 0.55 : 0.35
     }
 }
 
@@ -90,7 +217,7 @@ private struct ScrollRevealedTitle: ViewModifier {
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Text(title)
-                        .font(.headline)
+                        .displayFont(.inline)
                         .lineLimit(1)
                         .opacity(isRevealed ? 1 : 0)
                         .accessibilityHidden(!isRevealed)
@@ -100,9 +227,9 @@ private struct ScrollRevealedTitle: ViewModifier {
     }
 }
 
-// MARK: - Toolbar
+// MARK: - Actions
 
-/// The heart in a page's toolbar, filled while the item is a favorite.
+/// The heart in a toolbar, filled while the item is a favorite.
 struct FavoriteToolbarButton: View {
     let kind: FavoriteKind
     let id: String
@@ -121,6 +248,69 @@ struct FavoriteToolbarButton: View {
         }
         .accessibilityLabel(t(isFavorite ? "options.unlike" : "options.like"))
         .haptic(.impact(weight: .light), trigger: isFavorite)
+    }
+}
+
+/// The heart beside Play: red and filled while the item is a favorite, as
+/// on the web.
+struct FavoriteRoundButton: View {
+    let kind: FavoriteKind
+    let id: String
+
+    @Environment(FavoritesStore.self) private var favorites
+    @Environment(Localizer.self) private var t
+
+    var body: some View {
+        let isFavorite = favorites.isFavorite(kind, id: id)
+        RoundIconButton(
+            systemImage: isFavorite ? "heart.fill" : "heart",
+            label: t(isFavorite ? "options.unlike" : "options.like")
+        ) {
+            Task { await favorites.toggle(kind, id: id) }
+        }
+        .foregroundStyle(isFavorite ? AnyShapeStyle(.red) : AnyShapeStyle(.tint))
+        .symbolEffect(.bounce, value: isFavorite)
+        .haptic(.impact(weight: .light), trigger: isFavorite)
+    }
+}
+
+/// Downloads a playlist for offline playback beside Play: an arrow, its
+/// progress, then a check whose menu removes the download.
+struct PlaylistDownloadButton: View {
+    let playlistId: String
+
+    @Environment(DownloadsStore.self) private var downloads
+    @Environment(Localizer.self) private var t
+
+    var body: some View {
+        let _ = downloads.revision
+        switch downloads.state(ofPlaylist: playlistId) {
+        case .notCached:
+            RoundIconButton(systemImage: "arrow.down", label: t("options.downloadPlaylist")) {
+                Task { await downloads.download(playlistId: playlistId) }
+            }
+        case let .downloading(completed, total):
+            RoundIconButton(systemImage: "arrow.down", label: t("offline.badge.downloading")) {}
+                .overlay {
+                    ProgressRing(progress: total > 0 ? Double(completed) / Double(total) : nil, diameter: 44)
+                        .allowsHitTesting(false)
+                }
+                .disabled(true)
+        case .cached:
+            Menu {
+                Button(t("options.removeDownload"), systemImage: "trash", role: .destructive) {
+                    Task { await downloads.remove(playlistId: playlistId) }
+                }
+            } label: {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 18, weight: .semibold))
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .controlSize(.large)
+            .accessibilityLabel(t("offline.badge.downloaded"))
+        }
     }
 }
 

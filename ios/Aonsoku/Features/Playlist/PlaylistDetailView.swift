@@ -1,9 +1,10 @@
 import AonsokuKit
 import SwiftUI
 
-/// A playlist, laid out like Apple Music's playlist page: the cover and
-/// name over the cover's glow, Play and Shuffle, the description, then the
-/// songs in playlist order and their total length.
+/// A playlist, laid out like the web's playlist page: the cover, name and
+/// description over a band of the cover's color, Shuffle, Play and the
+/// download button, then the songs in playlist order and their total
+/// length. A list, so songs can be swiped away.
 struct PlaylistDetailView: View {
     let playlistId: String
 
@@ -12,6 +13,7 @@ struct PlaylistDetailView: View {
     @State private var loadedKey: ReloadKey?
     @State private var palette: ArtworkPalette?
     @State private var isDescriptionExpanded = false
+    @State private var headerHeight: CGFloat = 360
 
     @Environment(AppModel.self) private var app
     @Environment(LibrarySyncStore.self) private var sync
@@ -61,7 +63,16 @@ struct PlaylistDetailView: View {
         List {
             if let playlist {
                 header(playlist)
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.size.height
+                    } action: { height in
+                        headerHeight = height
+                    }
                     .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                playButtons(playlist)
+                    .listRowInsets(EdgeInsets(top: 8, leading: margin, bottom: 12, trailing: margin))
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
                 songRows(playlist)
@@ -81,8 +92,9 @@ struct PlaylistDetailView: View {
             }
         }
         .artworkPalette(coverArt, into: $palette)
-        .artworkGlowBackground(palette)
-        .scrollRevealedTitle(playlist?.name ?? "", threshold: sizeClass == .regular ? 220 : 330)
+        .detailBand(palette, headerHeight: headerHeight)
+        .themedBackground()
+        .scrollRevealedTitle(playlist?.name ?? "", threshold: sizeClass == .regular ? 200 : 290)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -110,97 +122,69 @@ struct PlaylistDetailView: View {
     // MARK: - Header
 
     private func header(_ playlist: Playlist) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if sizeClass == .regular {
-                HStack(alignment: .bottom, spacing: 28) {
-                    cover
-                        .frame(width: 260)
-                    VStack(alignment: .leading, spacing: 4) {
-                        titles(playlist, font: .title.bold())
-                        playButtons(playlist)
-                            .frame(maxWidth: 340)
-                            .padding(.top, 18)
-                    }
-                    Spacer(minLength: 0)
-                }
-                .padding(.top, 12)
-            } else {
-                VStack(spacing: 0) {
-                    cover
-                        .frame(maxWidth: 290)
-                        .padding(.horizontal, 24)
-                    VStack(spacing: 4) {
-                        titles(playlist, font: .title2.bold())
-                    }
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 18)
-                    playButtons(playlist)
-                        .padding(.top, 18)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.top, 8)
-            }
+        DetailHeader(
+            kind: t("playlist.headline"),
+            title: playlist.name,
+            metadata: metadata(playlist),
+            palette: palette,
+            drawsBand: false
+        ) {
+            ArtworkImage(id: coverArt, size: .large, cornerRadius: Layout.artworkRadius, placeholder: "music.note.list")
+        } subtitle: {
             description(playlist)
         }
-        .pageMargins()
-        .padding(.bottom, 12)
     }
 
-    private var cover: some View {
-        ArtworkImage(id: coverArt, size: .large, cornerRadius: 10, placeholder: "music.note.list")
-            .shadow(color: .black.opacity(0.22), radius: 20, y: 10)
-    }
-
-    @ViewBuilder
-    private func titles(_ playlist: Playlist, font: Font) -> some View {
-        Text(playlist.name)
-            .font(font)
-            .lineLimit(3)
-        if let owner = playlist.owner, !owner.isEmpty {
-            Text(owner)
-                .font(.title3)
-                .foregroundStyle(.tint)
-                .lineLimit(1)
+    /// The owner of a shared playlist, its length and whether it is
+    /// public, like the web's header badges.
+    private func metadata(_ playlist: Playlist) -> [MetadataItem] {
+        var items: [MetadataItem] = []
+        if let owner = playlist.owner, !owner.isEmpty, !isOwned {
+            items.append(MetadataItem(text: owner))
         }
-        HStack(spacing: 5) {
-            if playlist.isPublic {
-                Label(t("playlist.form.labels.isPublic"), systemImage: "globe")
-                    .textCase(.uppercase)
-            }
-            PlaylistCacheBadge(playlistId: playlist.id)
+        let count = songs.isEmpty ? playlist.songCount : songs.count
+        if count > 0 {
+            items.append(MetadataItem(text: t("playlist.songCount", count: count)))
         }
-        .font(.footnote.weight(.semibold))
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
-        .padding(.top, 2)
+        let duration = songs.isEmpty ? playlist.duration : songs.reduce(0) { $0 + $1.duration }
+        if duration > 0 {
+            items.append(MetadataItem(text: Formatters.totalDuration(duration, locale: locale)))
+        }
+        if playlist.isPublic {
+            items.append(MetadataItem(text: t("playlist.form.labels.isPublic")))
+        }
+        return items
     }
 
     private func playButtons(_ playlist: Playlist) -> some View {
-        PlayShuffleButtons(canShuffle: songs.count > 1) {
+        PlayShuffleButtons(
+            canShuffle: songs.count > 1,
+            alignment: sizeClass == .regular ? .leading : .center
+        ) {
             play(playlist, shuffle: false)
         } shuffle: {
             play(playlist, shuffle: true)
+        } trailing: {
+            PlaylistDownloadButton(playlistId: playlist.id)
         }
         .disabled(songs.isEmpty)
     }
 
-    /// The comment, three lines at first; a tap shows all of it.
+    /// The comment in two lines at first; a tap shows all of it.
     @ViewBuilder
     private func description(_ playlist: Playlist) -> some View {
         let text = playlist.comment?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !text.isEmpty {
             Text(RichText.linkified(text))
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(isDescriptionExpanded ? nil : 3)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .opacity(0.8)
+                .lineLimit(isDescriptionExpanded ? nil : 2)
                 .contentShape(.rect)
                 .onTapGesture {
                     withAnimation(.smooth) {
                         isDescriptionExpanded.toggle()
                     }
                 }
-                .padding(.top, 20)
         }
     }
 
@@ -243,7 +227,7 @@ struct PlaylistDetailView: View {
                         .tint(.red)
                     }
                 }
-                .listRowInsets(EdgeInsets(top: 5, leading: margin, bottom: 5, trailing: margin - 8))
+                .listRowInsets(EdgeInsets(top: 4, leading: margin, bottom: 4, trailing: margin - 8))
                 .listRowBackground(Color.clear)
             }
         } else {
@@ -285,7 +269,7 @@ struct PlaylistDetailView: View {
             let duration = songs.reduce(0) { $0 + $1.duration }
             Text("\(t("playlist.songCount", count: songs.count)), \(Formatters.totalDuration(duration, locale: locale))")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ThemeColor.mutedForeground)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 8)
                 .padding(.bottom, 24)
