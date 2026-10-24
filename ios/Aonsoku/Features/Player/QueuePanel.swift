@@ -49,7 +49,8 @@ struct QueuePanel<CurrentMetadata: View>: View {
                 if showsCurrentTrack {
                     Section {
                         // Metadata belongs to the native row so drags on its
-                        // buttons still scroll the List. Artwork remains sole.
+                        // buttons scroll the List unless this row is pinned
+                        // at the top and starts a player dismissal.
                         HStack(spacing: 14) {
                             Button(action: onShowCover) {
                                 Color.clear
@@ -71,13 +72,15 @@ struct QueuePanel<CurrentMetadata: View>: View {
                             QueueHeaderTrackingReader(
                                 isActive: isActive,
                                 reduceMotion: reduceMotion,
-                                onLayout: { owner, frame, visible in
+                                onLayout: { owner, frame, visible, pinned in
                                     if let frame {
                                         presentation.queueHeaderOwner = owner
                                         presentation.queueHeaderFrame = frame
                                         presentation.isQueueHeaderVisible = visible
+                                        presentation.isQueueHeaderPinned = pinned
                                     } else if presentation.queueHeaderOwner == owner {
                                         presentation.isQueueHeaderVisible = false
+                                        presentation.isQueueHeaderPinned = false
                                     }
                                 },
                                 onSnap: { snapFeedback += 1 }
@@ -192,6 +195,11 @@ struct QueuePanel<CurrentMetadata: View>: View {
             .scrollIndicators(.hidden)
             .scrollBounceBehavior(.always)
             .onGeometryChange(for: CGRect.self) {
+                $0.frame(in: .named(PlayerArtworkLocation.containerCoordinateSpace))
+            } action: { frame in
+                if showsCurrentTrack { presentation.queueGestureViewportFrame = frame }
+            }
+            .onGeometryChange(for: CGRect.self) {
                 $0.frame(in: .named(PlayerArtworkLocation.coordinateSpace))
             } action: { frame in
                 viewportHeight = frame.height
@@ -234,6 +242,7 @@ struct QueuePanel<CurrentMetadata: View>: View {
                     x: 24, y: 8, width: max(viewport.width - 48, 0), height: headerHeight
                 )
                 presentation.isQueueHeaderVisible = true
+                presentation.isQueueHeaderPinned = false
             }
         }
     }

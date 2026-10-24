@@ -55,7 +55,10 @@ struct PlayerDismissGesture: UIGestureRecognizerRepresentable {
     func handleUIGestureRecognizerAction(_ pan: UIPanGestureRecognizer, context: Context) {
         let window = pan.view?.window
         switch pan.state {
-        case .began, .changed:
+        case .began:
+            context.coordinator.cancelQueuePanIfNeeded()
+            presentation.dragOffset = max(pan.translation(in: window).y, 0)
+        case .changed:
             presentation.dragOffset = max(pan.translation(in: window).y, 0)
         case .ended:
             let distance = presentation.dragOffset
@@ -71,6 +74,9 @@ struct PlayerDismissGesture: UIGestureRecognizerRepresentable {
         let presentation: PlayerPresentationState
         let converter: CoordinateSpaceConverter
         private weak var scrollView: UIScrollView?
+        private var pinnedQueueHeaderAtTouch: CGRect?
+        private var dismissesFromQueueHeader = false
+        private var scrollOffsetAtTouch: CGPoint?
 
         init(presentation: PlayerPresentationState, converter: CoordinateSpaceConverter) {
             self.presentation = presentation
@@ -79,6 +85,10 @@ struct PlayerDismissGesture: UIGestureRecognizerRepresentable {
 
         func gestureRecognizer(_ gesture: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
             scrollView = nil
+            // Freeze eligibility before the List moves past its top anchor
+            // during UIKit's pan-recognition slop.
+            pinnedQueueHeaderAtTouch = presentation.pinnedQueueHeaderDismissFrame
+            dismissesFromQueueHeader = false
             var view = touch.view
             while let current = view {
                 if let scroll = current as? UIScrollView {
@@ -87,6 +97,7 @@ struct PlayerDismissGesture: UIGestureRecognizerRepresentable {
                 }
                 view = current.superview
             }
+            scrollOffsetAtTouch = scrollView?.contentOffset
             return true
         }
 
@@ -104,13 +115,25 @@ struct PlayerDismissGesture: UIGestureRecognizerRepresentable {
             let velocity = pan.velocity(in: pan.view?.window)
             guard velocity.y > abs(velocity.x) else { return false }
             if scrollView != nil, presentation.queueOwnsScrollGestures {
-                return false
+                dismissesFromQueueHeader = pinnedQueueHeaderAtTouch?.contains(start) == true
+                return dismissesFromQueueHeader
             }
             // A scrolled lyrics list scrolls back to its top first.
             if let scrollView, scrollView.contentOffset.y > -scrollView.adjustedContentInset.top + 1 {
                 return false
             }
             return true
+        }
+
+        func cancelQueuePanIfNeeded() {
+            guard dismissesFromQueueHeader, let scrollView else { return }
+            // The pan may already have begun simultaneously. Cancel it once
+            // so the current row stays put while the whole player follows.
+            scrollView.panGestureRecognizer.isEnabled = false
+            scrollView.panGestureRecognizer.isEnabled = true
+            if let scrollOffsetAtTouch {
+                scrollView.setContentOffset(scrollOffsetAtTouch, animated: false)
+            }
         }
 
         func gestureRecognizer(

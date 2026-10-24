@@ -6,7 +6,7 @@ import UIKit
 struct QueueHeaderTrackingReader: UIViewRepresentable {
     let isActive: Bool
     let reduceMotion: Bool
-    let onLayout: (UUID, CGRect?, Bool) -> Void
+    let onLayout: (UUID, CGRect?, Bool, Bool) -> Void
     let onSnap: () -> Void
 
     func makeUIView(context: Context) -> MarkerView {
@@ -30,13 +30,14 @@ struct QueueHeaderTrackingReader: UIViewRepresentable {
     final class MarkerView: UIView {
         var isActive = false
         var reduceMotion = false
-        var onLayout: ((UUID, CGRect?, Bool) -> Void)?
+        var onLayout: ((UUID, CGRect?, Bool, Bool) -> Void)?
         var onSnap: (() -> Void)?
 
         private weak var scrollView: UIScrollView?
         private var updateLink: UIUpdateLink?
         private var lastFrame: CGRect?
         private var lastVisible = false
+        private var lastPinned = false
         private var pendingSnap: DispatchWorkItem?
         private var awaitingSettlement = false
         private var releasedAt: CFTimeInterval = 0
@@ -101,7 +102,7 @@ struct QueueHeaderTrackingReader: UIViewRepresentable {
                 let owner = owner
                 // A recycled marker may disappear during a SwiftUI update.
                 // Its owner token prevents this callback hiding a newer cell.
-                DispatchQueue.main.async { callback?(owner, nil, false) }
+                DispatchQueue.main.async { callback?(owner, nil, false, false) }
             }
             lastFrame = nil
         }
@@ -111,10 +112,13 @@ struct QueueHeaderTrackingReader: UIViewRepresentable {
             let contentFrame = convert(bounds, to: scrollView)
             let frame = contentFrame.offsetBy(dx: -scrollView.bounds.minX, dy: -scrollView.bounds.minY)
             let visible = frame.intersects(CGRect(origin: .zero, size: scrollView.bounds.size))
-            if frame != lastFrame || visible != lastVisible {
+            let pinned = abs(frame.minY - scrollView.adjustedContentInset.top - 8) <= 1
+                && !scrollView.isDragging && !scrollView.isDecelerating
+            if frame != lastFrame || visible != lastVisible || pinned != lastPinned {
                 lastFrame = frame
                 lastVisible = visible
-                onLayout?(owner, frame, visible)
+                lastPinned = pinned
+                onLayout?(owner, frame, visible, pinned)
             }
             if awaitingSettlement, CACurrentMediaTime() - releasedAt > 0.08,
                !scrollView.isTracking, !scrollView.isDragging, !scrollView.isDecelerating {

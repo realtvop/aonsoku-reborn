@@ -160,7 +160,8 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   the full viewport width. Downward pans start anywhere on the surface
   except the progress/volume slider touch targets; horizontal pans do not
   dismiss it. Lyrics scroll back to their top before dismissal; the queue
-  keeps its own history/upcoming scroll gestures and dismisses via the grabber.
+  keeps its own history/upcoming scroll gestures, except that its current-track
+  row can start dismissal while settled at the top anchor.
   Full-screen progress and volume use the app target's pinned
   `realtvop/slidercontrol` Swift package (`SliderControlView`). Progress uses
   `.progressLabels`, with elapsed/remaining labels and the quality badge in
@@ -244,8 +245,10 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   delegate, attracts slow/settled releases within 44pt of the current/upcoming
   boundary, and retains native rubber banding, row moves and swipe deletion.
   Snap/mode-button selection feedback uses the shared `haptic` modifier and
-  respects the playback haptics setting. Queue list pans stay within the list;
-  the grabber still dismisses the player.
+  respects the playback haptics setting. Queue list pans stay within the list,
+  except downward pans starting on the current-track row while it is settled
+  at its top anchor. That row cancels the List pan and dismisses the player;
+  other rows continue to browse history. The grabber also dismisses the player.
 - Android native pages use the application-scoped
   `github.realtvop.aonsoku.plugins.data.LibraryService` for Room queries,
   metadata sync, lyrics, and image-cache ownership. It is created with the

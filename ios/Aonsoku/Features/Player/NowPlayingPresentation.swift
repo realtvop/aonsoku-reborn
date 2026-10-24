@@ -24,7 +24,17 @@ final class PlayerPresentationState {
     var queueHeaderFrame: CGRect?
     var queueHeaderOwner: UUID?
     var queueViewportFrame: CGRect?
+    var queueGestureViewportFrame: CGRect?
+    var isQueueHeaderPinned = false
     var isQueueHeaderVisible = true
+    var pinnedQueueHeaderDismissFrame: CGRect? {
+        guard queueOwnsScrollGestures, isQueueHeaderPinned,
+              let viewport = queueGestureViewportFrame, let header = queueHeaderFrame else { return nil }
+        return CGRect(
+            x: viewport.minX, y: viewport.minY + header.minY - 8,
+            width: viewport.width, height: header.height + 16
+        ).intersection(viewport)
+    }
     @ObservationIgnored var prepareQueueForPresentation: (() -> Void)?
     var accessory: PlayerAccessoryLayout?
 }

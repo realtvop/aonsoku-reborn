@@ -243,6 +243,8 @@ with automatic foreground sync disabled.
   movement with a short fade and keeps the short artwork transition.
   Every queue entry resets to the
   current track at the top, including reopening fullscreen with Queue selected.
+  Once settled at that anchor, a downward pan on the current-track row dismisses
+  the player and cancels the List pan; other rows still scroll into history.
   It prepares the offset and artwork destination before selection and tracks
   its artwork marker while hidden; switching never inserts a new
   List, replaces the metadata layout slots, or delays the cover destination
