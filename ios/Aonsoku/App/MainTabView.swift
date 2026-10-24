@@ -19,7 +19,7 @@ struct MainTabView: View {
                         .appDestinations()
                 }
             }
-            Tab(t("sidebar.library"), systemImage: "square.stack.fill", value: AppTab.library) {
+            Tab(t("sidebar.library"), systemImage: "books.vertical.fill", value: AppTab.library) {
                 NavigationStack(path: $router.libraryPath) {
                     LibraryView()
                         .appDestinations()

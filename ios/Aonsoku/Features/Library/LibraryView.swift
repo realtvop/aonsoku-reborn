@@ -1,39 +1,38 @@
 import AonsokuKit
 import SwiftUI
 
-/// The Library tab, after Apple Music's: the kinds of things in the
-/// library as rows, then a grid of the albums added most recently.
+/// The Library tab, like the web's mobile library: the kinds of things in
+/// the library as rows with icon tiles, then the playlists.
 struct LibraryView: View {
     @Environment(AppModel.self) private var app
     @Environment(Router.self) private var router
-    @Environment(HomeStore.self) private var home
+    @Environment(PlaylistsStore.self) private var playlists
     @Environment(SettingsStore.self) private var settings
     @Environment(NetworkMonitor.self) private var network
     @Environment(LibrarySyncStore.self) private var sync
     @Environment(Localizer.self) private var t
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    /// Playlists shown here; the full list has search and editing.
+    private static let playlistLimit = 12
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Layout.sectionSpacing) {
-                VStack(spacing: 0) {
+                VStack(spacing: 2) {
                     ForEach(categories) { category in
-                        LibraryCategoryRow(category: category) {
+                        Button {
                             router.navigate(to: route(for: category))
-                        }
-                    }
-                }
-                let recent = home.albums(in: .recentlyAdded)
-                if !recent.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        SectionHeader(title: t("home.recentlyAdded"), route: .albums(.recentlyAdded))
-                            .pageMargins()
-                        TileGrid {
-                            ForEach(recent) { album in
-                                AlbumTile(album: album)
+                        } label: {
+                            LibraryRow(title: t(category.titleKey)) {
+                                IconTile(systemImage: category.symbol)
                             }
                         }
+                        .buttonStyle(RowHighlightStyle())
                     }
                 }
+                .padding(.horizontal, rowInset)
+                playlistsSection
             }
             .padding(.top, 4)
             .padding(.bottom, 24)
@@ -43,12 +42,70 @@ struct LibraryView: View {
         .navigationTitle(t("sidebar.library"))
         .accountToolbar()
         .refreshable {
-            await home.refresh()
+            await playlists.reload()
             if network.isOnline, !sync.isSyncing {
                 sync.syncIncremental()
             }
         }
-        .task { await home.loadIfNeeded() }
+        .task { await playlists.loadIfNeeded() }
+    }
+
+    /// Rows reach past the margin by their own padding, so their icons line
+    /// up with the titles while the highlight has room around them.
+    private var rowInset: CGFloat {
+        Layout.margin(sizeClass) - libraryRowPadding
+    }
+
+    @ViewBuilder
+    private var playlistsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                SectionHeader(title: t("sidebar.playlists"), route: .playlists)
+                Button {
+                    router.present(.createPlaylist(songs: []))
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .accessibilityLabel(t("options.playlist.create"))
+            }
+            .pageMargins()
+            if playlists.playlists.isEmpty {
+                if playlists.phase == .loaded {
+                    Text(t("sidebar.emptyPlaylist"))
+                        .font(.subheadline)
+                        .foregroundStyle(ThemeColor.mutedForeground)
+                        .pageMargins()
+                }
+            } else {
+                VStack(spacing: 2) {
+                    ForEach(playlists.playlists.prefix(Self.playlistLimit)) { playlist in
+                        NavigationLink(value: AppRoute.playlist(id: playlist.id)) {
+                            LibraryRow(
+                                title: playlist.name,
+                                subtitle: t("playlist.songCount", count: playlist.songCount)
+                            ) {
+                                ArtworkImage(
+                                    id: playlist.coverArt,
+                                    size: .small,
+                                    cornerRadius: Layout.rowArtworkRadius,
+                                    placeholder: "music.note.list"
+                                )
+                                .frame(width: 44, height: 44)
+                            }
+                        }
+                        .buttonStyle(RowHighlightStyle())
+                        .contextMenu {
+                            PlaylistMenuItems(playlist: playlist)
+                        }
+                    }
+                }
+                .padding(.horizontal, rowInset)
+            }
+        }
     }
 
     private var categories: [LibraryCategory] {
@@ -61,7 +118,6 @@ struct LibraryView: View {
     /// row is tapped so a change made in the list is never stale.
     private func route(for category: LibraryCategory) -> AppRoute {
         switch category {
-        case .playlists: .playlists
         case .artists: .artists
         case .albums: .albums(AlbumListPreference.load(app.services.preferences))
         case .songs: .songs(SongListQuery())
@@ -73,13 +129,13 @@ struct LibraryView: View {
     }
 }
 
+/// The web's mobile library order, with Genres and Downloaded added.
 private enum LibraryCategory: String, CaseIterable, Identifiable {
-    case playlists
     case artists
-    case albums
     case songs
-    case genres
+    case albums
     case favorites
+    case genres
     case radios
     case downloads
 
@@ -87,12 +143,11 @@ private enum LibraryCategory: String, CaseIterable, Identifiable {
 
     var titleKey: String {
         switch self {
-        case .playlists: "sidebar.playlists"
         case .artists: "sidebar.artists"
-        case .albums: "sidebar.albums"
         case .songs: "sidebar.songs"
-        case .genres: "table.columns.genres"
+        case .albums: "sidebar.albums"
         case .favorites: "sidebar.favorites"
+        case .genres: "table.columns.genres"
         case .radios: "sidebar.radios"
         case .downloads: "offline.badge.downloaded"
         }
@@ -100,61 +155,61 @@ private enum LibraryCategory: String, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
-        case .playlists: "music.note.list"
         case .artists: "music.mic"
-        case .albums: "square.stack"
         case .songs: "music.note"
-        case .genres: "guitars"
+        case .albums: "square.stack"
         case .favorites: "heart"
+        case .genres: "guitars"
         case .radios: "dot.radiowaves.left.and.right"
         case .downloads: "arrow.down.circle"
         }
     }
 }
 
-/// A category as a tall row with a tinted symbol, separated by hairlines
-/// that start at the title.
-private struct LibraryCategoryRow: View {
-    let category: LibraryCategory
-    let action: () -> Void
+/// The inset of a library row's content from its highlight.
+private let libraryRowPadding: CGFloat = 10
 
-    @Environment(Localizer.self) private var t
+/// A library row: an icon tile or cover, the title and a chevron.
+private struct LibraryRow<Leading: View>: View {
+    let title: String
+    var subtitle: String?
+    @ViewBuilder let leading: Leading
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 14) {
-                Image(systemName: category.symbol)
-                    .font(.title3)
-                    .foregroundStyle(.tint)
-                    .frame(width: 30)
-                Text(t(category.titleKey))
-                    .font(.title3)
-                    .foregroundStyle(.primary)
-                Spacer(minLength: 8)
-                Image(systemName: "chevron.forward")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.tertiary)
+        HStack(spacing: 12) {
+            leading
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(Color.primary)
+                    .lineLimit(1)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(ThemeColor.mutedForeground)
+                        .lineLimit(1)
+                }
             }
-            .padding(.vertical, 12)
-            .pageMargins()
-            .overlay(alignment: .bottom) {
-                Divider()
-                    .padding(.leading, 44)
-                    .pageMargins()
-            }
-            .contentShape(.rect)
+            Spacer(minLength: 8)
+            Image(systemName: "chevron.forward")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(ThemeColor.mutedForeground.opacity(0.7))
         }
-        .buttonStyle(RowHighlightStyle())
+        .padding(.horizontal, libraryRowPadding)
+        .frame(minHeight: 56)
+        .contentShape(.rect)
     }
 }
 
-/// Highlights a full-width row while it is pressed, like a list row.
+/// Highlights a row on a rounded patch of the theme's accent while it is
+/// pressed, like the web's `active:bg-accent`.
 struct RowHighlightStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background {
                 if configuration.isPressed {
-                    Color.primary.opacity(0.08)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(ThemeColor.accent.opacity(0.7))
                 }
             }
     }
