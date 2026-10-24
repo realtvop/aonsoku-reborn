@@ -384,7 +384,7 @@ private struct NowPlayingPresentation: ViewModifier {
             }
             .opacity(
                 presentation.artworkLocation == .queue && router.isNowPlayingPresented
-                    && !presentation.isQueueHeaderVisible ? 0 : 1
+                    && presentation.queueHeaderFrame != nil && !presentation.isQueueHeaderVisible ? 0 : 1
             )
             .animation(presentationAnimation, value: presentation.artworkLocation)
             .animation(presentationAnimation, value: presentation.artworkFrames[.cover])

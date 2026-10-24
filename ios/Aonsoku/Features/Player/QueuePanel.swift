@@ -64,7 +64,7 @@ struct QueuePanel<CurrentMetadata: View>: View {
                         .frame(height: currentHeaderHeight)
                         .background {
                             QueueHeaderTrackingReader(
-                                isActive: isActive && didPositionInitially,
+                                isActive: isActive,
                                 reduceMotion: reduceMotion,
                                 onLayout: { owner, frame, visible in
                                     if let frame {
@@ -192,7 +192,12 @@ struct QueuePanel<CurrentMetadata: View>: View {
             }
             .haptic(.selection, trigger: snapFeedback)
             .task(id: isActive) {
-                guard isActive, !didPositionInitially else { return }
+                guard isActive else { return }
+                presentation.isQueueHeaderVisible = true
+                guard !history.songs.isEmpty, !didPositionInitially else {
+                    didPositionInitially = true
+                    return
+                }
                 await Task.yield()
                 var transaction = Transaction()
                 transaction.disablesAnimations = true

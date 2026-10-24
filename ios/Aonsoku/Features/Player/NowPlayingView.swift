@@ -86,7 +86,7 @@ struct NowPlayingView: View {
         VStack(spacing: 0) {
             grabber
             statusCapsules
-            PlayerContentLayout(showsPanel: panel != nil, showsQueue: panel == .queue) {
+            PlayerContentLayout(showsPanel: panel != nil) {
                 largeArtwork
                 headerArtwork
                     .opacity(panel == .lyrics ? 1 : 0)
@@ -100,7 +100,7 @@ struct NowPlayingView: View {
                                 .modifier(PlayerPanelTransition(
                                     progress: panel == nil ? 0 : 1, element: .metadata, reduceMotion: reduceMotion
                                 ))
-                                .transition(.opacity.animation(.easeOut(duration: reduceMotion ? 0.15 : 0.08)))
+                                .transition(.opacity.animation(.easeInOut(duration: reduceMotion ? 0.15 : 0.2)))
                         }
                     }
                     .allowsHitTesting(panel != .queue)
@@ -328,9 +328,10 @@ struct NowPlayingView: View {
                 LyricsPanel(isActive: panel == .lyrics && router.isNowPlayingPresented) { hidden in
                     lyricsControlsHidden = hidden
                 }
-                    .opacity(panel == .lyrics ? 1 : 0)
-                    .allowsHitTesting(panel == .lyrics)
-                    .accessibilityHidden(panel != .lyrics)
+                .padding(.top, showsQueueHeader ? (metadataHeight + 16) : 0)
+                .opacity(panel == .lyrics ? 1 : 0)
+                .allowsHitTesting(panel == .lyrics)
+                .accessibilityHidden(panel != .lyrics)
             }
             if loadedPanels.contains(.queue) {
                 QueuePanel(
@@ -400,7 +401,7 @@ private struct PlayerPanelTransition: AnimatableModifier {
     }
 
     func body(content: Content) -> some View {
-        let reveal = min(max((progress - 0.9) / 0.1, 0), 1)
+        let reveal = min(max((progress - 0.3) / 0.7, 0), 1)
         let opacity: Double = switch element {
         case .metadata:
             1
@@ -415,7 +416,6 @@ private struct PlayerPanelTransition: AnimatableModifier {
 /// exist, and the same metadata row moves between them; controls never reflow.
 private struct PlayerContentLayout: SwiftUI.Layout {
     var showsPanel: Bool
-    var showsQueue: Bool
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         proposal.replacingUnspecifiedDimensions()
@@ -428,7 +428,6 @@ private struct PlayerContentLayout: SwiftUI.Layout {
         let titleWidth = max(bounds.width - leading - trailing, 0)
         let titleSize = subviews[2].sizeThatFits(ProposedViewSize(width: titleWidth, height: nil))
         let headerHeight = max(64, titleSize.height)
-        let panelTop = showsQueue ? 0 : headerHeight + 16
         let coverHeight = max(bounds.height - titleSize.height - 24, 0)
         let coverSide = max(min(bounds.width - 60, coverHeight), 0)
 
@@ -449,8 +448,8 @@ private struct PlayerContentLayout: SwiftUI.Layout {
             proposal: ProposedViewSize(width: titleWidth, height: titleSize.height)
         )
         subviews[3].place(
-            at: CGPoint(x: bounds.minX, y: bounds.minY + panelTop),
-            proposal: ProposedViewSize(width: bounds.width, height: max(bounds.height - panelTop, 0))
+            at: CGPoint(x: bounds.minX, y: bounds.minY),
+            proposal: ProposedViewSize(width: bounds.width, height: bounds.height)
         )
     }
 }
