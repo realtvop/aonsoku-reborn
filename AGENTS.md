@@ -136,7 +136,8 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   the cover's RMS average color blended at the configured intensity over the
   selected dark theme background, matching the web player's color treatment
   while retaining the native player's light controls. Palette changes crossfade;
-  no mesh gradient or continuous background animation runs.
+  only a very low-opacity edge vignette is layered over the solid color; no mesh
+  gradient or continuous background animation runs.
   The system accessory reserves space and reports native geometry only.
   A scoped UIKit marker hides the immediate host of the public
   `UITabAccessory.contentView`, leaving tab bar layout/minimization intact.

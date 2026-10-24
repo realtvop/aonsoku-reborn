@@ -595,8 +595,9 @@ private struct DevicesButton: View {
 
 // MARK: - Background
 
-/// All player pages and pinned queue headers use the same opaque backdrop.
-/// Like the web player, overlay the cover's RMS average at the configured strength.
+/// All player pages and pinned queue headers use the same solid backdrop.
+/// A very soft edge vignette keeps the surface from looking cut out, like
+/// Apple Music, without turning the whole page into a moving gradient.
 struct NowPlayingBackground: View {
     @Environment(\.nowPlayingPalette) private var palette
     @Environment(SettingsStore.self) private var settings
@@ -609,6 +610,17 @@ struct NowPlayingBackground: View {
             if let color = palette?.average ?? palette?.colors.first {
                 Color(color)
                     .opacity(min(max(settings.settings.appearance.nowPlayingColorIntensity, 0), 1))
+            }
+            GeometryReader { proxy in
+                RadialGradient(
+                    stops: [
+                        .init(color: .clear, location: 0.55),
+                        .init(color: .black.opacity(0.08), location: 1),
+                    ],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: max(proxy.size.width, proxy.size.height) * 0.72
+                )
             }
         }
         .animation(reduceMotion ? .linear(duration: 0.15) : .smooth(duration: 1), value: palette)
