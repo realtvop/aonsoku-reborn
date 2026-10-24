@@ -6,7 +6,14 @@ import SwiftUI
 /// tab bar it keeps the cover, title, artist and Play/Pause. Swipe the pill
 /// horizontally to move through the queue.
 struct MiniPlayer: View {
-    var isInline = false
+    var compactProgress: CGFloat = 0
+
+    @ScaledMetric(relativeTo: .footnote) private var expandedTitleSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .caption) private var compactTitleSize: CGFloat = 12
+    @ScaledMetric(relativeTo: .caption) private var expandedSubtitleSize: CGFloat = 12
+    @ScaledMetric(relativeTo: .caption2) private var compactSubtitleSize: CGFloat = 11
+    @ScaledMetric(relativeTo: .title3) private var expandedControlSize: CGFloat = 20
+    @ScaledMetric(relativeTo: .body) private var compactControlSize: CGFloat = 17
 
     @Environment(PlayerStore.self) private var player
     @Environment(Router.self) private var router
@@ -20,15 +27,15 @@ struct MiniPlayer: View {
     @State private var settleTask: Task<Void, Never>?
 
     var body: some View {
-        HStack(spacing: isInline ? 7 : 10) {
+        HStack(spacing: mix(10, 7)) {
             Color.clear
-                .frame(width: isInline ? 26 : 34, height: isInline ? 26 : 34)
+                .frame(width: mix(34, 26), height: mix(34, 26))
             titles
             Spacer(minLength: 4)
             controls
         }
-        .padding(.leading, isInline ? 7 : 10)
-        .padding(.trailing, isInline ? 3 : 7)
+        .padding(.leading, mix(10, 7))
+        .padding(.trailing, mix(7, 3))
         .foregroundStyle(.black)
         .contentShape(.rect)
         .onTapGesture {
@@ -76,7 +83,7 @@ struct MiniPlayer: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: isInline ? 28 : 32)
+        .frame(height: mix(32, 28))
         .onGeometryChange(for: CGFloat.self, of: \.size.width) { titlesWidth = $0 }
         .clipped()
         .layoutPriority(1)
@@ -84,12 +91,12 @@ struct MiniPlayer: View {
 
     @ViewBuilder
     private func metadata(_ metadata: MiniPlayerMetadata) -> some View {
-        VStack(alignment: .leading, spacing: isInline ? 0 : 1) {
+        VStack(alignment: .leading, spacing: mix(1, 0)) {
             MarqueeText(text: metadata.title, respectsReduceMotion: false)
-                .font(isInline ? .caption.weight(.semibold) : .footnote.weight(.semibold))
+                .font(.system(size: mix(expandedTitleSize, compactTitleSize), weight: .semibold))
             if let subtitle = metadata.subtitle {
                 subtitleView(subtitle)
-                    .font(isInline ? .caption2 : .caption)
+                    .font(.system(size: mix(expandedSubtitleSize, compactSubtitleSize)))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -261,19 +268,22 @@ struct MiniPlayer: View {
         swipeContext = nil
     }
 
-    @ViewBuilder
+    private func mix(_ expanded: CGFloat, _ compact: CGFloat) -> CGFloat {
+        expanded + (compact - expanded) * compactProgress
+    }
+
     private var controls: some View {
-        Button {
-            player.togglePlayPause()
-        } label: {
-            Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                .font(isInline ? .body : .title3)
-                .contentTransition(.symbolEffect(.replace))
-                .frame(width: 36, height: 36)
-                .contentShape(.rect)
-        }
-        .accessibilityLabel(t(player.isPlaying ? "player.tooltips.pause" : "player.tooltips.play"))
-        if !isInline {
+        HStack(spacing: mix(10, 0)) {
+            Button {
+                player.togglePlayPause()
+            } label: {
+                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: mix(expandedControlSize, compactControlSize)))
+                    .contentTransition(.symbolEffect(.replace))
+                    .frame(width: 36, height: 36)
+                    .contentShape(.rect)
+            }
+            .accessibilityLabel(t(player.isPlaying ? "player.tooltips.pause" : "player.tooltips.play"))
             Button {
                 player.next()
             } label: {
@@ -282,6 +292,11 @@ struct MiniPlayer: View {
                     .frame(width: 36, height: 36)
                     .contentShape(.rect)
             }
+            .frame(width: mix(36, 0))
+            .opacity(1 - compactProgress)
+            .clipped()
+            .allowsHitTesting(compactProgress == 0)
+            .accessibilityHidden(compactProgress > 0)
             .accessibilityLabel(t("player.tooltips.next"))
         }
     }

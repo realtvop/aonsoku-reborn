@@ -23,7 +23,7 @@ nonisolated enum PlayerArtworkLocation: Hashable {
 
 nonisolated struct PlayerAccessoryLayout: Equatable {
     var frame: CGRect
-    var isInline: Bool
+    var compactProgress: CGFloat
 }
 
 /// The system accessory supplies layout only. The presentation container
@@ -35,11 +35,10 @@ struct PlayerAccessorySlot: View {
     var body: some View {
         Color.clear
             .frame(height: 36)
-            .background { PlayerAccessoryGlassSuppression() }
-            .onGeometryChange(for: PlayerAccessoryLayout.self) { proxy in
-                PlayerAccessoryLayout(frame: proxy.frame(in: .global), isInline: placement == .inline)
-            } action: { layout in
-                if layout.frame.width > 0, layout.frame.height > 0 {
+            .background {
+                PlayerAccessoryLayoutReader(
+                    isInline: placement == .inline, previousLayout: presentation.accessory
+                ) { layout in
                     presentation.accessory = layout
                 }
             }
@@ -53,22 +52,106 @@ struct PlayerAccessorySlot: View {
 /// Keep native accessory placement/minimization without leaving a second
 /// glass pill underneath the moving player. Scope this to the public
 /// bottomAccessory.contentView's immediate host, never the tab bar itself.
-private struct PlayerAccessoryGlassSuppression: UIViewRepresentable {
-    func makeUIView(context: Context) -> MarkerView { MarkerView() }
+private struct PlayerAccessoryLayoutReader: UIViewRepresentable {
+    var isInline: Bool
+    var previousLayout: PlayerAccessoryLayout?
+    var onChange: (PlayerAccessoryLayout) -> Void
+
+    func makeUIView(context: Context) -> MarkerView {
+        MarkerView(isInline: isInline, previousLayout: previousLayout, onChange: onChange)
+    }
 
     func updateUIView(_ view: MarkerView, context: Context) {
+        view.update(isInline: isInline, onChange: onChange)
         view.suppressAccessoryGlass()
     }
 
+    static func dismantleUIView(_ view: MarkerView, coordinator: ()) {
+        view.stopObserving()
+    }
+
     final class MarkerView: UIView {
+        private var isInline: Bool
+        private var onChange: (PlayerAccessoryLayout) -> Void
+        private var updateLink: UIUpdateLink?
+        private weak var accessoryContent: UIView?
+        private var lastLayout: PlayerAccessoryLayout?
+        private var startWidth: CGFloat = 0
+        private var startProgress: CGFloat = 0
+
+        init(
+            isInline: Bool, previousLayout: PlayerAccessoryLayout?,
+            onChange: @escaping (PlayerAccessoryLayout) -> Void
+        ) {
+            self.isInline = isInline
+            self.onChange = onChange
+            lastLayout = previousLayout
+            startWidth = previousLayout?.frame.width ?? 0
+            startProgress = previousLayout?.compactProgress ?? (isInline ? 1 : 0)
+            super.init(frame: .zero)
+            isUserInteractionEnabled = false
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        func update(isInline: Bool, onChange: @escaping (PlayerAccessoryLayout) -> Void) {
+            self.onChange = onChange
+            guard self.isInline != isInline else { return }
+            startWidth = lastLayout?.frame.width ?? bounds.width
+            startProgress = lastLayout?.compactProgress ?? (self.isInline ? 1 : 0)
+            self.isInline = isInline
+        }
+
         override func didMoveToWindow() {
             super.didMoveToWindow()
+            stopObserving()
+            guard window != nil else { return }
             suppressAccessoryGlass()
+            // Observe UIKit's existing updates; never drive an idle display loop
+            // or run a second spring with a different clock from the tab bar.
+            let link = UIUpdateLink(view: self) { [weak self] _, _ in
+                self?.reportPresentationLayout()
+            }
+            link.isEnabled = true
+            updateLink = link
+        }
+
+        func stopObserving() {
+            updateLink?.isEnabled = false
+            updateLink = nil
         }
 
         override func layoutSubviews() {
             super.layoutSubviews()
             suppressAccessoryGlass()
+        }
+
+        private func reportPresentationLayout() {
+            guard let window, let accessoryContent,
+                  isDescendant(of: accessoryContent), !bounds.isEmpty else { return }
+            // Walk each ancestor's presentation transform. The layout-only
+            // accessory is hidden, so its own presentation layer can be nil
+            // while an ancestor is still animating its bounds or position.
+            var frame = layer.presentation()?.bounds ?? bounds
+            var current: CALayer? = layer
+            while let model = current, model !== window.layer {
+                let visible = model.presentation() ?? model
+                frame = visible.convert(frame, to: visible.superlayer)
+                current = model.superlayer
+            }
+            guard current != nil, frame.width > 0, frame.height > 0 else { return }
+            let targetWidth = convert(bounds, to: window).width
+            let targetProgress: CGFloat = isInline ? 1 : 0
+            var progress = lastLayout?.compactProgress ?? targetProgress
+            let distance = targetWidth - startWidth
+            if lastLayout != nil, abs(distance) > 1 {
+                let fraction = min(max((frame.width - startWidth) / distance, 0), 1)
+                progress = startProgress + (targetProgress - startProgress) * fraction
+            }
+            let layout = PlayerAccessoryLayout(frame: frame, compactProgress: progress)
+            guard layout != lastLayout else { return }
+            lastLayout = layout
+            onChange(layout)
         }
 
         func suppressAccessoryGlass() {
@@ -84,6 +167,7 @@ private struct PlayerAccessoryGlassSuppression: UIViewRepresentable {
                host !== tabs.view,
                !tabs.tabBar.isDescendant(of: host) {
                 host.isHidden = true
+                accessoryContent = content
                 // Do not restore this during marker recycling: the native
                 // accessory remains layout-only for its entire lifetime.
                 return
@@ -117,7 +201,7 @@ nonisolated struct PlayerArtworkFrame: Equatable {
 
 /// Layout only: the image itself lives once, above the tabs and player.
 /// Expanded layouts report coordinates before their presentation transforms.
-/// The compact destination comes directly from the stationary native accessory.
+/// The compact destination follows the native accessory's presentation frame.
 struct PlayerArtworkSlot: View {
     let location: PlayerArtworkLocation
     var cornerRadius: CGFloat = 8
@@ -185,7 +269,7 @@ private struct NowPlayingPresentation: ViewModifier {
                             .opacity(router.isNowPlayingPresented ? 1 : 0)
                             .allowsHitTesting(router.isNowPlayingPresented)
                             .accessibilityHidden(!router.isNowPlayingPresented)
-                        MiniPlayer(isInline: presentation.accessory?.isInline ?? false)
+                        MiniPlayer(compactProgress: presentation.accessory?.compactProgress ?? 0)
                             .frame(width: accessory.width, height: accessory.height)
                             .position(x: surface.midX, y: surface.minY + 6 + accessory.height / 2)
                             .opacity(router.isNowPlayingPresented ? 0 : 1)
@@ -287,12 +371,12 @@ private struct NowPlayingPresentation: ViewModifier {
         guard router.isNowPlayingPresented,
               var expanded = presentation.artworkFrames[presentation.artworkLocation] else {
             let accessory = accessoryFrame(in: proxy)
-            let isInline = presentation.accessory?.isInline ?? false
-            let side: CGFloat = isInline ? 26 : 34
+            let progress = presentation.accessory?.compactProgress ?? 0
+            let side: CGFloat = 34 - 8 * progress
             return PlayerArtworkFrame(
-                rect: CGRect(x: accessory.minX + (isInline ? 7 : 10),
+                rect: CGRect(x: accessory.minX + 10 - 3 * progress,
                              y: accessory.midY - side / 2, width: side, height: side),
-                cornerRadius: isInline ? 4 : 5,
+                cornerRadius: 5 - progress,
                 shadowRadius: 0
             )
         }

@@ -142,8 +142,11 @@ with automatic foreground sync disabled.
   debounce; submitting searches immediately. iPad uses the adaptable sidebar.
 - **Mini player**: the system `tabViewBottomAccessory` contains only a
   layout marker; its native glass host is hidden. Its inline/expanded
-  geometry positions the actual mini controls inside `NowPlayingPresentation`,
-  the same persistent container as the full player, background and cover. This
+  presentation-layer geometry, sampled by a passive `UIUpdateLink`, positions
+  the actual mini controls inside `NowPlayingPresentation`, the same persistent
+  container as the full player, background and cover. Controls, artwork
+  and glass follow the native minimization frame with continuous compact
+  layout interpolation and no independent animation clock. This
   container owns the sole Liquid Glass surface, which moves and resizes
   into the pill itself; no separate playback pill remains underneath.
   Tapping it slides Now Playing up at the
