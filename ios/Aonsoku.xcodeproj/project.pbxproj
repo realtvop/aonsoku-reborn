@@ -392,7 +392,7 @@
 			repositoryURL = "https://github.com/realtvop/slidercontrol";
 			requirement = {
 				kind = revision;
-				revision = 916ead4885912457da3ab4746c11dbdf0b0cabcb;
+				revision = 54f8b8bb925b0971bb9b1267b38cccc2addec74f;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
