@@ -171,6 +171,12 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   updates and an exact trailing value.
   `PlayerPresentationState` owns the interactive dismissal offset, while
   `Router.isNowPlayingPresented` remains the presentation authority.
+  The presentation host captures the expanded artwork frame and clipping
+  viewport before animating its rendered expansion state. Layout/scroll
+  probes do not inherit the host animation or retarget those endpoints in
+  flight. Interrupted transitions invalidate older completion callbacks.
+  A queue cover that is already offscreen stays hidden throughout collapse
+  and reappears only in its settled mini slot.
   While the finger is down, artwork keeps its expanded size and moves only
   with the container. Only a committed release retargets it to the mini player.
   A stationary full-viewport UIKit probe resolves the screen/window corner

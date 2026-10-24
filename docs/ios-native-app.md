@@ -202,6 +202,12 @@ with automatic foreground sync disabled.
   moves down and becomes transparent in the pill. Cover and container use
   the same zero-bounce settling animation. The last valid native accessory
   frame survives host recycling to keep the compact destination stable.
+  Expansion/collapse captures the expanded artwork frame and viewport before
+  animating the host's rendered state. Its layout probes and native List do
+  not inherit that animation, and live layout reports cannot retarget the
+  captured endpoints until it completes. Completion tokens discard interrupted
+  transitions. An offscreen queue cover remains hidden during collapse and
+  returns only at the settled mini slot.
   Tapping the handle or the accessibility escape action also collapses it.
   The player surface keeps the system-resolved viewport corner radius on
   rounded screens/windows. On square viewports its corners grow from 0 to

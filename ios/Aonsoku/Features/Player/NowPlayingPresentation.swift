@@ -266,6 +266,17 @@ private struct NowPlayingPresentation: ViewModifier {
     @State private var presentation = PlayerPresentationState()
     @State private var viewportCornerRadius: CGFloat = 0
     @State private var palette: ArtworkPalette?
+    @State private var isExpanded = false
+    @State private var artworkTransition: ArtworkTransition?
+
+    private struct ArtworkTransition {
+        let id = UUID()
+        let frame: PlayerArtworkFrame?
+        let compactFrame: PlayerArtworkFrame
+        let viewport: CGRect
+        let dragOffset: CGFloat
+        let hidesArtwork: Bool
+    }
 
     func body(content: Content) -> some View {
         content
@@ -279,9 +290,9 @@ private struct NowPlayingPresentation: ViewModifier {
                     let full = CGRect(x: 0, y: 0, width: width, height: height)
                     let accessory = accessoryFrame(in: proxy)
                     let pill = accessory.insetBy(dx: 0, dy: -6)
-                    let surface = router.isNowPlayingPresented
+                    let surface = isExpanded
                         ? full.offsetBy(dx: 0, dy: presentation.dragOffset) : pill
-                    let radius = router.isNowPlayingPresented
+                    let radius = isExpanded
                         ? expandedRadius : pill.height / 2
                     let shape = PlayerSurfaceShape(frame: surface, cornerRadius: radius)
                     ZStack(alignment: .topLeading) {
@@ -293,8 +304,12 @@ private struct NowPlayingPresentation: ViewModifier {
                             .padding(insets)
                             .frame(width: width, height: height)
                             .coordinateSpace(name: PlayerArtworkLocation.coordinateSpace)
+                            // Animate the host, never its layout probes or the
+                            // native List. Otherwise their intermediate frames
+                            // become new artwork destinations mid-transition.
+                            .transaction { $0.animation = nil }
                             .offset(y: surface.minY)
-                            .opacity(router.isNowPlayingPresented ? 1 : 0)
+                            .opacity(isExpanded ? 1 : 0)
                             .allowsHitTesting(router.isNowPlayingPresented)
                             .accessibilityHidden(!router.isNowPlayingPresented)
                         sharedArtwork(in: proxy)
@@ -312,7 +327,7 @@ private struct NowPlayingPresentation: ViewModifier {
                                 MiniPlayer(compactProgress: presentation.accessory?.compactProgress ?? 0)
                                     .frame(width: accessory.width, height: accessory.height)
                                     .padding(.top, 6)
-                                    .opacity(router.isNowPlayingPresented ? 0 : 1)
+                                    .opacity(isExpanded ? 0 : 1)
                             }
                             .glassEffect(.regular, in: RoundedRectangle(
                                 cornerRadius: radius, style: .continuous
@@ -327,9 +342,12 @@ private struct NowPlayingPresentation: ViewModifier {
                         presentation: presentation,
                         isEnabled: router.isNowPlayingPresented && router.sheet == nil
                     ) { dismiss in
-                        withAnimation(presentationAnimation) {
-                            if dismiss { router.isNowPlayingPresented = false }
-                            presentation.dragOffset = 0
+                        if dismiss {
+                            // Keep the finger's final offset until the source
+                            // geometry has been captured by transition().
+                            router.isNowPlayingPresented = false
+                        } else {
+                            withAnimation(presentationAnimation) { presentation.dragOffset = 0 }
                         }
                     })
                     .background(alignment: .topLeading) {
@@ -339,18 +357,46 @@ private struct NowPlayingPresentation: ViewModifier {
                             .accessibilityHidden(true)
                     }
                     .offset(x: -insets.leading, y: -insets.top)
+                    .onChange(of: router.isNowPlayingPresented, initial: true) { _, expanded in
+                        transition(to: expanded, in: proxy)
+                    }
+                    .onChange(of: presentation.artworkLocation) {
+                        if artworkTransition != nil {
+                            transition(to: router.isNowPlayingPresented, in: proxy, force: true)
+                        }
+                    }
                 }
                 .ignoresSafeArea(.keyboard)
-                .animation(
-                    presentationAnimation,
-                    value: router.isNowPlayingPresented
-                )
             }
             .environment(presentation)
             .artworkPalette(coverArtId, into: $palette)
-            .onChange(of: router.isNowPlayingPresented) {
-                presentation.dragOffset = 0
-            }
+    }
+
+    private func transition(to expanded: Bool, in proxy: GeometryProxy, force: Bool = false) {
+        guard force || expanded != isExpanded else { return }
+        if expanded, presentation.artworkLocation == .queue {
+            presentation.prepareQueueForPresentation?()
+        }
+        let frame = expandedArtworkFrame()
+        let viewport = expandedArtworkViewport(in: proxy)
+        let snapshot = ArtworkTransition(
+            frame: frame, compactFrame: compactArtworkFrame(in: proxy),
+            viewport: viewport, dragOffset: presentation.dragOffset,
+            hidesArtwork: !expanded && presentation.artworkLocation == .queue
+                && (!presentation.isQueueHeaderVisible
+                    || frame.map { !$0.rect.intersects(viewport) } == true)
+        )
+        withAnimation(presentationAnimation, completionCriteria: .logicallyComplete) {
+            artworkTransition = snapshot
+            isExpanded = expanded
+            presentation.dragOffset = 0
+        } completion: {
+            // An interrupted opening/closing owns a newer pair of endpoints.
+            guard artworkTransition?.id == snapshot.id else { return }
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { artworkTransition = nil }
+        }
     }
 
     private var coverArtId: String? {
@@ -366,7 +412,7 @@ private struct NowPlayingPresentation: ViewModifier {
     }
 
     private func backgroundOpacity(viewportHeight: CGFloat) -> Double {
-        guard router.isNowPlayingPresented else { return 0 }
+        guard isExpanded else { return 0 }
         return Double(1 - min(presentation.dragOffset / max(viewportHeight, 1), 1))
     }
 
@@ -398,20 +444,36 @@ private struct NowPlayingPresentation: ViewModifier {
             .clipShape(PlayerSurfaceShape(frame: artworkViewport(in: proxy), cornerRadius: 0))
             .allowsHitTesting(false)
             .accessibilityHidden(true)
-            .opacity(
-                presentation.artworkLocation == .queue && router.isNowPlayingPresented
-                    && presentation.queueHeaderFrame != nil && !presentation.isQueueHeaderVisible ? 0 : 1
-            )
+            .opacity(artworkOpacity)
             .animation(presentationAnimation, value: presentation.artworkLocation)
             .animation(presentationAnimation, value: presentation.artworkFrames[.cover])
             .animation(presentationAnimation, value: presentation.artworkFrames[.header])
     }
 
+    private var artworkOpacity: Double {
+        if let artworkTransition { return artworkTransition.hidesArtwork ? 0 : 1 }
+        return presentation.artworkLocation == .queue && isExpanded
+            && presentation.queueHeaderFrame != nil && !presentation.isQueueHeaderVisible ? 0 : 1
+    }
+
     private func artworkViewport(in proxy: GeometryProxy) -> CGRect {
-        if router.isNowPlayingPresented, presentation.artworkLocation == .queue,
+        if isExpanded, let artworkTransition {
+            return artworkTransition.viewport.offsetBy(
+                dx: 0, dy: presentation.dragOffset - artworkTransition.dragOffset
+            )
+        }
+        return isExpanded ? expandedArtworkViewport(in: proxy) : fullArtworkViewport(in: proxy)
+    }
+
+    private func expandedArtworkViewport(in proxy: GeometryProxy) -> CGRect {
+        if presentation.artworkLocation == .queue,
            let viewport = presentation.queueViewportFrame {
             return viewport.offsetBy(dx: 0, dy: presentation.dragOffset)
         }
+        return fullArtworkViewport(in: proxy)
+    }
+
+    private func fullArtworkViewport(in proxy: GeometryProxy) -> CGRect {
         let insets = proxy.safeAreaInsets
         return CGRect(
             x: 0, y: 0,
@@ -421,7 +483,32 @@ private struct NowPlayingPresentation: ViewModifier {
     }
 
     private func artworkFrame(in proxy: GeometryProxy) -> PlayerArtworkFrame? {
-        if router.isNowPlayingPresented, presentation.artworkLocation == .queue,
+        if isExpanded {
+            if let artworkTransition, var frame = artworkTransition.frame {
+                frame.rect = frame.rect.offsetBy(
+                    dx: 0, dy: presentation.dragOffset - artworkTransition.dragOffset
+                )
+                return frame
+            }
+            return expandedArtworkFrame()
+        }
+        return artworkTransition?.compactFrame ?? compactArtworkFrame(in: proxy)
+    }
+
+    private func compactArtworkFrame(in proxy: GeometryProxy) -> PlayerArtworkFrame {
+        let accessory = accessoryFrame(in: proxy)
+        let progress = presentation.accessory?.compactProgress ?? 0
+        let side: CGFloat = 34 - 8 * progress
+        return PlayerArtworkFrame(
+            rect: CGRect(x: accessory.minX + 10 - 3 * progress,
+                         y: accessory.midY - side / 2, width: side, height: side),
+            cornerRadius: 5 - progress,
+            shadowRadius: 0
+        )
+    }
+
+    private func expandedArtworkFrame() -> PlayerArtworkFrame? {
+        if presentation.artworkLocation == .queue,
            let header = presentation.queueHeaderFrame,
            let viewport = presentation.queueViewportFrame {
             return PlayerArtworkFrame(
@@ -434,19 +521,10 @@ private struct NowPlayingPresentation: ViewModifier {
                 shadowRadius: 10
             )
         }
-        guard router.isNowPlayingPresented,
-              var expanded = presentation.artworkFrames[
+        guard var expanded = presentation.artworkFrames[
                   presentation.artworkLocation == .queue ? .header : presentation.artworkLocation
               ] else {
-            let accessory = accessoryFrame(in: proxy)
-            let progress = presentation.accessory?.compactProgress ?? 0
-            let side: CGFloat = 34 - 8 * progress
-            return PlayerArtworkFrame(
-                rect: CGRect(x: accessory.minX + 10 - 3 * progress,
-                             y: accessory.midY - side / 2, width: side, height: side),
-                cornerRadius: 5 - progress,
-                shadowRadius: 0
-            )
+            return nil
         }
         // During a pan the cover stays attached to the expanded surface.
         // Only committing dismissal changes its destination to the pill.
