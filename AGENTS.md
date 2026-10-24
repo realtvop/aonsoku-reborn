@@ -310,7 +310,12 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   Recovery attempts have their own progress deadline, so a resumed stream
   with no further stall notifications still reaches reload. Pausing cancels
   pending and in-flight recovery through an attempt revision. Reload keeps
-  the saved position; empty buffers and completed cache downloads do not
+  the saved position and waits for the replacement item's `readyToPlay`
+  status before seeking with a completion handler. Failed items retry, and
+  never-ready items remain bounded by the recovery attempt's progress deadline;
+  late readiness cannot resume a canceled or expired attempt. Initial and
+  queue loads with a saved start time use the same readiness gate.
+  Empty buffers and completed cache downloads do not
   imply end of track. The empty-buffer queue fallback requires a position
   within one second of a known duration. It resolves and enqueues
   the next deterministic `NativeQueueEngine` song one item ahead, then adopts

@@ -6,6 +6,7 @@ import UIKit
 public final class AudioService: NSObject, @unchecked Sendable {
     public typealias EventHandler = @Sendable (AudioServiceEvent) -> Void
     typealias PlayerFactory = (AVPlayerItem) -> AVPlayer
+    typealias PlayerItemFactory = (URL) -> AVPlayerItem
 
     private struct PreparedQueueItem {
         let song: QueueSong
@@ -23,6 +24,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private let scrobbleSubmitter: NativeScrobbleSubmitter
     private let recoveryController: PlaybackRecoveryController
     private let playerFactory: PlayerFactory
+    private let playerItemFactory: PlayerItemFactory
     private let stateQueue = DispatchQueue(
         label: "com.aonsoku.AudioService.state",
         qos: .userInitiated
@@ -49,6 +51,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private var isHandlingQueueEnd = false
     private var timeObserver: Any?
     private var statusObservation: NSKeyValueObservation?
+    private var pendingItemSeek: (() -> Void)?
     private var timeControlObservation: NSKeyValueObservation?
     private var durationObservation: NSKeyValueObservation?
     private var bufferEmptyObservation: NSKeyValueObservation?
@@ -113,6 +116,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
         scrobbleBuffer: NativeScrobbleBuffer = NativeScrobbleBuffer(),
         scrobbleSubmitter: NativeScrobbleSubmitter = NativeScrobbleSubmitter(),
         recoveryController: PlaybackRecoveryController = PlaybackRecoveryController(),
+        playerItemFactory: @escaping PlayerItemFactory = { AVPlayerItem(url: $0) },
         playerFactory: @escaping PlayerFactory = { AVQueuePlayer(items: [$0]) }
     ) {
         self.databaseManager = databaseManager
@@ -123,6 +127,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
         self.scrobbleSubmitter = scrobbleSubmitter
         self.recoveryController = recoveryController
         self.playerFactory = playerFactory
+        self.playerItemFactory = playerItemFactory
         self.persistence = PlaybackStatePersistence(
             repository: PlaybackStateRepository(db: databaseManager.dbPool)
         )
@@ -304,19 +309,29 @@ public final class AudioService: NSObject, @unchecked Sendable {
                 }
                 self.emitPlaybackState(.loading, force: true)
 
-                let startPlayback = {
+                let startPlayback = { [weak self] in
+                    guard let self else { return }
                     if request.autoplay {
                         self.player?.play()
                         self.persistence.startProgressTracking()
                     }
                     completion(.success(()))
                 }
-                if request.startTime > 0 {
-                    self.player?.seek(
+                if request.startTime > 0, let player = self.player {
+                    self.seekWhenReady(
                         to: self.makeTime(request.startTime),
-                        toleranceBefore: .zero,
-                        toleranceAfter: .zero
-                    ) { _ in startPlayback() }
+                        on: player,
+                        generation: self.playbackGeneration
+                    ) { finished in
+                        if finished {
+                            startPlayback()
+                        } else {
+                            completion(.failure(AudioServiceError(
+                                code: "load_failed",
+                                message: "Cannot seek to the requested start position."
+                            )))
+                        }
+                    }
                 } else {
                     startPlayback()
                 }
@@ -1486,7 +1501,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     private func makePlayerItem(url: URL, kind: String?) -> AVPlayerItem {
-        let item = AVPlayerItem(url: url)
+        let item = playerItemFactory(url)
         item.preferredForwardBufferDuration = kind == "radio"
             ? 0
             : .greatestFiniteMagnitude
@@ -1520,6 +1535,58 @@ public final class AudioService: NSObject, @unchecked Sendable {
         recoveryController.reset()
     }
 
+    // An unready item can throw an Objective-C exception on a completion-handler
+    // seek. Wait for readyToPlay using the item's existing status observation
+    // and discard pending work when its item or recovery attempt changes.
+    private func seekWhenReady(
+        to time: CMTime,
+        on player: AVPlayer,
+        generation: Int,
+        isCurrent: @escaping () -> Bool = { true },
+        completion: @escaping @Sendable (Bool) -> Void
+    ) {
+        guard let item = player.currentItem else {
+            completion(false)
+            return
+        }
+        pendingItemSeek = { [weak self, weak player, weak item] in
+            guard let self else { return }
+            guard let player, let item,
+                  player === self.player,
+                  item === self.playerItem,
+                  item === player.currentItem,
+                  generation == self.playbackGeneration,
+                  isCurrent() else {
+                self.pendingItemSeek = nil
+                return
+            }
+            switch item.status {
+            case .unknown:
+                return
+            case .failed:
+                self.pendingItemSeek = nil
+                completion(false)
+            case .readyToPlay:
+                self.pendingItemSeek = nil
+                player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) {
+                    [weak self, weak player, weak item] finished in
+                    self?.dispatchMain {
+                        guard let self, let player, let item,
+                              player === self.player,
+                              item === self.playerItem,
+                              item === player.currentItem,
+                              generation == self.playbackGeneration,
+                              isCurrent() else { return }
+                        completion(finished)
+                    }
+                }
+            @unknown default:
+                break
+            }
+        }
+        pendingItemSeek?()
+    }
+
     private func observe(
         item: AVPlayerItem,
         player: AVPlayer,
@@ -1534,6 +1601,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
             DispatchQueue.main.async {
                 guard item === self.playerItem,
                       generation == self.playbackGeneration else { return }
+                self.pendingItemSeek?()
                 switch item.status {
                 case .readyToPlay:
                     self.emitDuration()
@@ -1767,6 +1835,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     private func removePlayerObservers() {
+        pendingItemSeek = nil
         if let timeObserver, let player { player.removeTimeObserver(timeObserver) }
         timeObserver = nil
         statusObservation?.invalidate()
@@ -1947,7 +2016,8 @@ public final class AudioService: NSObject, @unchecked Sendable {
                 if !usedPreloadedItem {
                     self.emitPlaybackState(.loading, force: true)
                 }
-                let begin = {
+                let begin = { [weak self] in
+                    guard let self else { return }
                     if autoplay {
                         self.player?.play()
                         self.scrobbleBuffer.startTracking(
@@ -1960,8 +2030,22 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     self.isHandlingQueueEnd = false
                     self.scheduleNextItemPreload()
                 }
-                if let startTime, startTime > 0 {
-                    self.player?.seek(to: self.makeTime(startTime)) { _ in begin() }
+                if let startTime, startTime > 0, let player = self.player {
+                    self.seekWhenReady(
+                        to: self.makeTime(startTime),
+                        on: player,
+                        generation: self.playbackGeneration
+                    ) { [weak self] finished in
+                        if finished {
+                            begin()
+                        } else {
+                            self?.isHandlingQueueEnd = false
+                            self?.emitError(
+                                code: "load_failed",
+                                message: "Cannot seek to the saved queue position."
+                            )
+                        }
+                    }
                 } else {
                     begin()
                 }
@@ -3202,10 +3286,11 @@ extension AudioService: PlaybackRecoveryDelegate {
         if case .level1(let attempt) = controller.state {
             emit(.recoveryAttempt(level: 1, attempt: attempt, maxAttempts: 3))
         }
-        player.seek(
+        seekWhenReady(
             to: time,
-            toleranceBefore: .zero,
-            toleranceAfter: .zero
+            on: player,
+            generation: generation,
+            isCurrent: { controller.isCurrentAttempt(generation: generation, revision: revision) }
         ) { [weak self, weak player] finished in
             guard finished,
                   let self,
@@ -3272,10 +3357,13 @@ extension AudioService: PlaybackRecoveryDelegate {
                 self.currentSourceKind = resolved.kind
                 self.observe(item: item, player: player, generation: generation)
                 self.scheduleNextItemPreload()
-                player.seek(
+                self.seekWhenReady(
                     to: savedPosition,
-                    toleranceBefore: .zero,
-                    toleranceAfter: .zero
+                    on: player,
+                    generation: generation,
+                    isCurrent: {
+                        controller.isCurrentAttempt(generation: generation, revision: revision)
+                    }
                 ) { [weak self, weak player] finished in
                     guard let self,
                           let player,
