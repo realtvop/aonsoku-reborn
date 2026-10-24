@@ -2981,26 +2981,22 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     private func handleBufferPositionMismatch(player: AVPlayer, generation: Int) {
-        guard generation == playbackGeneration, player === self.player else { return }
+        guard generation == playbackGeneration,
+              player === self.player,
+              recoveryController.isMonitoringProgress else { return }
 
-        let position = player.currentTime().seconds
-        let isNearEnd = position > 0 && duration > 0 && duration - position < 10
-        if isNearEnd, isQueueActive {
-            handleEnded()
-            return
-        }
-
-        isSeeking = true
-        player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero) {
-            [weak self, weak player] _ in
-            guard let self,
-                  let player,
-                  generation == self.playbackGeneration else { return }
-            self.isSeeking = false
-            player.play()
-            self.emitProgress()
-            self.updateNowPlayingPlaybackInfo()
-        }
+        // Loaded ranges describe available media, not the end of the song.
+        // Keep the current position even when the mismatch is near the tail.
+        NativeLogger.shared.warn(
+            "Playback position is outside loaded ranges; recovering at the current position.",
+            source: "AudioService"
+        )
+        recoveryController.triggerRecovery(
+            currentTime: player.currentTime(),
+            generation: generation,
+            sourceKind: recoverySourceKind(),
+            requiresReload: true
+        )
     }
 
     private func resolve(_ source: AudioSource) throws -> (url: URL, kind: String) {
