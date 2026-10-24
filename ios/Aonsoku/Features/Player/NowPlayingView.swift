@@ -25,6 +25,7 @@ struct NowPlayingView: View {
     @Environment(Router.self) private var router
     @Environment(PlayerPresentationState.self) private var presentation
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.nowPlayingPalette) private var palette
 
     var body: some View {
         GeometryReader { proxy in
@@ -336,6 +337,7 @@ struct NowPlayingView: View {
                     isActive: panel == .queue && router.isNowPlayingPresented,
                     showsCurrentTrack: showsQueueHeader,
                     currentHeaderHeight: max(64, metadataHeight),
+                    palette: palette,
                     onShowCover: { panel = nil }
                 ) { measuredTitleRow(isCompact: true) }
                     .opacity(panel == .queue ? 1 : 0)

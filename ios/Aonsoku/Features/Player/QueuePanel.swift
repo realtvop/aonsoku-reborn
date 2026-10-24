@@ -9,6 +9,7 @@ struct QueuePanel<CurrentMetadata: View>: View {
     var isActive = true
     var showsCurrentTrack = true
     var currentHeaderHeight: CGFloat = 64
+    var palette: ArtworkPalette? = nil
     var onShowCover: () -> Void = {}
     @ViewBuilder let currentMetadata: CurrentMetadata
 
@@ -42,7 +43,7 @@ struct QueuePanel<CurrentMetadata: View>: View {
                         QueueSectionHeader(title: t("fullscreen.queueHistory")) {
                             Button(t("generic.clear")) { history.clear() }
                         }
-                        .queuePinnedHeader()
+                        .queuePinnedHeader(palette: palette)
                     }
                 }
 
@@ -173,7 +174,7 @@ struct QueuePanel<CurrentMetadata: View>: View {
                             }
                         }
                     }
-                    .queuePinnedHeader()
+                    .queuePinnedHeader(palette: palette)
                 }
             }
             .listStyle(.plain)
@@ -211,22 +212,40 @@ private extension View {
             .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
     }
 
-    func queuePinnedHeader() -> some View {
+    func queuePinnedHeader(palette: ArtworkPalette?) -> some View {
         textCase(nil)
             .padding(.vertical, 10)
             .foregroundStyle(.white)
             .background {
-                NowPlayingBackground(showsVignette: false)
+                QueuePinnedHeaderBackground(palette: palette)
                     .padding(.horizontal, -20)
                     .padding(.vertical, -10)
             }
-            .listRowBackground(NowPlayingBackground(showsVignette: false))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
     }
 
     func queueHeaderRow() -> some View {
         listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
             .listRowInsets(EdgeInsets(top: 14, leading: 20, bottom: 2, trailing: 20))
+    }
+}
+
+/// A completely solid backdrop for pinned headers that directly matches the player's
+/// background without radial vignette or palette transition delays.
+private struct QueuePinnedHeaderBackground: View {
+    let palette: ArtworkPalette?
+    @Environment(SettingsStore.self) private var settings
+
+    var body: some View {
+        ZStack {
+            settings.settings.appearance.darkTheme.palette.background
+            if let color = palette?.average ?? palette?.colors.first {
+                Color(color)
+                    .opacity(min(max(settings.settings.appearance.nowPlayingColorIntensity, 0), 1))
+            }
+        }
     }
 }
 
