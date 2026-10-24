@@ -187,9 +187,15 @@ with automatic foreground sync disabled.
   same large-resolution image reader through every transition, including
   paused scaling and dismissal.
   Page selection and artwork destination share `PlayerPresentationState`.
-  Lyrics and queue mount before the first switch. Only the shared artwork
-  animates between pages; metadata, lyrics, queue content and controls adopt
-  their final layout immediately, without movement, scaling or crossfades.
+  Lyrics and queue mount before the first switch. Persistent cover and lyrics
+  metadata crossfade at their final layouts; titles and lyrics enter with a
+  slight upward reveal and fade/blur after a short outgoing fade. The queue
+  fades/blurs in place to preserve native artwork tracking coordinates.
+  Content effects are local: layout, scroll resets and artwork markers never
+  inherit a page-wide animation. Playback controls stay fixed, and page
+  buttons animate their selected appearance. Hidden content immediately stops
+  accepting touches and accessibility focus. Reduce Motion replaces content
+  movement/blur with a short fade and keeps the short artwork transition.
   Every queue entry resets to the
   current track at the top, including reopening fullscreen with Queue selected.
   It prepares the offset and artwork destination before selection and tracks

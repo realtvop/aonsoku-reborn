@@ -33,8 +33,8 @@ struct NowPlayingView: View {
                         .frame(maxWidth: .infinity)
                 }
             }
-            // Page content adopts its final layout immediately. The sole
-            // artwork is outside this subtree and owns its own animation.
+            // Keep layout and native scroll geometry immediate. Individual
+            // content surfaces opt into their own visual-only animations.
             .animation(nil, value: panel)
             .onChange(of: isWide, initial: true) { _, isWide in
                 presentation.usesWideLayout = isWide
@@ -78,20 +78,17 @@ struct NowPlayingView: View {
         VStack(spacing: 0) {
             grabber
             statusCapsules
-            PlayerContentLayout(showsPanel: panel != nil) {
+            PlayerContentLayout {
                 largeArtwork
                 headerArtwork
                     .opacity(panel == .lyrics ? 1 : 0)
                     .allowsHitTesting(panel == .lyrics)
                     .accessibilityHidden(panel != .lyrics)
-                Color.clear
-                    .frame(height: metadataHeight)
-                    .overlay {
-                        measuredTitleRow(isCompact: panel != nil)
-                            .opacity(panel == .queue ? 0 : 1)
-                    }
-                    .allowsHitTesting(panel != .queue)
-                    .accessibilityHidden(panel == .queue)
+                titleRow(isCompact: false)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .modifier(PlayerPageContent(isVisible: panel == nil))
+                measuredTitleRow(isCompact: true)
+                    .modifier(PlayerPageContent(isVisible: panel == .lyrics))
                 panels(showsQueueHeader: true)
             }
             .frame(maxHeight: .infinity)
@@ -296,32 +293,31 @@ struct NowPlayingView: View {
                 .frame(width: 44, height: 44)
                 .background(.white.opacity(isOn ? 0.92 : 0), in: .circle)
                 .contentShape(.circle)
+                .animation(.easeInOut(duration: 0.2), value: isOn)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
-    /// Mount both pages before the first transition. Inserting a List inside
-    /// an animation adds an implicit insertion fade and defers its geometry.
+    /// Keep both pages mounted and animate their appearance locally, without
+    /// animating List layout, scroll resets or the shared artwork markers.
     private func panels(showsQueueHeader: Bool) -> some View {
         ZStack {
             LyricsPanel(isActive: panel == .lyrics && router.isNowPlayingPresented) { hidden in
                 lyricsControlsHidden = hidden
             }
             .padding(.top, showsQueueHeader ? (metadataHeight + 16) : 0)
-            .opacity(panel == .lyrics ? 1 : 0)
-            .allowsHitTesting(panel == .lyrics)
-            .accessibilityHidden(panel != .lyrics)
+            .modifier(PlayerPageContent(isVisible: panel == .lyrics))
             QueuePanel(
                 isActive: panel == .queue && router.isNowPlayingPresented,
                 showsCurrentTrack: showsQueueHeader,
                 currentHeaderHeight: max(64, metadataHeight),
                 onShowCover: { selectPanel(nil) }
             ) { titleRow(isCompact: true) }
-            .opacity(panel == .queue ? 1 : 0)
-            .allowsHitTesting(panel == .queue)
-            .accessibilityHidden(panel != .queue)
+            // The native row reports artwork coordinates, so keep its
+            // position fixed and use only fade/blur for the queue surface.
+            .modifier(PlayerPageContent(isVisible: panel == .queue, lift: 0))
         }
         .allowsHitTesting(panel != nil)
         .accessibilityHidden(panel == nil)
@@ -329,23 +325,50 @@ struct NowPlayingView: View {
     }
 }
 
-/// Only the upper content changes layout. Both artwork destinations always
-/// exist. Metadata switches directly to the selected page's layout; only
-/// the presentation host's sole artwork animates between those destinations.
-private struct PlayerContentLayout: SwiftUI.Layout {
-    var showsPanel: Bool
+/// A short outgoing fade followed by a softer incoming reveal, like the
+/// reference player. Only rendering changes; hidden pages retain their state
+/// and immediately relinquish touches and accessibility focus.
+private struct PlayerPageContent: ViewModifier {
+    var isVisible: Bool
+    var lift: CGFloat = 14
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .animation(animation) { surface in
+                surface
+                    .opacity(isVisible ? 1 : 0)
+                    .blur(radius: reduceMotion || isVisible ? 0 : 3)
+                    .offset(y: reduceMotion || isVisible ? 0 : lift)
+            }
+            .allowsHitTesting(isVisible)
+            .accessibilityHidden(!isVisible)
+    }
+
+    private var animation: Animation {
+        if reduceMotion { return .linear(duration: 0.15) }
+        return isVisible
+            ? .easeOut(duration: 0.3).delay(0.1)
+            : .easeOut(duration: 0.16)
+    }
+}
+
+/// Both metadata layouts and artwork destinations stay at their final
+/// coordinates. Crossfade the metadata instead of moving or scaling text
+/// across the page; the presentation host moves the sole artwork separately.
+private struct PlayerContentLayout: SwiftUI.Layout {
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         proposal.replacingUnspecifiedDimensions()
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        guard subviews.count == 4 else { return }
-        let leading: CGFloat = showsPanel ? 102 : 30
-        let trailing: CGFloat = showsPanel ? 24 : 30
-        let titleWidth = max(bounds.width - leading - trailing, 0)
+        guard subviews.count == 5 else { return }
+        let titleWidth = max(bounds.width - 60, 0)
+        let headerWidth = max(bounds.width - 126, 0)
         let titleSize = subviews[2].sizeThatFits(ProposedViewSize(width: titleWidth, height: nil))
-        let headerHeight = max(64, titleSize.height)
+        let headerSize = subviews[3].sizeThatFits(ProposedViewSize(width: headerWidth, height: nil))
+        let headerHeight = max(64, headerSize.height)
         let coverHeight = max(bounds.height - titleSize.height - 24, 0)
         let coverSide = max(min(bounds.width - 60, coverHeight), 0)
 
@@ -358,14 +381,14 @@ private struct PlayerContentLayout: SwiftUI.Layout {
             proposal: ProposedViewSize(width: 64, height: 64)
         )
         subviews[2].place(
-            at: CGPoint(
-                x: bounds.minX + leading,
-                y: showsPanel ? bounds.minY + 8 + (headerHeight - titleSize.height) / 2
-                    : bounds.maxY - titleSize.height
-            ),
+            at: CGPoint(x: bounds.minX + 30, y: bounds.maxY - titleSize.height),
             proposal: ProposedViewSize(width: titleWidth, height: titleSize.height)
         )
         subviews[3].place(
+            at: CGPoint(x: bounds.minX + 102, y: bounds.minY + 8 + (headerHeight - headerSize.height) / 2),
+            proposal: ProposedViewSize(width: headerWidth, height: headerSize.height)
+        )
+        subviews[4].place(
             at: CGPoint(x: bounds.minX, y: bounds.minY),
             proposal: ProposedViewSize(width: bounds.width, height: bounds.height)
         )
