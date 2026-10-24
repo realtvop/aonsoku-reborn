@@ -187,20 +187,27 @@ with automatic foreground sync disabled.
   same large-resolution image reader through every transition, including
   paused scaling and dismissal.
   Page selection and artwork destination share `PlayerPresentationState`.
-  Lyrics and queue mount before the first switch. Persistent cover and lyrics
-  metadata crossfade at their final layouts; titles and lyrics enter with a
-  slight upward reveal and fade/blur after a short outgoing fade. The queue
-  fades/blurs in place to preserve native artwork tracking coordinates.
+  Lyrics, queue and metadata layout slots mount before the first switch.
+  Leaving the cover moves its title/actions up toward the compact header,
+  scales them to 0.85 and fades them out; returning reveals them from 64pt
+  below. Compact metadata crossfades in place between Lyrics and Queue,
+  moves downward when returning to the cover, and enters 160ms later when
+  coming from the cover. Lyrics, queue rows and section headers rise 24pt
+  after a 140ms delay with a 380ms zero-bounce spring/fade; outgoing content
+  fades downward over 180ms. Queue effects animate individual row/header
+  rendering so the native List, artwork marker and viewport stay stationary.
+  The content viewport clips these effects above the playback controls.
   Content effects are local: layout, scroll resets and artwork markers never
   inherit a page-wide animation. Playback controls stay fixed, and page
   buttons animate their selected appearance. Hidden content immediately stops
   accepting touches and accessibility focus. Reduce Motion replaces content
-  movement/blur with a short fade and keeps the short artwork transition.
+  movement with a short fade and keeps the short artwork transition.
   Every queue entry resets to the
   current track at the top, including reopening fullscreen with Queue selected.
   It prepares the offset and artwork destination before selection and tracks
   its artwork marker while hidden; switching never inserts a new
-  List, removes the main metadata, or delays the cover destination by a frame.
+  List, replaces the metadata layout slots, or delays the cover destination
+  by a frame.
 - **Home**: other devices' playback, featured albums, pinned items, Recently
   Played, Most Played, Recently Added, Explore. Pull to refresh runs an
   incremental sync. The avatar opens the account sheet.

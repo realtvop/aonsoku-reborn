@@ -9,6 +9,7 @@ struct QueuePanel<CurrentMetadata: View>: View {
     var isActive = true
     var showsCurrentTrack = true
     var currentHeaderHeight: CGFloat = 64
+    var metadataEntranceDelay: Double = 0
     var onShowCover: () -> Void = {}
     @ViewBuilder let currentMetadata: CurrentMetadata
 
@@ -35,13 +36,13 @@ struct QueuePanel<CurrentMetadata: View>: View {
                             QueueSongRow(song: song) {
                                 player.playFromHistory(song)
                             }
-                            .queueRow()
+                            .queueRow(isActive: isActive)
                         }
                     } header: {
                         QueueSectionHeader(title: t("fullscreen.queueHistory")) {
                             Button(t("generic.clear")) { history.clear() }
                         }
-                        .queuePinnedHeader()
+                        .queuePinnedHeader(isActive: isActive)
                     }
                 }
 
@@ -58,6 +59,12 @@ struct QueuePanel<CurrentMetadata: View>: View {
                             .buttonStyle(.plain)
                             .accessibilityLabel(t("fullscreen.playing"))
                             currentMetadata
+                                .modifier(PlayerPageContent(
+                                    isVisible: isActive,
+                                    riseDistance: presentation.panel == nil ? 64 : 0,
+                                    isMetadata: true,
+                                    entranceDelay: metadataEntranceDelay
+                                ))
                         }
                         .frame(height: currentHeaderHeight)
                         .background {
@@ -93,7 +100,7 @@ struct QueuePanel<CurrentMetadata: View>: View {
                             .contextMenu {
                                 SongMenuItems(song: entry.song, context: .queue(entry))
                             }
-                            .queueRow()
+                            .queueRow(isActive: isActive)
                         }
                         .onMove { source, destination in
                             player.move(in: .user, from: source, to: destination)
@@ -108,7 +115,7 @@ struct QueuePanel<CurrentMetadata: View>: View {
                                 title: t("fullscreen.queueContinue"),
                                 subtitle: queue.sourceName.map { t("fullscreen.queueFromSource", ["source": $0]) }
                             ) { EmptyView() }
-                                .queueHeaderRow()
+                                .queueHeaderRow(isActive: isActive)
                         }
                         ForEach(queue.upNext) { entry in
                             QueueSongRow(song: entry.song, isMovable: true) {
@@ -117,7 +124,7 @@ struct QueuePanel<CurrentMetadata: View>: View {
                             .contextMenu {
                                 SongMenuItems(song: entry.song, context: .queue(entry))
                             }
-                            .queueRow()
+                            .queueRow(isActive: isActive)
                         }
                         .onMove { source, destination in
                             player.move(in: .context, from: source, to: destination)
@@ -131,18 +138,18 @@ struct QueuePanel<CurrentMetadata: View>: View {
                             .font(.footnote)
                             .foregroundStyle(.white.opacity(0.5))
                             .frame(maxWidth: .infinity)
-                            .queueRow()
+                            .queueRow(isActive: isActive)
                     }
                     if player.repeatMode != .off {
                         QueueModeNote(
                             title: t("fullscreen.queueRepeating"),
                             systemImage: player.repeatMode == .one ? "repeat.1" : "repeat"
                         )
-                        .queueRow()
+                        .queueRow(isActive: isActive)
                     }
                     if player.isShuffleActive {
                         QueueModeNote(title: t("fullscreen.queueShuffling"), systemImage: "shuffle")
-                            .queueRow()
+                            .queueRow(isActive: isActive)
                     }
                     // Even an empty/short queue can rest at the current-song
                     // boundary instead of exposing history on initial entry.
@@ -172,7 +179,7 @@ struct QueuePanel<CurrentMetadata: View>: View {
                             }
                         }
                     }
-                    .queuePinnedHeader()
+                    .queuePinnedHeader(isActive: isActive)
                 }
             }
             .listStyle(.plain)
@@ -233,13 +240,14 @@ struct QueuePanel<CurrentMetadata: View>: View {
 }
 
 private extension View {
-    func queueRow() -> some View {
+    func queueRow(isActive: Bool) -> some View {
         listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
             .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
+            .modifier(PlayerPageContent(isVisible: isActive))
     }
 
-    func queuePinnedHeader() -> some View {
+    func queuePinnedHeader(isActive: Bool) -> some View {
         textCase(nil)
             .padding(.vertical, 10)
             .foregroundStyle(.white)
@@ -250,12 +258,14 @@ private extension View {
             }
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
+            .modifier(PlayerPageContent(isVisible: isActive))
     }
 
-    func queueHeaderRow() -> some View {
+    func queueHeaderRow(isActive: Bool) -> some View {
         listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
             .listRowInsets(EdgeInsets(top: 14, leading: 20, bottom: 2, trailing: 20))
+            .modifier(PlayerPageContent(isVisible: isActive))
     }
 }
 

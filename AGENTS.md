@@ -190,20 +190,28 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   (`TransportControls(scale: 0.85)` with
   6pt vertical transport padding) across all pages. On compact layouts,
   `PlayerContentLayout` positions the cover/lyrics metadata and both persistent artwork
-  markers above those controls. Cover and lyrics metadata keep separate,
-  persistent final layouts and crossfade with a slight vertical reveal;
-  lyrics use the same short outgoing fade and delayed incoming fade/blur.
-  Queue content fades/blurs without translation so its native artwork marker
-  and viewport coordinates remain stable. Playback controls stay fixed and
-  page buttons animate their selection appearance.
+  markers above those controls. The metadata layout slots stay mounted.
+  Leaving the cover page moves its title/actions upward toward the compact
+  header, scales them to 0.85 and fades them out; returning reveals them
+  from 64pt below. Compact lyrics/queue metadata crossfades in place between
+  those pages and moves downward only when returning to the cover page.
+  Entering a panel from the cover delays its compact metadata by 160ms.
+  Lyrics, queue rows and section headers float up 24pt after a 140ms delay,
+  with a 380ms zero-bounce spring and fade; outgoing content fades downward
+  over 180ms. Queue effects apply to row/header rendering, leaving the List,
+  native current-song marker and viewport stationary. The content viewport
+  clips these effects above the fixed playback controls.
+  Page buttons animate their selection appearance.
   `PlayerPresentationState.panel`
   is the single page selection and derives the artwork destination synchronously.
   Lyrics/queue panels mount before their first switch; lyrics preserve scrolling
   and hidden lyrics stop their playback-following task. Hidden content loses
   hit testing and accessibility immediately. Reduce Motion uses short linear
-  fades without content movement/blur and a short linear artwork transition.
-  Keep animations local to rendering; never animate page selection, native
-  List layout/scroll resets or artwork markers through a global transaction.
+  fades without content movement and a short linear artwork transition.
+  `PlayerPageReveal` explicitly interpolates render progress, and its content
+  descendants do not inherit an animation transaction. Never animate page
+  selection, native List layout/scroll resets or artwork markers through a
+  global transaction.
   Manually scrolling down through synced or plain lyrics collapses the entire
   footer (progress, transport, volume and bottom actions) and expands the lyrics
   viewport. Scrolling back or tapping lyrics restores it, as do changing panels,

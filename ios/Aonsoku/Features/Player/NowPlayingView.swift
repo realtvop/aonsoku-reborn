@@ -10,6 +10,7 @@ struct NowPlayingView: View {
     @State private var lyricsControlsHidden = false
     @State private var bottomControlsHeight: CGFloat?
     @State private var metadataHeight: CGFloat = 64
+    @State private var panelsEnteringFromCover = false
 
     @Environment(PlayerStore.self) private var player
     @Environment(LyricsStore.self) private var lyrics
@@ -17,6 +18,7 @@ struct NowPlayingView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(Router.self) private var router
     @Environment(PlayerPresentationState.self) private var presentation
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var panel: PlayerPanel? { presentation.panel }
 
@@ -78,21 +80,40 @@ struct NowPlayingView: View {
         VStack(spacing: 0) {
             grabber
             statusCapsules
-            PlayerContentLayout {
-                largeArtwork
-                headerArtwork
-                    .opacity(panel == .lyrics ? 1 : 0)
-                    .allowsHitTesting(panel == .lyrics)
-                    .accessibilityHidden(panel != .lyrics)
-                titleRow(isCompact: false)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .modifier(PlayerPageContent(isVisible: panel == nil))
-                measuredTitleRow(isCompact: true)
-                    .modifier(PlayerPageContent(isVisible: panel == .lyrics))
-                panels(showsQueueHeader: true)
+            GeometryReader { proxy in
+                PlayerContentLayout {
+                    largeArtwork
+                    headerArtwork
+                        .opacity(panel == .lyrics ? 1 : 0)
+                        .allowsHitTesting(panel == .lyrics)
+                        .accessibilityHidden(panel != .lyrics)
+                    Color.clear
+                        .frame(height: metadataHeight)
+                        .overlay {
+                            if panel == nil {
+                                titleRow(isCompact: false)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .transition(coverMetadataTransition(in: proxy.size.height))
+                            }
+                        }
+                        .animation(
+                            PlayerPresentationState.panelAnimation(reduceMotion: reduceMotion),
+                            value: panel == nil
+                        )
+                        .allowsHitTesting(panel == nil)
+                        .accessibilityHidden(panel != nil)
+                    measuredTitleRow(isCompact: true)
+                        .modifier(PlayerPageContent(
+                            isVisible: panel == .lyrics,
+                            riseDistance: panel == nil ? 64 : 0,
+                            isMetadata: true,
+                            entranceDelay: panelsEnteringFromCover ? 0.16 : 0
+                        ))
+                    panels(showsQueueHeader: true)
+                }
+                .frame(maxHeight: .infinity)
+                .clipped()
             }
-            .frame(maxHeight: .infinity)
-            .clipped()
             bottomControls
         }
     }
@@ -123,8 +144,19 @@ struct NowPlayingView: View {
         // Reset the hidden List and its artwork target before selecting it,
         // so the transition never starts at the previous scroll position.
         if panel == .queue { presentation.prepareQueueForPresentation?() }
+        panelsEnteringFromCover = self.panel == nil && panel != nil
         lyricsControlsHidden = false
         presentation.panel = panel
+    }
+
+    private func coverMetadataTransition(in height: CGFloat) -> AnyTransition {
+        guard !reduceMotion else { return .opacity }
+        return .asymmetric(
+            insertion: .offset(y: 64).combined(with: .opacity),
+            removal: .offset(y: -max(height - metadataHeight - 16, 0))
+                .combined(with: .scale(scale: 0.85, anchor: .leading))
+                .combined(with: .opacity)
+        )
     }
 
     private var grabber: some View {
@@ -313,11 +345,11 @@ struct NowPlayingView: View {
                 isActive: panel == .queue && router.isNowPlayingPresented,
                 showsCurrentTrack: showsQueueHeader,
                 currentHeaderHeight: max(64, metadataHeight),
+                metadataEntranceDelay: panelsEnteringFromCover ? 0.16 : 0,
                 onShowCover: { selectPanel(nil) }
             ) { titleRow(isCompact: true) }
-            // The native row reports artwork coordinates, so keep its
-            // position fixed and use only fade/blur for the queue surface.
-            .modifier(PlayerPageContent(isVisible: panel == .queue, lift: 0))
+            .allowsHitTesting(panel == .queue)
+            .accessibilityHidden(panel != .queue)
         }
         .allowsHitTesting(panel != nil)
         .accessibilityHidden(panel == nil)
@@ -325,38 +357,63 @@ struct NowPlayingView: View {
     }
 }
 
-/// A short outgoing fade followed by a softer incoming reveal, like the
-/// reference player. Only rendering changes; hidden pages retain their state
-/// and immediately relinquish touches and accessibility focus.
-private struct PlayerPageContent: ViewModifier {
+/// Body content floats up a short distance after the outgoing page fades.
+/// Compact metadata crossfades in place between the lyrics and queue pages.
+/// Hidden pages retain state but relinquish touches and accessibility focus.
+struct PlayerPageContent: ViewModifier {
     var isVisible: Bool
-    var lift: CGFloat = 14
+    var riseDistance: CGFloat = 24
+    var isMetadata = false
+    var entranceDelay: Double = 0.14
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         content
-            .animation(animation) { surface in
-                surface
-                    .opacity(isVisible ? 1 : 0)
-                    .blur(radius: reduceMotion || isVisible ? 0 : 3)
-                    .offset(y: reduceMotion || isVisible ? 0 : lift)
-            }
+            // Only the reveal interpolates. Native List layout and scroll
+            // preparation must never inherit the page animation transaction.
+            .transaction { $0.animation = nil }
+            .modifier(PlayerPageReveal(
+                progress: isVisible ? 1 : 0,
+                riseDistance: reduceMotion ? 0 : riseDistance
+            ))
+            .animation(animation, value: isVisible)
             .allowsHitTesting(isVisible)
             .accessibilityHidden(!isVisible)
     }
 
     private var animation: Animation {
         if reduceMotion { return .linear(duration: 0.15) }
+        if isMetadata {
+            return .easeInOut(duration: 0.22).delay(isVisible ? entranceDelay : 0)
+        }
         return isVisible
-            ? .easeOut(duration: 0.3).delay(0.1)
-            : .easeOut(duration: 0.16)
+            ? .spring(duration: 0.38, bounce: 0).delay(entranceDelay)
+            : .easeOut(duration: 0.18)
+    }
+}
+
+/// Interpolate the render offset explicitly: applying offset inside SwiftUI's
+/// scoped animation closure can jump native-backed content to its endpoint.
+private struct PlayerPageReveal: AnimatableModifier {
+    var progress: CGFloat
+    var riseDistance: CGFloat
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .offset(y: (1 - progress) * riseDistance)
+            .opacity(Double(progress))
     }
 }
 
 /// Both metadata layouts and artwork destinations stay at their final
-/// coordinates. Crossfade the metadata instead of moving or scaling text
-/// across the page; the presentation host moves the sole artwork separately.
+/// coordinates while their content rises into view. The presentation host
+/// moves the sole artwork separately.
 private struct PlayerContentLayout: SwiftUI.Layout {
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         proposal.replacingUnspecifiedDimensions()
