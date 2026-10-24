@@ -595,54 +595,26 @@ private struct DevicesButton: View {
 
 // MARK: - Background
 
-/// The cover's colors in a slowly moving mesh, as behind Apple Music's Now
-/// Playing. `intensity` is the color strength setting.
+/// All player pages and pinned queue headers use the same opaque backdrop.
+/// Like the web player, overlay the cover's RMS average at the configured strength.
 struct NowPlayingBackground: View {
-    let palette: ArtworkPalette?
-    let intensity: Double
-    var isAnimating = true
-
+    @Environment(\.nowPlayingPalette) private var palette
+    @Environment(SettingsStore.self) private var settings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
-            Color.black
-            TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion || !isAnimating)) { context in
-                MeshGradient(
-                    width: 3,
-                    height: 3,
-                    points: Self.points(at: context.date.timeIntervalSinceReferenceDate),
-                    colors: colors
-                )
+            // The player keeps light controls in every app appearance.
+            settings.settings.appearance.darkTheme.palette.background
+            if let color = palette?.average ?? palette?.colors.first {
+                Color(color)
+                    .opacity(min(max(settings.settings.appearance.nowPlayingColorIntensity, 0), 1))
             }
-            .opacity(opacity)
         }
-        .animation(.smooth(duration: 0.8), value: palette)
+        .animation(reduceMotion ? .linear(duration: 0.15) : .smooth(duration: 1), value: palette)
     }
+}
 
-    private var colors: [Color] {
-        palette?.meshColors ?? Array(repeating: Color(white: 0.2), count: 9)
-    }
-
-    /// 0.5 at the weakest setting, fully opaque at the strongest.
-    private var opacity: Double {
-        let range = AppearanceSettings.colorIntensityRange
-        let normalized = (intensity - range.lowerBound) / (range.upperBound - range.lowerBound)
-        return 0.5 + 0.5 * min(max(normalized, 0), 1)
-    }
-
-    /// The middle points drift on slow, offset sine waves; the edges stay put.
-    nonisolated static func points(at time: TimeInterval) -> [SIMD2<Float>] {
-        let t = Float(time.truncatingRemainder(dividingBy: 10_000))
-        func drift(_ phase: Float, _ amount: Float) -> Float {
-            sin(t * 0.22 + phase) * amount
-        }
-        return [
-            SIMD2(0, 0), SIMD2(0.5 + drift(0, 0.12), 0), SIMD2(1, 0),
-            SIMD2(0, 0.5 + drift(1.3, 0.12)),
-            SIMD2(0.5 + drift(2.1, 0.16), 0.5 + drift(0.7, 0.16)),
-            SIMD2(1, 0.5 + drift(2.9, 0.12)),
-            SIMD2(0, 1), SIMD2(0.5 + drift(1.7, 0.12), 1), SIMD2(1, 1),
-        ]
-    }
+extension EnvironmentValues {
+    @Entry var nowPlayingPalette: ArtworkPalette?
 }

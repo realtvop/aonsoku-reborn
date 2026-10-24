@@ -216,8 +216,7 @@ private extension View {
             .padding(.vertical, 10)
             .foregroundStyle(.white)
             .background {
-                Rectangle()
-                    .fill(.ultraThinMaterial)
+                NowPlayingBackground()
                     .mask(LinearGradient(
                         stops: [.init(color: .black, location: 0.85), .init(color: .clear, location: 1)],
                         startPoint: .top, endPoint: .bottom
@@ -235,7 +234,7 @@ private extension View {
 }
 
 /// Shared titles for pinned history/upcoming headers and the user/context
-/// boundary. Pinned headers supply their own fading material backdrop.
+/// boundary. Pinned headers fade the same solid backdrop over the scrolling rows.
 private struct QueueSectionHeader<Actions: View>: View {
     let title: String
     var subtitle: String?

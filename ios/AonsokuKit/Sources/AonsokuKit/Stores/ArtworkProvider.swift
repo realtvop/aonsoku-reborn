@@ -37,13 +37,16 @@ public struct RGBColor: Hashable, Sendable {
 
 /// Dominant colors of a cover, for Now Playing and detail backgrounds.
 public struct ArtworkPalette: Hashable, Sendable {
-    /// Four colors, most prominent first, for a mesh gradient.
+    /// Up to four colors, most prominent first.
     public var colors: [RGBColor]
+    /// Root-mean-square average, matching the web player's color extraction.
+    public var average: RGBColor?
     /// The background is dark enough for light text.
     public var isDark: Bool
 
-    public init(colors: [RGBColor], isDark: Bool) {
+    public init(colors: [RGBColor], isDark: Bool, average: RGBColor? = nil) {
         self.colors = colors
+        self.average = average
         self.isDark = isDark
     }
 }
@@ -256,8 +259,21 @@ public final class ArtworkProvider: @unchecked Sendable {
         guard drewImage else { return nil }
 
         var buckets: [Int: ColorBucket] = [:]
+        var squaredRed = 0.0
+        var squaredGreen = 0.0
+        var squaredBlue = 0.0
+        var alphaWeight = 0.0
         for index in stride(from: 0, to: pixels.count, by: 4) {
             let alpha = Int(pixels[index + 3])
+            // CGContext provides premultiplied channels; undo premultiplication
+            // before applying the web sqrt algorithm's alpha weighting.
+            if alpha > 0 {
+                let weight = Double(alpha) / 255
+                squaredRed += pow(Double(pixels[index]) / Double(alpha), 2) * weight
+                squaredGreen += pow(Double(pixels[index + 1]) / Double(alpha), 2) * weight
+                squaredBlue += pow(Double(pixels[index + 2]) / Double(alpha), 2) * weight
+                alphaWeight += weight
+            }
             guard alpha >= 64 else { continue }
             let red = Int(pixels[index])
             let green = Int(pixels[index + 1])
@@ -299,7 +315,12 @@ public final class ArtworkProvider: @unchecked Sendable {
         } / Double(totalWeight)
         return ArtworkPalette(
             colors: selected.map(\.0),
-            isDark: luminance < 0.45
+            isDark: luminance < 0.45,
+            average: alphaWeight > 0 ? RGBColor(
+                red: sqrt(squaredRed / alphaWeight),
+                green: sqrt(squaredGreen / alphaWeight),
+                blue: sqrt(squaredBlue / alphaWeight)
+            ) : nil
         )
     }
 }

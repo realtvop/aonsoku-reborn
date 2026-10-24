@@ -264,11 +264,7 @@ private struct NowPlayingPresentation: ViewModifier {
                         ? expandedRadius : pill.height / 2
                     let shape = PlayerSurfaceShape(frame: surface, cornerRadius: radius)
                     ZStack(alignment: .topLeading) {
-                        NowPlayingBackground(
-                            palette: palette,
-                            intensity: settings.settings.appearance.nowPlayingColorIntensity,
-                            isAnimating: player.isPlaying && router.isNowPlayingPresented
-                        )
+                        NowPlayingBackground()
                         .frame(width: surface.width, height: surface.height)
                         .position(x: surface.midX, y: surface.midY)
                         .opacity(backgroundOpacity(viewportHeight: height))
@@ -288,6 +284,7 @@ private struct NowPlayingPresentation: ViewModifier {
                             .accessibilityHidden(router.isNowPlayingPresented)
                         sharedArtwork(in: proxy)
                     }
+                    .environment(\.nowPlayingPalette, palette)
                     .frame(width: width, height: height, alignment: .topLeading)
                     .coordinateSpace(name: PlayerArtworkLocation.containerCoordinateSpace)
                     .clipShape(shape)

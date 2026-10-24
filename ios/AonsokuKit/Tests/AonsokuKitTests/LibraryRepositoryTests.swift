@@ -294,6 +294,12 @@ final class ArtworkProviderTests: XCTestCase {
         let extracted = await provider.palette(for: id)
         let palette = try XCTUnwrap(extracted)
         XCTAssertEqual(palette.colors.count, 4)
+        // Equal red/green/blue/yellow quadrants: RMS differs from both
+        // the dominant bucket and arithmetic average used by other algorithms.
+        let average = try XCTUnwrap(palette.average)
+        XCTAssertEqual(average.red, sqrt(0.5), accuracy: 0.03)
+        XCTAssertEqual(average.green, sqrt(0.5), accuracy: 0.03)
+        XCTAssertEqual(average.blue, 0.5, accuracy: 0.03)
         XCTAssertFalse(palette.colors.contains { color in
             color.red.isNaN || color.green.isNaN || color.blue.isNaN
         })
