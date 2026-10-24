@@ -6,6 +6,10 @@ import UIKit
 @MainActor
 @Observable
 final class PlayerPresentationState {
+    static func panelAnimation(reduceMotion: Bool) -> Animation {
+        reduceMotion ? .linear(duration: 0.15) : .spring(duration: 0.45, bounce: 0)
+    }
+
     var dragOffset: CGFloat = 0
     var artworkLocation: PlayerArtworkLocation = .cover
     var artworkFrames: [PlayerArtworkLocation: PlayerArtworkFrame] = [:]
@@ -331,7 +335,7 @@ private struct NowPlayingPresentation: ViewModifier {
     }
 
     private var presentationAnimation: Animation {
-        reduceMotion ? .linear(duration: 0.15) : .spring(duration: 0.45, bounce: 0)
+        PlayerPresentationState.panelAnimation(reduceMotion: reduceMotion)
     }
 
     private func backgroundOpacity(viewportHeight: CGFloat) -> Double {

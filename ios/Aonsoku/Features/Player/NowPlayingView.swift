@@ -13,6 +13,7 @@ struct NowPlayingView: View {
     }
 
     @State private var panel: Panel?
+    @State private var loadedPanels: Set<Panel> = []
 
     @Environment(PlayerStore.self) private var player
     @Environment(LyricsStore.self) private var lyrics
@@ -20,6 +21,7 @@ struct NowPlayingView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(Router.self) private var router
     @Environment(PlayerPresentationState.self) private var presentation
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { proxy in
@@ -34,9 +36,11 @@ struct NowPlayingView: View {
                         .frame(maxWidth: .infinity)
                 }
             }
-            .animation(.spring(duration: 0.5, bounce: 0.15), value: panel)
+            .animation(panelAnimation, value: panel)
             .onChange(of: isWide || panel == nil, initial: true) { _, usesLargeCover in
-                presentation.artworkLocation = usesLargeCover ? .cover : .header
+                withAnimation(panelAnimation) {
+                    presentation.artworkLocation = usesLargeCover ? .cover : .header
+                }
             }
         }
         .foregroundStyle(.white)
@@ -68,25 +72,21 @@ struct NowPlayingView: View {
         VStack(spacing: 0) {
             grabber
             statusCapsules
-            if let panel {
-                compactHeader
-                    .padding(.horizontal, 24)
-                    .padding(.top, 8)
-                panelContent(panel)
-                    .frame(maxHeight: .infinity)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-                controls
-                    .padding(.top, 8)
-            } else {
+            PlayerContentLayout(showsPanel: panel != nil) {
                 largeArtwork
-                    .padding(.horizontal, 30)
-                    .padding(.vertical, 12)
-                    .frame(maxHeight: .infinity)
+                headerArtwork
+                    .opacity(panel == nil ? 0 : 1)
+                    .allowsHitTesting(panel != nil)
+                    .accessibilityHidden(panel == nil)
                 titleRow
-                    .padding(.horizontal, 30)
-                controls
-                    .padding(.top, 14)
+                    .modifier(PlayerPanelTransition(
+                        progress: panel == nil ? 0 : 1, element: .metadata, reduceMotion: reduceMotion
+                    ))
+                panels
             }
+            .frame(maxHeight: .infinity)
+            controls
+                .padding(.top, 14)
             bottomBar
         }
     }
@@ -105,11 +105,11 @@ struct NowPlayingView: View {
                 bottomBar
             }
             .frame(maxWidth: 500)
-            if let panel {
-                panelContent(panel)
+            if panel != nil {
+                panels
                     .frame(maxWidth: 620, maxHeight: .infinity)
                     .padding(.vertical, 40)
-                    .transition(.opacity.combined(with: .move(edge: .trailing)))
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .trailing)))
             }
         }
         .padding(.horizontal, 48)
@@ -117,6 +117,10 @@ struct NowPlayingView: View {
     }
 
     // MARK: - Pieces
+
+    private var panelAnimation: Animation {
+        PlayerPresentationState.panelAnimation(reduceMotion: reduceMotion)
+    }
 
     private var grabber: some View {
         Capsule()
@@ -178,27 +182,15 @@ struct NowPlayingView: View {
         }
     }
 
-    /// The small cover, song and buttons above lyrics or the queue. The
-    /// cover returns to the large one.
-    private var compactHeader: some View {
-        HStack(spacing: 14) {
-            Button {
-                panel = nil
-            } label: {
-                PlayerArtworkSlot(location: .header, cornerRadius: 8, shadowRadius: 10)
-                    .frame(width: 64, height: 64)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(t("fullscreen.playing"))
-            VStack(alignment: .leading, spacing: 2) {
-                MarqueeText(text: NowPlayingText.title(player, t))
-                    .font(.headline)
-                ArtistMenu()
-                    .font(.subheadline)
-            }
-            Spacer(minLength: 0)
-            songButtons
+    private var headerArtwork: some View {
+        Button {
+            panel = nil
+        } label: {
+            PlayerArtworkSlot(location: .header, cornerRadius: 8, shadowRadius: 10)
+                .contentShape(.rect)
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(t("fullscreen.playing"))
     }
 
     @ViewBuilder
@@ -228,8 +220,8 @@ struct NowPlayingView: View {
     private var controls: some View {
         VStack(spacing: 0) {
             PlaybackScrubber()
-            TransportControls(scale: panel == nil ? 1 : 0.85)
-                .padding(.vertical, panel == nil ? 16 : 6)
+            TransportControls()
+                .padding(.vertical, 16)
             VolumeSlider()
         }
         .padding(.horizontal, 30)
@@ -261,6 +253,7 @@ struct NowPlayingView: View {
     private func panelButton(_ target: Panel, symbol: String, label: String) -> some View {
         let isOn = panel == target
         return Button {
+            loadedPanels.insert(target)
             panel = isOn ? nil : target
         } label: {
             Image(systemName: symbol)
@@ -275,14 +268,101 @@ struct NowPlayingView: View {
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
-    @ViewBuilder
-    private func panelContent(_ panel: Panel) -> some View {
-        switch panel {
-        case .lyrics:
-            LyricsPanel()
-        case .queue:
-            QueuePanel()
+    /// Keep visited pages mounted so switching preserves scroll position.
+    /// The header and transport stay outside this crossfade.
+    private var panels: some View {
+        ZStack {
+            if loadedPanels.contains(.lyrics) {
+                LyricsPanel(isActive: panel == .lyrics && router.isNowPlayingPresented)
+                    .opacity(panel == .lyrics ? 1 : 0)
+                    .allowsHitTesting(panel == .lyrics)
+                    .accessibilityHidden(panel != .lyrics)
+            }
+            if loadedPanels.contains(.queue) {
+                QueuePanel()
+                    .opacity(panel == .queue ? 1 : 0)
+                    .allowsHitTesting(panel == .queue)
+                    .accessibilityHidden(panel != .queue)
+            }
         }
+        .animation(.easeInOut(duration: reduceMotion ? 0.15 : 0.2), value: panel)
+        .modifier(PlayerPanelTransition(
+            progress: panel == nil ? 0 : 1, element: .content, reduceMotion: reduceMotion
+        ))
+        .allowsHitTesting(panel != nil)
+        .accessibilityHidden(panel == nil)
+        .clipped()
+    }
+}
+
+/// Tie visibility to the same interruptible progress as the cover movement.
+/// Text fades out during travel; panel content appears as the cover settles.
+private struct PlayerPanelTransition: AnimatableModifier {
+    enum Element {
+        case metadata
+        case content
+    }
+
+    var progress: Double
+    let element: Element
+    let reduceMotion: Bool
+
+    var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        let reveal = min(max((progress - 0.9) / 0.1, 0), 1)
+        let opacity: Double = switch element {
+        case .metadata:
+            reduceMotion ? 1 : max(1 - progress / 0.25, reveal)
+        case .content:
+            reduceMotion ? progress : reveal
+        }
+        content.opacity(opacity)
+    }
+}
+
+/// Only the upper content changes layout. Both artwork destinations always
+/// exist, and the same metadata row moves between them; controls never reflow.
+private struct PlayerContentLayout: SwiftUI.Layout {
+    var showsPanel: Bool
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        proposal.replacingUnspecifiedDimensions()
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard subviews.count == 4 else { return }
+        let leading: CGFloat = showsPanel ? 102 : 30
+        let trailing: CGFloat = showsPanel ? 24 : 30
+        let titleWidth = max(bounds.width - leading - trailing, 0)
+        let titleSize = subviews[2].sizeThatFits(ProposedViewSize(width: titleWidth, height: nil))
+        let headerHeight = max(64, titleSize.height)
+        let panelTop = headerHeight + 16
+        let coverHeight = max(bounds.height - titleSize.height - 24, 0)
+        let coverSide = max(min(bounds.width - 60, coverHeight), 0)
+
+        subviews[0].place(
+            at: CGPoint(x: bounds.midX - coverSide / 2, y: bounds.minY + 12 + (coverHeight - coverSide) / 2),
+            proposal: ProposedViewSize(width: coverSide, height: coverSide)
+        )
+        subviews[1].place(
+            at: CGPoint(x: bounds.minX + 24, y: bounds.minY + 8 + (headerHeight - 64) / 2),
+            proposal: ProposedViewSize(width: 64, height: 64)
+        )
+        subviews[2].place(
+            at: CGPoint(
+                x: bounds.minX + leading,
+                y: showsPanel ? bounds.minY + 8 + (headerHeight - titleSize.height) / 2 : bounds.maxY - titleSize.height
+            ),
+            proposal: ProposedViewSize(width: titleWidth, height: titleSize.height)
+        )
+        subviews[3].place(
+            at: CGPoint(x: bounds.minX, y: bounds.minY + panelTop),
+            proposal: ProposedViewSize(width: bounds.width, height: max(bounds.height - panelTop, 0))
+        )
     }
 }
 

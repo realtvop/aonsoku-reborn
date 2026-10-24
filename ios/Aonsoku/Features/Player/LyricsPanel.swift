@@ -5,6 +5,8 @@ import SwiftUI
 /// current line lit and kept in view, as in Apple Music; a tap on a line
 /// plays from it, and scrolling by hand pauses the following for a moment.
 struct LyricsPanel: View {
+    var isActive = true
+
     @Environment(PlayerStore.self) private var player
     @Environment(LyricsStore.self) private var lyrics
     @Environment(SettingsStore.self) private var settings
@@ -29,7 +31,7 @@ struct LyricsPanel: View {
                 }
             case let .loaded(songLyrics):
                 if songLyrics.isSynced {
-                    SyncedLyrics(lyrics: songLyrics, showsTranslation: showsTranslation)
+                    SyncedLyrics(lyrics: songLyrics, showsTranslation: showsTranslation, isActive: isActive)
                 } else {
                     PlainLyrics(lyrics: songLyrics, showsTranslation: showsTranslation)
                 }
@@ -75,6 +77,7 @@ struct LyricsPanel: View {
 private struct SyncedLyrics: View {
     let lyrics: SongLyrics
     let showsTranslation: Bool
+    let isActive: Bool
 
     @Environment(PlayerStore.self) private var player
     @Environment(LyricsStore.self) private var store
@@ -124,7 +127,8 @@ private struct SyncedLyrics: View {
             }
         }
         .mask(EdgeFade())
-        .task(id: lyrics) {
+        .task(id: LyricsFollowingTask(lyrics: lyrics, isActive: isActive)) {
+            guard isActive else { return }
             // Checks the line ten times a second but only redraws when it
             // changes.
             while !Task.isCancelled {
@@ -145,6 +149,11 @@ private struct SyncedLyrics: View {
             player.resume()
         }
     }
+}
+
+private struct LyricsFollowingTask: Equatable {
+    let lyrics: SongLyrics
+    let isActive: Bool
 }
 
 private struct LyricLineView: View {
