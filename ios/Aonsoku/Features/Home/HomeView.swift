@@ -152,8 +152,8 @@ private struct OtherDevicesSection: View {
 private struct FeaturedCarousel: View {
     let albums: [Album]
 
-    @State private var selection: String?
-    @State private var isInteracting = false
+    @State private var selection: Int? = 1
+    @State private var isScrolling = false
 
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -161,41 +161,69 @@ private struct FeaturedCarousel: View {
 
     var body: some View {
         let margin = Layout.margin(sizeClass)
-        VStack(spacing: 10) {
-            ScrollView(.horizontal) {
-                LazyHStack(spacing: margin) {
-                    ForEach(albums) { album in
-                        FeaturedCard(album: album)
-                            .containerRelativeFrame(.horizontal)
-                    }
+        ScrollView(.horizontal) {
+            LazyHStack(spacing: margin) {
+                // The end copies let both swipes and autoplay cross the seam.
+                ForEach(0..<pageCount, id: \.self) { page in
+                    FeaturedCard(album: albums[albumIndex(for: page)])
+                        .containerRelativeFrame(.horizontal)
                 }
-                .scrollTargetLayout()
             }
-            .scrollTargetBehavior(.viewAligned)
-            .scrollPosition(id: $selection)
-            .scrollIndicators(.hidden)
-            .scrollClipDisabled()
-            .contentMargins(.horizontal, margin, for: .scrollContent)
-            .onScrollPhaseChange { _, phase in
-                isInteracting = phase == .interacting || phase == .decelerating
-            }
-            if albums.count > 1 {
-                PageDots(count: albums.count, selected: selectedIndex)
+            .scrollTargetLayout()
+        }
+        .scrollTargetBehavior(.viewAligned)
+        .scrollPosition(id: $selection)
+        .scrollIndicators(.hidden)
+        .scrollClipDisabled()
+        .contentMargins(.horizontal, margin, for: .scrollContent)
+        .onScrollPhaseChange { _, phase in
+            isScrolling = phase != .idle
+            if phase == .idle {
+                recenterSelection()
             }
         }
-        .task(id: selection) {
-            guard albums.count > 1, !reduceMotion, !voiceOver else { return }
-            try? await Task.sleep(for: .seconds(10))
-            guard !Task.isCancelled, !isInteracting else { return }
-            let next = albums[(selectedIndex + 1) % albums.count].id
-            withAnimation(.smooth(duration: 0.6)) {
-                selection = next
+        .onChange(of: albums.map(\.id), initial: true) { _, _ in
+            setSelectionWithoutAnimation(albums.count > 1 ? 1 : 0)
+        }
+        .task(id: canAutoAdvance ? albums.map(\.id) : []) {
+            guard canAutoAdvance else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(10))
+                guard !Task.isCancelled, canAutoAdvance else { return }
+                withAnimation(.smooth(duration: 0.6)) {
+                    selection = min((selection ?? 1) + 1, albums.count + 1)
+                }
             }
         }
     }
 
-    private var selectedIndex: Int {
-        selection.flatMap { id in albums.firstIndex { $0.id == id } } ?? 0
+    private var pageCount: Int {
+        albums.count > 1 ? albums.count + 2 : albums.count
+    }
+
+    private var canAutoAdvance: Bool {
+        albums.count > 1 && !reduceMotion && !voiceOver && !isScrolling
+    }
+
+    private func albumIndex(for page: Int) -> Int {
+        albums.count > 1 ? (page + albums.count - 1) % albums.count : page
+    }
+
+    private func recenterSelection() {
+        guard albums.count > 1 else { return }
+        if selection == 0 {
+            setSelectionWithoutAnimation(albums.count)
+        } else if selection == albums.count + 1 {
+            setSelectionWithoutAnimation(1)
+        }
+    }
+
+    private func setSelectionWithoutAnimation(_ page: Int) {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            selection = page
+        }
     }
 }
 
@@ -296,23 +324,5 @@ private struct FeaturedCard: View {
         .compactMap { $0 }
         .filter { !$0.isEmpty }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-}
-
-/// Which featured card is showing: a wider capsule in the accent color.
-private struct PageDots: View {
-    let count: Int
-    let selected: Int
-
-    var body: some View {
-        HStack(spacing: 5) {
-            ForEach(0..<count, id: \.self) { index in
-                Capsule()
-                    .fill(index == selected ? AnyShapeStyle(.tint) : AnyShapeStyle(ThemeColor.border))
-                    .frame(width: index == selected ? 16 : 6, height: 6)
-            }
-        }
-        .animation(.smooth, value: selected)
-        .accessibilityHidden(true)
     }
 }
