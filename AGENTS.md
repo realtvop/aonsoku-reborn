@@ -196,7 +196,7 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   text while staying visible during travel. `PlayerPresentationState.panel`
   is the single page selection and derives the artwork destination synchronously.
   Lyrics/queue panels mount before their first transition and crossfade with
-  the same interruptible animation as the cover, preserving scrolling; hidden
+  the same interruptible animation as the cover; lyrics preserve scrolling and hidden
   lyrics stop their playback-following task. Reduce Motion uses a short linear transition.
   Manually scrolling down through synced or plain lyrics collapses the entire
   footer (progress, transport, volume and bottom actions) and expands the lyrics
@@ -215,8 +215,11 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   A persistent animatable rectangular mask clips queue artwork to its viewport
   and expands to the full surface on other pages; never conditionally replace
   the artwork's mask or let a scrolling cover paint over transport controls.
-  The mounted queue positions its initial history offset before activation,
-  and keeps sampling its marker while hidden so reentry has a valid target.
+  Every queue entry, including reopening fullscreen with Queue selected,
+  positions the current track at the top. The mounted queue registers a
+  preparation callback that resets its offset before selection and supplies
+  the artwork's top-row destination synchronously, before List layout catches
+  up. It also keeps sampling its marker while hidden.
   `QueueHeaderTrackingReader` observes the existing pan without replacing its
   delegate, attracts slow/settled releases within 44pt of the current/upcoming
   boundary, and retains native rubber banding, row moves and swipe deletion.

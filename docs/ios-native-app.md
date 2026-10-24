@@ -188,8 +188,10 @@ with automatic foreground sync disabled.
   paused scaling and dismissal.
   Page selection and artwork destination share `PlayerPresentationState`.
   Lyrics and queue mount before the first switch, and content/metadata/artwork
-  use the same interruptible transition. The queue prepares its history offset
-  and tracks its artwork marker while hidden; switching never inserts a new
+  use the same interruptible transition. Every queue entry resets to the
+  current track at the top, including reopening fullscreen with Queue selected.
+  It prepares the offset and artwork destination before selection and tracks
+  its artwork marker while hidden; switching never inserts a new
   List, removes the main metadata, or delays the cover destination by a frame.
 - **Home**: other devices' playback, featured albums, pinned items, Recently
   Played, Most Played, Recently Added, Explore. Pull to refresh runs an

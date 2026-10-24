@@ -18,7 +18,6 @@ struct QueuePanel<CurrentMetadata: View>: View {
     @Environment(PlayerPresentationState.self) private var presentation
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    @State private var didPositionInitially = false
     @State private var viewportHeight: CGFloat = 0
     @State private var snapFeedback = 0
 
@@ -192,19 +191,42 @@ struct QueuePanel<CurrentMetadata: View>: View {
                 if showsCurrentTrack { presentation.queueViewportFrame = frame }
             }
             .haptic(.selection, trigger: snapFeedback)
+            .onAppear { registerPreparation(proxy) }
+            .onChange(of: currentHeaderHeight) { registerPreparation(proxy) }
+            .onDisappear { presentation.prepareQueueForPresentation = nil }
+            .onChange(of: isActive) { _, active in
+                // Also handles reopening fullscreen while Queue is selected.
+                if active { presentation.prepareQueueForPresentation?() }
+            }
             .task(id: history.songs.isEmpty) {
-                // Position while the mounted page is still hidden. Waiting
-                // for activation makes the cover travel to the old row
-                // position, then jump when scrollTo updates it a frame later.
-                guard !history.songs.isEmpty, !didPositionInitially else { return }
+                // Prepare the initial offset when history finishes loading.
+                guard !history.songs.isEmpty else { return }
                 await Task.yield()
                 guard !Task.isCancelled else { return }
-                var transaction = Transaction()
-                transaction.disablesAnimations = true
-                withTransaction(transaction) {
-                    proxy.scrollTo(showsCurrentTrack ? currentID : modesID, anchor: .top)
-                }
-                didPositionInitially = true
+                presentation.prepareQueueForPresentation?()
+            }
+        }
+    }
+
+    private func registerPreparation(_ proxy: ScrollViewProxy) {
+        let target = showsCurrentTrack ? currentID : modesID
+        let showsCurrentTrack = showsCurrentTrack
+        let headerHeight = currentHeaderHeight
+        presentation.prepareQueueForPresentation = { [weak presentation] in
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                proxy.scrollTo(target, anchor: .top)
+                guard showsCurrentTrack, let presentation,
+                      let viewport = presentation.queueViewportFrame else { return }
+                // scrollTo lays out on the next pass. Supply its destination
+                // immediately so the sole artwork doesn't visit the old row
+                // position, even if that cell has been recycled offscreen.
+                presentation.queueHeaderOwner = nil
+                presentation.queueHeaderFrame = CGRect(
+                    x: 24, y: 8, width: max(viewport.width - 48, 0), height: headerHeight
+                )
+                presentation.isQueueHeaderVisible = true
             }
         }
     }

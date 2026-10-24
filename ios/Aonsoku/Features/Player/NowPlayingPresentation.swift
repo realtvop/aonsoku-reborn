@@ -25,6 +25,7 @@ final class PlayerPresentationState {
     var queueHeaderOwner: UUID?
     var queueViewportFrame: CGRect?
     var isQueueHeaderVisible = true
+    @ObservationIgnored var prepareQueueForPresentation: (() -> Void)?
     var accessory: PlayerAccessoryLayout?
 }
 

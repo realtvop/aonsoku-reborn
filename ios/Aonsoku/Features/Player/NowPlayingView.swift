@@ -129,6 +129,9 @@ struct NowPlayingView: View {
     }
 
     private func selectPanel(_ panel: PlayerPanel?) {
+        // Reset the hidden List and its artwork target before selecting it,
+        // so the transition never starts at the previous scroll position.
+        if panel == .queue { presentation.prepareQueueForPresentation?() }
         withAnimation(panelAnimation) {
             lyricsControlsHidden = false
             presentation.panel = panel
