@@ -21,6 +21,7 @@ struct ArtistDetailView: View {
     @Environment(NetworkMonitor.self) private var network
     @Environment(PlayerStore.self) private var player
     @Environment(Localizer.self) private var t
+    @Environment(\.themeContext) private var theme
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     init(artistId: String, name: String) {
@@ -85,7 +86,11 @@ struct ArtistDetailView: View {
         }
         .artworkPalette(artist?.coverArt, into: $palette)
         .themedBackground()
-        .scrollRevealedTitle(artistName, threshold: sizeClass == .regular ? 200 : 290)
+        .scrollRevealedTitle(
+            artistName,
+            threshold: sizeClass == .regular ? 200 : 290,
+            headerIsDark: DetailBand.isDark(palette, theme: theme.palette)
+        )
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {

@@ -23,6 +23,7 @@ struct AlbumDetailView: View {
     @Environment(PlayerStore.self) private var player
     @Environment(Router.self) private var router
     @Environment(Localizer.self) private var t
+    @Environment(\.themeContext) private var theme
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.locale) private var locale
 
@@ -90,7 +91,11 @@ struct AlbumDetailView: View {
         }
         .artworkPalette(album?.coverArt, into: $palette)
         .themedBackground()
-        .scrollRevealedTitle(album?.name ?? "", threshold: sizeClass == .regular ? 200 : 290)
+        .scrollRevealedTitle(
+            album?.name ?? "",
+            threshold: sizeClass == .regular ? 200 : 290,
+            headerIsDark: DetailBand.isDark(palette, theme: theme.palette)
+        )
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -263,6 +268,7 @@ struct AlbumDetailView: View {
         HStack(spacing: 8) {
             Image(systemName: "opticaldisc")
                 .frame(width: 26)
+                .accessibilityHidden(true)
             Text(t("album.table.discNumber", ["number": String(disc.number)]))
             if let title = disc.title {
                 Text(verbatim: "·")

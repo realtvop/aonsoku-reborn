@@ -23,6 +23,7 @@ struct PlaylistDetailView: View {
     @Environment(SessionStore.self) private var session
     @Environment(Router.self) private var router
     @Environment(Localizer.self) private var t
+    @Environment(\.themeContext) private var theme
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.locale) private var locale
 
@@ -94,7 +95,11 @@ struct PlaylistDetailView: View {
         .artworkPalette(coverArt, into: $palette)
         .detailBand(palette, headerHeight: headerHeight)
         .themedBackground()
-        .scrollRevealedTitle(playlist?.name ?? "", threshold: sizeClass == .regular ? 200 : 290)
+        .scrollRevealedTitle(
+            playlist?.name ?? "",
+            threshold: sizeClass == .regular ? 200 : 290,
+            headerIsDark: DetailBand.isDark(palette, theme: theme.palette)
+        )
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {

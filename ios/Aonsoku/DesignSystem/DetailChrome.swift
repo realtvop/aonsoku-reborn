@@ -191,15 +191,18 @@ private struct ListDetailBand: ViewModifier {
 
 extension View {
     /// An inline navigation title that appears once the header showing the
-    /// page's name has scrolled past `threshold`.
-    func scrollRevealedTitle(_ title: String, threshold: CGFloat) -> some View {
-        modifier(ScrollRevealedTitle(title: title, threshold: threshold))
+    /// page's name has scrolled past `threshold`. Until then the bar and the
+    /// status bar follow `headerIsDark`, for a header band that is lighter
+    /// or darker than the page.
+    func scrollRevealedTitle(_ title: String, threshold: CGFloat, headerIsDark: Bool? = nil) -> some View {
+        modifier(ScrollRevealedTitle(title: title, threshold: threshold, headerIsDark: headerIsDark))
     }
 }
 
 private struct ScrollRevealedTitle: ViewModifier {
     let title: String
     let threshold: CGFloat
+    let headerIsDark: Bool?
 
     @State private var isRevealed = false
 
@@ -207,6 +210,7 @@ private struct ScrollRevealedTitle: ViewModifier {
         content
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(barColorScheme, for: .navigationBar)
             .onScrollGeometryChange(for: Bool.self) { geometry in
                 geometry.contentOffset.y + geometry.contentInsets.top > threshold
             } action: { _, revealed in
@@ -224,6 +228,11 @@ private struct ScrollRevealedTitle: ViewModifier {
                 }
                 .sharedBackgroundVisibility(.hidden)
             }
+    }
+
+    private var barColorScheme: ColorScheme? {
+        guard !isRevealed, let headerIsDark else { return nil }
+        return headerIsDark ? .dark : .light
     }
 }
 
