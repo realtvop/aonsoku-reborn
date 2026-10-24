@@ -70,16 +70,16 @@ struct MiniPlayer: View {
             let viewportWidth = max(proxy.size.width, 1)
             let pageStride = viewportWidth + trackSpacing
             ZStack(alignment: .leading) {
-                metadata(context.current)
+                metadata(context.current, isActive: swipeContext == nil)
                     .frame(width: viewportWidth, alignment: .leading)
                     .offset(x: swipeOffset)
                 if let previous = context.previous {
-                    metadata(previous.metadata)
+                    metadata(previous.metadata, isActive: false)
                         .frame(width: viewportWidth, alignment: .leading)
                         .offset(x: swipeOffset - pageStride)
                 }
                 if let next = context.next {
-                    metadata(next.metadata)
+                    metadata(next.metadata, isActive: false)
                         .frame(width: viewportWidth, alignment: .leading)
                         .offset(x: swipeOffset + pageStride)
                 }
@@ -93,12 +93,12 @@ struct MiniPlayer: View {
     }
 
     @ViewBuilder
-    private func metadata(_ metadata: MiniPlayerMetadata) -> some View {
+    private func metadata(_ metadata: MiniPlayerMetadata, isActive: Bool) -> some View {
         VStack(alignment: .leading, spacing: mix(1, 0)) {
-            MarqueeText(text: metadata.title, respectsReduceMotion: false)
+            MarqueeText(text: metadata.title, respectsReduceMotion: false, isActive: isActive)
                 .font(.system(size: mix(expandedTitleSize, compactTitleSize), weight: .semibold))
             if let subtitle = metadata.subtitle {
-                subtitleView(subtitle)
+                subtitleView(subtitle, isActive: isActive)
                     .font(.system(size: mix(expandedSubtitleSize, compactSubtitleSize)))
             }
         }
@@ -106,17 +106,17 @@ struct MiniPlayer: View {
     }
 
     @ViewBuilder
-    private func subtitleView(_ subtitle: MiniPlayerMetadata.Subtitle) -> some View {
+    private func subtitleView(_ subtitle: MiniPlayerMetadata.Subtitle, isActive: Bool) -> some View {
         switch subtitle {
         case let .device(name):
             HStack(spacing: 4) {
                 Image(systemName: "hifispeaker.fill")
-                MarqueeText(text: name, respectsReduceMotion: false)
+                MarqueeText(text: name, respectsReduceMotion: false, isActive: isActive)
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(name)
         case let .text(text):
-            MarqueeText(text: text, respectsReduceMotion: false)
+            MarqueeText(text: text, respectsReduceMotion: false, isActive: isActive)
         }
     }
 

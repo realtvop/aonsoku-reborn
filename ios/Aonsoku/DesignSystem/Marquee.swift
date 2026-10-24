@@ -13,6 +13,8 @@ struct MarqueeText: View {
     var pause: Double = 2.5
     /// Whether the system Reduce Motion setting disables scrolling.
     var respectsReduceMotion = true
+    /// Inactive carousel pages stay at the beginning until they become current.
+    var isActive = true
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var textWidth: CGFloat = 0
@@ -39,10 +41,10 @@ struct MarqueeText: View {
                         Text(text)
                             .fixedSize()
                     }
-                    .offset(x: offset)
+                    .offset(x: isActive ? offset : 0)
                     .frame(width: availableWidth, alignment: .leading)
                     .mask(alignment: .leading) {
-                        edgeFade(isScrolling: offset != 0)
+                        edgeFade(isScrolling: isActive && offset != 0)
                             .frame(width: availableWidth)
                     }
                 } else {
@@ -60,12 +62,18 @@ struct MarqueeText: View {
             .clipped()
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(text)
-            .task(id: ScrollKey(text: text, scrolls: scrolls, width: textWidth)) {
-                await run(scrolls: scrolls)
+            .task(id: ScrollKey(
+                text: text,
+                scrolls: scrolls,
+                width: textWidth,
+                isActive: isActive
+            )) {
+                await run(scrolls: scrolls && isActive)
             }
     }
 
     private func run(scrolls: Bool) async {
+        guard !Task.isCancelled else { return }
         reset()
         guard scrolls else { return }
         let distance = textWidth + gap
@@ -111,4 +119,5 @@ private struct ScrollKey: Equatable {
     let text: String
     let scrolls: Bool
     let width: CGFloat
+    let isActive: Bool
 }
