@@ -20,15 +20,18 @@ struct MarqueeText: View {
     @State private var textWidth: CGFloat = 0
     @State private var availableWidth: CGFloat = 0
     @State private var offset: CGFloat = 0
-    @State private var isScrolling = false
 
-    private let fade: CGFloat = 24
+    private let leadFade: CGFloat = 16
+    private let trailFade: CGFloat = 24
 
     var body: some View {
         let allowsScrolling = !respectsReduceMotion || !reduceMotion
         let scrolls = allowsScrolling
             && availableWidth > 0
             && textWidth > availableWidth + 0.5
+        let lead = scrolls ? min(leadFade, availableWidth / 4) : 0
+        let trail = scrolls ? min(trailFade, availableWidth / 4) : 0
+
         Text(text)
             .lineLimit(1)
             .hidden()
@@ -42,11 +45,12 @@ struct MarqueeText: View {
                         Text(text)
                             .fixedSize()
                     }
-                    .offset(x: isActive ? offset : 0)
-                    .frame(width: availableWidth, alignment: .leading)
+                    .offset(x: (isActive ? offset : 0) + lead)
+                    .frame(width: availableWidth + lead, alignment: .leading)
+                    .offset(x: -lead)
                     .mask(alignment: .leading) {
-                        edgeFade(isScrolling: isActive && isScrolling)
-                            .frame(width: availableWidth)
+                        edgeFade(lead: lead, trail: trail)
+                            .frame(width: availableWidth + lead)
                     }
                 } else {
                     Text(text)
@@ -60,7 +64,6 @@ struct MarqueeText: View {
                     .hidden()
                     .onGeometryChange(for: CGFloat.self, of: \.size.width) { textWidth = $0 }
             }
-            .clipped()
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(text)
             .task(id: ScrollKey(
@@ -83,9 +86,6 @@ struct MarqueeText: View {
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(pause))
             guard !Task.isCancelled else { return }
-            withAnimation(.easeInOut(duration: 0.25)) {
-                isScrolling = true
-            }
             withAnimation(.linear(duration: duration)) {
                 offset = -distance
             }
@@ -102,21 +102,19 @@ struct MarqueeText: View {
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             offset = 0
-            isScrolling = false
         }
     }
 
-    /// Fades the trailing edge, and the leading edge while text moves
-    /// under it.
-    private func edgeFade(isScrolling: Bool) -> some View {
-        let fadeWidth = min(fade, availableWidth / 2)
-        return HStack(spacing: 0) {
+    /// Permanent leading and trailing edge fades. The leading fade sits in the
+    /// overhang region to the left of the original text starting position, so
+    /// stationary text is completely unmasked.
+    private func edgeFade(lead: CGFloat, trail: CGFloat) -> some View {
+        HStack(spacing: 0) {
             LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
-                .frame(width: isScrolling ? fadeWidth : 0)
-                .clipped()
+                .frame(width: lead)
             Rectangle()
             LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
-                .frame(width: fadeWidth)
+                .frame(width: trail)
         }
     }
 }

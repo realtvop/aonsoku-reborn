@@ -239,21 +239,17 @@ struct NowPlayingView: View {
 
     @ViewBuilder
     private var songButtons: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 4) {
             if let song = player.currentSong {
                 NowPlayingFavoriteButton(songId: song.id)
-                    .font(.body.weight(.semibold))
-                    .frame(width: 34, height: 34)
-                    .glassEffect(.regular.interactive(), in: .circle)
-                    .buttonStyle(.plain)
             }
             Menu {
                 NowPlayingMenuItems()
             } label: {
                 Image(systemName: "ellipsis")
-                    .font(.body.weight(.semibold))
-                    .frame(width: 34, height: 34)
-                    .glassEffect(.regular.interactive(), in: .circle)
+                    .font(.system(size: 22, weight: .semibold))
+                    .frame(width: 40, height: 40)
+                    .contentShape(.rect)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(t("playlist.buttons.options", ["name": NowPlayingText.title(player, t)]))
@@ -518,10 +514,24 @@ private struct NowPlayingFavoriteButton: View {
     let songId: String
 
     @Environment(FavoritesStore.self) private var favorites
+    @Environment(Localizer.self) private var t
 
     var body: some View {
-        FavoriteToolbarButton(kind: .song, id: songId)
-            .foregroundStyle(favorites.isFavorite(.song, id: songId) ? Color.red : Color.white)
+        let isFavorite = favorites.isFavorite(.song, id: songId)
+        Button {
+            Task { await favorites.toggle(.song, id: songId) }
+        } label: {
+            Image(systemName: isFavorite ? "heart.fill" : "heart")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(isFavorite ? Color.red : Color.white)
+                .frame(width: 40, height: 40)
+                .contentShape(.rect)
+                .contentTransition(.symbolEffect(.replace))
+                .symbolEffect(.bounce, value: isFavorite)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(t(isFavorite ? "options.unlike" : "options.like"))
+        .haptic(.impact(weight: .light), trigger: isFavorite)
     }
 }
 
