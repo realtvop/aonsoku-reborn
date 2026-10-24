@@ -155,8 +155,10 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   keeps its own history/upcoming scroll gestures and dismisses via the grabber.
   Full-screen progress and volume use the app target's pinned
   `realtvop/slidercontrol` Swift package (`SliderControlView`). Progress uses
-  `.progress` and seeks on release; volume uses `.volume`, including inertia
-  and elastic limits, with coalesced store updates and an exact trailing value.
+  `.progressLabels`, with elapsed/remaining labels and the quality badge in
+  its independently sized center slot, and seeks on release. Volume uses
+  `.volumeIcons`, including inertia and elastic limits, with coalesced store
+  updates and an exact trailing value.
   `PlayerPresentationState` owns the interactive dismissal offset, while
   `Router.isNowPlayingPresented` remains the presentation authority.
   While the finger is down, artwork keeps its expanded size and moves only

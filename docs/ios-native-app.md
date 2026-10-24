@@ -172,8 +172,10 @@ with automatic foreground sync disabled.
 - **Now Playing**: artwork-derived animated mesh gradient, artwork that
   shrinks while paused, marquee title, favorite and more menus, scrubber,
   transport, volume, and a bottom bar for lyrics, AirPlay, Aonsoku devices,
-  and the queue. The pinned SliderControl package supplies `.progress`
-  (seek on release) and `.volume` (inertia and elastic limits) sliders.
+  and the queue. The pinned SliderControl package supplies `.progressLabels`
+  (seek on release, elapsed/remaining labels that scale while dragging, and
+  an independently sized quality badge in the center slot) and `.volumeIcons`
+  (speaker icons, inertia and elastic limits) variants.
   Volume updates are coalesced with an exact trailing value, and both slider
   touch regions remain excluded from the player's dismissal pan.
   Lyrics and queue replace the large artwork with a compact

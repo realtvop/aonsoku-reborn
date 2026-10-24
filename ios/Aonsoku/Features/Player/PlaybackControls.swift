@@ -41,50 +41,43 @@ struct PlaybackScrubber: View {
 
     private func scrubber(position: TimeInterval, duration: TimeInterval) -> some View {
         let progress = duration > 0 ? min(max(position / duration, 0), 1) : 0
-        return VStack(spacing: 6) {
-            SliderControlView(
-                value: Binding(
-                    get: { progress },
-                    set: { newValue in
-                        // The control repeats its final value after editing
-                        // ends. Ignore that event so the playback clock resumes.
-                        if dragProgress != nil { dragProgress = newValue }
-                    }
-                ),
-                behavior: .progress
-            ) { isEditing in
-                if isEditing {
-                    dragProgress = progress
-                } else {
-                    if let dragProgress, duration > 0 {
-                        seek(to: dragProgress * duration)
-                    }
-                    dragProgress = nil
+        return SliderControlView(
+            value: Binding(
+                get: { progress },
+                set: { newValue in
+                    // The control repeats its final value after editing
+                    // ends. Ignore that event so the playback clock resumes.
+                    if dragProgress != nil { dragProgress = newValue }
                 }
-            }
-            .trackColor(.white.opacity(0.22))
-            .progressColor(.white.opacity(0.8), enlarged: .white)
-            .frame(height: 24)
-            .disabled(duration <= 0)
-            .playerSliderRegion(.progress)
-            HStack {
-                Text(Formatters.clock(position))
-                Spacer()
-                if let quality = player.currentSong.flatMap({ Formatters.quality(of: $0) }) {
-                    Text(quality)
-                        .font(.caption2.weight(.semibold))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(.white.opacity(0.12), in: .capsule)
-                        .lineLimit(1)
+            )
+        ) { isEditing in
+            if isEditing {
+                dragProgress = progress
+            } else {
+                if let dragProgress, duration > 0 {
+                    seek(to: dragProgress * duration)
                 }
-                Spacer()
-                Text("-\(Formatters.clock(max(duration - position, 0)))")
+                dragProgress = nil
             }
-            .font(.caption.weight(.medium))
-            .monospacedDigit()
-            .foregroundStyle(.white.opacity(0.6))
         }
+        .trackColor(.white.opacity(0.22))
+        .progressColor(.white.opacity(0.8), enlarged: .white)
+        .progressLabels(
+            leading: Formatters.clock(position),
+            trailing: "-\(Formatters.clock(max(duration - position, 0)))"
+        ) {
+            if let quality = player.currentSong.flatMap({ Formatters.quality(of: $0) }) {
+                Text(quality)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(.white.opacity(0.12), in: .capsule)
+                    .lineLimit(1)
+            }
+        }
+        .disabled(duration <= 0)
+        .playerSliderRegion(.progress)
         .accessibilityElement()
         .accessibilityLabel(t("player.tooltips.progress"))
         .accessibilityValue("\(Formatters.clock(position)) / \(Formatters.clock(duration))")
@@ -211,35 +204,28 @@ struct VolumeSlider: View {
 
     var body: some View {
         let value = dragValue ?? player.volume
-        HStack(spacing: 12) {
-            Image(systemName: "speaker.fill")
-            SliderControlView(
-                value: Binding(
-                    get: { value },
-                    set: { newValue in
-                        dragValue = newValue
-                        // Keep inertia smooth without a remote command for
-                        // every frame. A trailing update sends the exact value.
-                        if abs(newValue - (lastSentValue ?? player.volume)) >= 0.01 {
-                            sendVolume(newValue)
-                        }
+        SliderControlView(
+            value: Binding(
+                get: { value },
+                set: { newValue in
+                    dragValue = newValue
+                    // Keep inertia smooth without a remote command for
+                    // every frame. A trailing update sends the exact value.
+                    if abs(newValue - (lastSentValue ?? player.volume)) >= 0.01 {
+                        sendVolume(newValue)
                     }
-                ),
-                behavior: .volume
-            ) { editing in
-                isEditing = editing
-                if editing {
-                    dragValue = value
                 }
+            )
+        ) { editing in
+            isEditing = editing
+            if editing {
+                dragValue = value
             }
-            .trackColor(.white.opacity(0.22))
-            .progressColor(.white.opacity(0.8), enlarged: .white)
-            .frame(height: 24)
-            .playerSliderRegion(.volume)
-            Image(systemName: "speaker.wave.3.fill")
         }
-        .font(.caption)
-        .foregroundStyle(.white.opacity(0.6))
+        .trackColor(.white.opacity(0.22))
+        .progressColor(.white.opacity(0.8), enlarged: .white)
+        .volumeIcons()
+        .playerSliderRegion(.volume)
         .task(id: isEditing ? nil : dragValue) {
             guard !isEditing, let dragValue else { return }
             do {
