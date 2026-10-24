@@ -38,7 +38,7 @@ struct MiniPlayer: View {
         }
         .padding(.leading, mix(10, 7))
         .padding(.trailing, mix(7, 3))
-        .foregroundStyle(.black)
+        .foregroundStyle(.primary)
         .contentShape(.rect)
         .onTapGesture {
             open()

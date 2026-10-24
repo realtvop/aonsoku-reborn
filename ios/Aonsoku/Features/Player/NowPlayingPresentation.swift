@@ -276,12 +276,6 @@ private struct NowPlayingPresentation: ViewModifier {
                             .opacity(router.isNowPlayingPresented ? 1 : 0)
                             .allowsHitTesting(router.isNowPlayingPresented)
                             .accessibilityHidden(!router.isNowPlayingPresented)
-                        MiniPlayer(compactProgress: presentation.accessory?.compactProgress ?? 0)
-                            .frame(width: accessory.width, height: accessory.height)
-                            .position(x: surface.midX, y: surface.minY + 6 + accessory.height / 2)
-                            .opacity(router.isNowPlayingPresented ? 0 : 1)
-                            .allowsHitTesting(!router.isNowPlayingPresented)
-                            .accessibilityHidden(router.isNowPlayingPresented)
                         sharedArtwork(in: proxy)
                     }
                     .environment(\.nowPlayingPalette, palette)
@@ -291,12 +285,20 @@ private struct NowPlayingPresentation: ViewModifier {
                     .background {
                         Color.clear
                             .frame(width: surface.width, height: surface.height)
+                            // Keep the content inside the glass effect so its
+                            // semantic foreground adapts to the backdrop.
+                            .overlay(alignment: .top) {
+                                MiniPlayer(compactProgress: presentation.accessory?.compactProgress ?? 0)
+                                    .frame(width: accessory.width, height: accessory.height)
+                                    .padding(.top, 6)
+                                    .opacity(router.isNowPlayingPresented ? 0 : 1)
+                            }
                             .glassEffect(.regular, in: RoundedRectangle(
                                 cornerRadius: radius, style: .continuous
                             ))
                             .position(x: surface.midX, y: surface.midY)
-                            .allowsHitTesting(false)
-                            .accessibilityHidden(true)
+                            .allowsHitTesting(!router.isNowPlayingPresented)
+                            .accessibilityHidden(router.isNowPlayingPresented)
                     }
                     .contentShape(shape)
                     .opacity(router.isNowPlayingPresented || presentation.accessory != nil ? 1 : 0)
