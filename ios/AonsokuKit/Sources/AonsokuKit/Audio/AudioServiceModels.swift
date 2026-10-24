@@ -219,7 +219,8 @@ enum PlaybackRecoverySeekValidation {
         metadataDuration: Double
     ) -> Bool {
         guard seekFinished else { return false }
-        guard savedPosition <= 5 || loadedRangeContainsPosition else { return false }
+        // A successful seek may still be waiting for network data. Empty
+        // loaded ranges do not invalidate the restored playback position.
         guard savedPosition <= 2 ||
             (actualPosition.isFinite && abs(actualPosition - savedPosition) <= 2)
         else { return false }
@@ -239,9 +240,12 @@ struct QueueEndOfStreamTracker {
         isQueueActive: Bool,
         isWaiting: Bool,
         bufferIsEmpty: Bool,
-        position: Double
+        position: Double,
+        duration: Double
     ) -> Bool {
-        guard isQueueActive, isWaiting, bufferIsEmpty else {
+        guard isQueueActive, isWaiting, bufferIsEmpty,
+              duration.isFinite, duration > 0,
+              position.isFinite, position >= duration - 1 else {
             stalledSince = nil
             return false
         }

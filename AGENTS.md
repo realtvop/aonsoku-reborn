@@ -269,7 +269,13 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   `AonsokuKit.AppServices`. `AudioService` owns a long-lived `AVQueuePlayer`,
   the queue, downloads, scrobbling, playback persistence, system media
   controls, direct-stream background caching, and staged
-  `PlaybackRecoveryController` seek/reload fallback. It resolves and enqueues
+  `PlaybackRecoveryController` seek/reload fallback.
+  Recovery attempts have their own progress deadline, so a resumed stream
+  with no further stall notifications still reaches reload. Pausing cancels
+  pending and in-flight recovery through an attempt revision. Reload keeps
+  the saved position; empty buffers and completed cache downloads do not
+  imply end of track. The empty-buffer queue fallback requires a position
+  within one second of a known duration. It resolves and enqueues
   the next deterministic `NativeQueueEngine` song one item ahead, then adopts
   that buffered `AVPlayerItem` without recreating the player; repeat-one,
   shuffled wrap, end-of-track sleep and unresolved sources fall back to the

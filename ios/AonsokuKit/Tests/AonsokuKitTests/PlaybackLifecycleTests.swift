@@ -33,6 +33,14 @@ final class PlaybackLifecycleTests: XCTestCase {
             itemDuration: 100,
             metadataDuration: 100
         ))
+        XCTAssertTrue(PlaybackRecoverySeekValidation.acceptsSavedPosition(
+            seekFinished: true,
+            savedPosition: 42,
+            actualPosition: 42,
+            loadedRangeContainsPosition: false,
+            itemDuration: 100,
+            metadataDuration: 100
+        ))
         XCTAssertFalse(PlaybackRecoverySeekValidation.acceptsSavedPosition(
             seekFinished: true,
             savedPosition: 42,
@@ -51,7 +59,7 @@ final class PlaybackLifecycleTests: XCTestCase {
         ))
     }
 
-    func testQueueEndOfStreamFallbackWaitsThreeSecondsPastFiveSeconds() {
+    func testQueueEndOfStreamFallbackOnlyAdvancesNearTheKnownEnd() {
         var tracker = QueueEndOfStreamTracker()
         let start = Date(timeIntervalSince1970: 100)
 
@@ -60,21 +68,24 @@ final class PlaybackLifecycleTests: XCTestCase {
             isQueueActive: true,
             isWaiting: true,
             bufferIsEmpty: true,
-            position: 10
+            position: 99.5,
+            duration: 100
         ))
         XCTAssertFalse(tracker.shouldAdvanceQueue(
             now: start.addingTimeInterval(2.9),
             isQueueActive: true,
             isWaiting: true,
             bufferIsEmpty: true,
-            position: 10
+            position: 99.5,
+            duration: 100
         ))
         XCTAssertTrue(tracker.shouldAdvanceQueue(
             now: start.addingTimeInterval(3),
             isQueueActive: true,
             isWaiting: true,
             bufferIsEmpty: true,
-            position: 10
+            position: 99.5,
+            duration: 100
         ))
 
         XCTAssertFalse(tracker.shouldAdvanceQueue(
@@ -82,8 +93,28 @@ final class PlaybackLifecycleTests: XCTestCase {
             isQueueActive: true,
             isWaiting: false,
             bufferIsEmpty: true,
-            position: 10
+            position: 99.5,
+            duration: 100
         ))
+
+        for duration in [100.0, 0, .nan, .infinity] {
+            XCTAssertFalse(tracker.shouldAdvanceQueue(
+                now: start,
+                isQueueActive: true,
+                isWaiting: true,
+                bufferIsEmpty: true,
+                position: 42,
+                duration: duration
+            ))
+            XCTAssertFalse(tracker.shouldAdvanceQueue(
+                now: start.addingTimeInterval(30),
+                isQueueActive: true,
+                isWaiting: true,
+                bufferIsEmpty: true,
+                position: 42,
+                duration: duration
+            ))
+        }
     }
 
     func testStopDoesNotPublishNaturalEndedEvent() throws {

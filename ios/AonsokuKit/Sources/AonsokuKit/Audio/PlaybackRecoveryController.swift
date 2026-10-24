@@ -33,6 +33,7 @@ class PlaybackRecoveryController {
 
     private(set) var state: RecoveryState = .idle
     private(set) var generation: Int = 0
+    private(set) var revision = 0
 
     private let level1MaxAttempts = 3
     private let level2MaxAttempts = 2
@@ -47,6 +48,7 @@ class PlaybackRecoveryController {
     private var isBackground = false
 
     private var recoveryTimer: DispatchWorkItem?
+    private var attemptTimeoutTimer: DispatchWorkItem?
     private var progressMonitorTimer: DispatchSourceTimer?
     private var likelyToKeepUpDebounceTimer: DispatchWorkItem?
     private let recoveryScheduler: RecoveryScheduler
@@ -65,16 +67,27 @@ class PlaybackRecoveryController {
 
     // MARK: - Public API
 
-    func triggerRecovery(currentTime: CMTime, generation: Int, sourceKind: RecoverySourceKind) {
+    func triggerRecovery(
+        currentTime: CMTime,
+        generation: Int,
+        sourceKind: RecoverySourceKind,
+        requiresReload: Bool = false
+    ) {
         guard self.generation == generation || state == .idle else { return }
 
         if state == .idle {
             self.generation = generation
             self.sourceKind = sourceKind
             savedPosition = currentTime
+            lastProgressTime = currentTime
             delegate?.recoveryDidBegin(self)
             delegate?.recoverySetBuffering(self, isBuffering: true)
-        } else if recoveryTimer != nil {
+        } else if recoveryTimer != nil || attemptTimeoutTimer != nil {
+            return
+        }
+
+        if requiresReload {
+            escalateToLevel2()
             return
         }
 
@@ -104,12 +117,6 @@ class PlaybackRecoveryController {
         }
     }
 
-    func reportPlaybackResumed(generation: Int) {
-        guard generation == self.generation else { return }
-        guard state != .idle else { return }
-        handleRecoverySuccess()
-    }
-
     func reportLikelyToKeepUp(generation: Int) {
         guard generation == self.generation else { return }
         guard state != .idle else { return }
@@ -137,6 +144,7 @@ class PlaybackRecoveryController {
     func reloadDidComplete(success: Bool, generation: Int) {
         guard generation == self.generation, case .level2 = state else { return }
         if !success {
+            cancelAttemptTimeout()
             escalateToLevel2()
         }
     }
@@ -145,10 +153,15 @@ class PlaybackRecoveryController {
         self.isBackground = isBackground
     }
 
-    func startProgressMonitoring(generation: Int, sourceKind: RecoverySourceKind) {
+    func startProgressMonitoring(
+        generation: Int,
+        sourceKind: RecoverySourceKind,
+        currentTime: CMTime = .zero
+    ) {
         stopProgressMonitoring()
         self.generation = generation
         self.sourceKind = sourceKind
+        lastProgressTime = currentTime
         lastProgressAdvanceDate = Date()
         isMonitoringProgress = true
 
@@ -168,7 +181,9 @@ class PlaybackRecoveryController {
     }
 
     func reset() {
+        revision += 1
         cancelRecoveryTimer()
+        cancelAttemptTimeout()
         likelyToKeepUpDebounceTimer?.cancel()
         likelyToKeepUpDebounceTimer = nil
         state = .idle
@@ -239,14 +254,17 @@ class PlaybackRecoveryController {
 
     private func scheduleLevel1(attempt: Int) {
         cancelRecoveryTimer()
+        revision += 1
         state = .level1(attempt: attempt)
 
         let delay = level1BaseDelay * pow(2.0, Double(attempt - 1))
         let gen = generation
+        let revision = revision
 
         let work = recoveryScheduler(delay) { [weak self] in
-            guard let self, self.generation == gen, self.state == .level1(attempt: attempt) else { return }
+            guard let self, self.isCurrentAttempt(generation: gen, revision: revision) else { return }
             self.recoveryTimer = nil
+            self.scheduleAttemptTimeout()
             self.delegate?.recoverySeek(self, to: self.savedPosition, generation: gen)
         }
         recoveryTimer = work
@@ -254,15 +272,18 @@ class PlaybackRecoveryController {
 
     private func scheduleLevel2(attempt: Int) {
         cancelRecoveryTimer()
+        revision += 1
         state = .level2(attempt: attempt)
 
         let baseDelay = isBackground ? level2BaseDelay * 2.0 : level2BaseDelay
         let delay = baseDelay * pow(2.0, Double(attempt - 1))
         let gen = generation
+        let revision = revision
 
         let work = recoveryScheduler(delay) { [weak self] in
-            guard let self, self.generation == gen, self.state == .level2(attempt: attempt) else { return }
+            guard let self, self.isCurrentAttempt(generation: gen, revision: revision) else { return }
             self.recoveryTimer = nil
+            self.scheduleAttemptTimeout()
             self.delegate?.recoveryReload(self, generation: gen, savedPosition: self.savedPosition)
         }
         recoveryTimer = work
@@ -270,6 +291,7 @@ class PlaybackRecoveryController {
 
     private func giveUp() {
         cancelRecoveryTimer()
+        cancelAttemptTimeout()
         state = .gaveUp
         let gen = generation
         delegate?.recoverySetBuffering(self, isBuffering: false)
@@ -279,7 +301,9 @@ class PlaybackRecoveryController {
     // MARK: - Private: Success
 
     private func handleRecoverySuccess() {
+        revision += 1
         cancelRecoveryTimer()
+        cancelAttemptTimeout()
         likelyToKeepUpDebounceTimer?.cancel()
         likelyToKeepUpDebounceTimer = nil
         state = .idle
@@ -303,6 +327,34 @@ class PlaybackRecoveryController {
     }
 
     // MARK: - Private: Timers
+
+    func isCurrentAttempt(generation: Int, revision: Int) -> Bool {
+        self.generation == generation && self.revision == revision &&
+            state != .idle && state != .gaveUp
+    }
+
+    // A seek/reload can complete without producing another stall notification,
+    // or its completion may never arrive. Keep escalating until playback moves.
+    private func scheduleAttemptTimeout() {
+        cancelAttemptTimeout()
+        let gen = generation
+        let revision = revision
+        let timeout = isBackground ? backgroundProgressTimeout : foregroundProgressTimeout
+        attemptTimeoutTimer = recoveryScheduler(timeout) { [weak self] in
+            guard let self, self.isCurrentAttempt(generation: gen, revision: revision) else { return }
+            self.attemptTimeoutTimer = nil
+            switch self.sourceKind {
+            case .stream: self.escalateStream()
+            case .radio: self.escalateRadio()
+            case .nativeFile: self.escalateToLevel2()
+            }
+        }
+    }
+
+    private func cancelAttemptTimeout() {
+        attemptTimeoutTimer?.cancel()
+        attemptTimeoutTimer = nil
+    }
 
     private func cancelRecoveryTimer() {
         recoveryTimer?.cancel()

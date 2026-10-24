@@ -77,11 +77,10 @@ final class RestorationTests: XCTestCase {
                 19,
                 accuracy: 0.001
             )
-            controller.triggerRecovery(
-                currentTime: .zero,
-                generation: 8,
-                sourceKind: .stream
-            )
+            // No further KVO/stall event arrives after the seek. The attempt
+            // watchdog must still advance recovery on its own.
+            XCTAssertEqual(scheduled.first?.0, 10)
+            scheduled.removeFirst().1.perform()
         }
 
         XCTAssertEqual(controller.state, .level2(attempt: 1))
@@ -89,13 +88,14 @@ final class RestorationTests: XCTestCase {
         XCTAssertEqual(delegate.reloadPositions, [19])
         controller.reloadDidComplete(success: false, generation: 8)
         XCTAssertEqual(controller.state, .level2(attempt: 2))
+        scheduled.removeAll { $0.1.isCancelled }
         scheduled.removeFirst().1.perform()
         controller.reloadDidComplete(success: false, generation: 8)
 
         XCTAssertEqual(controller.state, .gaveUp)
         XCTAssertEqual(delegate.exhaustedGenerations, [8])
         XCTAssertEqual(delegate.bufferingStates, [true, false])
-        XCTAssertEqual(scheduled.map(\.0), [])
+        XCTAssertTrue(scheduled.allSatisfy { $0.1.isCancelled })
     }
 
     func testSuccessfulProgressCancelsPendingRecoveryAndClearsBuffering() {
@@ -125,6 +125,80 @@ final class RestorationTests: XCTestCase {
         XCTAssertEqual(delegate.reloadPositions, [])
         XCTAssertEqual(delegate.didSucceedCount, 1)
         XCTAssertEqual(delegate.bufferingStates, [true, false])
+    }
+
+    func testSuccessfulReloadWithoutPlaybackProgressStillRetries() {
+        var scheduled: [DispatchWorkItem] = []
+        let controller = PlaybackRecoveryController { _, action in
+            let work = DispatchWorkItem(block: action)
+            scheduled.append(work)
+            return work
+        }
+        let delegate = RecoveryDelegateSpy()
+        controller.delegate = delegate
+        controller.triggerRecovery(currentTime: .zero, generation: 1, sourceKind: .nativeFile)
+        scheduled.removeFirst().perform()
+        controller.reloadDidComplete(success: true, generation: 1)
+        scheduled.removeFirst().perform()
+
+        XCTAssertEqual(controller.state, .level2(attempt: 2))
+        controller.reportUserPause()
+    }
+
+    func testFailedItemSkipsSeekingAndReloadsAtTheSavedPosition() {
+        var scheduled: [DispatchWorkItem] = []
+        let controller = PlaybackRecoveryController { _, action in
+            let work = DispatchWorkItem(block: action)
+            scheduled.append(work)
+            return work
+        }
+        let delegate = RecoveryDelegateSpy()
+        controller.delegate = delegate
+        controller.triggerRecovery(
+            currentTime: CMTime(seconds: 42, preferredTimescale: 600),
+            generation: 1,
+            sourceKind: .stream,
+            requiresReload: true
+        )
+        scheduled.removeFirst().perform()
+
+        XCTAssertEqual(delegate.seekPositions, [])
+        XCTAssertEqual(delegate.reloadPositions, [42])
+        controller.reportUserPause()
+    }
+
+    func testPausedAttemptCannotActOnANewRecoveryForTheSameItem() {
+        var actions: [@Sendable () -> Void] = []
+        let controller = PlaybackRecoveryController { _, action in
+            actions.append(action)
+            return DispatchWorkItem(block: action)
+        }
+        let delegate = RecoveryDelegateSpy()
+        controller.delegate = delegate
+        controller.triggerRecovery(currentTime: .zero, generation: 1, sourceKind: .stream)
+        let oldRevision = controller.revision
+        controller.reportUserPause()
+        controller.triggerRecovery(currentTime: .zero, generation: 1, sourceKind: .stream)
+        actions.removeFirst()()
+
+        XCTAssertFalse(controller.isCurrentAttempt(generation: 1, revision: oldRevision))
+        XCTAssertEqual(delegate.seekPositions, [])
+        controller.reportUserPause()
+    }
+
+    func testResumeBaselineDoesNotCountThePausedPositionAsProgress() {
+        let controller = PlaybackRecoveryController()
+        let delegate = RecoveryDelegateSpy()
+        controller.delegate = delegate
+        let position = CMTime(seconds: 42, preferredTimescale: 600)
+        controller.startProgressMonitoring(generation: 1, sourceKind: .stream, currentTime: position)
+        controller.triggerRecovery(currentTime: position, generation: 1, sourceKind: .stream)
+        controller.reportProgress(at: position, generation: 1)
+        XCTAssertEqual(delegate.didSucceedCount, 0)
+
+        controller.reportProgress(at: CMTime(seconds: 43, preferredTimescale: 600), generation: 1)
+        XCTAssertEqual(delegate.didSucceedCount, 1)
+        controller.reportUserPause()
     }
 }
 

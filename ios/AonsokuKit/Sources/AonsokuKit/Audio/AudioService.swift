@@ -88,7 +88,6 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private var preparedHandoffBefore: (PlaybackPersistState, Bool)?
     private var handoffGeneration = 0
     private var backgroundCacheSongIds = Set<String>()
-    private var backgroundCacheCompletedSongIds = Set<String>()
     private var sleepTimer: Timer?
     private var sleepTimerEndDate: Date?
     private var sleepTimerMode = "duration"
@@ -299,7 +298,8 @@ public final class AudioService: NSObject, @unchecked Sendable {
                 if request.autoplay {
                     self.recoveryController.startProgressMonitoring(
                         generation: self.playbackGeneration,
-                        sourceKind: self.recoverySourceKind()
+                        sourceKind: self.recoverySourceKind(),
+                        currentTime: self.player?.currentTime() ?? .zero
                     )
                 }
                 self.emitPlaybackState(.loading, force: true)
@@ -339,6 +339,18 @@ public final class AudioService: NSObject, @unchecked Sendable {
             guard let self else { return }
             do {
                 try self.activateAudioSession()
+                switch self.recoveryController.state {
+                case .level1, .level2:
+                    // Keep the saved resume position while an existing
+                    // recovery is replacing/seeking the item.
+                    completion?(.success(()))
+                    return
+                case .gaveUp:
+                    self.recoveryController.reset()
+                    self.isRecoveryReload = false
+                case .idle:
+                    break
+                }
                 if self.player == nil,
                    self.isQueueActive,
                    let song = self.queueEngine.currentSong {
@@ -353,8 +365,19 @@ public final class AudioService: NSObject, @unchecked Sendable {
                 }
                 self.recoveryController.startProgressMonitoring(
                     generation: self.playbackGeneration,
-                    sourceKind: self.recoverySourceKind()
+                    sourceKind: self.recoverySourceKind(),
+                    currentTime: self.player?.currentTime() ?? .zero
                 )
+                // A stream can fail while paused. play() on that same failed
+                // item need not emit another status/stall change.
+                if self.playerItem?.status == .failed {
+                    self.recoveryController.triggerRecovery(
+                        currentTime: self.player?.currentTime() ?? .zero,
+                        generation: self.playbackGeneration,
+                        sourceKind: self.recoverySourceKind(),
+                        requiresReload: true
+                    )
+                }
                 self.persistence.startProgressTracking()
                 completion?(.success(()))
             } catch {
@@ -372,6 +395,9 @@ public final class AudioService: NSObject, @unchecked Sendable {
         dispatchMain { [weak self] in
             self?.cancelTransitionStateSuppression()
             self?.recoveryController.reportUserPause()
+            self?.isRecoveryReload = false
+            self?.isSeeking = false
+            self?.endOfStreamTracker.reset()
             self?.player?.pause()
             self?.scrobbleBuffer.pauseTracking()
             self?.persistence.flushNow()
@@ -411,6 +437,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
             }
             let position = max(0, seconds)
             self.recoveryController.reportUserSeek()
+            self.isRecoveryReload = false
             self.isSeeking = true
             player.seek(
                 to: self.makeTime(position),
@@ -670,8 +697,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
 
     public func pauseAndGetFullState() -> AudioQueueSnapshot? {
         dispatchMainSync {
-            player?.pause()
-            persistence.flushNow()
+            pause()
         }
         return fullState()
     }
@@ -1486,6 +1512,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
         bufferMismatchFirstSeen = nil
         endOfStreamTracker.reset()
         isSeeking = false
+        isRecoveryReload = false
         cancelTransitionStateSuppression()
         removePlayerObservers()
         persistence.stopProgressTracking()
@@ -1514,10 +1541,12 @@ public final class AudioService: NSObject, @unchecked Sendable {
                         self.emitPlaybackState(.playing)
                     }
                 case .failed:
+                    guard self.recoveryController.isMonitoringProgress else { return }
                     self.recoveryController.triggerRecovery(
                         currentTime: player.currentTime(),
                         generation: generation,
-                        sourceKind: self.recoverySourceKind()
+                        sourceKind: self.recoverySourceKind(),
+                        requiresReload: true
                     )
                 default:
                     break
@@ -1534,14 +1563,12 @@ public final class AudioService: NSObject, @unchecked Sendable {
                   generation == self.playbackGeneration else { return }
             DispatchQueue.main.async {
                 guard player === self.player,
+                      item === self.playerItem,
                       generation == self.playbackGeneration else { return }
                 switch player.timeControlStatus {
                 case .playing:
                     self.cancelTransitionStateSuppression()
                     self.endOfStreamTracker.reset()
-                    self.recoveryController.reportPlaybackResumed(
-                        generation: generation
-                    )
                     self.scrobbleBuffer.resumeTracking()
                     self.emit(.bufferingChanged(false, requestId: self.currentRequestId))
                     self.emitPlaybackState(.playing)
@@ -1615,16 +1642,19 @@ public final class AudioService: NSObject, @unchecked Sendable {
             queue: .main
         ) { [weak self] _ in
             guard let self else { return }
-            guard generation == self.playbackGeneration else { return }
-            guard !self.isSeeking else { return }
+            guard generation == self.playbackGeneration, item === self.playerItem else { return }
+            guard !self.isSeeking, !self.isRecoveryReload else { return }
             self.persistence.updateProgress(self.currentTime)
             let bufferEmpty = item.isPlaybackBufferEmpty
             if !bufferEmpty {
                 self.endOfStreamTracker.reset()
-                self.recoveryController.reportProgress(
-                    at: player.currentTime(),
-                    generation: generation
-                )
+                if self.recoveryController.isMonitoringProgress,
+                   player.timeControlStatus == .playing {
+                    self.recoveryController.reportProgress(
+                        at: player.currentTime(),
+                        generation: generation
+                    )
+                }
                 self.checkBufferPositionCoherence(
                     player: player,
                     item: item,
@@ -1637,14 +1667,6 @@ public final class AudioService: NSObject, @unchecked Sendable {
                         item: item,
                         generation: generation
                     )
-                }
-                if player.timeControlStatus == .waitingToPlayAtSpecifiedRate,
-                   self.isQueueActive,
-                   let song = self.queueEngine.currentSong,
-                   self.backgroundCacheCompletedSongIds.remove(song.id) != nil {
-                    self.endOfStreamTracker.reset()
-                    self.handleEnded()
-                    return
                 }
                 self.checkEndOfStreamFallback(player: player)
             }
@@ -1662,7 +1684,8 @@ public final class AudioService: NSObject, @unchecked Sendable {
         ) { [weak self] note in
             let error = note.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey]
                 as? Error
-            guard let self, generation == self.playbackGeneration else { return }
+            guard let self, generation == self.playbackGeneration,
+                  self.recoveryController.isMonitoringProgress else { return }
             NativeLogger.shared.warn(
                 "Playback ended with error: \(error?.localizedDescription ?? "unknown")",
                 source: "AudioService"
@@ -1670,7 +1693,8 @@ public final class AudioService: NSObject, @unchecked Sendable {
             self.recoveryController.triggerRecovery(
                 currentTime: player.currentTime(),
                 generation: generation,
-                sourceKind: self.recoverySourceKind()
+                sourceKind: self.recoverySourceKind(),
+                requiresReload: true
             )
         }
         stalledObserver = NotificationCenter.default.addObserver(
@@ -1916,7 +1940,8 @@ public final class AudioService: NSObject, @unchecked Sendable {
                 if autoplay {
                     self.recoveryController.startProgressMonitoring(
                         generation: self.playbackGeneration,
-                        sourceKind: self.recoverySourceKind()
+                        sourceKind: self.recoverySourceKind(),
+                        currentTime: self.player?.currentTime() ?? .zero
                     )
                 }
                 if !usedPreloadedItem {
@@ -2773,29 +2798,11 @@ public final class AudioService: NSObject, @unchecked Sendable {
         }
     }
 
-    private func isAtEndOfLoadedRanges(item: AVPlayerItem, position: Double) -> Bool {
-        guard let range = item.loadedTimeRanges.last?.timeRangeValue else { return true }
-        let end = range.start.seconds + range.duration.seconds
-        return position >= end - 1
-    }
-
     private func handleStall(player: AVPlayer, generation: Int) {
         guard generation == playbackGeneration,
               player === self.player,
+              recoveryController.isMonitoringProgress,
               player.timeControlStatus == .waitingToPlayAtSpecifiedRate else { return }
-
-        if isQueueActive,
-           let song = queueEngine.currentSong,
-           backgroundCacheCompletedSongIds.contains(song.id) {
-            return
-        }
-
-        if let item = playerItem, item.isPlaybackBufferEmpty {
-            let position = player.currentTime().seconds
-            if position > 5, isAtEndOfLoadedRanges(item: item, position: position) {
-                return
-            }
-        }
 
         recoveryController.triggerRecovery(
             currentTime: player.currentTime(),
@@ -2812,15 +2819,13 @@ public final class AudioService: NSObject, @unchecked Sendable {
         guard generation == playbackGeneration,
               player === self.player,
               item === playerItem,
+              recoveryController.isMonitoringProgress,
               !isPlayerAtEnd,
               currentSourceKind != "radio",
               item.isPlaybackBufferEmpty else { return }
 
         let position = player.currentTime().seconds
         guard position.isFinite else { return }
-        if position > 5, isAtEndOfLoadedRanges(item: item, position: position) {
-            return
-        }
         let positionIsBuffered = item.loadedTimeRanges.contains { range in
             let timeRange = range.timeRangeValue
             let start = timeRange.start.seconds
@@ -2829,8 +2834,11 @@ public final class AudioService: NSObject, @unchecked Sendable {
         }
         guard !positionIsBuffered else { return }
 
-        player.pause()
-        handleEnded()
+        recoveryController.triggerRecovery(
+            currentTime: player.currentTime(),
+            generation: generation,
+            sourceKind: recoverySourceKind()
+        )
     }
 
     private func checkEndOfStreamFallback(player: AVPlayer) {
@@ -2839,7 +2847,8 @@ public final class AudioService: NSObject, @unchecked Sendable {
             isQueueActive: isQueueActive,
             isWaiting: player.timeControlStatus == .waitingToPlayAtSpecifiedRate,
             bufferIsEmpty: playerItem?.isPlaybackBufferEmpty ?? false,
-            position: player.currentTime().seconds
+            position: player.currentTime().seconds,
+            duration: duration
         )
         guard shouldEnd else { return }
         NativeLogger.shared.info(
@@ -2964,19 +2973,22 @@ public final class AudioService: NSObject, @unchecked Sendable {
         downloadManager.download(songId: songId)
     }
 
-    private func checkEndOfStreamAfterCacheComplete(songId: String) {
+    private func recoverStreamAfterCacheComplete(songId: String) {
         guard isQueueActive,
               queueEngine.currentSong?.id == songId,
               let player,
               let playerItem,
+              recoveryController.isMonitoringProgress,
               player.timeControlStatus == .waitingToPlayAtSpecifiedRate,
               playerItem.isPlaybackBufferEmpty else { return }
-        backgroundCacheCompletedSongIds.remove(songId)
-        NativeLogger.shared.info(
-            "End of stream detected after cache completion for \(songId)",
-            source: "AudioService"
+        // Cache completion says nothing about the stream's playback position.
+        // Reload through the resolver, which can now use the completed file.
+        recoveryController.triggerRecovery(
+            currentTime: player.currentTime(),
+            generation: playbackGeneration,
+            sourceKind: recoverySourceKind(),
+            requiresReload: true
         )
-        handleEnded()
     }
 
     private func recoverySourceKind() -> RecoverySourceKind {
@@ -3011,6 +3023,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
         sleepTimerEndDate = nil
         sleepTimerMode = "duration"
         player?.pause()
+        recoveryController.reportUserPause()
         emitPlaybackState(.paused)
         emit(.sleepTimerFired(reason: reason))
     }
@@ -3184,6 +3197,8 @@ extension AudioService: PlaybackRecoveryDelegate {
         generation: Int
     ) {
         guard generation == playbackGeneration, let player else { return }
+        let revision = controller.revision
+        guard controller.isCurrentAttempt(generation: generation, revision: revision) else { return }
         if case .level1(let attempt) = controller.state {
             emit(.recoveryAttempt(level: 1, attempt: attempt, maxAttempts: 3))
         }
@@ -3195,7 +3210,8 @@ extension AudioService: PlaybackRecoveryDelegate {
             guard finished,
                   let self,
                   let player,
-                  generation == self.playbackGeneration else { return }
+                  generation == self.playbackGeneration,
+                  controller.isCurrentAttempt(generation: generation, revision: revision) else { return }
             player.play()
         }
     }
@@ -3205,10 +3221,9 @@ extension AudioService: PlaybackRecoveryDelegate {
         generation: Int,
         savedPosition: CMTime
     ) {
-        guard generation == playbackGeneration else {
-            controller.reloadDidComplete(success: false, generation: generation)
-            return
-        }
+        let revision = controller.revision
+        guard generation == playbackGeneration,
+              controller.isCurrentAttempt(generation: generation, revision: revision) else { return }
         if case .level2(let attempt) = controller.state {
             emit(.recoveryAttempt(level: 2, attempt: attempt, maxAttempts: 2))
         }
@@ -3229,8 +3244,8 @@ extension AudioService: PlaybackRecoveryDelegate {
             }
             DispatchQueue.main.async {
                 guard generation == self.playbackGeneration,
-                      let resolved,
-                      let player = self.player else {
+                      controller.isCurrentAttempt(generation: generation, revision: revision) else { return }
+                guard let resolved, let player = self.player else {
                     controller.reloadDidComplete(
                         success: false,
                         generation: generation
@@ -3264,13 +3279,9 @@ extension AudioService: PlaybackRecoveryDelegate {
                 ) { [weak self, weak player] finished in
                     guard let self,
                           let player,
-                          generation == self.playbackGeneration else {
-                        controller.reloadDidComplete(
-                            success: false,
-                            generation: generation
-                        )
-                        return
-                    }
+                          generation == self.playbackGeneration,
+                          item === self.playerItem,
+                          controller.isCurrentAttempt(generation: generation, revision: revision) else { return }
                     self.isRecoveryReload = false
                     let rawSavedSeconds = savedPosition.seconds
                     let savedSeconds = rawSavedSeconds.isFinite
@@ -3299,42 +3310,9 @@ extension AudioService: PlaybackRecoveryDelegate {
                         return
                     }
 
-                    let isNearEnd = savedSeconds > 0 &&
-                        self.duration > 0 && self.duration - savedSeconds < 10
-                    if isNearEnd, self.isQueueActive {
-                        controller.reloadDidComplete(
-                            success: true,
-                            generation: generation
-                        )
-                        self.handleEnded()
-                        return
-                    }
-
-                    self.isSeeking = true
-                    player.seek(
-                        to: .zero,
-                        toleranceBefore: .zero,
-                        toleranceAfter: .zero
-                    ) { [weak self, weak player] restarted in
-                        guard let self,
-                              let player,
-                              generation == self.playbackGeneration else {
-                            controller.reloadDidComplete(
-                                success: false,
-                                generation: generation
-                            )
-                            return
-                        }
-                        self.isSeeking = false
-                        self.loadedDuration = self.metadata.duration
-                        if restarted { player.play() }
-                        controller.reloadDidComplete(
-                            success: restarted,
-                            generation: generation
-                        )
-                        self.emitProgress()
-                        self.updateNowPlayingPlaybackInfo()
-                    }
+                    // Retry the saved position instead of restarting the song
+                    // or treating an unbuffered seek as the end of the track.
+                    controller.reloadDidComplete(success: false, generation: generation)
                 }
             }
         }
@@ -3372,7 +3350,8 @@ extension AudioService: PlaybackRecoveryDelegate {
         scrobbleBuffer.resumeTracking()
         recoveryController.startProgressMonitoring(
             generation: playbackGeneration,
-            sourceKind: recoverySourceKind()
+            sourceKind: recoverySourceKind(),
+            currentTime: player?.currentTime() ?? .zero
         )
     }
 }
@@ -3415,9 +3394,8 @@ extension AudioService: NativeDownloadManagerDelegate {
         dispatchMain { [weak self] in
             guard let self else { return }
             if requestId == nil, self.backgroundCacheSongIds.remove(songId) != nil {
-                self.backgroundCacheCompletedSongIds.insert(songId)
                 self.emit(.streamCacheCompleted(songId: songId, file: file))
-                self.checkEndOfStreamAfterCacheComplete(songId: songId)
+                self.recoverStreamAfterCacheComplete(songId: songId)
             } else {
                 self.emit(.downloadCompleted(
                     songId: songId,
