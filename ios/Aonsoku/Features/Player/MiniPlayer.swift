@@ -26,6 +26,8 @@ struct MiniPlayer: View {
     @State private var swipeHapticTrigger = 0
     @State private var settleTask: Task<Void, Never>?
 
+    private let trackSpacing: CGFloat = 32
+
     var body: some View {
         HStack(spacing: mix(10, 7)) {
             Color.clear
@@ -66,6 +68,7 @@ struct MiniPlayer: View {
         let context = swipeContext ?? makeSwipeContext()
         return GeometryReader { proxy in
             let viewportWidth = max(proxy.size.width, 1)
+            let pageStride = viewportWidth + trackSpacing
             ZStack(alignment: .leading) {
                 metadata(context.current)
                     .frame(width: viewportWidth, alignment: .leading)
@@ -73,12 +76,12 @@ struct MiniPlayer: View {
                 if let previous = context.previous {
                     metadata(previous.metadata)
                         .frame(width: viewportWidth, alignment: .leading)
-                        .offset(x: swipeOffset - viewportWidth)
+                        .offset(x: swipeOffset - pageStride)
                 }
                 if let next = context.next {
                     metadata(next.metadata)
                         .frame(width: viewportWidth, alignment: .leading)
-                        .offset(x: swipeOffset + viewportWidth)
+                        .offset(x: swipeOffset + pageStride)
                 }
             }
         }
@@ -165,7 +168,7 @@ struct MiniPlayer: View {
                 let context = swipeContext ?? makeSwipeContext()
                 swipeContext = context
                 let direction = MiniPlayerSwipeDirection(translation: value.translation.width)
-                let width = max(titlesWidth, 1)
+                let width = max(titlesWidth, 1) + trackSpacing
                 let limited = min(max(value.translation.width, -width), width)
                 swipeOffset = context.destination(in: direction) == nil
                     ? limited * 0.12
@@ -228,7 +231,7 @@ struct MiniPlayer: View {
         on destination: MiniPlayerSwipeDestination,
         direction: MiniPlayerSwipeDirection
     ) {
-        let width = max(titlesWidth, 1)
+        let width = max(titlesWidth, 1) + trackSpacing
         withAnimation(.spring(duration: 0.24, bounce: 0.05)) {
             swipeOffset = direction == .next ? -width : width
         }
