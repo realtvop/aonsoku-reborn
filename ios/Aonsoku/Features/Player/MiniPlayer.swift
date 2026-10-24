@@ -30,7 +30,7 @@ struct MiniPlayer: View {
 
     var body: some View {
         HStack(spacing: mix(10, 7)) {
-            Color.clear
+            PlayerArtwork(cornerRadius: 4.5, size: .small)
                 .frame(width: mix(30, 24), height: mix(30, 24))
             titles
             Spacer(minLength: 4)
@@ -415,24 +415,12 @@ private struct MiniPlayerPreviewContainer: View {
         ZStack(alignment: .bottom) {
             Color.black.ignoresSafeArea()
 
-            ZStack(alignment: .leading) {
-                HStack {
-                    MiniPlayer(compactProgress: 0)
-                }
-                .frame(height: 36)
-                .padding(.vertical, 6)
-                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-
-                RoundedRectangle(cornerRadius: 4.5, style: .continuous)
-                    .fill(.fill.tertiary)
-                    .overlay {
-                        Image(systemName: "music.note")
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(width: 30, height: 30)
-                    .padding(.leading, 20)
+            HStack {
+                MiniPlayer(compactProgress: 0)
             }
+            .frame(height: 36)
+            .padding(.vertical, 6)
+            .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
             .padding(.horizontal, 16)
             .padding(.bottom, 12)
         }

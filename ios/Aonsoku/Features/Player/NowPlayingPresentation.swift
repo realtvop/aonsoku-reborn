@@ -329,7 +329,7 @@ private struct NowPlayingPresentation: ViewModifier {
                                     .padding(.top, 6)
                                     .opacity(isExpanded ? 0 : 1)
                             }
-                            .glassEffect(.regular, in: RoundedRectangle(
+                            .glassEffect(.regular.interactive(), in: RoundedRectangle(
                                 cornerRadius: radius, style: .continuous
                             ))
                             .position(x: surface.midX, y: surface.midY)
@@ -452,6 +452,7 @@ private struct NowPlayingPresentation: ViewModifier {
 
     private var artworkOpacity: Double {
         if let artworkTransition { return artworkTransition.hidesArtwork ? 0 : 1 }
+        guard isExpanded else { return 0 }
         return presentation.artworkLocation == .queue && isExpanded
             && presentation.queueHeaderFrame != nil && !presentation.isQueueHeaderVisible ? 0 : 1
     }
