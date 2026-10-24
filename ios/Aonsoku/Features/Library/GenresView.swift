@@ -1,8 +1,7 @@
 import AonsokuKit
 import SwiftUI
 
-/// Every genre as a colored card, like Apple Music's Browse Categories. A
-/// genre opens its albums.
+/// Every genre as a colored card. A genre opens its albums.
 struct GenresView: View {
     @State private var genres: [Genre] = []
     @State private var phase = LoadPhase.idle
@@ -96,7 +95,7 @@ struct GenreTile: View {
 
     var body: some View {
         let hue = Self.hue(for: genre.name)
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
             .fill(
                 LinearGradient(
                     colors: [
@@ -119,7 +118,7 @@ struct GenreTile: View {
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(genre.name)
-                        .font(.headline)
+                        .displayFont(.inline)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                     if genre.albumCount > 0 {
@@ -132,8 +131,8 @@ struct GenreTile: View {
                 .foregroundStyle(.white)
                 .padding(12)
             }
-            .clipShape(.rect(cornerRadius: 12, style: .continuous))
-            .contentShape(.rect(cornerRadius: 12, style: .continuous))
+            .clipShape(.rect(cornerRadius: 14, style: .continuous))
+            .contentShape(.rect(cornerRadius: 14, style: .continuous))
             .accessibilityElement(children: .combine)
     }
 

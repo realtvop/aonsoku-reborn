@@ -2,7 +2,7 @@ import AonsokuKit
 import SwiftUI
 
 /// The user's playlists and those shared with them, most recently changed
-/// first, with New Playlist at the top as in Apple Music.
+/// first, with New Playlist at the top.
 struct PlaylistsListView: View {
     @State private var searchText = ""
 
@@ -79,7 +79,7 @@ struct PlaylistsListView: View {
     }
 }
 
-/// The New Playlist row: a tinted plus where the cover would be.
+/// The New Playlist row: a tinted plus on a tile where the cover would be.
 struct NewPlaylistRow: View {
     let action: () -> Void
 
@@ -88,21 +88,23 @@ struct NewPlaylistRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(.fill.tertiary)
-                    .frame(width: 56, height: 56)
+                RoundedRectangle(cornerRadius: Layout.rowArtworkRadius, style: .continuous)
+                    .fill(ThemeColor.border)
+                    .frame(width: 52, height: 52)
                     .overlay {
                         Image(systemName: "plus")
-                            .font(.title2.weight(.medium))
+                            .font(.title3.weight(.semibold))
                             .foregroundStyle(.tint)
                     }
                 Text(t("options.playlist.create"))
+                    .font(.callout.weight(.medium))
                     .foregroundStyle(.tint)
                 Spacer(minLength: 0)
             }
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .listRowSeparator(.hidden)
     }
 }
 
@@ -117,21 +119,28 @@ struct PlaylistRow: View {
     var body: some View {
         NavigationLink(value: AppRoute.playlist(id: playlist.id)) {
             HStack(spacing: 12) {
-                ArtworkImage(id: playlist.coverArt, size: .small, cornerRadius: 6, placeholder: "music.note.list")
-                    .frame(width: 56, height: 56)
+                ArtworkImage(
+                    id: playlist.coverArt,
+                    size: .small,
+                    cornerRadius: Layout.rowArtworkRadius,
+                    placeholder: "music.note.list"
+                )
+                .frame(width: 52, height: 52)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(playlist.name)
+                        .font(.callout.weight(.medium))
                         .lineLimit(1)
                     HStack(spacing: 4) {
                         Text(details)
                             .lineLimit(1)
                         PlaylistCacheBadge(playlistId: playlist.id)
                     }
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(.footnote)
+                    .foregroundStyle(ThemeColor.mutedForeground)
                 }
             }
         }
+        .listRowSeparator(.hidden)
         .contextMenu {
             PlaylistMenuItems(playlist: playlist)
         }

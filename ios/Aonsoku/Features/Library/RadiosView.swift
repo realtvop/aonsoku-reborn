@@ -137,10 +137,11 @@ private struct RadioRow: View {
         Button(action: action) {
             HStack(spacing: 12) {
                 RadioBadge(name: station.name)
-                    .frame(width: 56, height: 56)
+                    .clipShape(.rect(cornerRadius: Layout.rowArtworkRadius, style: .continuous))
+                    .frame(width: 52, height: 52)
                     .overlay {
                         if isCurrent {
-                            NowPlayingIndicator(isPlaying: isPlaying)
+                            NowPlayingIndicator(isPlaying: isPlaying, size: 20)
                                 .foregroundStyle(.white)
                         } else {
                             Image(systemName: "dot.radiowaves.left.and.right")
@@ -150,11 +151,12 @@ private struct RadioRow: View {
                     }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(station.name)
-                        .foregroundStyle(isCurrent ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(isCurrent ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.primary))
                         .lineLimit(1)
                     Text(station.homepage?.host() ?? station.streamUrl)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(.footnote)
+                        .foregroundStyle(ThemeColor.mutedForeground)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
@@ -162,6 +164,7 @@ private struct RadioRow: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .listRowSeparator(.hidden)
         .accessibilityLabel(station.name)
         .accessibilityHint(
             isCurrent && isPlaying

@@ -1,7 +1,8 @@
 import AonsokuKit
 import SwiftUI
 
-/// Every artist by name, as round portraits in a list.
+/// Every artist by name, as round portraits in a list, like the web's
+/// mobile artist list.
 struct ArtistsListView: View {
     @State private var searchText = ""
 
@@ -70,19 +71,22 @@ struct ArtistRow: View {
         NavigationLink(value: AppRoute.artist(id: artist.id, name: artist.name)) {
             HStack(spacing: 12) {
                 ArtworkImage(id: artist.coverArt, size: .small, isCircular: true, placeholder: "music.mic")
-                    .frame(width: 48, height: 48)
+                    .frame(width: 44, height: 44)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(artist.name)
+                        .font(.callout.weight(.medium))
                         .lineLimit(1)
                     if artist.albumCount > 0 {
                         Text(t("artist.info.albumsCount", count: artist.albumCount))
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .font(.footnote)
+                            .foregroundStyle(ThemeColor.mutedForeground)
                             .lineLimit(1)
                     }
                 }
             }
+            .padding(.vertical, 2)
         }
+        .listRowSeparator(.hidden)
         .contextMenu {
             ArtistMenuItems(artist: artist)
         }
