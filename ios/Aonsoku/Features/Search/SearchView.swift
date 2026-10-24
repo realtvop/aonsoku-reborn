@@ -5,10 +5,9 @@ import SwiftUI
 /// browse, like Apple Music's categories; typing searches albums, songs
 /// and artists, each linking to its full results.
 struct SearchView: View {
-    /// Shared with the Search stack's native bottom search field.
-    @Binding var text: String
-    /// `text` once typing pauses or the native search field submits.
-    @Binding var query: String
+    @State private var text = ""
+    /// `text` once typing pauses.
+    @State private var query = ""
     @State private var results: SearchResults?
     @State private var phase = LoadPhase.idle
 
@@ -24,10 +23,15 @@ struct SearchView: View {
                 BrowseGenres()
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .offlineBanner()
         .themedBackground()
         .navigationTitle(t("sidebar.miniSearch"))
+        .searchable(text: $text, prompt: Text(t("command.inputPlaceholder")))
+        .autocorrectionDisabled()
+        .textInputAutocapitalization(.never)
+        .onSubmit(of: .search) {
+            query = trimmedText
+        }
         .task(id: trimmedText) {
             // Waits for typing to pause; clearing the field is immediate.
             guard !trimmedText.isEmpty else {

@@ -135,11 +135,10 @@ with automatic foreground sync disabled.
 - **Tabs**: Home, Library, Search (`Tab(role: .search)`), each with an
   independent native navigation stack. Search remains separate from the
   other tabs; the system owns minimization on scroll and all transitions.
-  Selecting Search activates its navigation stack's native `searchable`
-  toolbar field at the bottom on iPhone. Other tabs and the search page have
-  no duplicate top field. Typing retains the 500ms debounce; submitting
-  searches immediately. iPad uses system search placement and the adaptable
-  sidebar.
+  `SearchView` owns its text/query state and native `searchable` field with
+  default system placement and activation. No forced bottom placement or
+  tab-selection search activation is applied. Typing retains the 500ms
+  debounce; submitting searches immediately. iPad uses the adaptable sidebar.
 - **Mini player**: the system `tabViewBottomAccessory` contains only a
   layout marker; its native glass host is hidden. Its inline/expanded
   geometry positions the actual mini controls inside `NowPlayingPresentation`,

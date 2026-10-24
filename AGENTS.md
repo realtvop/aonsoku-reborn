@@ -124,12 +124,11 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   and observable stores. See `docs/ios-native-app.md`.
   `MainTabView` uses the system tab bar, a fixed search-role tab and the
   native bottom accessory for a layout-only `PlayerAccessorySlot`. Search stays separate from the
-  other tabs; minimization and transitions are system-owned. The Search
-  stack's `searchable` toolbar field sits at the bottom on iPhone when Search
-  is selected. `SearchView` shares its text/query bindings with that field;
-  typing debounces and submitting searches immediately. Keep `searchable`
-  scoped to the Search stack so other tabs do not gain a search field. iPad
-  keeps the system search placement and adaptable sidebar.
+  other tabs; minimization and transitions are system-owned. `SearchView`
+  owns its text/query state and native `searchable` field, using the system's
+  default placement and activation behavior. Typing debounces and submitting
+  searches immediately. Keep `searchable` scoped to `SearchView` so other
+  tabs do not gain a search field. iPad keeps the adaptable sidebar.
   `NowPlayingPresentation` keeps the full-screen player in the same view
   tree as the tabs. One persistent container owns `MiniPlayer`,
   `NowPlayingView`, their shared background and the sole `PlayerArtwork`.

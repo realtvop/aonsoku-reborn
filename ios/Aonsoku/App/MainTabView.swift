@@ -9,8 +9,6 @@ struct MainTabView: View {
     @Environment(PlayerStore.self) private var player
     @Environment(SettingsStore.self) private var settings
     @Environment(Localizer.self) private var t
-    @State private var searchText = ""
-    @State private var searchQuery = ""
 
     var body: some View {
         @Bindable var router = router
@@ -29,23 +27,12 @@ struct MainTabView: View {
             }
             Tab(t("sidebar.miniSearch"), systemImage: "magnifyingglass", value: AppTab.search, role: .search) {
                 NavigationStack(path: $router.searchPath) {
-                    SearchView(text: $searchText, query: $searchQuery)
+                    SearchView()
                         .appDestinations()
-                }
-                .searchable(
-                    text: $searchText,
-                    placement: .toolbar,
-                    prompt: Text(t("command.inputPlaceholder"))
-                )
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .onSubmit(of: .search) {
-                    searchQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
                 }
             }
         }
         .tabViewStyle(.sidebarAdaptable)
-        .tabViewSearchActivation(.searchTabSelection)
         .tabBarMinimizeBehavior(.onScrollDown)
         .tabViewBottomAccessory {
             PlayerAccessorySlot()
