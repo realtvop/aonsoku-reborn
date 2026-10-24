@@ -20,6 +20,7 @@ struct MarqueeText: View {
     @State private var textWidth: CGFloat = 0
     @State private var availableWidth: CGFloat = 0
     @State private var offset: CGFloat = 0
+    @State private var isScrolling = false
 
     private let fade: CGFloat = 24
 
@@ -44,7 +45,7 @@ struct MarqueeText: View {
                     .offset(x: isActive ? offset : 0)
                     .frame(width: availableWidth, alignment: .leading)
                     .mask(alignment: .leading) {
-                        edgeFade(isScrolling: isActive && offset != 0)
+                        edgeFade(isScrolling: isActive && isScrolling)
                             .frame(width: availableWidth)
                     }
                 } else {
@@ -73,6 +74,7 @@ struct MarqueeText: View {
     }
 
     private func run(scrolls: Bool) async {
+        defer { reset() }
         guard !Task.isCancelled else { return }
         reset()
         guard scrolls else { return }
@@ -81,6 +83,9 @@ struct MarqueeText: View {
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(pause))
             guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.25)) {
+                isScrolling = true
+            }
             withAnimation(.linear(duration: duration)) {
                 offset = -distance
             }
@@ -97,6 +102,7 @@ struct MarqueeText: View {
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             offset = 0
+            isScrolling = false
         }
     }
 
@@ -107,11 +113,11 @@ struct MarqueeText: View {
         return HStack(spacing: 0) {
             LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
                 .frame(width: isScrolling ? fadeWidth : 0)
+                .clipped()
             Rectangle()
             LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
                 .frame(width: fadeWidth)
         }
-        .animation(.easeInOut(duration: 0.3), value: isScrolling)
     }
 }
 
