@@ -19,7 +19,7 @@ struct MarqueeText: View {
     @State private var availableWidth: CGFloat = 0
     @State private var offset: CGFloat = 0
 
-    private let fade: CGFloat = 12
+    private let fade: CGFloat = 24
 
     var body: some View {
         let allowsScrolling = !respectsReduceMotion || !reduceMotion
@@ -95,12 +95,13 @@ struct MarqueeText: View {
     /// Fades the trailing edge, and the leading edge while text moves
     /// under it.
     private func edgeFade(isScrolling: Bool) -> some View {
-        HStack(spacing: 0) {
+        let fadeWidth = min(fade, availableWidth / 2)
+        return HStack(spacing: 0) {
             LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
-                .frame(width: isScrolling ? fade : 0)
+                .frame(width: isScrolling ? fadeWidth : 0)
             Rectangle()
             LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
-                .frame(width: fade)
+                .frame(width: fadeWidth)
         }
         .animation(.easeInOut(duration: 0.3), value: isScrolling)
     }
