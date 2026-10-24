@@ -2,8 +2,8 @@ import AonsokuKit
 import SwiftUI
 
 /// The Search tab. With an empty field it shows the biggest genres to
-/// browse, like Apple Music's categories; typing searches albums, songs
-/// and artists, each linking to its full results.
+/// browse; typing searches artists, albums and songs in sections captioned
+/// like the web's mobile search, each linking to its full results.
 struct SearchView: View {
     @State private var text = ""
     /// `text` once typing pauses.
@@ -69,8 +69,7 @@ struct SearchView: View {
                                 .themedRow(plain: true)
                         }
                     } header: {
-                        SectionHeader(title: t("sidebar.artists"))
-                            .textCase(nil)
+                        resultsHeader(t("sidebar.artists"))
                     }
                 }
                 if !results.albums.isEmpty {
@@ -80,8 +79,7 @@ struct SearchView: View {
                                 .themedRow(plain: true)
                         }
                     } header: {
-                        SectionHeader(title: t("sidebar.albums"), route: .albums(.search(query)))
-                            .textCase(nil)
+                        resultsHeader(t("sidebar.albums"), route: .albums(.search(query)))
                     }
                 }
                 if !results.songs.isEmpty {
@@ -91,8 +89,7 @@ struct SearchView: View {
                                 .themedRow(plain: true)
                         }
                     } header: {
-                        SectionHeader(title: t("sidebar.songs"), route: .songs(SongListQuery(search: query)))
-                            .textCase(nil)
+                        resultsHeader(t("sidebar.songs"), route: .songs(SongListQuery(search: query)))
                     }
                 }
             }
@@ -104,6 +101,20 @@ struct SearchView: View {
         } empty: {
             EmptyStateView(title: t("command.noResults"), systemImage: "magnifyingglass")
         }
+    }
+
+    private func resultsHeader(_ title: String, route: AppRoute? = nil) -> some View {
+        CaptionHeader(title: title) {
+            if let route {
+                NavigationLink(value: route) {
+                    Text(t("generic.seeMore"))
+                        .padding(.vertical, 4)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .textCase(nil)
     }
 
     private func search() async {
@@ -185,11 +196,12 @@ private struct AlbumResultRow: View {
     var body: some View {
         NavigationLink(value: AppRoute.album(album)) {
             HStack(spacing: 12) {
-                ArtworkImage(id: album.coverArt, size: .small, cornerRadius: 6)
-                    .frame(width: 48, height: 48)
+                ArtworkImage(id: album.coverArt, size: .small, cornerRadius: Layout.rowArtworkRadius)
+                    .frame(width: 44, height: 44)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 4) {
                         Text(album.name)
+                            .font(.callout.weight(.medium))
                             .lineLimit(1)
                         if album.explicitStatus == .explicit {
                             ExplicitBadge()
@@ -200,11 +212,13 @@ private struct AlbumResultRow: View {
                             .lineLimit(1)
                         AlbumCacheBadge(albumId: album.id)
                     }
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(.footnote)
+                    .foregroundStyle(ThemeColor.mutedForeground)
                 }
             }
+            .padding(.vertical, 2)
         }
+        .listRowSeparator(.hidden)
         .contextMenu {
             AlbumMenuItems(album: album)
         }

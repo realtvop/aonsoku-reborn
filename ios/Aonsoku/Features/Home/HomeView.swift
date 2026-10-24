@@ -108,20 +108,10 @@ private struct OtherDevicesSection: View {
         let devices = coordination.groups.live + coordination.groups.offlineSnapshots
         if !devices.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Label {
-                        Text(t("settings.crossDevice.playback.otherDevices"))
-                            .textCase(.uppercase)
-                            .tracking(0.6)
-                            .foregroundStyle(ThemeColor.mutedForeground)
-                    } icon: {
-                        Image(systemName: "hifispeaker.2.fill")
-                            .foregroundStyle(.tint)
-                    }
-                    .font(.caption.weight(.bold))
-                    .lineLimit(1)
-                    .accessibilityAddTraits(.isHeader)
-                    Spacer(minLength: 8)
+                CaptionHeader(
+                    title: t("settings.crossDevice.playback.otherDevices"),
+                    systemImage: "hifispeaker.2.fill"
+                ) {
                     Button {
                         router.present(.devices)
                     } label: {
@@ -129,8 +119,6 @@ private struct OtherDevicesSection: View {
                             Text(t("settings.crossDevice.playback.showDevices"))
                             Image(systemName: "arrow.right")
                         }
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tint)
                     }
                     .buttonStyle(.plain)
                 }

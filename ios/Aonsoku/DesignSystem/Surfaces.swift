@@ -137,3 +137,58 @@ struct FlowLayout: SwiftUI.Layout {
         return rows
     }
 }
+
+// MARK: - Captions
+
+/// A small uppercase caption over a group, like the web's search sections
+/// and device overview, with an optional link at the trailing edge.
+struct CaptionHeader<Trailing: View>: View {
+    let title: String
+    var systemImage: String?
+    @ViewBuilder var trailing: Trailing
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Label {
+                Text(title)
+                    .textCase(.uppercase)
+                    .tracking(0.6)
+                    .foregroundStyle(ThemeColor.mutedForeground)
+            } icon: {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .foregroundStyle(.tint)
+                }
+            }
+            .labelStyle(CaptionLabelStyle(showsIcon: systemImage != nil))
+            .font(.caption.weight(.bold))
+            .lineLimit(1)
+            .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 8)
+            trailing
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tint)
+        }
+    }
+}
+
+extension CaptionHeader where Trailing == EmptyView {
+    init(title: String, systemImage: String? = nil) {
+        self.init(title: title, systemImage: systemImage) {
+            EmptyView()
+        }
+    }
+}
+
+private struct CaptionLabelStyle: LabelStyle {
+    let showsIcon: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 6) {
+            if showsIcon {
+                configuration.icon
+            }
+            configuration.title
+        }
+    }
+}
