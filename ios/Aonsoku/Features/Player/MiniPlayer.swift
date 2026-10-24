@@ -12,8 +12,8 @@ struct MiniPlayer: View {
     @ScaledMetric(relativeTo: .caption) private var compactTitleSize: CGFloat = 12
     @ScaledMetric(relativeTo: .caption) private var expandedSubtitleSize: CGFloat = 12
     @ScaledMetric(relativeTo: .caption2) private var compactSubtitleSize: CGFloat = 11
-    @ScaledMetric(relativeTo: .title3) private var expandedControlSize: CGFloat = 20
-    @ScaledMetric(relativeTo: .body) private var compactControlSize: CGFloat = 17
+    @ScaledMetric(relativeTo: .title3) private var expandedControlSize: CGFloat = 24
+    @ScaledMetric(relativeTo: .body) private var compactControlSize: CGFloat = 21
 
     @Environment(PlayerStore.self) private var player
     @Environment(Router.self) private var router
@@ -280,7 +280,7 @@ struct MiniPlayer: View {
                 Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                     .font(.system(size: mix(expandedControlSize, compactControlSize)))
                     .contentTransition(.symbolEffect(.replace))
-                    .frame(width: 36, height: 36)
+                    .frame(width: 40, height: 36)
                     .contentShape(.rect)
             }
             .accessibilityLabel(t(player.isPlaying ? "player.tooltips.pause" : "player.tooltips.play"))
@@ -288,11 +288,11 @@ struct MiniPlayer: View {
                 player.next()
             } label: {
                 Image(systemName: "forward.fill")
-                    .font(.title3)
-                    .frame(width: 36, height: 36)
+                    .font(.system(size: expandedControlSize))
+                    .frame(width: 40, height: 36)
                     .contentShape(.rect)
             }
-            .frame(width: mix(36, 0))
+            .frame(width: mix(40, 0))
             .opacity(1 - compactProgress)
             .clipped()
             .allowsHitTesting(compactProgress == 0)
