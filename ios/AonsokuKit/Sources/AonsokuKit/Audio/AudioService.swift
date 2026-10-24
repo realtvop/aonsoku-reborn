@@ -87,6 +87,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private var loadedDuration: Double?
     private var isQueueActive = false
     private var savedRestoreTime: Double?
+    private var pausedResumePosition: CMTime?
     private var remoteProjection: AudioRemotePlaybackProjection?
     private var preparedHandoffBefore: (PlaybackPersistState, Bool)?
     private var handoffGeneration = 0
@@ -354,6 +355,11 @@ public final class AudioService: NSObject, @unchecked Sendable {
             guard let self else { return }
             do {
                 try self.activateAudioSession()
+                let resumePosition = self.pausedResumePosition
+                    ?? self.recoveryController.resumePosition
+                    ?? self.makeTime(self.currentTime)
+                let isResuming = self.pausedResumePosition != nil
+                    || self.recoveryController.state == .gaveUp
                 switch self.recoveryController.state {
                 case .level1, .level2:
                     // Keep the saved resume position while an existing
@@ -366,14 +372,28 @@ public final class AudioService: NSObject, @unchecked Sendable {
                 case .idle:
                     break
                 }
-                if self.player == nil,
+                self.pausedResumePosition = nil
+                let streamBufferWasLost = isResuming && self.currentSourceKind == "stream"
+                    && (self.playerItem?.isPlaybackBufferEmpty == true
+                        || self.playerItem?.loadedTimeRanges.isEmpty == true
+                        || !self.isPositionWithinLoadedRanges(resumePosition.seconds))
+                let resumePositionWasLost = isResuming && self.currentSourceKind != "radio"
+                    && abs(self.currentTime - resumePosition.seconds) > 0.5
+                let needsReload = self.player != nil
+                    && (self.playerItem?.status == .failed
+                        || streamBufferWasLost || resumePositionWasLost)
+                if needsReload {
+                    // Do not play an unusable item before its saved-position
+                    // reload, or wait for another stall/status notification.
+                    self.player?.pause()
+                } else if self.player == nil,
                    self.isQueueActive,
                    let song = self.queueEngine.currentSong {
                     let resume = self.savedRestoreTime
                     self.savedRestoreTime = nil
                     self.queueEngine.clearRestoredFlag()
                     self.loadQueueSong(song, autoplay: true, startTime: resume)
-                } else if self.isAtEnd {
+                } else if self.isAtEnd, !isResuming {
                     self.player?.seek(to: .zero) { _ in self.player?.play() }
                 } else {
                     self.player?.play()
@@ -381,17 +401,18 @@ public final class AudioService: NSObject, @unchecked Sendable {
                 self.recoveryController.startProgressMonitoring(
                     generation: self.playbackGeneration,
                     sourceKind: self.recoverySourceKind(),
-                    currentTime: self.player?.currentTime() ?? .zero
+                    currentTime: needsReload
+                        ? resumePosition
+                        : (self.player?.currentTime() ?? .zero)
                 )
-                // A stream can fail while paused. play() on that same failed
-                // item need not emit another status/stall change.
-                if self.playerItem?.status == .failed {
+                if needsReload {
                     self.recoveryController.triggerRecovery(
-                        currentTime: self.player?.currentTime() ?? .zero,
+                        currentTime: resumePosition,
                         generation: self.playbackGeneration,
                         sourceKind: self.recoverySourceKind(),
                         requiresReload: true
                     )
+                    self.emitPlaybackState(.loading, force: true)
                 }
                 self.persistence.startProgressTracking()
                 completion?(.success(()))
@@ -408,21 +429,26 @@ public final class AudioService: NSObject, @unchecked Sendable {
 
     public func pause() {
         dispatchMain { [weak self] in
-            self?.cancelTransitionStateSuppression()
-            self?.recoveryController.reportUserPause()
-            self?.isRecoveryReload = false
-            self?.isSeeking = false
-            self?.endOfStreamTracker.reset()
-            self?.player?.pause()
-            self?.scrobbleBuffer.pauseTracking()
-            self?.persistence.flushNow()
-            self?.emitPlaybackState(.paused)
+            guard let self else { return }
+            self.pausedResumePosition = self.recoveryController.resumePosition
+                ?? self.makeTime(self.currentTime)
+            self.cancelTransitionStateSuppression()
+            self.recoveryController.reportUserPause()
+            self.isRecoveryReload = false
+            self.isSeeking = false
+            self.bufferMismatchFirstSeen = nil
+            self.endOfStreamTracker.reset()
+            self.player?.pause()
+            self.scrobbleBuffer.pauseTracking()
+            self.persistence.flushNow()
+            self.emitPlaybackState(.paused)
         }
     }
 
     public func stop() {
         dispatchMain { [weak self] in
             guard let self else { return }
+            self.pausedResumePosition = nil
             self.cancelTransitionStateSuppression()
             self.player?.pause()
             self.recoveryController.reportUserPause()
@@ -451,6 +477,9 @@ public final class AudioService: NSObject, @unchecked Sendable {
                 return
             }
             let position = max(0, seconds)
+            if self.pausedResumePosition != nil {
+                self.pausedResumePosition = self.makeTime(position)
+            }
             self.recoveryController.reportUserSeek()
             self.isRecoveryReload = false
             self.isSeeking = true
@@ -1524,6 +1553,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
 
     private func beginPlayerItemTransition() {
         playbackGeneration += 1
+        pausedResumePosition = nil
         bufferMismatchFirstSeen = nil
         endOfStreamTracker.reset()
         isSeeking = false

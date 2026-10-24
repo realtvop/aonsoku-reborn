@@ -323,7 +323,11 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   `PlaybackRecoveryController` seek/reload fallback.
   Recovery attempts have their own progress deadline, so a resumed stream
   with no further stall notifications still reaches reload. Pausing cancels
-  pending and in-flight recovery through an attempt revision. Reload keeps
+  pending and in-flight recovery through an attempt revision. The service keeps
+  the intended resume position across a pause even while a replacement item
+  is unready. Resuming a stream with lost buffers, a failed item or a lost seek
+  position enters reload recovery immediately instead of waiting for a new
+  stall notification. Reload keeps
   the saved position and waits for the replacement item's `readyToPlay`
   status before seeking with a completion handler. Failed items retry, and
   never-ready items remain bounded by the recovery attempt's progress deadline;

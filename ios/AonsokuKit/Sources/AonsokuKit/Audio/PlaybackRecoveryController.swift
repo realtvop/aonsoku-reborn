@@ -44,6 +44,11 @@ class PlaybackRecoveryController {
     private let likelyToKeepUpDebounceInterval: TimeInterval = 1.5
 
     private var savedPosition: CMTime = .zero
+    /// The service retains this before a user pause cancels the attempt. A
+    /// replacement item may not have sought back to this position yet.
+    var resumePosition: CMTime? {
+        state == .idle ? nil : savedPosition
+    }
     private var sourceKind: RecoverySourceKind = .stream
     private var isBackground = false
 
