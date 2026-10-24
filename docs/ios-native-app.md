@@ -16,6 +16,7 @@ context menus on every song, album, artist, and playlist.
 | --- | --- |
 | Minimum OS | iOS 26.0 (iPhone and iPad) |
 | Toolchain | Xcode 26, Swift 6.2 compiler, Swift 5 language mode |
+| Player sliders | [SliderControl](https://github.com/realtvop/slidercontrol), pinned to a revision in the app target |
 | Bundle identifier | `github.realtvop.aonsoku` (unchanged, so upgrades keep data) |
 | Background modes | `audio`, `fetch` (BGTask `github.realtvop.aonsoku.sync.refresh`) |
 
@@ -168,7 +169,11 @@ with automatic foreground sync disabled.
 - **Now Playing**: artwork-derived animated mesh gradient, artwork that
   shrinks while paused, marquee title, favorite and more menus, scrubber,
   transport, volume, and a bottom bar for lyrics, AirPlay, Aonsoku devices,
-  and the queue. Lyrics and queue replace the large artwork with a compact
+  and the queue. The pinned SliderControl package supplies `.progress`
+  (seek on release) and `.volume` (inertia and elastic limits) sliders.
+  Volume updates are coalesced with an exact trailing value, and both slider
+  touch regions remain excluded from the player's dismissal pan.
+  Lyrics and queue replace the large artwork with a compact
   header, as in Apple Music. One persistent `PlayerArtwork` in the presentation
   host moves and resizes between the native accessory destination and
   layout-only slots in the main page, lyrics and queue headers. It keeps the

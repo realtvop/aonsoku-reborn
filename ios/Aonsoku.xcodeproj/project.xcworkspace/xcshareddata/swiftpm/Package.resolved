@@ -1,5 +1,5 @@
 {
-  "originHash" : "f5aa4f2c87c6bda832e2aaf3f36c73f8a32d52e4e908821af2396b0cfc703b2a",
+  "originHash" : "48e5fd70f91622b8cb4531acd0f1fc934b18efb298752a1095813ff6655af61c",
   "pins" : [
     {
       "identity" : "grdb.swift",
@@ -8,6 +8,14 @@
       "state" : {
         "revision" : "b83108d10f42680d78f23fe4d4d80fc88dab3212",
         "version" : "7.11.1"
+      }
+    },
+    {
+      "identity" : "slidercontrol",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/realtvop/slidercontrol",
+      "state" : {
+        "revision" : "60ed08fb3694a4234c0e576eeaeacc76fb5253e0"
       }
     }
   ],

@@ -10,6 +10,7 @@
 		4E5A00000000000000000101 /* AonsokuKit in Frameworks */ = {isa = PBXBuildFile; productRef = 4E5A00000000000000000901 /* AonsokuKit */; };
 		4E5A00000000000000000102 /* locales in Resources */ = {isa = PBXBuildFile; fileRef = 4E5A00000000000000000202 /* locales */; };
 		4E5A00000000000000000103 /* native-locales in Resources */ = {isa = PBXBuildFile; fileRef = 4E5A00000000000000000203 /* native-locales */; };
+		4E5A00000000000000000104 /* SliderControl in Frameworks */ = {isa = PBXBuildFile; productRef = 4E5A00000000000000000902 /* SliderControl */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -45,6 +46,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				4E5A00000000000000000101 /* AonsokuKit in Frameworks */,
+				4E5A00000000000000000104 /* SliderControl in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -90,6 +92,7 @@
 			name = Aonsoku;
 			packageProductDependencies = (
 				4E5A00000000000000000901 /* AonsokuKit */,
+				4E5A00000000000000000902 /* SliderControl */,
 			);
 			productName = Aonsoku;
 			productReference = 4E5A00000000000000000201 /* Aonsoku.app */;
@@ -121,6 +124,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				4E5A00000000000000000801 /* XCLocalSwiftPackageReference "AonsokuKit" */,
+				4E5A00000000000000000802 /* XCRemoteSwiftPackageReference "slidercontrol" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 4E5A00000000000000000002 /* Products */;
@@ -382,10 +386,26 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		4E5A00000000000000000802 /* XCRemoteSwiftPackageReference "slidercontrol" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/realtvop/slidercontrol";
+			requirement = {
+				kind = revision;
+				revision = 60ed08fb3694a4234c0e576eeaeacc76fb5253e0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		4E5A00000000000000000901 /* AonsokuKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = AonsokuKit;
+		};
+		4E5A00000000000000000902 /* SliderControl */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4E5A00000000000000000802 /* XCRemoteSwiftPackageReference "slidercontrol" */;
+			productName = SliderControl;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

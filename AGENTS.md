@@ -142,6 +142,10 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   the full viewport width. Downward pans start anywhere on the surface
   except the progress/volume slider touch targets; horizontal pans do not
   dismiss it. Lyrics/queue lists scroll back to their top before dismissal.
+  Full-screen progress and volume use the app target's pinned
+  `realtvop/slidercontrol` Swift package (`SliderControlView`). Progress uses
+  `.progress` and seeks on release; volume uses `.volume`, including inertia
+  and elastic limits, with coalesced store updates and an exact trailing value.
   `PlayerPresentationState` owns the interactive dismissal offset, while
   `Router.isNowPlayingPresented` remains the presentation authority.
   While the finger is down, artwork keeps its expanded size and moves only

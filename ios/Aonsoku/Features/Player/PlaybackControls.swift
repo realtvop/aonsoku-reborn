@@ -1,5 +1,6 @@
 import AVKit
 import AonsokuKit
+import SliderControl
 import SwiftUI
 
 // MARK: - Scrubber
@@ -12,9 +13,6 @@ struct PlaybackScrubber: View {
 
     /// 0...1 while dragging.
     @State private var dragProgress: Double?
-    /// Where the drag started, so the bar moves with the finger instead of
-    /// jumping to it.
-    @State private var dragStart: Double?
     /// The position just sought to, shown until playback reports it.
     @State private var pendingSeek: (position: TimeInterval, at: Date)?
 
@@ -44,13 +42,30 @@ struct PlaybackScrubber: View {
     private func scrubber(position: TimeInterval, duration: TimeInterval) -> some View {
         let progress = duration > 0 ? min(max(position / duration, 0), 1) : 0
         return VStack(spacing: 6) {
-            GeometryReader { proxy in
-                ProgressBar(progress: progress, isActive: dragProgress != nil)
-                    .frame(maxHeight: .infinity)
-                    .contentShape(.rect)
-                    .gesture(drag(width: proxy.size.width, current: progress, duration: duration))
+            SliderControlView(
+                value: Binding(
+                    get: { progress },
+                    set: { newValue in
+                        // The control repeats its final value after editing
+                        // ends. Ignore that event so the playback clock resumes.
+                        if dragProgress != nil { dragProgress = newValue }
+                    }
+                ),
+                behavior: .progress
+            ) { isEditing in
+                if isEditing {
+                    dragProgress = progress
+                } else {
+                    if let dragProgress, duration > 0 {
+                        seek(to: dragProgress * duration)
+                    }
+                    dragProgress = nil
+                }
             }
+            .trackColor(.white.opacity(0.22))
+            .progressColor(.white.opacity(0.8), enlarged: .white)
             .frame(height: 24)
+            .disabled(duration <= 0)
             .playerSliderRegion(.progress)
             HStack {
                 Text(Formatters.clock(position))
@@ -70,30 +85,14 @@ struct PlaybackScrubber: View {
             .monospacedDigit()
             .foregroundStyle(.white.opacity(0.6))
         }
-        .animation(.spring(duration: 0.3), value: dragProgress != nil)
         .accessibilityElement()
         .accessibilityLabel(t("player.tooltips.progress"))
         .accessibilityValue("\(Formatters.clock(position)) / \(Formatters.clock(duration))")
         .accessibilityAdjustableAction { direction in
+            guard duration > 0 else { return }
             let step: TimeInterval = direction == .increment ? 10 : -10
             seek(to: min(max(position + step, 0), duration))
         }
-    }
-
-    private func drag(width: CGFloat, current: Double, duration: TimeInterval) -> some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                let start = dragStart ?? current
-                dragStart = start
-                dragProgress = min(max(start + value.translation.width / max(width, 1), 0), 1)
-            }
-            .onEnded { _ in
-                if let dragProgress, duration > 0 {
-                    seek(to: dragProgress * duration)
-                }
-                dragProgress = nil
-                dragStart = nil
-            }
     }
 
     private func seek(to position: TimeInterval) {
@@ -104,7 +103,9 @@ struct PlaybackScrubber: View {
     /// Radio has no position: a full bar and the station.
     private var live: some View {
         VStack(spacing: 6) {
-            ProgressBar(progress: 1, isActive: false)
+            Capsule()
+                .fill(.white.opacity(0.8))
+                .frame(height: 7)
                 .opacity(0.35)
                 .frame(height: 24)
             HStack(spacing: 6) {
@@ -117,25 +118,6 @@ struct PlaybackScrubber: View {
             .font(.caption.weight(.semibold))
             .foregroundStyle(.white.opacity(0.6))
         }
-    }
-}
-
-/// A rounded track and its filled part, thicker while being dragged.
-struct ProgressBar: View {
-    let progress: Double
-    let isActive: Bool
-
-    var body: some View {
-        GeometryReader { proxy in
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(.white.opacity(0.22))
-                Capsule()
-                    .fill(.white.opacity(isActive ? 1 : 0.8))
-                    .frame(width: max(proxy.size.width * progress, 0))
-            }
-        }
-        .frame(height: isActive ? 12 : 7)
     }
 }
 
@@ -224,54 +206,68 @@ struct VolumeSlider: View {
     @Environment(Localizer.self) private var t
 
     @State private var dragValue: Double?
-    @State private var dragStart: Double?
+    @State private var isEditing = false
+    @State private var lastSentValue: Double?
 
     var body: some View {
         let value = dragValue ?? player.volume
         HStack(spacing: 12) {
             Image(systemName: "speaker.fill")
-            GeometryReader { proxy in
-                ProgressBar(progress: value, isActive: dragValue != nil)
-                    .frame(maxHeight: .infinity)
-                    .contentShape(.rect)
-                    .gesture(drag(width: proxy.size.width, current: value))
+            SliderControlView(
+                value: Binding(
+                    get: { value },
+                    set: { newValue in
+                        dragValue = newValue
+                        // Keep inertia smooth without a remote command for
+                        // every frame. A trailing update sends the exact value.
+                        if abs(newValue - (lastSentValue ?? player.volume)) >= 0.01 {
+                            sendVolume(newValue)
+                        }
+                    }
+                ),
+                behavior: .volume
+            ) { editing in
+                isEditing = editing
+                if editing {
+                    dragValue = value
+                }
             }
+            .trackColor(.white.opacity(0.22))
+            .progressColor(.white.opacity(0.8), enlarged: .white)
             .frame(height: 24)
             .playerSliderRegion(.volume)
             Image(systemName: "speaker.wave.3.fill")
         }
         .font(.caption)
         .foregroundStyle(.white.opacity(0.6))
-        .animation(.spring(duration: 0.3), value: dragValue != nil)
+        .task(id: isEditing ? nil : dragValue) {
+            guard !isEditing, let dragValue else { return }
+            do {
+                try await Task.sleep(for: .milliseconds(100))
+                if lastSentValue != dragValue {
+                    sendVolume(dragValue)
+                }
+                // Retain the optimistic value through inertia and delayed
+                // system/remote echoes, then resume observing output volume.
+                try await Task.sleep(for: .seconds(1.5))
+                self.dragValue = nil
+                lastSentValue = nil
+            } catch {}
+        }
         .accessibilityElement()
         .accessibilityLabel(t("native.player.volume"))
         .accessibilityValue(value.formatted(.percent.precision(.fractionLength(0))))
         .accessibilityAdjustableAction { direction in
             let step = direction == .increment ? 0.1 : -0.1
-            player.setVolume(min(max(value + step, 0), 1))
+            let nextValue = min(max(value + step, 0), 1)
+            dragValue = nextValue
+            sendVolume(nextValue)
         }
     }
 
-    private func drag(width: CGFloat, current: Double) -> some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { gesture in
-                let start = dragStart ?? current
-                dragStart = start
-                let value = min(max(start + gesture.translation.width / max(width, 1), 0), 1)
-                // Small steps are enough and spare remote devices a command
-                // per frame.
-                if abs(value - (dragValue ?? -1)) >= 0.01 {
-                    dragValue = value
-                    player.setVolume(value)
-                }
-            }
-            .onEnded { _ in
-                if let dragValue {
-                    player.setVolume(dragValue)
-                }
-                dragValue = nil
-                dragStart = nil
-            }
+    private func sendVolume(_ value: Double) {
+        lastSentValue = value
+        player.setVolume(value)
     }
 }
 
