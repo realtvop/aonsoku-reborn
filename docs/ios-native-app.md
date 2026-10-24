@@ -187,8 +187,10 @@ with automatic foreground sync disabled.
   same large-resolution image reader through every transition, including
   paused scaling and dismissal.
   Page selection and artwork destination share `PlayerPresentationState`.
-  Lyrics and queue mount before the first switch, and content/metadata/artwork
-  use the same interruptible transition. Every queue entry resets to the
+  Lyrics and queue mount before the first switch. Only the shared artwork
+  animates between pages; metadata, lyrics, queue content and controls adopt
+  their final layout immediately, without movement, scaling or crossfades.
+  Every queue entry resets to the
   current track at the top, including reopening fullscreen with Queue selected.
   It prepares the offset and artwork destination before selection and tracks
   its artwork marker while hidden; switching never inserts a new

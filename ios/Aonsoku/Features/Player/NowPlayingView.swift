@@ -17,7 +17,6 @@ struct NowPlayingView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(Router.self) private var router
     @Environment(PlayerPresentationState.self) private var presentation
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var panel: PlayerPanel? { presentation.panel }
 
@@ -34,12 +33,11 @@ struct NowPlayingView: View {
                         .frame(maxWidth: .infinity)
                 }
             }
-            .animation(panelAnimation, value: panel)
-            .animation(panelAnimation, value: bottomControlsHidden)
+            // Page content adopts its final layout immediately. The sole
+            // artwork is outside this subtree and owns its own animation.
+            .animation(nil, value: panel)
             .onChange(of: isWide, initial: true) { _, isWide in
-                withAnimation(panelAnimation) {
-                    presentation.usesWideLayout = isWide
-                }
+                presentation.usesWideLayout = isWide
             }
         }
         .foregroundStyle(.white)
@@ -124,18 +122,12 @@ struct NowPlayingView: View {
 
     // MARK: - Pieces
 
-    private var panelAnimation: Animation {
-        PlayerPresentationState.panelAnimation(reduceMotion: reduceMotion)
-    }
-
     private func selectPanel(_ panel: PlayerPanel?) {
         // Reset the hidden List and its artwork target before selecting it,
         // so the transition never starts at the previous scroll position.
         if panel == .queue { presentation.prepareQueueForPresentation?() }
-        withAnimation(panelAnimation) {
-            lyricsControlsHidden = false
-            presentation.panel = panel
-        }
+        lyricsControlsHidden = false
+        presentation.panel = panel
     }
 
     private var grabber: some View {
@@ -193,7 +185,7 @@ struct NowPlayingView: View {
                     .accessibilityAddTraits(.isHeader)
                 ArtistMenu()
             }
-            .modifier(MetadataScaleModifier(progress: isCompact ? 1 : 0, reduceMotion: reduceMotion))
+            .scaleEffect(isCompact ? 17.0 / 20.0 : 1, anchor: .leading)
             Spacer(minLength: 0)
             songButtons
         }
@@ -337,35 +329,9 @@ struct NowPlayingView: View {
     }
 }
 
-/// Smoothly transitions track metadata between the large cover title and the compact
-/// headline text at the top using a non-linear ease-in-out curve.
-private struct MetadataScaleModifier: AnimatableModifier {
-    var progress: Double
-    let reduceMotion: Bool
-
-    var animatableData: Double {
-        get { progress }
-        set { progress = newValue }
-    }
-
-    func body(content: Content) -> some View {
-        let scale: CGFloat
-        if reduceMotion {
-            scale = progress > 0.5 ? (17.0 / 20.0) : 1.0
-        } else {
-            // Cubic ease-in-out non-linear curve for fluid acceleration and settling
-            let t = min(max(progress, 0), 1)
-            let eased = t < 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2
-            scale = 1.0 - CGFloat(eased) * (1.0 - 17.0 / 20.0)
-        }
-
-        return content
-            .scaleEffect(scale, anchor: .leading)
-    }
-}
-
 /// Only the upper content changes layout. Both artwork destinations always
-/// exist, and the same metadata row moves between them; controls never reflow.
+/// exist. Metadata switches directly to the selected page's layout; only
+/// the presentation host's sole artwork animates between those destinations.
 private struct PlayerContentLayout: SwiftUI.Layout {
     var showsPanel: Bool
 

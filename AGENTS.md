@@ -190,14 +190,15 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   (`TransportControls(scale: 0.85)` with
   6pt vertical transport padding) across all pages. On compact layouts,
   `PlayerContentLayout` positions the cover/lyrics metadata and both persistent artwork
-  markers above those controls; the
-  sole artwork and metadata use the same zero-bounce panel animation.
-  Metadata transitions its scale non-linearly between the expanded title and compact header
-  text while staying visible during travel. `PlayerPresentationState.panel`
+  markers above those controls. Only the sole artwork animates between page
+  destinations. Titles, lyrics, queue content and controls switch immediately
+  to their final layout, without movement, scaling animation or crossfade.
+  `PlayerPresentationState.panel`
   is the single page selection and derives the artwork destination synchronously.
-  Lyrics/queue panels mount before their first transition and crossfade with
-  the same interruptible animation as the cover; lyrics preserve scrolling and hidden
-  lyrics stop their playback-following task. Reduce Motion uses a short linear transition.
+  Lyrics/queue panels mount before their first switch; lyrics preserve scrolling
+  and hidden lyrics stop their playback-following task. Reduce Motion uses a
+  short linear artwork transition. Do not wrap page selection in a global
+  animation or animate the page-content subtree.
   Manually scrolling down through synced or plain lyrics collapses the entire
   footer (progress, transport, volume and bottom actions) and expands the lyrics
   viewport. Scrolling back or tapping lyrics restores it, as do changing panels,
