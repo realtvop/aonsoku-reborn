@@ -14,13 +14,13 @@ struct AboutView: View {
     @Environment(\.locale) private var locale
 
     var body: some View {
-        List {
+        ThemedList {
             Section {
                 VStack(spacing: 10) {
                     AppIconImage()
                         .frame(width: 88, height: 88)
                     Text(verbatim: AppInfo.name)
-                        .font(.title2.bold())
+                        .displayFont(.title)
                     Text(verbatim: AppInfo.version)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -65,7 +65,7 @@ struct AboutView: View {
                     Label {
                         Text(verbatim: "GitHub")
                     } icon: {
-                        SettingsIcon(systemImage: "chevron.left.forwardslash.chevron.right", color: .black)
+                        SettingsIcon(systemImage: "chevron.left.forwardslash.chevron.right")
                     }
                 }
                 .contextMenu {
@@ -75,7 +75,6 @@ struct AboutView: View {
                 Text(verbatim: AppInfo.repositoryURL.absoluteString)
             }
         }
-        .themedBackground(grouped: true)
         .navigationTitle(t("menu.about"))
         .task(id: network.isOnline) {
             await loadServerInfo()

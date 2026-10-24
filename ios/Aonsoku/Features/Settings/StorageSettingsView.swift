@@ -24,7 +24,7 @@ struct StorageSettingsView: View {
 
     var body: some View {
         let cache = settings.settings.cache
-        Form {
+        ThemedForm {
             librarySync(cache)
             smartDownloads(cache.smartRules)
             limits(cache)
@@ -36,7 +36,6 @@ struct StorageSettingsView: View {
                 Text(t("settings.storage.cacheManager.description"))
             }
         }
-        .themedBackground(grouped: true)
         .navigationTitle(t("settings.options.storage"))
         .task(id: downloads.revision) {
             await downloads.refreshUsage()
@@ -280,7 +279,7 @@ struct CacheManagerView: View {
     @Environment(\.locale) private var locale
 
     var body: some View {
-        List {
+        ThemedList {
             if !items.isEmpty {
                 Section {
                     ForEach(items) { item in
@@ -314,7 +313,6 @@ struct CacheManagerView: View {
         } empty: {
             EmptyStateView(title: t("settings.storage.cacheManager.list.empty"), systemImage: "internaldrive")
         }
-        .themedBackground(grouped: true)
         .navigationTitle(t("settings.storage.cacheManager.group"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

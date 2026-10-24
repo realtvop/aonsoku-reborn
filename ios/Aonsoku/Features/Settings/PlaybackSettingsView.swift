@@ -9,7 +9,7 @@ struct PlaybackSettingsView: View {
 
     var body: some View {
         let replayGain = settings.settings.replayGain
-        Form {
+        ThemedForm {
             Section {
                 SettingsToggle(
                     title: t("settings.audio.hapticFeedback.enabled.label"),
@@ -61,7 +61,6 @@ struct PlaybackSettingsView: View {
                 Text(t("settings.audio.history.maxSize.info"))
             }
         }
-        .themedBackground(grouped: true)
         .navigationTitle(t("settings.options.audio"))
         .animation(.smooth, value: replayGain.enabled)
     }
@@ -96,7 +95,7 @@ struct LyricsPreferencesView: View {
 
     var body: some View {
         let lyrics = settings.settings.lyrics
-        Form {
+        ThemedForm {
             Section {
                 SettingsToggle(
                     title: t("settings.audio.lyrics.preferSynced.label"),
@@ -152,7 +151,6 @@ struct LyricsPreferencesView: View {
                 }
             }
         }
-        .themedBackground(grouped: true)
         .navigationTitle(t("settings.audio.lyrics.group"))
         .animation(.smooth, value: lyrics.customServerEnabled)
         .onAppear {
@@ -190,7 +188,7 @@ private struct LyricsSourceOrderView: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        List {
+        ThemedList {
             Section {
                 ForEach(Array(settings.settings.lyrics.sourcePriority.enumerated()), id: \.element) { index, source in
                     let name = t("settings.audio.lyrics.source.\(source.rawValue)")
@@ -215,7 +213,6 @@ private struct LyricsSourceOrderView: View {
             }
         }
         .environment(\.editMode, .constant(.active))
-        .themedBackground(grouped: true)
         .navigationTitle(t("settings.audio.lyrics.source.label"))
     }
 }
@@ -226,7 +223,7 @@ struct ContentSettingsView: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        Form {
+        ThemedForm {
             Section {
                 Toggle(t("settings.content.sidebar.radios.section"), isOn: settings.binding(\.content.hideRadiosSection))
             } header: {
@@ -235,7 +232,6 @@ struct ContentSettingsView: View {
                 Text(t("settings.content.sidebar.description"))
             }
         }
-        .themedBackground(grouped: true)
         .navigationTitle(t("settings.options.content"))
     }
 }
@@ -246,7 +242,7 @@ struct PrivacySettingsView: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        Form {
+        ThemedForm {
             Section {
                 SettingsToggle(
                     title: t("settings.privacy.services.lrclib.label"),
@@ -259,7 +255,6 @@ struct PrivacySettingsView: View {
                 Text(t("settings.privacy.services.description"))
             }
         }
-        .themedBackground(grouped: true)
         .navigationTitle(t("settings.options.privacy"))
     }
 }

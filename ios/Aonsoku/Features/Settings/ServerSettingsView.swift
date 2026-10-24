@@ -19,7 +19,7 @@ struct ServerSettingsView: View {
     @Environment(\.locale) private var locale
 
     var body: some View {
-        Form {
+        ThemedForm {
             Section {
                 URLField(
                     title: t("settings.server.primaryUrl.label"),
@@ -67,7 +67,6 @@ struct ServerSettingsView: View {
             }
             management
         }
-        .themedBackground(grouped: true)
         .navigationTitle(t("settings.options.server"))
         .disabled(isSaving)
         .onAppear(perform: prefill)

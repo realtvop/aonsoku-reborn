@@ -32,7 +32,7 @@ struct RadioEditorView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            ThemedForm {
                 Section {
                     TextField(t("radios.table.name"), text: $name)
                         .textInputAutocapitalization(.words)
@@ -56,7 +56,6 @@ struct RadioEditorView: View {
                     problem(.homepage)
                 }
             }
-            .themedBackground(grouped: true)
             .disabled(isSaving)
             .navigationTitle(t(station == nil ? "radios.form.create.title" : "radios.form.edit.title"))
             .navigationBarTitleDisplayMode(.inline)

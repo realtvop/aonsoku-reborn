@@ -11,18 +11,14 @@ extension SettingsStore {
     }
 }
 
-/// The colored square before a settings row, as in the Settings app.
+/// The icon before a settings row: a symbol on a tile in the theme's
+/// border color, the same tiles as the library rows, rather than the
+/// Settings app's colored squares.
 struct SettingsIcon: View {
     let systemImage: String
-    let color: Color
 
     var body: some View {
-        Image(systemName: systemImage)
-            .font(.system(size: 15, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: 29, height: 29)
-            .background(color.gradient, in: .rect(cornerRadius: 7, style: .continuous))
-            .accessibilityHidden(true)
+        IconTile(systemImage: systemImage, size: 30)
     }
 }
 

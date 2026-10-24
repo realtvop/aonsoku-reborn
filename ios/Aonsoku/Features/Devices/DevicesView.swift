@@ -16,7 +16,7 @@ struct DevicesView: View {
 
     var body: some View {
         NavigationStack {
-            List {
+            ThemedList {
                 if let status = HandoffStatusText(coordination.handoffStatus, t) {
                     Section {
                         Label {
@@ -42,7 +42,6 @@ struct DevicesView: View {
                 }
                 connectionSections
             }
-            .themedBackground(grouped: true)
             .navigationTitle(t("settings.crossDevice.title"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

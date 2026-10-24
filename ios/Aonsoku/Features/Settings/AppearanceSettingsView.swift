@@ -9,7 +9,7 @@ struct AppearanceSettingsView: View {
 
     var body: some View {
         let mode = settings.settings.appearance.themeMode
-        Form {
+        ThemedForm {
             Section {
                 Picker(t("theme.modeLabel"), selection: settings.binding(\.appearance.themeMode)) {
                     ForEach(ThemeMode.allCases, id: \.self) { mode in
@@ -64,7 +64,6 @@ struct AppearanceSettingsView: View {
                 Text(t("settings.appearance.queue.description"))
             }
         }
-        .themedBackground(grouped: true)
         .navigationTitle(t("settings.options.appearance"))
         .animation(.smooth, value: mode)
     }
@@ -160,7 +159,7 @@ struct LanguageSettingsView: View {
 
     var body: some View {
         let selected = settings.settings.languageCode
-        List {
+        ThemedList {
             Section {
                 languageRow(title: t("theme.modeSystem"), subtitle: nil, code: nil, isSelected: selected == nil)
             }
@@ -178,7 +177,6 @@ struct LanguageSettingsView: View {
                 }
             }
         }
-        .themedBackground(grouped: true)
         .navigationTitle(t("settings.options.language"))
     }
 

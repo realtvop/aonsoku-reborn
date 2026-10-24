@@ -594,3 +594,36 @@ extension AppTheme {
         }
     }
 }
+
+// MARK: - Grouped containers
+
+/// A `Form` in the theme's grouped colors: rows on the raised surface over
+/// the grouped background. Rows can still set their own background.
+struct ThemedForm<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        Form {
+            Group {
+                content
+            }
+            .themedRow()
+        }
+        .themedBackground(grouped: true)
+    }
+}
+
+/// A grouped `List` in the theme's colors, like `ThemedForm`.
+struct ThemedList<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        List {
+            Group {
+                content
+            }
+            .themedRow()
+        }
+        .themedBackground(grouped: true)
+    }
+}

@@ -20,7 +20,7 @@ struct SongInfoView: View {
 
     var body: some View {
         NavigationStack {
-            List {
+            ThemedList {
                 Section {
                     header
                 }
@@ -36,7 +36,6 @@ struct SongInfoView: View {
                     }
                 }
             }
-            .themedBackground(grouped: true)
             .navigationTitle(t("songInfo.title"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -25,7 +25,7 @@ struct CrossDeviceSettingsView: View {
 
     var body: some View {
         let state = coordination.state
-        Form {
+        ThemedForm {
             Section {
                 LabeledContent(t("settings.crossDevice.connectionState.label")) {
                     ConnectionBadge(state: state.connectionState)
@@ -70,7 +70,6 @@ struct CrossDeviceSettingsView: View {
                 }
             }
         }
-        .themedBackground(grouped: true)
         .navigationTitle(t("settings.options.cross-device"))
         .animation(.smooth, value: state.isRegistered)
         .onAppear(perform: prefill)

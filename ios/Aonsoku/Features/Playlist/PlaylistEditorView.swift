@@ -40,7 +40,7 @@ struct PlaylistEditorView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            ThemedForm {
                 Section {
                     TextField(t("playlist.form.labels.name"), text: $name)
                         .focused($isNameFocused)
@@ -68,7 +68,6 @@ struct PlaylistEditorView: View {
                     Text(t("playlist.form.labels.isPublicDescription"))
                 }
             }
-            .themedBackground(grouped: true)
             .disabled(isSaving)
             .navigationTitle(t(isCreating ? "playlist.form.create.title" : "playlist.form.edit.title"))
             .navigationBarTitleDisplayMode(.inline)

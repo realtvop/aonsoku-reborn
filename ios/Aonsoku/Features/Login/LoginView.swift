@@ -28,7 +28,7 @@ struct LoginView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            ThemedForm {
                 Section {
                     header
                 }
@@ -109,7 +109,6 @@ struct LoginView: View {
             }
             .multilineTextAlignment(.trailing)
             .disabled(isConnecting)
-            .themedBackground(grouped: true)
             .scrollDismissesKeyboard(.interactively)
             .safeAreaInset(edge: .bottom) {
                 connectButton
@@ -138,10 +137,10 @@ struct LoginView: View {
                 .glassEffect(.regular, in: .rect(cornerRadius: 30))
             VStack(spacing: 6) {
                 Text(t("login.form.server"))
-                    .font(.largeTitle.bold())
+                    .displayFont(.largeTitle)
                 Text(t("login.form.description"))
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ThemeColor.mutedForeground)
             }
             .multilineTextAlignment(.center)
         }

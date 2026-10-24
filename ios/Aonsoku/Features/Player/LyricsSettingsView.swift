@@ -19,7 +19,7 @@ struct LyricsSettingsView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            ThemedForm {
                 if let song = player.currentSong {
                     Section {
                         header(song)
@@ -40,7 +40,6 @@ struct LyricsSettingsView: View {
                     ContentUnavailableView(t("lyrics.customSelect.noSong"), systemImage: "quote.bubble")
                 }
             }
-            .themedBackground(grouped: true)
             .navigationTitle(t("lyrics.customSelect.title"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

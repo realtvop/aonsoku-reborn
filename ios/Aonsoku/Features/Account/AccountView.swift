@@ -1,9 +1,9 @@
 import AonsokuKit
 import SwiftUI
 
-/// The account sheet, opened from the avatar like Apple Music's: who is
-/// signed in to which server, the connection and library sync, every
-/// settings page, About and Sign Out.
+/// The account sheet, opened from the avatar: who is signed in to which
+/// server, the connection and library sync, every settings page, About and
+/// Sign Out.
 struct AccountView: View {
     @State private var isConfirmingSignOut = false
 
@@ -15,27 +15,27 @@ struct AccountView: View {
     var body: some View {
         @Bindable var router = router
         NavigationStack(path: $router.accountPath) {
-            List {
+            ThemedList {
                 Section {
                     AccountHeader()
                 }
                 Section {
-                    row(.server, t("settings.options.server"), systemImage: "server.rack", color: .gray)
-                    row(.appearance, t("settings.options.appearance"), systemImage: "paintbrush.fill", color: .blue)
-                    row(.language, t("settings.options.language"), systemImage: "globe", color: .indigo)
+                    row(.server, t("settings.options.server"), systemImage: "server.rack")
+                    row(.appearance, t("settings.options.appearance"), systemImage: "paintbrush")
+                    row(.language, t("settings.options.language"), systemImage: "globe")
                 }
                 Section {
-                    row(.playback, t("settings.options.audio"), systemImage: "headphones", color: .pink)
-                    row(.lyrics, t("settings.audio.lyrics.group"), systemImage: "quote.bubble.fill", color: .purple)
-                    row(.content, t("settings.options.content"), systemImage: "square.grid.2x2.fill", color: .orange)
+                    row(.playback, t("settings.options.audio"), systemImage: "headphones")
+                    row(.lyrics, t("settings.audio.lyrics.group"), systemImage: "quote.bubble")
+                    row(.content, t("settings.options.content"), systemImage: "square.grid.2x2")
                 }
                 Section {
-                    row(.storage, t("settings.options.storage"), systemImage: "arrow.down.circle.fill", color: .green)
-                    row(.crossDevice, t("settings.options.cross-device"), systemImage: "hifispeaker.and.homepod.fill", color: .teal)
-                    row(.privacy, t("settings.options.privacy"), systemImage: "hand.raised.fill", color: .blue)
+                    row(.storage, t("settings.options.storage"), systemImage: "internaldrive")
+                    row(.crossDevice, t("settings.options.cross-device"), systemImage: "hifispeaker.and.homepod")
+                    row(.privacy, t("settings.options.privacy"), systemImage: "hand.raised")
                 }
                 Section {
-                    row(.about, t("menu.about"), systemImage: "info.circle.fill", color: .gray)
+                    row(.about, t("menu.about"), systemImage: "info.circle")
                 }
                 Section {
                     Button(t("menu.serverLogout"), role: .destructive) {
@@ -44,7 +44,6 @@ struct AccountView: View {
                     .frame(maxWidth: .infinity)
                 }
             }
-            .themedBackground(grouped: true)
             .navigationTitle(t("settings.label"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -70,12 +69,12 @@ struct AccountView: View {
         .globalPresentations(.account)
     }
 
-    private func row(_ page: SettingsPage, _ title: String, systemImage: String, color: Color) -> some View {
+    private func row(_ page: SettingsPage, _ title: String, systemImage: String) -> some View {
         NavigationLink(value: page) {
             Label {
                 Text(title)
             } icon: {
-                SettingsIcon(systemImage: systemImage, color: color)
+                SettingsIcon(systemImage: systemImage)
             }
         }
     }
@@ -93,7 +92,7 @@ private struct AccountHeader: View {
             AvatarImage(username: session.account?.username ?? "", size: 60)
             VStack(alignment: .leading, spacing: 3) {
                 Text(session.account?.username ?? "")
-                    .font(.title3.bold())
+                    .displayFont(.section)
                     .lineLimit(1)
                 Text(serverLine)
                     .font(.subheadline)
