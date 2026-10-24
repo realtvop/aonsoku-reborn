@@ -895,7 +895,9 @@ struct PlayShuffleButtons<Trailing: View>: View {
     }
 }
 
-extension PlayShuffleButtons where Trailing == EmptyView {
+extension PlayShuffleButtons where Trailing == ActionSpacer {
+    /// Without a trailing action, a space as wide as Shuffle keeps Play in
+    /// the middle.
     init(
         canShuffle: Bool = true,
         alignment: Alignment = .center,
@@ -903,8 +905,17 @@ extension PlayShuffleButtons where Trailing == EmptyView {
         shuffle: @escaping () -> Void
     ) {
         self.init(canShuffle: canShuffle, alignment: alignment, play: play, shuffle: shuffle) {
-            EmptyView()
+            ActionSpacer()
         }
+    }
+}
+
+/// An empty slot the size of an `ActionIconButton`.
+struct ActionSpacer: View {
+    var body: some View {
+        Color.clear
+            .frame(width: 48, height: 48)
+            .accessibilityHidden(true)
     }
 }
 
