@@ -88,10 +88,7 @@ struct MiniPlayer: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: mix(32, 28))
         .onGeometryChange(for: CGFloat.self, of: \.size.width) { titlesWidth = $0 }
-        .mask(alignment: .trailing) {
-            Rectangle()
-                .frame(width: titlesWidth + 24)
-        }
+        .clipped()
         .layoutPriority(1)
     }
 

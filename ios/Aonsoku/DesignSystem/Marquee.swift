@@ -21,16 +21,17 @@ struct MarqueeText: View {
     @State private var availableWidth: CGFloat = 0
     @State private var offset: CGFloat = 0
 
-    private let leadFade: CGFloat = 16
-    private let trailFade: CGFloat = 24
+    private let leadFade: CGFloat = 14
+    private let trailFade: CGFloat = 20
 
     var body: some View {
         let allowsScrolling = !respectsReduceMotion || !reduceMotion
+        let lead = min(leadFade, availableWidth / 4)
+        let trail = min(trailFade, availableWidth / 4)
+        let visibleWidth = max(0, availableWidth - lead)
         let scrolls = allowsScrolling
-            && availableWidth > 0
-            && textWidth > availableWidth + 0.5
-        let lead = scrolls ? min(leadFade, availableWidth / 4) : 0
-        let trail = scrolls ? min(trailFade, availableWidth / 4) : 0
+            && visibleWidth > 0
+            && textWidth > visibleWidth + 0.5
 
         Text(text)
             .lineLimit(1)
@@ -46,15 +47,15 @@ struct MarqueeText: View {
                             .fixedSize()
                     }
                     .offset(x: (isActive ? offset : 0) + lead)
-                    .frame(width: availableWidth + lead, alignment: .leading)
-                    .offset(x: -lead)
+                    .frame(width: availableWidth, alignment: .leading)
                     .mask(alignment: .leading) {
                         edgeFade(lead: lead, trail: trail)
-                            .frame(width: availableWidth + lead)
+                            .frame(width: availableWidth)
                     }
                 } else {
                     Text(text)
                         .lineLimit(1)
+                        .offset(x: lead)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
@@ -64,6 +65,7 @@ struct MarqueeText: View {
                     .hidden()
                     .onGeometryChange(for: CGFloat.self, of: \.size.width) { textWidth = $0 }
             }
+            .clipped()
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(text)
             .task(id: ScrollKey(
