@@ -1,7 +1,7 @@
 import AonsokuKit
 import SwiftUI
 
-/// An album with a large cover over an artwork glow, native title and
+/// An album with a compact cover over the artwork color band, native title and
 /// artist information, and the shared Liquid Glass playback action row.
 struct AlbumDetailView: View {
     let albumId: String
@@ -14,6 +14,7 @@ struct AlbumDetailView: View {
     @State private var comment: AttributedString?
     @State private var extras: Extras?
     @State private var palette: ArtworkPalette?
+    @State private var headerHeight: CGFloat = 360
 
     @Environment(AppModel.self) private var app
     @Environment(LibrarySyncStore.self) private var sync
@@ -21,6 +22,7 @@ struct AlbumDetailView: View {
     @Environment(PlayerStore.self) private var player
     @Environment(Router.self) private var router
     @Environment(Localizer.self) private var t
+    @Environment(\.themeContext) private var theme
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.locale) private var locale
 
@@ -45,6 +47,12 @@ struct AlbumDetailView: View {
             if let album {
                 VStack(alignment: .leading, spacing: 0) {
                     header(album)
+                        .environment(\.colorScheme, DetailBand.isDark(palette, theme: theme.palette) ? .dark : .light)
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            proxy.size.height
+                        } action: { height in
+                            headerHeight = height
+                        }
                     playButtons(album)
                         .pageMargins()
                         .padding(.top, 16)
@@ -95,8 +103,13 @@ struct AlbumDetailView: View {
             }
         }
         .artworkPalette(album?.coverArt, into: $palette)
-        .modifier(AlbumArtworkGlow(palette: palette))
-        .scrollRevealedTitle(album?.name ?? "", threshold: sizeClass == .regular ? 220 : 330)
+        .detailBand(palette, headerHeight: headerHeight)
+        .themedBackground()
+        .scrollRevealedTitle(
+            album?.name ?? "",
+            threshold: sizeClass == .regular ? 220 : 330,
+            headerIsDark: DetailBand.isDark(palette, theme: theme.palette)
+        )
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -524,50 +537,6 @@ struct AlbumDetailView: View {
               scheme == "http" || scheme == "https"
         else { return nil }
         return url
-    }
-}
-
-/// The album's original scroll-fading glow over the system background.
-private struct AlbumArtworkGlow: ViewModifier {
-    let palette: ArtworkPalette?
-
-    @State private var fade = 0.0
-    @Environment(\.colorScheme) private var colorScheme
-
-    func body(content: Content) -> some View {
-        content
-            .scrollContentBackground(.hidden)
-            .onScrollGeometryChange(for: Double.self) { geometry in
-                let offset = geometry.contentOffset.y + geometry.contentInsets.top
-                return (min(max(offset / 360, 0), 1) * 20).rounded() / 20
-            } action: { _, value in
-                fade = value
-            }
-            .background {
-                ZStack(alignment: .top) {
-                    Color(uiColor: .systemBackground)
-                    if let color = palette?.dominant {
-                        LinearGradient(
-                            stops: [
-                                .init(color: color.opacity(strength), location: 0),
-                                .init(color: color.opacity(strength * 0.4), location: 0.5),
-                                .init(color: color.opacity(0), location: 1),
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                        .frame(height: 560)
-                        .opacity(1 - fade)
-                        .transition(.opacity)
-                    }
-                }
-                .ignoresSafeArea()
-                .animation(.smooth(duration: 0.6), value: palette)
-            }
-    }
-
-    private var strength: Double {
-        colorScheme == .dark ? 0.55 : 0.35
     }
 }
 
