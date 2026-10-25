@@ -16,6 +16,7 @@ struct AlbumDetailView: View {
     @State private var comment: AttributedString?
     @State private var extras: Extras?
     @State private var palette: ArtworkPalette?
+    @State private var headerHeight: CGFloat = 360
 
     @Environment(AppModel.self) private var app
     @Environment(LibrarySyncStore.self) private var sync
@@ -48,10 +49,15 @@ struct AlbumDetailView: View {
     }
 
     var body: some View {
-        ScrollView {
+        List {
             if let album {
-                LazyVStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 0) {
                     header(album)
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            proxy.size.height
+                        } action: { height in
+                            headerHeight = height
+                        }
                     playButtons(album)
                         .pageMargins()
                         .padding(.top, 16)
@@ -66,8 +72,15 @@ struct AlbumDetailView: View {
                         .pageMargins()
                         .padding(.top, 24)
                     }
-                    tracks(album)
-                        .padding(.top, 20)
+                }
+                .padding(.bottom, 20)
+                .listRowInsets(EdgeInsets())
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+
+                tracks(album)
+
+                VStack(alignment: .leading, spacing: 0) {
                     if detail != nil {
                         footer(album)
                             .padding(.top, 20)
@@ -76,8 +89,13 @@ struct AlbumDetailView: View {
                         .padding(.top, Layout.sectionSpacing)
                 }
                 .padding(.bottom, 24)
+                .listRowInsets(EdgeInsets())
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
             }
         }
+        .listStyle(.plain)
+        .environment(\.defaultMinListRowHeight, 0)
         .overlay {
             if album == nil {
                 if case let .failed(message) = phase {
@@ -90,6 +108,7 @@ struct AlbumDetailView: View {
             }
         }
         .artworkPalette(album?.coverArt, into: $palette)
+        .detailBand(palette, headerHeight: headerHeight)
         .themedBackground()
         .scrollRevealedTitle(
             album?.name ?? "",
@@ -129,7 +148,8 @@ struct AlbumDetailView: View {
             kind: t("album.headline"),
             title: album.name,
             metadata: metadata(album),
-            palette: palette
+            palette: palette,
+            drawsBand: false
         ) {
             ArtworkImage(id: album.coverArt, size: .large, cornerRadius: Layout.artworkRadius)
         } subtitle: {
@@ -224,47 +244,52 @@ struct AlbumDetailView: View {
         if !songs.isEmpty {
             let discs = Disc.groups(of: songs, titles: album.discTitles)
             let numbersTracks = songs.contains { ($0.track ?? 0) > 0 }
-            // One container, so padding applied to the tracks applies once
-            // rather than to every row.
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(discs) { disc in
-                    if discs.count > 1 {
-                        discHeader(disc)
+            ForEach(discs) { disc in
+                if discs.count > 1 {
+                    discHeader(disc)
+                        .listRowInsets(EdgeInsets())
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                }
+                ForEach(disc.tracks) { track in
+                    SongRow(
+                        song: track.song,
+                        leading: .number(numbersTracks ? track.song.track : track.index + 1),
+                        subtitle: track.song.artistLine == album.artistLine ? .none : .artist,
+                        context: .album
+                    ) {
+                        play(album, startingAt: track.index, shuffle: false)
                     }
-                    ForEach(disc.tracks) { track in
-                        SongRow(
-                            song: track.song,
-                            leading: .number(numbersTracks ? track.song.track : track.index + 1),
-                            subtitle: track.song.artistLine == album.artistLine ? .none : .artist,
-                            context: .album
-                        ) {
-                            play(album, startingAt: track.index, shuffle: false)
+                    .frame(minHeight: 48)
+                    .listRowInsets(EdgeInsets(top: 2, leading: margin, bottom: 2, trailing: margin - 8))
+                    .listRowBackground(Color.clear)
+                }
+            }
+        } else {
+            Group {
+                if detail == nil {
+                    if case let .failed(message) = phase {
+                        ErrorStateView(message: message) {
+                            Task { await refreshIfNeeded() }
                         }
-                        .frame(minHeight: 48)
-                        .padding(.vertical, 2)
-                        .padding(.leading, margin)
-                        .padding(.trailing, margin - 8)
+                        .frame(minHeight: 220)
+                    } else {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 40)
                     }
+                } else if album.songCount > 0, !network.isOnline {
+                    EmptyStateView(
+                        title: t("album.detail.songsUnavailableTitle"),
+                        systemImage: "icloud.slash",
+                        description: t("album.detail.songsUnavailable")
+                    )
+                    .frame(minHeight: 220)
                 }
             }
-        } else if detail == nil {
-            if case let .failed(message) = phase {
-                ErrorStateView(message: message) {
-                    Task { await refreshIfNeeded() }
-                }
-                .frame(minHeight: 220)
-            } else {
-                ProgressView()
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 40)
-            }
-        } else if album.songCount > 0, !network.isOnline {
-            EmptyStateView(
-                title: t("album.detail.songsUnavailableTitle"),
-                systemImage: "icloud.slash",
-                description: t("album.detail.songsUnavailable")
-            )
-            .frame(minHeight: 220)
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
         }
     }
 

@@ -313,8 +313,8 @@ enum SongRowSubtitle: Equatable {
 }
 
 /// A song in a list, like the web's mobile song rows: cover or number,
-/// title and artist, its download state, length and a menu, with no
-/// separators between rows. Swipe right to queue it.
+/// title and artist, its download state, length and a menu. Separators
+/// start at the title; swipe right to queue it in a native List.
 struct SongRow: View {
     let song: Song
     var leading: SongRowLeading = .artwork
@@ -325,6 +325,7 @@ struct SongRow: View {
 
     @Environment(PlayerStore.self) private var player
     @Environment(Localizer.self) private var t
+    @Environment(\.themeContext) private var theme
 
     var body: some View {
         HStack(spacing: 4) {
@@ -357,7 +358,9 @@ struct SongRow: View {
             .buttonStyle(.borderless)
             .accessibilityLabel(t("playlist.buttons.options", ["name": song.title]))
         }
-        .listRowSeparator(.hidden)
+        .listRowSeparator(.visible, edges: .bottom)
+        .listRowSeparatorTint(theme.palette.border)
+        .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
         .compactRowInsets(vertical: 4, trailingInset: 8)
         .contextMenu {
             SongMenuItems(song: song, context: context)

@@ -139,6 +139,10 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   playlist and artist pages share the web image header (`DetailHeader`).
   Keep new screens on the `ThemeColor`, `displayFont` and `ThemedForm`
   tokens rather than system grays and fonts.
+  Album and playlist tracks use native plain `List` rows so `SongRow`'s
+  leading swipe actions can queue a song next or last. Shared song rows show
+  theme-colored bottom separators aligned with their titles; album headers,
+  disc labels, loading states and recommendations hide their separators.
   `MainTabView` uses the system tab bar, a fixed search-role tab and the
   native bottom accessory for a layout-only `PlayerAccessorySlot`. Search stays separate from the
   other tabs; minimization and transitions are system-owned. `SearchView`
