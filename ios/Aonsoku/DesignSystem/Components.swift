@@ -80,39 +80,59 @@ extension ButtonStyle where Self == TouchFeedbackStyle {
 
 // MARK: - Headers
 
-/// A shelf title in Poppins, like the web's preview list headers. With a
-/// route, "See more" at the trailing edge links to the full list.
+/// A title and its disclosure chevron, centered vertically without extra height.
+/// The caller supplies the font for both the title and the symbol.
+struct TitleDisclosureLabel<Title: View>: View {
+    @ViewBuilder let title: Title
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 6) {
+            title
+            Image(systemName: "chevron.forward")
+                .imageScale(.small)
+                .foregroundStyle(ThemeColor.mutedForeground)
+                .fixedSize()
+                .accessibilityHidden(true)
+        }
+        .contentShape(.rect)
+    }
+}
+
+/// A shelf title in Poppins. With a route, the title and chevron link to
+/// the full list at the title's intrinsic height.
 struct SectionHeader: View {
     let title: String
     var route: AppRoute?
-    /// The link's label, "See more" by default.
+    /// An optional spoken destination hint for the title link.
     var moreTitle: String?
 
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            // Concrete colors: a plain list's section header dims the
-            // hierarchical .primary style to grey.
-            Text(title)
-                .displayFont(.section)
-                .foregroundStyle(Color.primary)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityAddTraits(.isHeader)
+        Group {
             if let route {
                 NavigationLink(value: route) {
-                    Text(moreTitle ?? t("generic.seeMore"))
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.tint)
-                        .lineLimit(1)
-                        .padding(.vertical, 6)
-                        .frame(minWidth: 44, minHeight: 44)
-                        .contentShape(.rect)
+                    TitleDisclosureLabel {
+                        heading
+                    }
+                    .displayFont(.section)
                 }
                 .buttonStyle(.touchFeedback)
+                .accessibilityHint(moreTitle ?? t("generic.seeMore"))
+            } else {
+                heading
+                    .displayFont(.section)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityAddTraits(.isHeader)
+    }
+
+    private var heading: some View {
+        // Concrete colors keep plain list headers from dimming the title.
+        Text(title)
+            .foregroundStyle(Color.primary)
+            .lineLimit(1)
     }
 }
 

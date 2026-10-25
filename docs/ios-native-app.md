@@ -31,7 +31,8 @@ the same on every platform (see [Design language](#design-language)).
   lacks, such as CJK, cascade to the system fonts for the preferred
   languages at the same weight. Body text, rows and controls keep the
   system font.
-- **Components**: shelves of three tiles with a "See more" link, two-column
+- **Components**: shelves of three tiles with linked titles and adjacent
+  vertically centered disclosure chevrons, two-column
   grids, compact song rows (about the web's 56pt) without separators and
   with the web's bouncing equalizer for the current song, icon tiles on library and settings rows, bordered
   cards (`cardSurface`) and small uppercase captions for search results and
@@ -272,12 +273,13 @@ with automatic foreground sync disabled.
   180pt covers in regular-width layouts, with free horizontal scrolling and
   no tile snapping. The featured carousel retains its page alignment.
   Album section titles and their adjacent forward chevrons form one link
-  to the full list, with a minimum 44pt touch height and press feedback,
-  replacing the separate "See more" text.
+  to the full list, retaining the title's intrinsic height and press feedback,
+  replacing the separate "See more" text. Shared shelf headers use the same
+  centered title-and-chevron layout throughout the app.
   Pull to refresh runs an incremental sync. The avatar opens the account sheet.
 - **Library**: Artists, Songs, Albums, Favorites, Genres, Radio (unless
   hidden) and Downloaded as icon-tile rows, followed by the playlists with a
-  "See more" link to the full list and a New Playlist button.
+  linked section title and chevron to the full list and a New Playlist button.
 - **Detail screens**: album, artist, playlist, genre, album lists by filter,
   artist discography and tracks, song info.
 - **Search**: browse genres when idle; while typing, artists, albums and
