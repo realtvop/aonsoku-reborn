@@ -478,7 +478,14 @@ private struct NowPlayingPresentation: ViewModifier {
     private func expandedArtworkViewport(in proxy: GeometryProxy) -> CGRect {
         if presentation.artworkLocation == .queue,
            let viewport = presentation.queueViewportFrame {
-            return viewport.offsetBy(dx: 0, dy: presentation.dragOffset)
+            // The cover starts at the List's leading edge, but its shadow
+            // extends into the horizontal page margin. Only the vertical
+            // scroll bounds should clip it away from the playback controls.
+            let surface = fullArtworkViewport(in: proxy)
+            return CGRect(
+                x: surface.minX, y: viewport.minY + presentation.dragOffset,
+                width: surface.width, height: viewport.height
+            )
         }
         return fullArtworkViewport(in: proxy)
     }

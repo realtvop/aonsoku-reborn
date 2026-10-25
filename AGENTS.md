@@ -260,7 +260,9 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   artwork follows the marker's native scroll frame via a passive `UIUpdateLink`
   during dragging and deceleration; no second current-track image is created.
   A persistent animatable rectangular mask clips queue artwork to its viewport
-  and expands to the full surface on other pages; never conditionally replace
+  vertically, while spanning the full player width so the cover's shadow can
+  extend into the page margins. It expands to the full surface on other pages;
+  never conditionally replace
   the artwork's mask or let a scrolling cover paint over transport controls.
   Every queue entry, including reopening fullscreen with Queue selected,
   positions the current track at the top. The mounted queue registers a
