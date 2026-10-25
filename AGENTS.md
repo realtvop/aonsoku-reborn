@@ -1252,7 +1252,10 @@ libraries into `resources/native-audio/<platform>-<arch>/`, and runs
   walks the `otool -L` closure of `libmpv.2.dylib`, copies the Homebrew dylib
 dependency set into a staging directory, rewrites their install ids and
 cross-references to `@loader_path/<name>`, and patches the addon's libmpv
-reference. The x86_64 build runs on `macos-15-intel` (the last GitHub-hosted
+reference. Dependency traversal resolves `@loader_path` against each real
+binary and `@rpath` through its `LC_RPATH` entries, inherited runpaths and
+Homebrew's `lib` directory; unresolved dependencies fail collection before
+packaging. The x86_64 build runs on `macos-15-intel` (the last GitHub-hosted
 Intel runner; `macos-13` is retired) and the arm64 build on `macos-latest`.
 - **Windows**: `scripts/native-audio/ci/fetch-libmpv-windows.mjs` downloads the
 `mpv-dev-<arch>` and `mpv-<arch>` archives from `shinchiro/mpv-winbuild-cmake`,

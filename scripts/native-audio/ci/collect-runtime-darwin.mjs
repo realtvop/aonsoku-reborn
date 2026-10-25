@@ -45,7 +45,7 @@ rmSync(staging, { recursive: true, force: true });
 mkdirSync(staging, { recursive: true });
 
 const rootDir = path.dirname(rootLib);
-const brewPrefix = detectBrewPrefix(rootDir);
+const brewPrefix = realpathSafe(detectBrewPrefix(rootDir));
 
 console.log(`native-audio: root lib   ${rootLib}`);
 console.log(`native-audio: staging   ${staging}`);
@@ -127,11 +127,11 @@ console.log(
 
 function collectClosure(root, prefix) {
   const visited = new Set();
-  const queue = [root];
+  const queue = [{ library: root, runpaths: [] }];
   const result = [];
 
   while (queue.length > 0) {
-    const current = queue.pop();
+    const { library: current, runpaths: inheritedRunpaths } = queue.pop();
     const resolved = realpathSafe(current);
     if (visited.has(resolved)) continue;
     visited.add(resolved);
@@ -140,18 +140,59 @@ function collectClosure(root, prefix) {
       result.push(current);
     }
 
+    const runpaths = [
+      ...otoolRunpaths(current).map((entry) =>
+        entry.replace(/^@loader_path(?=\/|$)/u, path.dirname(resolved)),
+      ),
+      ...inheritedRunpaths,
+    ];
     for (const dep of otoolDependencies(current)) {
-      if (isSystemPath(dep) || dep.startsWith("@")) continue;
-      if (!path.isAbsolute(dep)) continue;
-      if (!isUnderPrefix(dep, prefix)) continue;
-      if (!existsSync(dep)) continue;
-      const depResolved = realpathSafe(dep);
+      if (isSystemPath(dep)) continue;
+      const dependency = resolveDependency(dep, resolved, runpaths, prefix);
+      if (!dependency) fail(`Cannot resolve ${dep} referenced by ${current}`);
+      if (!isUnderPrefix(realpathSafe(dependency), prefix)) continue;
+      const depResolved = realpathSafe(dependency);
       if (visited.has(depResolved)) continue;
-      queue.push(dep);
+      queue.push({ library: dependency, runpaths });
     }
   }
 
   return result;
+}
+
+function resolveDependency(dependency, library, runpaths, prefix) {
+  let candidates;
+  if (dependency.startsWith("@loader_path/")) {
+    candidates = [
+      path.resolve(
+        path.dirname(library),
+        dependency.slice("@loader_path/".length),
+      ),
+    ];
+  } else if (dependency.startsWith("@rpath/")) {
+    const relative = dependency.slice("@rpath/".length);
+    candidates = [
+      ...runpaths
+        .filter(path.isAbsolute)
+        .map((entry) => path.join(entry, relative)),
+      path.join(prefix, "lib", relative),
+    ];
+  } else {
+    candidates = [dependency];
+  }
+  return candidates.find(
+    (candidate) => path.isAbsolute(candidate) && existsSync(candidate),
+  );
+}
+
+function otoolRunpaths(library) {
+  const result = spawnSync("otool", ["-l", library], { encoding: "utf8" });
+  if (result.status !== 0) fail(`otool -l failed for ${library}.`);
+  return [
+    ...result.stdout.matchAll(
+      /cmd LC_RPATH\s+cmdsize \d+\s+path (.+) \(offset \d+\)/gu,
+    ),
+  ].map((match) => match[1]);
 }
 
 function otoolDependencies(library) {
