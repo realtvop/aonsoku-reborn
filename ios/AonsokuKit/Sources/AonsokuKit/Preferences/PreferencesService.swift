@@ -54,6 +54,11 @@ public final class PreferencesService: @unchecked Sendable {
             .playback.estimateContentLength ?? true
     }
 
+    var audioDownloadConcurrency: Int {
+        getJSON(SettingsStore.storageKey, as: AppSettings.self)?
+            .cache.downloadConcurrency ?? 2
+    }
+
     /// Get a Codable preference value decoded from JSON.
     public func getJSON<T: Decodable>(_ key: String, as type: T.Type) -> T? {
         guard let jsonString = prefs.getString(key),

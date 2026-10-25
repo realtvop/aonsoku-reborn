@@ -53,6 +53,10 @@
       "autoOpenNowPlaying": {
         "label": "„Jetzt läuft“ automatisch öffnen",
         "info": "Zeigt „Jetzt läuft“, wenn Sie ein Album, eine Wiedergabeliste oder ein Lied abspielen."
+      },
+      "downloadConcurrency": {
+        "label": "Gleichzeitige Titeldownloads",
+        "info": "Anzahl gleichzeitig heruntergeladener Titel. Ein höheres Limit startet wartende Titel sofort; ein niedrigeres lässt laufende Downloads abschließen."
       }
     },
     "accountSwitch": {

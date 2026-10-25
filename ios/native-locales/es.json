@@ -53,6 +53,10 @@
       "autoOpenNowPlaying": {
         "label": "Abrir “Reproduciendo” automáticamente",
         "info": "Muestra “Reproduciendo” al empezar a reproducir un álbum, una lista de reproducción o una canción."
+      },
+      "downloadConcurrency": {
+        "label": "Descargas simultáneas de canciones",
+        "info": "Número de canciones que se descargan a la vez. Al aumentar el límite se inician las canciones en espera; al reducirlo se deja terminar las descargas actuales."
       }
     },
     "accountSwitch": {

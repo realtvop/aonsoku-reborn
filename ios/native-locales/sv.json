@@ -53,6 +53,10 @@
       "autoOpenNowPlaying": {
         "label": "Öppna Spelas nu automatiskt",
         "info": "Visar Spelas nu när du börjar spela ett album, en spellista eller en sång."
+      },
+      "downloadConcurrency": {
+        "label": "Samtidiga spårhämtningar",
+        "info": "Antal spår som hämtas samtidigt. Ett högre tak startar väntande spår direkt; ett lägre låter pågående hämtningar slutföras."
       }
     },
     "accountSwitch": {

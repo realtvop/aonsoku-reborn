@@ -262,6 +262,14 @@ public struct CacheSettings: Codable, Hashable, Sendable {
     public var syncCoverArt = false
     /// Parallel cover downloads during sync, 1...8.
     public var coverArtConcurrency = 4
+    /// Parallel track downloads, including explicit, smart and cache repairs.
+    public var downloadConcurrency = 2
+
+    public static let downloadConcurrencyOptions = [1, 2, 4, 8]
+
+    static func normalizedDownloadConcurrency(_ value: Int) -> Int {
+        downloadConcurrencyOptions.contains(value) ? value : 2
+    }
 
     /// Quota choices offered in Settings, in bytes; 0 is Unlimited.
     public static let quotaOptions: [Int64] = [
@@ -280,13 +288,15 @@ public struct CacheSettings: Codable, Hashable, Sendable {
         lruQuota: Int64 = 1024 * 1024 * 1024,
         smartRules: SmartDownloadRules = SmartDownloadRules(),
         syncCoverArt: Bool = false,
-        coverArtConcurrency: Int = 4
+        coverArtConcurrency: Int = 4,
+        downloadConcurrency: Int = 2
     ) {
         self.assetsQuota = assetsQuota
         self.lruQuota = lruQuota
         self.smartRules = smartRules
         self.syncCoverArt = syncCoverArt
         self.coverArtConcurrency = coverArtConcurrency
+        self.downloadConcurrency = Self.normalizedDownloadConcurrency(downloadConcurrency)
     }
 
     public init(from decoder: Decoder) throws {
@@ -299,6 +309,9 @@ public struct CacheSettings: Codable, Hashable, Sendable {
         coverArtConcurrency = min(
             max(c.value(.coverArtConcurrency, default: d.coverArtConcurrency), 1),
             8
+        )
+        downloadConcurrency = Self.normalizedDownloadConcurrency(
+            c.value(.downloadConcurrency, default: d.downloadConcurrency)
         )
     }
 }

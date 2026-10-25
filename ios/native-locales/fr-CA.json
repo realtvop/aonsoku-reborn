@@ -53,6 +53,10 @@
       "autoOpenNowPlaying": {
         "label": "Ouvrir « À l’écoute » automatiquement",
         "info": "Affiche « À l’écoute » lorsque vous lancez la lecture d’un album, d’une liste de lecture ou d’un titre."
+      },
+      "downloadConcurrency": {
+        "label": "Téléchargements de titres simultanés",
+        "info": "Nombre de titres téléchargés à la fois. Augmenter la limite lance immédiatement les titres en attente ; la réduire laisse les téléchargements en cours se terminer."
       }
     },
     "accountSwitch": {

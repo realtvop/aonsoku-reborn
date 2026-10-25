@@ -53,6 +53,10 @@
       "autoOpenNowPlaying": {
         "label": "Abrir “A reproduzir” automaticamente",
         "info": "Mostra “A reproduzir” quando começa a reproduzir um álbum, uma playlist ou uma música."
+      },
+      "downloadConcurrency": {
+        "label": "Transferências simultâneas de faixas",
+        "info": "Número de faixas transferidas em simultâneo. Aumentar o limite inicia imediatamente as faixas em espera; reduzi-lo permite concluir as transferências atuais."
       }
     },
     "accountSwitch": {

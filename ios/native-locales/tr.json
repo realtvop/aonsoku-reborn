@@ -53,6 +53,10 @@
       "autoOpenNowPlaying": {
         "label": "Şimdi Çalıyor'u otomatik aç",
         "info": "Bir albüm, çalma listesi veya şarkı çalmaya başladığında Şimdi Çalıyor'u gösterir."
+      },
+      "downloadConcurrency": {
+        "label": "Eşzamanlı parça indirme sayısı",
+        "info": "Aynı anda indirilen parça sayısı. Sınırı artırmak bekleyen parçaları hemen başlatır; azaltmak mevcut indirmelerin tamamlanmasını bekler."
       }
     },
     "accountSwitch": {

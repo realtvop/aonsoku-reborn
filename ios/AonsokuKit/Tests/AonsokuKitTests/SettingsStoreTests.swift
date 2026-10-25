@@ -54,4 +54,35 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.settings.languageCode, "ja")
         XCTAssertEqual(store.settings.appearance.themeMode, .system)
     }
+
+    func testDownloadConcurrencyDefaultsValidationAndPersistence() throws {
+        let database = try TemporaryDatabase()
+        let preferences = PreferencesService(db: database.manager.dbPool)
+        let store = SettingsStore(preferences: preferences)
+        preferences.setString(#"{"cache":{"lruQuota":1234}}"#, for: SettingsStore.storageKey)
+        store.load()
+        XCTAssertEqual(store.settings.cache.lruQuota, 1234)
+        XCTAssertEqual(store.settings.cache.downloadConcurrency, 2)
+        XCTAssertEqual(preferences.audioDownloadConcurrency, 2)
+
+        for limit in [1, 2, 4, 8] {
+            store.update { $0.cache.downloadConcurrency = limit }
+            let restored = SettingsStore(preferences: preferences)
+            restored.load()
+            XCTAssertEqual(restored.settings.cache.downloadConcurrency, limit)
+            XCTAssertEqual(preferences.audioDownloadConcurrency, limit)
+        }
+        for invalid in [-1, 0, 3, 7, 9, 100] {
+            preferences.setString(
+                "{\"cache\":{\"downloadConcurrency\":\(invalid)}}",
+                for: SettingsStore.storageKey
+            )
+            store.load()
+            XCTAssertEqual(store.settings.cache.downloadConcurrency, 2)
+        }
+        store.update { $0.cache.downloadConcurrency = 8 }
+        store.reset()
+        XCTAssertEqual(store.settings.cache.downloadConcurrency, 2)
+        XCTAssertEqual(preferences.audioDownloadConcurrency, 2)
+    }
 }

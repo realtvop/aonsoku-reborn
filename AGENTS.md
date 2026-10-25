@@ -442,6 +442,13 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   relaunch callbacks to the audio download manager. WebSockets use a normal
   URLSession because iOS background sessions are reserved for transfer tasks;
   downloads use `github.realtvop.aonsoku.audio.downloads` and survive relaunch.
+  `NativeDownloadManager` limits track transfers to 2 by default, configurable
+  as 1/2/4/8 in Storage settings. Waiting request descriptors are persisted
+  under `audio.downloadQueue.v1` without credentials; launch/session reconnect
+  restores them after enumerating existing transfers, before filling free slots.
+  Increasing the limit fills slots immediately; decreasing it lets running
+  transfers finish before admitting more. Completion, failure and cancellation
+  all advance the same queue, including explicit, smart and cache-repair downloads.
   The Swift package owns `AonsokuKitTests`, which exercises queue and
   shuffle behavior, staged playback recovery and persistence, source/cache and
   download behavior, scrobbling, handoff and coordination contracts, auth and

@@ -312,6 +312,7 @@ with automatic foreground sync disabled.
 | Content: hide radios | Hides Radio in Library and Search. |
 | Storage: library sync, cover art sync, cover concurrency, sync now/cancel | Same; library caching is always on, as in the former iOS app. |
 | Storage: smart downloads (favorite songs, favorite playlists) | Same rules. |
+| Storage: track download concurrency | Defaults to 2; choose 1/2/4/8. Explicit, smart and cache-repair transfers share the limit. Waiting requests are persisted separately from running background transfers and restored on launch/reconnect; lowering the limit lets running transfers finish. |
 | Storage: stream cache and cover cache quotas, per-pool clear, clear all | Same quotas and actions. |
 | Storage: cache manager | Native list with filter and swipe to delete. |
 | Cross-device: server, identity URL, device name, connect/disconnect, devices rename/revoke, delete data | Same. |

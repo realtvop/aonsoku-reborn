@@ -53,6 +53,10 @@
       "autoOpenNowPlaying": {
         "label": "Apri “In riproduzione” automaticamente",
         "info": "Mostra “In riproduzione” quando avvii un album, una playlist o un brano."
+      },
+      "downloadConcurrency": {
+        "label": "Download simultanei dei brani",
+        "info": "Numero di brani scaricati contemporaneamente. Aumentando il limite si avviano subito i brani in attesa; riducendolo si lasciano terminare i download in corso."
       }
     },
     "accountSwitch": {

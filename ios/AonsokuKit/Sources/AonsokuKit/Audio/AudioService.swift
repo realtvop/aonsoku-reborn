@@ -159,6 +159,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
             }
             guard !self.started else { return }
             self.started = true
+            self.downloadManager.restoreDownloads()
             do {
                 try self.configureAudioSession()
             } catch {

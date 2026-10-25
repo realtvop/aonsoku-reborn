@@ -57,6 +57,10 @@
       "autoOpenNowPlaying": {
         "label": "Open Now Playing Automatically",
         "info": "Shows Now Playing when you start playing an album, playlist or song."
+      },
+      "downloadConcurrency": {
+        "label": "Track Download Concurrency",
+        "info": "Number of tracks downloaded at once. Increasing the limit starts waiting tracks immediately; decreasing it lets current downloads finish."
       }
     },
     "accountSwitch": {

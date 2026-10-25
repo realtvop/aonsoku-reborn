@@ -26,6 +26,17 @@ struct StorageSettingsView: View {
         let cache = settings.settings.cache
         ThemedForm {
             librarySync(cache)
+            Section {
+                Picker(selection: settings.binding(\.cache.downloadConcurrency)) {
+                    ForEach(CacheSettings.downloadConcurrencyOptions, id: \.self) { count in
+                        Text(String(count)).tag(count)
+                    }
+                } label: {
+                    Text(t("native.settings.downloadConcurrency.label"))
+                }
+            } footer: {
+                Text(t("native.settings.downloadConcurrency.info"))
+            }
             smartDownloads(cache.smartRules)
             limits(cache)
             Section {

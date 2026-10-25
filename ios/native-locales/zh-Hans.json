@@ -57,6 +57,10 @@
       "autoOpenNowPlaying": {
         "label": "自动打开正在播放",
         "info": "开始播放专辑、播放列表或歌曲时显示正在播放。"
+      },
+      "downloadConcurrency": {
+        "label": "曲目下载并发数",
+        "info": "同时下载的曲目数量。调高上限会立即开始等待中的曲目；调低上限会等待当前下载完成。"
       }
     },
     "accountSwitch": {

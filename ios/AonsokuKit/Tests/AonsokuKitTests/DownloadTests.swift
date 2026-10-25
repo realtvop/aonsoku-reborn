@@ -342,6 +342,102 @@ final class DownloadTests: XCTestCase {
         XCTAssertEqual(metadata.lastModifiedAt, 123_000)
     }
 
+    func testDefaultConcurrencyQueuesTracksAndCompletionFillsTheNextSlot() async throws {
+        let fixture = try DownloadSchedulingFixture()
+        defer { fixture.session.invalidateAndCancel() }
+        for index in 1...5 { fixture.manager.download(songId: "song-\(index)") }
+        let tasks = try await fixture.waitForTasks(total: 5, running: 2)
+        XCTAssertEqual(tasks.map(\.state), [.running, .running, .suspended, .suspended, .suspended])
+        XCTAssertEqual(fixture.persistedSongIds, ["song-3", "song-4", "song-5"])
+
+        let file = fixture.database.directory.appendingPathComponent("complete.tmp")
+        try Data([1, 2, 3]).write(to: file)
+        fixture.manager.urlSession(
+            fixture.session, downloadTask: try XCTUnwrap(tasks[0] as? URLSessionDownloadTask),
+            didFinishDownloadingTo: file
+        )
+        XCTAssertEqual(tasks[2].state, .running)
+        XCTAssertEqual(tasks[3].state, .suspended)
+        XCTAssertEqual(fixture.persistedSongIds, ["song-4", "song-5"])
+        // URLSession follows a successful download with a nil-error completion.
+        // It must not free another slot or restart a finished request.
+        fixture.manager.urlSession(fixture.session, task: tasks[0], didCompleteWithError: nil)
+        XCTAssertEqual(tasks[3].state, .suspended)
+    }
+
+    func testAllConcurrencyOptionsBoundParallelRequests() async throws {
+        for limit in [1, 2, 4, 8] {
+            let fixture = try DownloadSchedulingFixture()
+            defer { fixture.session.invalidateAndCancel() }
+            try fixture.setLimit(limit)
+            let manager = fixture.manager
+            DispatchQueue.concurrentPerform(iterations: 12) { index in
+                manager.download(songId: "song-\(index)")
+            }
+            let tasks = try await fixture.waitForTasks(total: 12, running: limit)
+            XCTAssertEqual(tasks.filter { $0.state == .suspended }.count, 12 - limit)
+        }
+    }
+
+    func testLimitChangesAndFailuresRefillWithoutInterruptingRunningTracks() async throws {
+        let fixture = try DownloadSchedulingFixture()
+        defer { fixture.session.invalidateAndCancel() }
+        for index in 1...10 { fixture.manager.download(songId: "song-\(index)") }
+        _ = try await fixture.waitForTasks(total: 10, running: 2)
+        try fixture.setLimit(8)
+        let tasks = try await fixture.waitForTasks(total: 10, running: 8)
+        try fixture.setLimit(1)
+        XCTAssertEqual(tasks.filter { $0.state == .running }.count, 8)
+
+        for task in tasks.prefix(7) {
+            fixture.fail(task)
+            XCTAssertEqual(tasks[8].state, .suspended)
+        }
+        fixture.fail(tasks[7])
+        XCTAssertEqual(tasks[8].state, .running)
+        XCTAssertEqual(tasks[9].state, .suspended)
+    }
+
+    func testCancellingQueuedAndRunningTracksAndCancelAllAdvanceSafely() async throws {
+        let fixture = try DownloadSchedulingFixture()
+        defer { fixture.session.invalidateAndCancel() }
+        try fixture.setLimit(1)
+        for index in 1...4 { fixture.manager.download(songId: "song-\(index)") }
+        let tasks = try await fixture.waitForTasks(total: 4, running: 1)
+        fixture.manager.cancel(songId: "song-2")
+        XCTAssertEqual(tasks[2].state, .suspended)
+        fixture.manager.cancel(songId: "song-1")
+        XCTAssertEqual(tasks[2].state, .running)
+        XCTAssertEqual(tasks[3].state, .suspended)
+        fixture.manager.cancelAll()
+        fixture.manager.download(songId: "new")
+        for _ in 0..<100 where fixture.manager.activeDownloadSongIds != ["new"] {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(fixture.manager.activeDownloadSongIds, ["new"])
+        XCTAssertTrue(fixture.persistedSongIds.isEmpty)
+        // Late progress for a cancelled waiting task cannot resurrect it.
+        fixture.manager.urlSession(
+            fixture.session, downloadTask: try XCTUnwrap(tasks[1] as? URLSessionDownloadTask),
+            didWriteData: 1, totalBytesWritten: 1, totalBytesExpectedToWrite: 2
+        )
+        XCTAssertEqual(fixture.manager.activeDownloadSongIds, ["new"])
+    }
+
+    func testReconnectRecoversPersistedWaitingTracksBeforeAdmittingNewTracks() async throws {
+        let fixture = try DownloadSchedulingFixture(restoredCount: 3)
+        defer { fixture.session.invalidateAndCancel() }
+        _ = try await fixture.waitForTasks(total: 3, running: 2)
+        fixture.manager.download(songId: "new")
+        let tasks = try await fixture.waitForTasks(total: 4, running: 2)
+        XCTAssertEqual(tasks[2].state, .suspended)
+        XCTAssertEqual(tasks[3].state, .suspended)
+        XCTAssertEqual(fixture.persistedSongIds, ["restored-3", "new"])
+        fixture.fail(tasks[0])
+        XCTAssertEqual(tasks[2].state, .running)
+        XCTAssertEqual(tasks[3].state, .suspended)
+    }
+
     private func makeManager() -> NativeDownloadManager {
         NativeDownloadManager(sessionFactory: { delegate in
             URLSession(
@@ -362,6 +458,85 @@ final class DownloadTests: XCTestCase {
             serverType: "navidrome",
             fallbackUrl: nil
         )
+    }
+}
+
+private final class DownloadSchedulingFixture {
+    let database: TemporaryDatabase
+    let preferences: PreferencesService
+    let manager: NativeDownloadManager
+    let session: URLSession
+
+    init(restoredCount: Int = 0) throws {
+        let database = try TemporaryDatabase()
+        self.database = database
+        preferences = PreferencesService(db: database.manager.dbPool)
+        if restoredCount > 0 {
+            let waiting: [[String: Any]] = (1...restoredCount).map { index in
+                ["context": ["songId": "restored-\(index)", "requestId": "request-\(index)"],
+                 "songCancellationGeneration": 0]
+            }
+            let data = try JSONSerialization.data(withJSONObject: waiting)
+            preferences.setString(String(decoding: data, as: UTF8.self), for: NativeDownloadManager.downloadQueueStorageKey)
+        }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [StallingURLProtocol.self]
+        var createdSession: URLSession?
+        manager = NativeDownloadManager(
+            sessionFactory: { delegate in
+                let created = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+                createdSession = created
+                return created
+            },
+            credentialsProvider: {
+                ServerCredentials(
+                    serverUrl: "https://example.test", username: "alice", password: "token",
+                    authType: "token", protocolVersion: "1.16.0", serverType: "navidrome", fallbackUrl: nil
+                )
+            },
+            estimateContentLengthProvider: { true },
+            preferences: preferences,
+            cacheDirectoryProvider: { _ in database.directory }
+        )
+        _ = manager.handleEvents(
+            forBackgroundSession: NativeDownloadManager.backgroundSessionIdentifier,
+            completionHandler: {}
+        )
+        session = try XCTUnwrap(createdSession)
+    }
+
+    func setLimit(_ value: Int) throws {
+        var settings = AppSettings()
+        settings.cache.downloadConcurrency = value
+        try preferences.setJSON(settings, for: SettingsStore.storageKey)
+    }
+
+    var persistedSongIds: [String] {
+        let queue = preferences.getJSON(
+            NativeDownloadManager.downloadQueueStorageKey, as: [PersistedRequest].self
+        ) ?? []
+        return queue.map(\.context.songId)
+    }
+
+    private struct PersistedRequest: Decodable {
+        struct Context: Decodable { let songId: String }
+        let context: Context
+    }
+
+    func fail(_ task: URLSessionTask) {
+        manager.urlSession(session, task: task, didCompleteWithError: URLError(.networkConnectionLost))
+        task.cancel()
+    }
+
+    func waitForTasks(total: Int, running: Int) async throws -> [URLSessionTask] {
+        var tasks: [URLSessionTask] = []
+        for _ in 0..<100 {
+            tasks = manager.downloadTasksSnapshot
+            if tasks.count == total, tasks.filter({ $0.state == .running }).count == running { return tasks }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTFail("Expected \(total) tasks with \(running) running, got states \(tasks.map { $0.state.rawValue })")
+        throw URLError(.timedOut)
     }
 }
 

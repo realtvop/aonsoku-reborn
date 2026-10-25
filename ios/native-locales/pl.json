@@ -53,6 +53,10 @@
       "autoOpenNowPlaying": {
         "label": "Automatycznie otwieraj „Teraz odtwarzane”",
         "info": "Pokazuje „Teraz odtwarzane”, gdy zaczniesz odtwarzać album, playlistę lub utwór."
+      },
+      "downloadConcurrency": {
+        "label": "Jednoczesne pobieranie utworów",
+        "info": "Liczba utworów pobieranych jednocześnie. Zwiększenie limitu od razu uruchamia oczekujące utwory; zmniejszenie pozwala dokończyć bieżące pobieranie."
       }
     },
     "accountSwitch": {

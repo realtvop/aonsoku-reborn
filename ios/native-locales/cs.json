@@ -53,6 +53,10 @@
       "autoOpenNowPlaying": {
         "label": "Automaticky otevírat Právě hraje",
         "info": "Po spuštění alba, playlistu nebo skladby zobrazí Právě hraje."
+      },
+      "downloadConcurrency": {
+        "label": "Souběžné stahování skladeb",
+        "info": "Počet skladeb stahovaných současně. Zvýšení limitu ihned spustí čekající skladby; snížení nechá probíhající stahování dokončit."
       }
     },
     "accountSwitch": {

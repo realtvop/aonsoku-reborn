@@ -16,11 +16,21 @@ enum DownloadError: Error {
 
 class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
     static let backgroundSessionIdentifier = "github.realtvop.aonsoku.audio.downloads"
+    static let downloadQueueStorageKey = "audio.downloadQueue.v1"
     typealias SessionFactory = (URLSessionDownloadDelegate) -> URLSession
 
     weak var delegate: NativeDownloadManagerDelegate?
 
     private var activeTasks: [Int: DownloadTaskContext] = [:]
+    /// Unstarted tasks are not returned by URLSession.getAllTasks. Persist their
+    /// request descriptors separately, without authenticated URLs/credentials.
+    private var queuedTasks: [URLSessionTask] = []
+    private var queuedRequests: [Int: DownloadRequest] = [:]
+    private var requestsToRestore: [DownloadRequest]
+    private var runningTaskIds: Set<Int> = []
+    private var sessionTasks: [Int: URLSessionTask] = [:]
+    private var finishedTaskIds: Set<Int> = []
+    private var isRestoringTasks = false
     /// Task identifiers cancelled by the user. URLSession may still deliver
     /// delegate callbacks after `cancel()` wins a race with completion; those
     /// callbacks must not publish a completed download.
@@ -43,10 +53,25 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
     private let cacheDirectoryProvider: (Bool) throws -> URL
     private let fileManager: FileManager
     private let now: () -> Date
+    private let preferences: PreferencesService
+    private var preferencesObservation: PreferencesObservation?
+    private let sessionLock = NSLock()
+    private var storedSession: URLSession?
 
-    private lazy var session: URLSession = {
-        sessionFactory(self)
-    }()
+    private var session: URLSession {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        if let storedSession { return storedSession }
+        lock.lock()
+        isRestoringTasks = true
+        lock.unlock()
+        let created = sessionFactory(self)
+        storedSession = created
+        created.getAllTasks { [weak self] tasks in
+            self?.restoreTasks(tasks)
+        }
+        return created
+    }
 
     override convenience init() {
         self.init(sessionFactory: { delegate in
@@ -62,6 +87,7 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
         estimateContentLengthProvider: @escaping () -> Bool = {
             PreferencesService.shared.estimateStreamContentLength
         },
+        preferences: PreferencesService = .shared,
         cacheDirectoryProvider: @escaping (Bool) throws -> URL = {
             try AudioCacheUtils.cacheDirectoryURL(createIfNeeded: $0)
         },
@@ -74,8 +100,24 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
         self.cacheDirectoryProvider = cacheDirectoryProvider
         self.fileManager = fileManager
         self.now = now
+        self.preferences = preferences
+        requestsToRestore = preferences.getJSON(
+            Self.downloadQueueStorageKey, as: [DownloadRequest].self
+        ) ?? []
+        var restoredContexts: Set<DownloadTaskContext> = []
+        requestsToRestore = requestsToRestore.filter { restoredContexts.insert($0.context).inserted }
+        for index in requestsToRestore.indices {
+            requestsToRestore[index].songCancellationGeneration = 0
+        }
         super.init()
+        preferencesObservation = preferences.observe { [weak self] change in
+            if change.key == SettingsStore.storageKey {
+                self?.scheduleDownloads()
+            }
+        }
     }
+
+    deinit { preferencesObservation?.cancel() }
 
     private static func makeBackgroundSession(
         delegate: URLSessionDownloadDelegate
@@ -87,6 +129,7 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
         config.waitsForConnectivity = true
         config.isDiscretionary = false
         config.sessionSendsLaunchEvents = true
+        config.httpMaximumConnectionsPerHost = 8
         return URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
     }
 
@@ -153,8 +196,12 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
         let task = activeSession.downloadTask(with: url)
         task.taskDescription = Self.encode(context)
         activeTasks[task.taskIdentifier] = context
+        sessionTasks[task.taskIdentifier] = task
+        queuedTasks.append(task)
+        queuedRequests[task.taskIdentifier] = request
+        persistQueueLocked()
         lock.unlock()
-        task.resume()
+        scheduleDownloads()
     }
 
     func cancel(songId: String) {
@@ -165,17 +212,18 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
         })
         for taskId in taskIds {
             activeTasks.removeValue(forKey: taskId)
+            sessionTasks.removeValue(forKey: taskId)?.cancel()
+            runningTaskIds.remove(taskId)
+            queuedRequests.removeValue(forKey: taskId)
         }
+        queuedTasks.removeAll { taskIds.contains($0.taskIdentifier) }
+        requestsToRestore.removeAll { $0.context.songId == songId }
+        persistQueueLocked()
         cancelledTaskIds.formUnion(taskIds)
         deferredDownloads.removeAll { $0.context.songId == songId }
         lock.unlock()
 
-        guard !taskIds.isEmpty else { return }
-        session.getAllTasks { tasks in
-            for task in tasks where taskIds.contains(task.taskIdentifier) {
-                task.cancel()
-            }
-        }
+        scheduleDownloads()
     }
 
     func cancelAll() {
@@ -189,6 +237,13 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
         cancelAllGeneration &+= 1
         cancelledTaskIds.formUnion(activeTasks.keys)
         activeTasks.removeAll()
+        queuedTasks.removeAll()
+        queuedRequests.removeAll()
+        requestsToRestore.removeAll()
+        persistQueueLocked()
+        runningTaskIds.removeAll()
+        for task in sessionTasks.values { task.cancel() }
+        sessionTasks.removeAll()
         lock.unlock()
         session.getAllTasks { tasks in
             self.lock.lock()
@@ -202,7 +257,95 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
             for request in deferred {
                 self.start(request, generation: generation)
             }
+            self.scheduleDownloads()
         }
+    }
+
+    private func restoreTasks(_ tasks: [URLSessionTask]) {
+        lock.lock()
+        for task in tasks.sorted(by: { $0.taskIdentifier < $1.taskIdentifier }) {
+            let id = task.taskIdentifier
+            guard !cancelledTaskIds.contains(id), !finishedTaskIds.contains(id),
+                  sessionTasks[id] == nil,
+                  task.state == .running || task.state == .suspended,
+                  let context = Self.decode(task.taskDescription) else { continue }
+            // A cancellation may precede this asynchronous session snapshot.
+            // Newly created requests are already registered above and skipped.
+            guard !isCancellingAll,
+                  songCancellationGenerations[context.songId, default: 0] == 0 else {
+                cancelledTaskIds.insert(id)
+                task.cancel()
+                continue
+            }
+            activeTasks[id] = context
+            sessionTasks[id] = task
+            if task.state == .running {
+                runningTaskIds.insert(id)
+            } else {
+                queuedTasks.append(task)
+            }
+        }
+        queuedTasks.sort { $0.taskIdentifier < $1.taskIdentifier }
+        let restored = requestsToRestore.filter { request in
+            !activeTasks.values.contains { context in
+                context.songId == request.context.songId
+                    && context.requestId == request.context.requestId
+            }
+        }
+        let generation = cancelAllGeneration
+        lock.unlock()
+        for request in restored {
+            start(request, generation: generation)
+        }
+        lock.lock()
+        // Recovered requests take precedence over new requests queued during
+        // the session snapshot, preserving the user's original download order.
+        let restoredIds = Set(restored.map { $0.context })
+        queuedTasks = queuedTasks.filter { task in
+            queuedRequests[task.taskIdentifier].map { restoredIds.contains($0.context) } ?? false
+        } + queuedTasks.filter { task in
+            !(queuedRequests[task.taskIdentifier].map { restoredIds.contains($0.context) } ?? false)
+        }
+        requestsToRestore.removeAll()
+        persistQueueLocked()
+        isRestoringTasks = false
+        lock.unlock()
+        scheduleDownloads()
+    }
+
+    /// Read the current setting on every fill. Lowering the limit lets existing
+    /// transfers finish; raising it immediately admits more queued tracks.
+    private func scheduleDownloads() {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !isCancellingAll, !isRestoringTasks else { return }
+        let limit = preferences.audioDownloadConcurrency
+        while runningTaskIds.count < limit, !queuedTasks.isEmpty {
+            let task = queuedTasks.removeFirst()
+            queuedRequests.removeValue(forKey: task.taskIdentifier)
+            runningTaskIds.insert(task.taskIdentifier)
+            task.resume()
+        }
+        persistQueueLocked()
+    }
+
+    private func persistQueueLocked() {
+        let waiting = requestsToRestore + queuedTasks.compactMap { queuedRequests[$0.taskIdentifier] }
+        try? preferences.setJSON(waiting, for: Self.downloadQueueStorageKey)
+    }
+
+    /// Reconnect at normal launch too, even if no new download is requested.
+    func restoreDownloads() {
+        lock.lock()
+        let hasWaitingRequests = !requestsToRestore.isEmpty
+        lock.unlock()
+        if hasWaitingRequests { _ = session }
+    }
+
+    var downloadTasksSnapshot: [URLSessionTask] {
+        lock.lock()
+        defer { lock.unlock() }
+        return sessionTasks.values.sorted { $0.taskIdentifier < $1.taskIdentifier }
     }
 
     var activeDownloadSongIds: Set<String> {
@@ -278,6 +421,7 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        defer { scheduleDownloads() }
         guard let context = removeContext(for: downloadTask) else {
             return
         }
@@ -354,12 +498,12 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        guard let error else { return }
-
+        defer { scheduleDownloads() }
         guard let context = removeContext(for: task) else {
             return
         }
 
+        guard let error else { return }
         if (error as NSError).code == NSURLErrorCancelled { return }
         delegate?.downloadManager(
             self,
@@ -381,16 +525,25 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
         lock.lock()
         defer { lock.unlock() }
         guard !cancelledTaskIds.contains(task.taskIdentifier) else { return nil }
+        guard !finishedTaskIds.contains(task.taskIdentifier) else { return nil }
         if let context = activeTasks[task.taskIdentifier] { return context }
         guard let context = Self.decode(task.taskDescription) else { return nil }
         activeTasks[task.taskIdentifier] = context
+        sessionTasks[task.taskIdentifier] = task
+        runningTaskIds.insert(task.taskIdentifier)
         return context
     }
 
     private func removeContext(for task: URLSessionTask) -> DownloadTaskContext? {
         lock.lock()
         defer { lock.unlock() }
-        if cancelledTaskIds.remove(task.taskIdentifier) != nil {
+        let id = task.taskIdentifier
+        guard finishedTaskIds.insert(id).inserted else { return nil }
+        sessionTasks.removeValue(forKey: id)
+        queuedRequests.removeValue(forKey: id)
+        runningTaskIds.remove(id)
+        queuedTasks.removeAll { $0.taskIdentifier == id }
+        if cancelledTaskIds.contains(id) {
             activeTasks.removeValue(forKey: task.taskIdentifier)
             return nil
         }
@@ -429,12 +582,12 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
     }
 }
 
-private struct DownloadTaskContext: Codable {
+private struct DownloadTaskContext: Codable, Hashable {
     var songId: String
     var requestId: String?
 }
 
-private struct DownloadRequest {
+private struct DownloadRequest: Codable {
     var context: DownloadTaskContext
     var maxBitRate: Int?
     var format: String?

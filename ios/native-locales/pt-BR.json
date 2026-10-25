@@ -53,6 +53,10 @@
       "autoOpenNowPlaying": {
         "label": "Abrir “Tocando agora” automaticamente",
         "info": "Mostra “Tocando agora” quando você começa a tocar um álbum, uma playlist ou uma música."
+      },
+      "downloadConcurrency": {
+        "label": "Downloads simultâneos de faixas",
+        "info": "Número de faixas baixadas ao mesmo tempo. Aumentar o limite inicia imediatamente as faixas em espera; reduzi-lo permite concluir os downloads atuais."
       }
     },
     "accountSwitch": {
