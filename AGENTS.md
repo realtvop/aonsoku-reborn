@@ -154,7 +154,12 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   selected dark theme background, matching the web player's color treatment
   while retaining the native player's light controls. `NowPlayingBackground`
   blends these colors into one opaque fill shared by the surface and pinned
-  headers. The queue hides system scroll-edge effects and uses a top/bottom
+  headers.
+  The full-screen background and page content (including opaque pinned headers)
+  composite together before fading toward the glass during dismissal, so headers
+  cannot remain as solid rectangles over a translucent player surface. The shared
+  artwork stays outside that fade group.
+  The queue hides system scroll-edge effects and uses a top/bottom
   marquee-style edge fade gradient mask; its width matches the playback
   scrubber, extending directly to the top of the progress bar. Palette changes animate
   the fill without inserting or removing color layers.

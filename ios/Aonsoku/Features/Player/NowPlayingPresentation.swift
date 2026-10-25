@@ -297,22 +297,27 @@ private struct NowPlayingPresentation: ViewModifier {
                         ? expandedRadius : pill.height / 2
                     let shape = PlayerSurfaceShape(frame: surface, cornerRadius: radius)
                     ZStack(alignment: .topLeading) {
-                        NowPlayingBackground()
-                        .frame(width: surface.width, height: surface.height)
-                        .position(x: surface.midX, y: surface.midY)
-                        .opacity(backgroundOpacity(viewportHeight: height))
-                        NowPlayingView()
-                            .padding(insets)
-                            .frame(width: width, height: height)
-                            .coordinateSpace(name: PlayerArtworkLocation.coordinateSpace)
-                            // Animate the host, never its layout probes or the
-                            // native List. Otherwise their intermediate frames
-                            // become new artwork destinations mid-transition.
-                            .transaction { $0.animation = nil }
-                            .offset(y: surface.minY)
-                            .opacity(isExpanded ? 1 : 0)
-                            .allowsHitTesting(router.isNowPlayingPresented)
-                            .accessibilityHidden(!router.isNowPlayingPresented)
+                        ZStack(alignment: .topLeading) {
+                            NowPlayingBackground()
+                                .frame(width: surface.width, height: surface.height)
+                                .position(x: surface.midX, y: surface.midY)
+                            NowPlayingView()
+                                .padding(insets)
+                                .frame(width: width, height: height)
+                                .coordinateSpace(name: PlayerArtworkLocation.coordinateSpace)
+                                // Animate the host, never its layout probes or the
+                                // native List. Otherwise their intermediate frames
+                                // become new artwork destinations mid-transition.
+                                .transaction { $0.animation = nil }
+                                .offset(y: surface.minY)
+                                .allowsHitTesting(router.isNowPlayingPresented)
+                                .accessibilityHidden(!router.isNowPlayingPresented)
+                        }
+                        // Flatten the opaque pinned headers with the page before
+                        // fading toward the glass. Independent alpha exposes a
+                        // solid rectangle where a header overlaps the backdrop.
+                        .compositingGroup()
+                        .opacity(expandedContentOpacity(viewportHeight: height))
                         sharedArtwork(in: proxy)
                     }
                     .environment(\.nowPlayingPalette, palette)
@@ -415,7 +420,7 @@ private struct NowPlayingPresentation: ViewModifier {
         PlayerPresentationState.panelAnimation(reduceMotion: reduceMotion)
     }
 
-    private func backgroundOpacity(viewportHeight: CGFloat) -> Double {
+    private func expandedContentOpacity(viewportHeight: CGFloat) -> Double {
         guard isExpanded else { return 0 }
         return Double(1 - min(presentation.dragOffset / max(viewportHeight, 1), 1))
     }
