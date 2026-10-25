@@ -147,17 +147,18 @@ struct NowPlayingView: View {
     }
 
     private var grabber: some View {
-        Capsule()
-            .fill(.white.opacity(0.35))
-            .frame(width: 38, height: 5)
-            .frame(maxWidth: .infinity)
-            .frame(height: 32)
-            .contentShape(.rect)
-            .accessibilityElement()
-            .accessibilityAddTraits(.isButton)
-            .accessibilityLabel(t("fullscreen.switchButton"))
-            .accessibilityAction { router.isNowPlayingPresented = false }
-            .onTapGesture { router.isNowPlayingPresented = false }
+        Button {
+            router.isNowPlayingPresented = false
+        } label: {
+            Capsule()
+                .fill(.white.opacity(0.35))
+                .frame(width: 38, height: 5)
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.touchFeedback)
+        .accessibilityLabel(t("fullscreen.switchButton"))
     }
 
     /// Remote control and the sleep timer, when they apply.
@@ -235,10 +236,10 @@ struct NowPlayingView: View {
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 22, weight: .semibold))
-                    .frame(width: 40, height: 40)
+                    .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.touchFeedback)
             .accessibilityLabel(t("playlist.buttons.options", ["name": NowPlayingText.title(player, t)]))
             .disabled(!player.hasMedia)
         }
@@ -336,10 +337,10 @@ struct NowPlayingView: View {
                 .foregroundStyle(isOn ? .black : .white.opacity(0.7))
                 .frame(width: 44, height: 44)
                 .background(.white.opacity(isOn ? 0.92 : 0), in: .circle)
-                .contentShape(.circle)
+                .contentShape(.rect)
                 .animation(.easeInOut(duration: 0.2), value: isOn)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.touchFeedback)
         .accessibilityLabel(label)
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
@@ -519,12 +520,12 @@ private struct NowPlayingFavoriteButton: View {
             Image(systemName: isFavorite ? "heart.fill" : "heart")
                 .font(.system(size: 22, weight: .semibold))
                 .foregroundStyle(isFavorite ? Color.red : Color.white)
-                .frame(width: 40, height: 40)
+                .frame(width: 44, height: 44)
                 .contentShape(.rect)
                 .contentTransition(.symbolEffect(.replace))
                 .symbolEffect(.bounce, value: isFavorite)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.touchFeedback)
         .accessibilityLabel(t(isFavorite ? "options.unlike" : "options.like"))
         .haptic(.impact(weight: .light), trigger: isFavorite)
     }
@@ -575,9 +576,9 @@ private struct DevicesButton: View {
                 .font(.title3.weight(.medium))
                 .foregroundStyle(isRemote ? AnyShapeStyle(.tint) : AnyShapeStyle(.white.opacity(0.7)))
                 .frame(width: 44, height: 44)
-                .contentShape(.circle)
+                .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.touchFeedback)
         .accessibilityLabel(t("settings.crossDevice.title"))
     }
 }

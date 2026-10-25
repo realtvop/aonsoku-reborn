@@ -174,8 +174,8 @@ private struct TransportButton: View {
             Image(systemName: symbol)
                 .font(.system(size: size))
                 .contentTransition(.symbolEffect(.replace))
-                .frame(width: size * 1.9, height: size * 1.9)
-                .contentShape(.circle)
+                .frame(width: max(size * 1.9, 44), height: max(size * 1.9, 44))
+                .contentShape(.rect)
         }
         .buttonStyle(TransportButtonStyle())
         .accessibilityLabel(label)

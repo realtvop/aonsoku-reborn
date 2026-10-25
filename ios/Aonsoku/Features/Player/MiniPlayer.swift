@@ -291,7 +291,7 @@ struct MiniPlayer: View {
                 Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                     .font(.system(size: mix(expandedControlSize, compactControlSize)))
                     .contentTransition(.symbolEffect(.replace))
-                    .frame(width: 40, height: 36)
+                    .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
             .overlay(alignment: .topTrailing) {
@@ -304,16 +304,17 @@ struct MiniPlayer: View {
             } label: {
                 Image(systemName: "forward.fill")
                     .font(.system(size: expandedControlSize))
-                    .frame(width: 40, height: 36)
+                    .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
-            .frame(width: mix(40, 0))
+            .frame(width: mix(44, 0))
             .opacity(1 - compactProgress)
             .clipped()
             .allowsHitTesting(compactProgress == 0)
             .accessibilityHidden(compactProgress > 0)
             .accessibilityLabel(t("player.tooltips.next"))
         }
+        .buttonStyle(.touchFeedback)
     }
 }
 

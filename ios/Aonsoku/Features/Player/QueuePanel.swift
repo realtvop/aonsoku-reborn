@@ -50,7 +50,11 @@ struct QueuePanel<CurrentMetadata: View>: View {
                         }
                     } header: {
                         QueueSectionHeader(title: t("fullscreen.queueHistory")) {
-                            Button(t("generic.clear")) { history.clear() }
+                            Button { history.clear() } label: {
+                                Text(t("generic.clear"))
+                                    .frame(minWidth: 44, minHeight: 44)
+                                    .contentShape(.rect)
+                            }
                         }
                         .queuePinnedHeader(isActive: isActive)
                     }
@@ -329,7 +333,7 @@ private struct QueueSectionHeader<Actions: View>: View {
             actions
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.white.opacity(0.7))
-                .buttonStyle(.plain)
+                .buttonStyle(.touchFeedback)
         }
     }
 }
@@ -368,7 +372,7 @@ private struct QueueSongRow: View {
             }
             .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.touchFeedback)
     }
 }
 
