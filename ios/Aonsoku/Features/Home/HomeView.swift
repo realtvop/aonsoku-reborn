@@ -16,31 +16,35 @@ struct HomeView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: Layout.sectionSpacing) {
                 OtherDevicesSection()
-                if !home.carousel.isEmpty {
-                    FeaturedCarousel(albums: home.carousel)
-                }
-                if !pinned.resolved.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        SectionHeader(title: t("home.pinned"))
-                            .pageMargins()
-                        HomeShelf(items: pinned.resolved) { content in
-                            switch content {
-                            case let .album(album):
-                                AlbumTile(album: album)
-                            case let .playlist(playlist):
-                                PlaylistTile(playlist: playlist)
+                if showsSkeleton {
+                    HomeSkeleton()
+                } else {
+                    if !home.carousel.isEmpty {
+                        FeaturedCarousel(albums: home.carousel)
+                    }
+                    if !pinned.resolved.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            SectionHeader(title: t("home.pinned"))
+                                .pageMargins()
+                            HomeShelf(items: pinned.resolved) { content in
+                                switch content {
+                                case let .album(album):
+                                    AlbumTile(album: album)
+                                case let .playlist(playlist):
+                                    PlaylistTile(playlist: playlist)
+                                }
                             }
                         }
                     }
-                }
-                ForEach(HomeSection.allCases) { section in
-                    let albums = home.albums(in: section)
-                    if !albums.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            SectionHeader(title: t(section.titleKey), route: .albums(section.listFilter))
-                                .pageMargins()
-                            HomeShelf(items: albums) { album in
-                                AlbumTile(album: album)
+                    ForEach(HomeSection.allCases) { section in
+                        let albums = home.albums(in: section)
+                        if !albums.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                SectionHeader(title: t(section.titleKey), route: .albums(section.listFilter))
+                                    .pageMargins()
+                                HomeShelf(items: albums) { album in
+                                    AlbumTile(album: album)
+                                }
                             }
                         }
                     }
@@ -74,12 +78,17 @@ struct HomeView: View {
         }
     }
 
+    private var showsSkeleton: Bool {
+        home.isEmpty && pinned.resolved.isEmpty
+            && (home.phase == .idle || home.phase == .loading)
+    }
+
     @ViewBuilder
     private var states: some View {
         if home.isEmpty, pinned.resolved.isEmpty {
             switch home.phase {
             case .idle, .loading:
-                LoadingStateView()
+                EmptyView()
             case let .failed(message):
                 ErrorStateView(message: message) {
                     Task { await home.refresh() }
@@ -92,6 +101,62 @@ struct HomeView: View {
                 )
             }
         }
+    }
+}
+
+/// Mirrors the featured card and album shelves while the first Home load runs.
+private struct HomeSkeleton: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    private var tileWidth: CGFloat { sizeClass == .regular ? 180 : 160 }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Layout.sectionSpacing) {
+            HStack(spacing: sizeClass == .regular ? 22 : 14) {
+                block()
+                    .aspectRatio(1, contentMode: .fit)
+                VStack(alignment: .leading, spacing: 8) {
+                    Spacer(minLength: 0)
+                    block().frame(height: 20)
+                    block().frame(width: 100, height: 14)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(sizeClass == .regular ? 22 : 14)
+            .frame(height: sizeClass == .regular ? 250 : 150)
+            .background(ThemeColor.card, in: .rect(cornerRadius: 14))
+            .pageMargins()
+
+            ForEach(0..<3, id: \.self) { _ in
+                VStack(alignment: .leading, spacing: 12) {
+                    block().frame(width: 160, height: 24)
+                        .pageMargins()
+                    ScrollView(.horizontal) {
+                        HStack(alignment: .top, spacing: Layout.shelfSpacing) {
+                            ForEach(0..<4, id: \.self) { _ in
+                                VStack(alignment: .leading, spacing: 8) {
+                                    block().frame(height: tileWidth)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        block().frame(height: 16)
+                                        block().frame(width: tileWidth * 0.65, height: 12)
+                                    }
+                                }
+                                .frame(width: tileWidth)
+                            }
+                        }
+                    }
+                    .scrollIndicators(.hidden)
+                    .contentMargins(.horizontal, Layout.margin(sizeClass), for: .scrollContent)
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func block() -> some View {
+        RoundedRectangle(cornerRadius: Layout.artworkRadius, style: .continuous)
+            .fill(ThemeColor.muted)
     }
 }
 

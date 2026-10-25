@@ -133,6 +133,11 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   shared `src/` SPA or Capacitor. SwiftUI owns presentation; `AonsokuKit` owns
   networking, persistence, playback, sync, downloads, coordination, settings,
   and observable stores. See `docs/ios-native-app.md`.
+  Startup restores local settings and the session before the first SwiftUI
+  frame, opening Home directly for signed-in users or Login otherwise,
+  without a separate in-app splash screen. Home shows theme-colored featured
+  card and album-shelf skeletons during its initial data load; refreshes keep
+  existing content visible.
   Screens keep native interaction but follow the web's visual language:
   every theme paints the `src/themes.css` palette (pages on
   `--background-foreground`), and bundled Poppins sets headings only.
