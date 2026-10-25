@@ -1,0 +1,79 @@
+{
+  "native": {
+    "generic": {
+      "retry": "重试"
+    },
+    "explicit": "含露骨内容",
+    "error": {
+      "title": "出错了"
+    },
+    "home": {
+      "empty": {
+        "title": "资料库为空",
+        "description": "服务器扫描完成后，专辑会显示在这里。"
+      }
+    },
+    "search": {
+      "description": "在资料库中查找专辑、歌曲和艺术家。"
+    },
+    "sort": {
+      "label": "排序",
+      "order": "顺序"
+    },
+    "songs": {
+      "empty": "没有歌曲"
+    },
+    "artists": {
+      "empty": "没有艺术家",
+      "search": "搜索艺术家…"
+    },
+    "artist": {
+      "latestRelease": "最新发行"
+    },
+    "favorites": {
+      "noAlbums": "还没有收藏的专辑",
+      "noArtists": "还没有收藏的艺术家"
+    },
+    "downloads": {
+      "noAlbums": "没有已下载的专辑",
+      "noPlaylists": "没有已下载的播放列表",
+      "noSongs": "没有已下载的歌曲",
+      "description": "下载的专辑、播放列表和歌曲无需联网即可播放。"
+    },
+    "playlist": {
+      "added": "已添加到“{{name}}”",
+      "alreadyAdded": "已在“{{name}}”中",
+      "addedSkipped": "已添加到“{{name}}”，并跳过了其中已有的歌曲。",
+      "addFailed": "无法添加到播放列表"
+    },
+    "player": {
+      "volume": "音量"
+    },
+    "settings": {
+      "estimateContentLength": {
+        "label": "估算流媒体大小",
+        "info": "请求服务器估算流媒体大小，以改善播放和定位。若服务器返回时长为 0 或播放异常，可尝试关闭。更改对后续播放和下载请求生效。"
+      },
+      "autoOpenNowPlaying": {
+        "label": "自动打开正在播放",
+        "info": "开始播放专辑、播放列表或歌曲时显示正在播放。"
+      }
+    },
+    "accountSwitch": {
+      "different": {
+        "title": "切换账户？",
+        "message": "以 {{server}} 上的 {{user}} 身份登录，将从此设备抹掉 {{previousServer}} 上 {{previousUser}} 的资料库、下载内容和播放历史。服务器上的内容不会被删除。"
+      },
+      "server": {
+        "title": "是同一台服务器吗？",
+        "message": "此设备上有 {{previousServer}} 上 {{user}} 的资料库、下载内容和播放历史。如果 {{server}} 是同一台服务器的新地址，请保留它们；否则请抹掉并重新开始。"
+      },
+      "unknown": {
+        "title": "保留现有资料库？",
+        "message": "此设备上有之前登录留下的资料库和下载内容。如果它们属于 {{server}} 上的 {{user}}，请保留；否则请抹掉并重新开始。"
+      },
+      "erase": "抹掉并继续",
+      "keep": "保留资料库"
+    }
+  }
+}

@@ -9,6 +9,13 @@ permissions:
   contents: write
 
 jobs:
+  publish-ios:
+    permissions:
+      contents: write
+    uses: ./.github/workflows/build-ios.yml
+    with:
+      publish_release: true
+
   publish-electron:
     strategy:
       fail-fast: false

@@ -6,10 +6,10 @@ repository.
 ## Project Overview
 
 Aonsoku is a multi-runtime music streaming client for Navidrome/Subsonic
-servers. It targets the web, Electron desktop, Capacitor iOS, and a fully
-native Android app (Kotlin + Jetpack Compose, no WebView). It supports
-synchronized lyrics, radio streaming, Discord RPC, offline library/cache
-features, and cross-device coordination with remote control and handoff.
+servers. It targets the web, Electron desktop, native Android (Kotlin +
+Jetpack Compose), and a native SwiftUI app for iOS 26. It supports synchronized
+lyrics, radio streaming, Discord RPC, offline library/cache features, and
+cross-device coordination with remote control and handoff.
 
 ## Architecture Change Hygiene
 
@@ -27,10 +27,8 @@ pnpm run electron:dev     # Electron desktop dev
 
 # Build
 pnpm run build            # Production web build (tsc + vite)
-pnpm run build:mobile     # Capacitor (iOS) bundle with automatic fine-grained chunks
 pnpm run electron:build   # Electron renderer/main/preload build
 pnpm run make             # Create Electron distributable packages
-pnpm exec cap sync ios    # Copy the preceding build into the iOS host
 
 # Lint & Format (Biome)
 pnpm run lint             # Check only
@@ -74,16 +72,18 @@ node scripts/android/generate-theme-palettes.mjs     # Regenerate ThemePalettes.
 # Nightly/tag release workflows restore the same keystore from GitHub Secrets.
 cd android && ./gradlew assembleRelease
 
-# iOS native plugin. Selects the first available iPhone Simulator; override
-# with IOS_SIMULATOR_ID=<uuid>. Fails when no simulator is available, when no
-# XCTest executes, or when any test fails. The optional result path must not
-# already exist.
+# Native iOS AonsokuKit. Selects the first available iPhone Simulator;
+# override with IOS_SIMULATOR_ID=<uuid>. Fails when no simulator is available,
+# when no XCTest executes, or when any test fails. The optional result path
+# must not already exist.
 ./scripts/test-ios-native.sh
 IOS_TEST_RESULT_BUNDLE=/tmp/AonsokuNativeTests.xcresult ./scripts/test-ios-native.sh
 
-# iOS native core
-cd ios/App && xcodebuild -project App.xcodeproj -scheme App \
+# iOS SwiftUI app
+xcodebuild -project ios/Aonsoku.xcodeproj -scheme Aonsoku \
   -destination 'generic/platform=iOS Simulator' build
+node scripts/check-ios-strings.mjs # Every translation key the app uses exists
+bash scripts/test-ios-queue-scroll.sh # Queue/history snap geometry and animation curve (macOS, no Simulator)
 
 # Electron desktop native audio
 pnpm native-audio:build   # Build the Node-API libmpv addon
@@ -119,10 +119,6 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   is not part of the shared `src/` SPA, so web/Capacitor builds never bundle
   it. `tailwind.config.js` scans `electron/renderer/**` for its utility
   classes, and `tsconfig.electron-renderer.json` type-checks it.
-- **Capacitor iOS**: `capacitor.config.ts` points the iOS host at `dist`. The
-  custom native plugin lives in `capacitor-plugins/capacitor-native` (TypeScript
-  definitions + Swift sources) and is included through pnpm workspace package
-  `@aonsoku/capacitor-native`. The package no longer has an Android side.
 - **Android (native)**: `android/` is a standalone Gradle project (Kotlin DSL,
   version catalog in `android/gradle/libs.versions.toml`, AGP 9 with built-in
   Kotlin) with two modules. It does not use Capacitor, a WebView, or the web
@@ -132,6 +128,155 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
     playback, downloads, scrobbling, and the coordination socket runtime.
   - `android/app` (`:app`, namespace `github.realtvop.aonsoku`) is the Jetpack
     Compose / Material 3 Expressive UI.
+- **Native iOS**: `ios/Aonsoku.xcodeproj` builds the iOS 26 SwiftUI app and
+  links the local `ios/AonsokuKit` Swift package. The app does not load the
+  shared `src/` SPA or Capacitor. SwiftUI owns presentation; `AonsokuKit` owns
+  networking, persistence, playback, sync, downloads, coordination, settings,
+  and observable stores. See `docs/ios-native-app.md`.
+  Screens keep native interaction but follow the web's visual language:
+  every theme paints the `src/themes.css` palette (pages on
+  `--background-foreground`), bundled Poppins sets headings only, and album,
+  playlist and artist pages share the web image header (`DetailHeader`).
+  Keep new screens on the `ThemeColor`, `displayFont` and `ThemedForm`
+  tokens rather than system grays and fonts.
+  `MainTabView` uses the system tab bar, a fixed search-role tab and the
+  native bottom accessory for a layout-only `PlayerAccessorySlot`. Search stays separate from the
+  other tabs; minimization and transitions are system-owned. `SearchView`
+  owns its text/query state and native `searchable` field, using the system's
+  default placement and activation behavior. Typing debounces and submitting
+  searches immediately. Keep `searchable` scoped to `SearchView` so other
+  tabs do not gain a search field. iPad keeps the adaptable sidebar.
+  `NowPlayingPresentation` keeps the full-screen player in the same view
+  tree as the tabs. One persistent container owns `MiniPlayer`,
+  `NowPlayingView`, their shared background and the sole `PlayerArtwork`.
+  Full-screen pages and pinned queue headers share one solid background rule:
+  the cover's RMS average color blended at the configured intensity over the
+  selected dark theme background, matching the web player's color treatment
+  while retaining the native player's light controls. `NowPlayingBackground`
+  blends these colors into one opaque fill shared by the surface and pinned
+  headers. The queue hides system scroll-edge effects and uses a top/bottom
+  marquee-style edge fade gradient mask; its width matches the playback
+  scrubber, extending directly to the top of the progress bar. Palette changes animate
+  the fill without inserting or removing color layers.
+  The system accessory reserves space and reports native geometry only.
+  A scoped UIKit marker hides the immediate host of the public
+  `UITabAccessory.contentView`, leaving tab bar layout/minimization intact.
+  A passive `UIUpdateLink` samples the accessory's presentation-layer frame
+  during native minimization. The mini player, sole cover and glass follow
+  that frame; compact controls interpolate with its width instead of
+  switching layouts immediately or starting a separate animation.
+  The presentation container owns the sole Liquid Glass surface; its frame
+  and corners animate together with the player into the final pill, so no
+  stationary accessory glass remains underneath during a transition.
+  Interactive expansion/collapse changes only its Y offset at
+  the full viewport width. Downward pans start anywhere on the surface
+  except the progress/volume slider touch targets; horizontal pans do not
+  dismiss it. Lyrics scroll back to their top before dismissal; the queue
+  keeps its own history/upcoming scroll gestures, except that its current-track
+  row can start dismissal while settled at the top anchor.
+  Full-screen progress and volume use the app target's pinned
+  `realtvop/slidercontrol` Swift package (`SliderControlView`). Progress uses
+  `.progressLabels`, with elapsed/remaining labels and the quality badge in
+  its independently sized center slot, and seeks on release. Volume uses
+  `.volumeIcons`, including inertia and elastic limits, with coalesced store
+  updates and an exact trailing value.
+  `PlayerPresentationState` owns the interactive dismissal offset, while
+  `Router.isNowPlayingPresented` remains the presentation authority.
+  The presentation host captures the expanded artwork frame and clipping
+  viewport before animating its rendered expansion state. Layout/scroll
+  probes do not inherit the host animation or retarget those endpoints in
+  flight. Interrupted transitions invalidate older completion callbacks.
+  A queue cover that is already offscreen stays hidden throughout collapse
+  and reappears only in its settled mini slot.
+  While the finger is down, artwork keeps its expanded size and moves only
+  with the container. Only a committed release retargets it to the mini player.
+  A stationary full-viewport UIKit probe resolves the screen/window corner
+  radius through iOS 26's public concentric corner APIs. Rounded viewports
+  keep that radius throughout the Y slide; square viewports grow from 0 to
+  32pt over the first 96pt of downward movement. After release into a
+  committed dismissal, one animatable surface mask morphs into the pill's
+  bounds while the cover retargets its mini slot; a canceled drag restores
+  the whole expanded container. The same mask encloses background, controls
+  and artwork throughout, without recreating the image reader.
+  The same host renders one persistent `PlayerArtwork` at large resolution.
+  The main player and lyrics header contain only `PlayerArtworkSlot` layout
+  markers; the queue uses `QueueHeaderTrackingReader` for its native row.
+  The compact cover destination is derived directly from
+  the stationary native accessory. Keep its last valid frame while native
+  accessory hosts are recycled, so a closing player cannot lose its target.
+  Only the artwork shares geometry between layouts. Full and compact
+  controls have independent layouts anchored at the container's top;
+  the background fades with downward movement and becomes transparent in
+  the pill. Cover transitions use the container's zero-bounce timing.
+  The markers drive the image's position, size, corner radius and shadow,
+  including paused scaling and interactive collapse; never add separate
+  current-track images to them.
+  Full-screen layouts share one compact transport/slider layout
+  (`TransportControls(scale: 0.85)` with
+  6pt vertical transport padding) across all pages. On compact layouts,
+  `PlayerContentLayout` positions the cover/lyrics metadata and both persistent artwork
+  markers above those controls. The metadata layout slots stay mounted.
+  Leaving the cover page moves its title/actions upward toward the compact
+  header, scales them to 0.85 and fades them out; returning reveals them
+  from 64pt below. Compact lyrics/queue metadata crossfades in place between
+  those pages and moves downward only when returning to the cover page.
+  Entering a panel from the cover delays its compact metadata by 160ms.
+  Lyrics, queue rows and section headers float up 24pt after a 140ms delay,
+  with a 380ms zero-bounce spring and fade; outgoing content fades downward
+  over 180ms. Queue effects apply to row/header rendering, leaving the List,
+  native current-song marker and viewport stationary. The content viewport
+  clips these effects above the fixed playback controls.
+  Page buttons animate their selection appearance while staying bottom-aligned.
+  The footer uses its intrinsic height directly, so cover metadata grows upward
+  without a measured-height feedback pass shifting the buttons during page changes.
+  `PlayerPresentationState.panel`
+  is the single page selection and derives the artwork destination synchronously.
+  Lyrics/queue panels mount before their first switch; lyrics preserve scrolling
+  and hidden lyrics stop their playback-following task. Hidden content loses
+  hit testing and accessibility immediately. Reduce Motion uses short linear
+  fades without content movement and a short linear artwork transition.
+  `PlayerPageReveal` explicitly interpolates render progress, and its content
+  descendants do not inherit an animation transaction. Never animate page
+  selection, native List layout/scroll resets or artwork markers through a
+  global transaction.
+  Manually scrolling down through synced or plain lyrics collapses the entire
+  footer (progress, transport, volume and bottom actions) and expands the lyrics
+  viewport. Scrolling back or tapping lyrics restores it, as do changing panels,
+  songs or fullscreen presentation. Playback-following scrolls and viewport
+  resize callbacks do not toggle the footer. The footer stays mounted to retain
+  slider state, with hit testing and accessibility disabled while collapsed.
+  Collapsed sliders also stop excluding touches from the player dismiss pan.
+  The compact queue is one native `List` matching the progress bar width and
+  extending directly to its top edge: history, a current-track metadata
+  row with an artwork layout marker, then the upcoming section with pinned
+  mode/title controls. Cover/lyrics metadata stays mounted but is invisible,
+  noninteractive and accessibility-hidden while the queue owns that row, so
+  native scrolling also starts on its buttons. The sole
+  artwork follows the marker's native scroll frame via a passive `UIUpdateLink`
+  during dragging and deceleration; no second current-track image is created.
+  A persistent animatable rectangular mask clips queue artwork to its viewport
+  and expands to the full surface on other pages; never conditionally replace
+  the artwork's mask or let a scrolling cover paint over transport controls.
+  Every queue entry, including reopening fullscreen with Queue selected,
+  positions the current track at the top. The mounted queue registers a
+  preparation callback that resets its offset before selection and supplies
+  the artwork's top-row destination synchronously, before List layout catches
+  up. It also keeps sampling its marker while hidden.
+  `QueueHeaderTrackingReader` observes the existing pan without replacing its
+  delegate and retains native rubber banding, row moves and swipe deletion.
+  Slow/settled releases within 44pt snap to the current/upcoming boundary.
+  Moving more than 44pt into history instead settles with the entire current
+  row below the viewport; measured leading space makes this possible even
+  for short histories. A panel-owned `UIUpdateLink` drives the offset with a
+  380ms cubic ease-in/out, keeping artwork and metadata in step even when
+  the row is recycled. New touches or leaving Queue cancel the animation;
+  Reduce Motion settles immediately. Fully hidden rows leave history free
+  to scroll normally. `QueueScrollAnchors` owns the measured destinations.
+  Snap/mode-button selection feedback uses the shared `haptic` modifier and
+  respects the playback haptics setting. Queue list pans stay within the list,
+  except downward pans starting on the current-track row while it is settled
+  at its top anchor. That row cancels the List pan and dismisses the player;
+  other rows continue to browse history. The grabber also dismisses the player.
 - Android `LibraryService`
   (`github.realtvop.aonsoku.plugins.data.LibraryService`) is application
   scoped and owns Room queries, metadata sync, lyrics, and the image cache. It
@@ -198,21 +343,72 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   drives it from `data/coordination/CoordinationManager`.
 - Service boundaries and binding/lifecycle rules are documented in
   `docs/android-native-services.md`.
-- The iOS host owns long-lived native services through
-  `AonsokuNativePlugin.AppServices`. `AudioService` owns AVPlayer, queue,
-  downloads, scrobbling, playback persistence, and system media controls;
-  direct streams retain background cache downloads and the staged
-  `PlaybackRecoveryController` seek/reload fallback inside that service;
-  `AonsokuNativeAudioPlugin` is only the Capacitor payload/event adapter. New
-  native UI surfaces must call the typed service rather than locating a plugin
-  through `CAPBridgeProtocol`. `AudioCommand`, `AudioPlaybackSnapshot`, and
-  `AudioQueueSnapshot` are the native command/state contract; SwiftUI clients
-  can use `observeState` or `stateUpdates()` without depending on Capacitor.
+- The iOS app owns long-lived native services through
+  `AonsokuKit.AppServices`. `AudioService` owns a long-lived `AVQueuePlayer`,
+  the queue, downloads, scrobbling, playback persistence, system media
+  controls, direct-stream background caching, and staged
+  `PlaybackRecoveryController` seek/reload fallback.
+  Recovery attempts have their own progress deadline, so a resumed stream
+  with no further stall notifications still reaches reload. Pausing cancels
+  pending and in-flight recovery through an attempt revision. The service keeps
+  the intended resume position across a pause even while a replacement item
+  is unready. Resuming a stream with lost buffers, a failed item or a lost seek
+  position enters reload recovery immediately instead of waiting for a new
+  stall notification. Reload keeps
+  the saved position and waits for the replacement item's `readyToPlay`
+  status before seeking with a completion handler. Failed items retry, and
+  never-ready items remain bounded by the recovery attempt's progress deadline;
+  late readiness cannot resume a canceled or expired attempt. Initial and
+  queue loads with a saved start time use the same readiness gate.
+  Native player controls and artwork reflect playback intent: automatic loads
+  and recovery keep the pause action and expanded artwork, while the playback
+  clock stays stopped during buffering. Paused loads remain paused, and a pause
+  during a pending initial seek prevents its completion from starting playback.
+  Both player sizes show a buffering indicator after 800ms without replacing
+  the pause action.
+  `PlaybackSettings.estimateContentLength` defaults to true and can be disabled
+  in native Playback settings. Authentication stream URLs, queued/restored
+  Subsonic URLs, recovery loads and downloads read the persisted setting for
+  each new request; existing transfers are not restarted by a setting change.
+  Buffer-range mismatches recover at the current position instead of
+  synthesizing a track-end event or seeking to zero, including near the tail.
+  Cache resolution skips empty files and files rejected by playback. Failed,
+  truncated or repeatedly stalled local items fall back through source
+  resolution instead of reloading the same cache; one cache repair download
+  is allowed per song/load. Completed replacements clear the rejection.
+  Known positive library durations detect truncated local items with a
+  rounding/container tolerance; zero/unknown durations do not imply damage.
+  Downloads reject empty payloads and text/JSON/XML error responses before
+  publishing cache files. Arbitrary local files are not deleted by recovery.
+  Empty buffers and completed cache downloads do not
+  imply end of track. The empty-buffer queue fallback requires a position
+  within one second of a known duration. It resolves and enqueues
+  the next deterministic `NativeQueueEngine` song one item ahead, then adopts
+  that buffered `AVPlayerItem` without recreating the player; repeat-one,
+  shuffled wrap, end-of-track sleep and unresolved sources fall back to the
+  normal item-loading path. Adding songs to the queue while none is active,
+  locally or through
+  the remote `add_to_queue_next`/`add_to_queue_last` commands, starts a queue
+  from them and loads the first song paused, so the coordination snapshot
+  exists at once and playback begins only on a later play. SwiftUI reads
+  `@Observable` stores created by `AppModel`; views do not locate services
+  through a bridge or open the database directly.
 - `LibraryService` is the public iOS library boundary for native UI. It owns
   GRDB repository access, metadata sync/scheduling, typed library queries, and
   cover/avatar caching through `AppServices.library`; native UI must not open
-  `DatabaseManager` or construct repository types directly. The Capacitor data
-  plugin reuses this same service and adapts its typed events for the WebView.
+  `DatabaseManager` or construct repository types directly.
+- `AppModel` persists an iOS library-owner identity (primary server URL plus
+  username). Sign-out resets observable account stores while retaining
+  same-account offline data; activating a different account first clears
+  server metadata, playback/history state, downloads, artwork, pins, and
+  lyrics selections plus the old coordination registration so the singleton
+  service graph cannot leak prior-account content. Sign-in never erases another
+  account's library without the user confirming: `AppModel` holds a
+  `pendingAccountSwitch` request (stored under
+  `session.pending-account-switch.v1`, so it survives a relaunch) until the
+  user erases or keeps the library or cancels, and changing the server address
+  in Settings keeps the library. Restarting the same account resumes its
+  preserved coordination registration after sign-out.
 - `AppLifecycleService` is the App/Scene lifecycle boundary shared by the iOS
   host and `AppServices`. It starts/restores audio once, flushes playback state
   on background/termination, validates coordination with a foreground ping and
@@ -220,15 +416,17 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   relaunch callbacks to the audio download manager. WebSockets use a normal
   URLSession because iOS background sessions are reserved for transfer tasks;
   downloads use `github.realtvop.aonsoku.audio.downloads` and survive relaunch.
-  The Swift package owns `AonsokuNativePluginTests`, which exercises queue and
+  The Swift package owns `AonsokuKitTests`, which exercises queue and
   shuffle behavior, staged playback recovery and persistence, source/cache and
   download behavior, scrobbling, handoff and coordination contracts, auth and
   HTTP behavior, preferences, event contracts, typed library queries/sync,
-  lifecycle transitions, the `AppServices` graph, and Capacitor adapters. The
-  tests use injectable AVPlayer, URLSession, time, file-system, database, and
+  lifecycle transitions, the `AppServices` graph, stores, and legacy payload
+  compatibility. The tests use injectable AVPlayer, URLSession, time,
+  file-system, database, and
   lifecycle boundaries and do not require real network access. The test script
   parses its `.xcresult` and requires a non-zero executed test count;
-  `build-ios.yml` preserves that result bundle before packaging.
+  `build-ios.yml` preserves that result bundle before packaging, and the tag
+  release workflow calls it to attach the unsigned native iOS IPA.
 - Platform/runtime detection is centralized in `src/utils/capabilities.ts`,
   with lower-level helpers in `src/utils/desktop.ts` and
   `src/utils/platform.ts`.
@@ -250,10 +448,11 @@ and IndexedDB helpers in `src/store/idb.ts`. Offline-capable UI paths generally
 go through `src/lib/offlineQueryClient.ts`, which tries IDB/native data before
 network when an offline function is available.
 
-Playback state restore is owned by the runtime that owns playback. When the
-native playback backend is active (`shouldUseNativePlaybackBackend()`, i.e.
-Capacitor iOS/Android or Electron with the desktop native-audio bridge), the
-native layer is the single source of truth for the restored queue and progress:
+Playback state restore is owned by the runtime that owns playback. In the
+shared TypeScript app, when the native playback backend is active
+(`shouldUseNativePlaybackBackend()`, Electron with the desktop native-audio
+bridge), the native layer is the single source of
+truth for the restored queue and progress:
 `src/store/player/persistence.ts` skips the renderer-side IDB songlist rehydrate
 so `syncFromNative()` (`src/player/queue-controller/native-controller.ts`) sees an
 empty renderer songlist, takes the cold-start branch, sets
@@ -274,7 +473,9 @@ isolated from playback. The desktop singleton defers restore until
 and calls the service's idempotent `ready()` lifecycle, so a restored uncached
 `aonsoku-media://stream` source is translated before libmpv loads it. The
 web/Electron-fallback path still rehydrates the songlist from IDB and drives
-`load()` + `pendingResumePosition` from the renderer.
+`load()` + `pendingResumePosition` from the renderer. Native iOS restores its
+queue, paused state and progress directly in `AonsokuKit.AudioService`; the
+SwiftUI `PlayerStore` observes that authoritative snapshot.
 
 ### Sync Architecture
 
@@ -287,13 +488,19 @@ Metadata/library sync is runtime-specific:
   the main thread.
 - **Worker fallback**: if Web Workers are unavailable, sync falls back to
   `src/service/cache/metadata-sync.ts` on the main thread.
-- **Electron, Capacitor iOS**: sync uses
+- **Electron**: sync uses
   `src/native/data/native-sync-adapter.ts` and the runtime's
   `AonsokuNativeData` implementation. Electron implements the bridge in
-  `electron/main/native/data/`; iOS uses the Capacitor plugin. Native
-  runtimes do not fall back to the browser Worker/IndexedDB sync path.
+  `electron/main/native/data/`; it does not fall back to the browser
+  Worker/IndexedDB sync path.
 - **Android (native)**: the Compose app drives `LibraryService` (Room +
   `SyncEngine`) directly; no TypeScript is involved.
+- **Native iOS**: `AonsokuKit.LibraryService` owns GRDB-backed queries and
+  `SyncEngine`/`SyncScheduler`; `LibrarySyncStore` exposes sync state to
+  SwiftUI and is the sole foreground scheduling owner, so `AppModel` disables
+  `SyncScheduler`'s raw foreground timer while preserving its system
+  background-refresh handling. It does not use the TypeScript adapter or
+  IndexedDB.
 
 ### Data Flow
 
@@ -405,10 +612,13 @@ the device drawer outside fullscreen, so home-page device links also work before
 local playback begins; fullscreen owns its own drawer while open.
 
 - Web uses the TypeScript WebSocket client (`src/coordination/wsClient.ts`).
-- Electron and iOS use `src/native/coordination/facade.ts` and their
-  runtime-native coordination implementations. The native Android app has no
-  TypeScript: `data/coordination/CoordinationManager` drives the `:core`
-  `CoordinationRuntime` (see "Android Native App").
+- Electron uses `src/native/coordination/facade.ts` and its native
+  coordination implementation. Native Android uses
+  `data/coordination/CoordinationManager` to drive the `:core`
+  `CoordinationRuntime` directly.
+- Native iOS uses `AonsokuKit.CoordinationService` and `CoordinationStore`
+  directly. The service owns HTTP, WebSocket reconnects, snapshots, remote
+  commands, and handoff transactions against `AudioService`.
 - Electron native playback coordination is executed by
   `electron/main/native/coordination/playback.ts`: it publishes native queue
   snapshots, executes and acknowledges remote commands, prepares full queues
@@ -494,12 +704,11 @@ Dark mode is class-based.
 
 Normal Web (`pnpm run build`) and Electron renderer builds use
 `manual-chunks.ts` to preserve the established larger `pages`, `core-vendor`,
-and `heavy-vendor` bundles. Capacitor builds use `pnpm run build:mobile`
+and `heavy-vendor` bundles. The legacy mobile build uses `pnpm run build:mobile`
 (`vite --mode mobile`), which leaves chunk ownership to Rollup so lazy modules
 stay separate instead of collapsing every page and dependency into startup
-chunks. iOS CI and release workflows must use `build:mobile` before
-`cap sync ios`; do not use the normal Web build for a native package. The
-Android app is native and never consumes the web bundle.
+chunks. Native Android and iOS builds do not build or embed these assets;
+`build:mobile` remains available for the legacy shared Capacitor code.
 
 The HTML boot shell and its inline styles load without the application
 stylesheet; `src/main.tsx` restores native preferences before dynamically
@@ -520,9 +729,9 @@ route chunks or application CSS.
 - **Rust**: coordination server is a separate Cargo project under
   `coordination-server/`.
 - **Native**: the native Android app lives under `android/` (`:core` services
-  + `:app` Compose UI); the iOS host lives under `ios/`; the Capacitor plugin
-  (TypeScript definitions + iOS Swift sources) lives under
-  `capacitor-plugins/capacitor-native/`.
+  + `:app` Compose UI); the native SwiftUI app and `AonsokuKit` live under
+  `ios/`. `capacitor-plugins/capacitor-native/` retains shared TypeScript
+  bridge definitions with no iOS or Android Capacitor target.
 - **Git hooks**: Husky is configured (`.husky/`) and pre-commit runs
   `pnpm lint`.
 
@@ -896,8 +1105,8 @@ interface) supporting multiple playback stacks:
 | Stack | Runtime | Implementation |
 |---|---|---|
 | Web Audio (HTMLAudioElement) | web, electron | `src/player/playback/web-backend.ts` |
-| Native audio (Capacitor plugin) | capacitor-ios | `src/player/playback/native-backend.ts` |
 | Android native app (no TS) | android | `android/core` `PlaybackService` / `AudioService` |
+| Native SwiftUI audio | iOS 26 | `ios/AonsokuKit/Sources/AonsokuKit/Audio/AudioService.swift` |
 | Desktop native audio bridge | electron | `electron/preload/native-audio.ts` + `electron/main/native/audio/` |
 
 Key files:
@@ -1118,8 +1327,10 @@ feature-consistent**:
    `native-backend.ts` when the behavior applies to both.
 2. Queue logic changes -> update both `web-controller.ts` and
    `native-controller.ts`.
-3. Playback action changes -> ensure Web/Electron and Capacitor native branches
-   are covered in `playback-actions.ts`.
+3. Playback action changes -> cover the Web/Electron paths in
+   `playback-actions.ts` and mirror product behavior in Android
+   `PlayerController`/`AudioService` and iOS `PlayerStore`/`AudioService`
+   when applicable.
 4. New playback features -> define them in the `PlaybackBackend` interface and
    implement/degrade them in all backends.
 5. Platform capability differences (`capabilities.ts`) -> degrade gracefully

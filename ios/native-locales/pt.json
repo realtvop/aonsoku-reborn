@@ -1,0 +1,75 @@
+{
+  "native": {
+    "generic": {
+      "retry": "Tentar novamente"
+    },
+    "explicit": "Explícito",
+    "error": {
+      "title": "Algo correu mal"
+    },
+    "home": {
+      "empty": {
+        "title": "A sua biblioteca está vazia",
+        "description": "Os álbuns do seu servidor aparecerão aqui depois de serem analisados."
+      }
+    },
+    "search": {
+      "description": "Procure álbuns, músicas e artistas na sua biblioteca."
+    },
+    "sort": {
+      "label": "Ordenar",
+      "order": "Ordem"
+    },
+    "songs": {
+      "empty": "Sem músicas"
+    },
+    "artists": {
+      "empty": "Sem artistas",
+      "search": "Procurar artistas…"
+    },
+    "artist": {
+      "latestRelease": "Lançamento mais recente"
+    },
+    "favorites": {
+      "noAlbums": "Ainda não há álbuns favoritos",
+      "noArtists": "Ainda não há artistas favoritos"
+    },
+    "downloads": {
+      "noAlbums": "Sem álbuns descarregados",
+      "noPlaylists": "Sem playlists descarregadas",
+      "noSongs": "Sem músicas descarregadas",
+      "description": "Os álbuns, playlists e músicas descarregados podem ser reproduzidos sem ligação."
+    },
+    "playlist": {
+      "added": "Adicionado a “{{name}}”",
+      "alreadyAdded": "Já está em “{{name}}”",
+      "addedSkipped": "Adicionado a “{{name}}”. As músicas que já lá estavam foram ignoradas.",
+      "addFailed": "Não foi possível adicionar à playlist"
+    },
+    "player": {
+      "volume": "Volume"
+    },
+    "settings": {
+      "autoOpenNowPlaying": {
+        "label": "Abrir “A reproduzir” automaticamente",
+        "info": "Mostra “A reproduzir” quando começa a reproduzir um álbum, uma playlist ou uma música."
+      }
+    },
+    "accountSwitch": {
+      "different": {
+        "title": "Mudar de conta?",
+        "message": "Ao iniciar sessão como {{user}} em {{server}}, a biblioteca, as músicas descarregadas e o histórico de reprodução de {{previousUser}} em {{previousServer}} serão apagados deste dispositivo. Nada é removido do servidor."
+      },
+      "server": {
+        "title": "É o mesmo servidor?",
+        "message": "Este dispositivo tem a biblioteca, as músicas descarregadas e o histórico de reprodução de {{user}} em {{previousServer}}. Mantenha-os se {{server}} for o mesmo servidor num novo endereço, ou apague-os e comece do zero."
+      },
+      "unknown": {
+        "title": "Manter a biblioteca existente?",
+        "message": "Este dispositivo tem uma biblioteca e músicas descarregadas de um início de sessão anterior. Mantenha-as se pertencerem a {{user}} em {{server}}, ou apague-as e comece do zero."
+      },
+      "erase": "Apagar e continuar",
+      "keep": "Manter biblioteca"
+    }
+  }
+}

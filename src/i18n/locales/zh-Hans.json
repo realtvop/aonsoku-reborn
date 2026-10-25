@@ -490,11 +490,11 @@
       },
       "queue": {
         "colors": {
-          "info": "Si activé, l'application utilisera la couleur dominante de la pochette de l'album actuel comme couleur de fond.",
-          "label": "Activer la couleur de fond dynamique"
+          "info": "启用后，应用将使用当前专辑封面的主色作为背景颜色。",
+          "label": "启用动态背景颜色"
         },
-        "description": "Personnaliser la page de la file d'attente et des paroles.",
-        "group": "File d'attente et paroles"
+        "description": "自定义队列和歌词页面。",
+        "group": "队列和歌词"
       }
     },
     "audio": {
@@ -758,13 +758,13 @@
         "peerDevice": "远程设备",
         "controllingDevice": "正在控制 {{name}}",
         "thisDevice": "此设备",
-        "liveDevices": "在线设备",
+        "liveDevices": "正在播放的设备",
         "offlineSnapshots": "从离线播放继续",
-        "continue": "继续",
         "otherDevices": "其他设备正在播放",
-        "showDevices": "查看设备",
-        "continueConfirmTitle": "在此设备继续播放？",
-        "continueConfirmDesc": "这将替换此设备上正在进行的播放。",
+        "showDevices": "显示设备",
+        "continue": "继续",
+        "continueConfirmTitle": "在此设备上继续播放？",
+        "continueConfirmDesc": "这将替换此设备上当前的播放。",
         "currentLocal": "此设备当前播放",
         "willContinue": "将从 {{name}} 继续"
       },

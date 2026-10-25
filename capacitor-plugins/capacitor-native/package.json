@@ -1,7 +1,7 @@
 {
   "name": "@aonsoku/capacitor-native",
   "version": "0.0.0",
-  "description": "Capacitor native plugin for Aonsoku iOS — bridge, data, audio, preferences, and coordination.",
+  "description": "Shared native bridge definitions for Aonsoku — bridge, data, audio, preferences, and coordination.",
   "type": "module",
   "main": "src/index.ts",
   "module": "src/index.ts",
@@ -14,16 +14,11 @@
     "./preferences": "./src/preferences/index.ts",
     "./coordination": "./src/coordination/index.ts"
   },
-  "files": ["ios/Sources", "src", "Package.swift"],
+  "files": ["src"],
   "dependencies": {
     "@aonsoku/audio-contract": "workspace:*"
   },
   "peerDependencies": {
     "@capacitor/core": ">=8.0.0"
-  },
-  "capacitor": {
-    "ios": {
-      "src": "ios"
-    }
   }
 }

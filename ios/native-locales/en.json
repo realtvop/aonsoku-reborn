@@ -1,0 +1,79 @@
+{
+  "native": {
+    "generic": {
+      "retry": "Try Again"
+    },
+    "explicit": "Explicit",
+    "error": {
+      "title": "Something Went Wrong"
+    },
+    "home": {
+      "empty": {
+        "title": "Your Library Is Empty",
+        "description": "Albums on your server will appear here once it has scanned them."
+      }
+    },
+    "search": {
+      "description": "Find albums, songs and artists in your library."
+    },
+    "sort": {
+      "label": "Sort",
+      "order": "Order"
+    },
+    "songs": {
+      "empty": "No Songs"
+    },
+    "artists": {
+      "empty": "No Artists",
+      "search": "Search artists…"
+    },
+    "artist": {
+      "latestRelease": "Latest Release"
+    },
+    "favorites": {
+      "noAlbums": "No Favorite Albums Yet",
+      "noArtists": "No Favorite Artists Yet"
+    },
+    "downloads": {
+      "noAlbums": "No Downloaded Albums",
+      "noPlaylists": "No Downloaded Playlists",
+      "noSongs": "No Downloaded Songs",
+      "description": "Albums, playlists and songs you download play without a connection."
+    },
+    "playlist": {
+      "added": "Added to “{{name}}”",
+      "alreadyAdded": "Already in “{{name}}”",
+      "addedSkipped": "Added to “{{name}}”. Skipped songs already in it.",
+      "addFailed": "Couldn't add to the playlist"
+    },
+    "player": {
+      "volume": "Volume"
+    },
+    "settings": {
+      "estimateContentLength": {
+        "label": "Estimate Stream Size",
+        "info": "Ask the server to estimate stream size to help playback and seeking. Turn off if your server reports a zero duration or playback fails. Applies to new playback and download requests."
+      },
+      "autoOpenNowPlaying": {
+        "label": "Open Now Playing Automatically",
+        "info": "Shows Now Playing when you start playing an album, playlist or song."
+      }
+    },
+    "accountSwitch": {
+      "different": {
+        "title": "Switch Accounts?",
+        "message": "Signing in as {{user}} on {{server}} erases the library, downloads and play history of {{previousUser}} on {{previousServer}} from this device. Nothing is removed from the server."
+      },
+      "server": {
+        "title": "Is This the Same Server?",
+        "message": "This device holds the library, downloads and play history of {{user}} on {{previousServer}}. Keep them if {{server}} is the same server at a new address, or erase them and start fresh."
+      },
+      "unknown": {
+        "title": "Keep the Existing Library?",
+        "message": "This device holds a library and downloads from an earlier sign-in. Keep them if they belong to {{user}} on {{server}}, or erase them and start fresh."
+      },
+      "erase": "Erase and Continue",
+      "keep": "Keep Library"
+    }
+  }
+}

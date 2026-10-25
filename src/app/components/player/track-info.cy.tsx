@@ -55,12 +55,13 @@ function stubMatchMedia(matchesByQuery: Record<string, boolean>) {
   });
 }
 
+// ScrollingText renders an inert, aria-hidden repeat after the original.
 function getVisibleTrackTitle() {
-  return cy.getByTestId("track-title").eq(1);
+  return cy.getByTestId("track-title").first();
 }
 
 function getVisibleAlbumLink(albumId: string) {
-  return cy.get(`a[href="/library/albums/${albumId}"]`).eq(1);
+  return cy.get(`a[href="/library/albums/${albumId}"]`).first();
 }
 
 describe("TrackInfo Component", () => {

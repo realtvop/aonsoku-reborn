@@ -3,7 +3,7 @@
 set -euo pipefail
 
 REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PACKAGE_ROOT="$REPOSITORY_ROOT/capacitor-plugins/capacitor-native"
+PACKAGE_ROOT="$REPOSITORY_ROOT/ios/AonsokuKit"
 
 simulator_id="${IOS_SIMULATOR_ID:-}"
 if [[ -z "$simulator_id" ]]; then
@@ -26,7 +26,7 @@ result_bundle="${IOS_TEST_RESULT_BUNDLE:-}"
 temporary_result_root=""
 if [[ -z "$result_bundle" ]]; then
   temporary_result_root="$(mktemp -d "${TMPDIR:-/tmp}/aonsoku-ios-tests.XXXXXX")"
-  result_bundle="$temporary_result_root/AonsokuNativeTests.xcresult"
+  result_bundle="$temporary_result_root/AonsokuKitTests.xcresult"
   cleanup() {
     if [[ -n "$temporary_result_root" && -d "$temporary_result_root" ]]; then
       rm -rf -- "$temporary_result_root"
@@ -44,7 +44,7 @@ fi
 cd "$PACKAGE_ROOT"
 set +e
 xcodebuild -quiet test \
-  -scheme AonsokuCapacitorNative \
+  -scheme AonsokuKit \
   -destination "platform=iOS Simulator,id=$simulator_id" \
   -resultBundlePath "$result_bundle" \
   CODE_SIGNING_ALLOWED=NO

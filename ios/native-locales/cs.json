@@ -1,0 +1,75 @@
+{
+  "native": {
+    "generic": {
+      "retry": "Zkusit znovu"
+    },
+    "explicit": "Explicitní",
+    "error": {
+      "title": "Něco se pokazilo"
+    },
+    "home": {
+      "empty": {
+        "title": "Tvoje knihovna je prázdná",
+        "description": "Alba z tvého serveru se tu zobrazí, jakmile je naskenuje."
+      }
+    },
+    "search": {
+      "description": "Hledej alba, skladby a umělce ve své knihovně."
+    },
+    "sort": {
+      "label": "Řazení",
+      "order": "Pořadí"
+    },
+    "songs": {
+      "empty": "Žádné skladby"
+    },
+    "artists": {
+      "empty": "Žádní umělci",
+      "search": "Hledat umělce…"
+    },
+    "artist": {
+      "latestRelease": "Nejnovější vydání"
+    },
+    "favorites": {
+      "noAlbums": "Zatím žádná oblíbená alba",
+      "noArtists": "Zatím žádní oblíbení umělci"
+    },
+    "downloads": {
+      "noAlbums": "Žádná stažená alba",
+      "noPlaylists": "Žádné stažené playlisty",
+      "noSongs": "Žádné stažené skladby",
+      "description": "Stažená alba, playlisty a skladby přehraješ i bez připojení."
+    },
+    "playlist": {
+      "added": "Přidáno do „{{name}}“",
+      "alreadyAdded": "Už je v „{{name}}“",
+      "addedSkipped": "Přidáno do „{{name}}“. Skladby, které tam už byly, se přeskočily.",
+      "addFailed": "Do playlistu se nepodařilo přidat"
+    },
+    "player": {
+      "volume": "Hlasitost"
+    },
+    "settings": {
+      "autoOpenNowPlaying": {
+        "label": "Automaticky otevírat Právě hraje",
+        "info": "Po spuštění alba, playlistu nebo skladby zobrazí Právě hraje."
+      }
+    },
+    "accountSwitch": {
+      "different": {
+        "title": "Přepnout účet?",
+        "message": "Přihlášením jako {{user}} na serveru {{server}} vymažeš z tohoto zařízení knihovnu, staženou hudbu a historii přehrávání účtu {{previousUser}} na serveru {{previousServer}}. Ze serveru se nic neodstraní."
+      },
+      "server": {
+        "title": "Je to stejný server?",
+        "message": "V tomto zařízení je knihovna, stažená hudba a historie přehrávání účtu {{user}} na serveru {{previousServer}}. Ponech je, pokud je {{server}} stejný server na nové adrese, nebo je vymaž a začni znovu."
+      },
+      "unknown": {
+        "title": "Ponechat stávající knihovnu?",
+        "message": "V tomto zařízení je knihovna a stažená hudba z dřívějšího přihlášení. Ponech je, pokud patří účtu {{user}} na serveru {{server}}, nebo je vymaž a začni znovu."
+      },
+      "erase": "Vymazat a pokračovat",
+      "keep": "Ponechat knihovnu"
+    }
+  }
+}

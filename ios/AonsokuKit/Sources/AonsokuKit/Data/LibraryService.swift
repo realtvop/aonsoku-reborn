@@ -1,0 +1,621 @@
+import Foundation
+import GRDB
+
+public final class LibraryService: @unchecked Sendable {
+    public typealias EventHandler = @Sendable (LibraryEvent) -> Void
+
+    private let dbManager: DatabaseManager
+    private let syncEngine: SyncEngine
+    private let syncScheduler: SyncScheduler
+    private let imageCache: ImageCacheManager
+    private let listenerQueue = DispatchQueue(
+        label: "com.aonsoku.LibraryService.listeners"
+    )
+    private var listeners: [UUID: EventHandler] = [:]
+    private var initialized = false
+
+    init(
+        dbManager: DatabaseManager = .shared,
+        httpClient: any LibrarySyncHTTPClient = SubsonicHTTPClient(),
+        credentialsProvider: @escaping @Sendable () -> ServerCredentials? = {
+            KeychainManager.retrieve()
+        }
+    ) {
+        self.dbManager = dbManager
+        let imageCache = ImageCacheManager(db: dbManager.dbPool)
+        self.imageCache = imageCache
+        syncEngine = SyncEngine(
+            db: dbManager.dbPool,
+            httpClient: httpClient,
+            credentialsProvider: credentialsProvider,
+            cachedCoverSize: { id in
+                imageCache.getCoverImageSize(coverArtId: id)?.coverSize
+            },
+            downloadCover: { id, size in
+                _ = try await imageCache.downloadCoverImage(
+                    coverArtId: id,
+                    size: size
+                )
+            }
+        )
+        syncScheduler = SyncScheduler(syncEngine: syncEngine)
+        syncEngine.onSyncStateChanged = { [weak self] raw in
+            guard let self else { return }
+            self.emit(.syncStateChanged(LibrarySyncState(
+                phase: raw["phase"] as? String ?? "idle",
+                tier: raw["tier"] as? String,
+                isSyncing: raw["isSyncing"] as? Bool ?? self.syncEngine.isSyncing,
+                processedItems: raw["processedItems"] as? Int ?? 0,
+                totalItems: raw["totalItems"] as? Int ?? 0,
+                message: raw["message"] as? String
+            )))
+        }
+        syncEngine.onDataChanged = { [weak self] tables in
+            self?.emit(.dataChanged(tables: tables))
+        }
+    }
+
+    @discardableResult
+    public func initialize(startAutomaticSync: Bool = true) -> LibraryInitialization {
+        let hasData = (try? SyncStateRepository(
+            db: dbManager.dbPool
+        ).getFullSyncTimestamp()) != nil
+        syncScheduler.setForegroundSchedulingEnabled(startAutomaticSync)
+        if !initialized {
+            initialized = true
+            if startAutomaticSync {
+                hasData ? syncEngine.syncIncremental() : syncEngine.syncAll()
+            }
+        }
+        return LibraryInitialization(ready: true, needsMigration: !hasData)
+    }
+
+    var isAutomaticForegroundSyncEnabled: Bool {
+        syncScheduler.isForegroundSchedulingEnabled
+    }
+
+    @discardableResult
+    public func subscribe(_ handler: @escaping EventHandler) -> UUID {
+        let token = UUID()
+        listenerQueue.sync { listeners[token] = handler }
+        return token
+    }
+
+    public func unsubscribe(_ token: UUID) {
+        listenerQueue.sync { listeners.removeValue(forKey: token) }
+    }
+
+    public func syncAll() { syncEngine.syncAll() }
+    public func syncIncremental() { syncEngine.syncIncremental() }
+    public func cancelSync() { syncEngine.cancel() }
+    public var isSyncing: Bool { syncEngine.isSyncing }
+
+    func syncAll(with options: LibrarySyncOptions) {
+        syncEngine.syncAll(
+            includeFullSongs: options.includeFullSongs,
+            mode: "full",
+            coverArt: options.coverArt
+        )
+    }
+
+    func syncIncremental(with options: LibrarySyncOptions) {
+        syncEngine.syncAll(
+            includeFullSongs: options.includeFullSongs,
+            mode: "incremental",
+            coverArt: options.coverArt
+        )
+    }
+
+    public func artists(
+        limit: Int = 100,
+        offset: Int = 0,
+        filter: LibraryArtistFilter = LibraryArtistFilter()
+    ) throws -> LibraryPage<LibraryArtist> {
+        let result = try ArtistRepository(db: dbManager.dbPool).getAll(
+            limit: limit,
+            offset: offset,
+            filter: ArtistQueryFilter(
+                search: filter.search,
+                starredOnly: filter.starredOnly,
+                sortBy: filter.sortBy,
+                sortOrder: filter.sortOrder
+            )
+        )
+        return LibraryPage(
+            items: result.items.map(\.libraryValue),
+            total: result.total,
+            hasMore: offset + limit < result.total
+        )
+    }
+
+    public func artist(id: String) throws -> LibraryArtist? {
+        try ArtistRepository(db: dbManager.dbPool).getById(id)?.libraryValue
+    }
+
+    public func albums(
+        limit: Int = 100,
+        offset: Int = 0,
+        filter: LibraryAlbumFilter = LibraryAlbumFilter()
+    ) throws -> LibraryPage<LibraryAlbum> {
+        let result = try AlbumRepository(db: dbManager.dbPool).getAll(
+            limit: limit,
+            offset: offset,
+            filter: AlbumQueryFilter(
+                search: filter.search,
+                artistId: filter.artistId,
+                genre: filter.genre,
+                fromYear: filter.fromYear,
+                toYear: filter.toYear,
+                starredOnly: filter.starredOnly,
+                sortBy: filter.sortBy,
+                sortOrder: filter.sortOrder
+            )
+        )
+        return LibraryPage(
+            items: result.items.map(\.libraryValue),
+            total: result.total,
+            hasMore: offset + limit < result.total
+        )
+    }
+
+    public func album(id: String) throws -> LibraryAlbumDetail? {
+        try AlbumRepository(db: dbManager.dbPool).getWithSongs(id).map {
+            LibraryAlbumDetail(
+                album: $0.album.libraryValue,
+                songs: $0.songs.map(\.libraryValue)
+            )
+        }
+    }
+
+    public func songs(
+        limit: Int = 100,
+        offset: Int = 0,
+        filter: LibrarySongFilter = LibrarySongFilter()
+    ) throws -> LibraryPage<LibrarySong> {
+        let result = try SongRepository(db: dbManager.dbPool).getAll(
+            limit: limit,
+            offset: offset,
+            filter: SongQueryFilter(
+                search: filter.search,
+                albumId: filter.albumId,
+                artistId: filter.artistId,
+                genre: filter.genre,
+                starredOnly: filter.starredOnly,
+                sortBy: filter.sortBy,
+                sortOrder: filter.sortOrder
+            )
+        )
+        return LibraryPage(
+            items: result.items.map(\.libraryValue),
+            total: result.total,
+            hasMore: offset + limit < result.total
+        )
+    }
+
+    public func songs(ids: [String]) throws -> [LibrarySong] {
+        let records = try SongRepository(db: dbManager.dbPool).getByIds(ids: ids)
+        let byId = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0) })
+        return ids.compactMap { byId[$0]?.libraryValue }
+    }
+
+    public func playlists(
+        limit: Int = 100,
+        offset: Int = 0
+    ) throws -> LibraryPage<LibraryPlaylist> {
+        let result = try PlaylistRepository(db: dbManager.dbPool).getAll(
+            limit: limit,
+            offset: offset
+        )
+        return LibraryPage(
+            items: result.items.map(\.libraryValue),
+            total: result.total,
+            hasMore: offset + limit < result.total
+        )
+    }
+
+    public func playlist(id: String) throws -> LibraryPlaylistDetail? {
+        try PlaylistRepository(db: dbManager.dbPool).getDetailById(id).map {
+            LibraryPlaylistDetail(
+                playlist: $0.libraryPlaylist,
+                entriesJSON: $0.entriesJson
+            )
+        }
+    }
+
+    public func genres() throws -> [LibraryGenre] {
+        try GenreRepository(db: dbManager.dbPool).getAll().map(\.libraryValue)
+    }
+
+    public func search(
+        query: String,
+        artistCount: Int = 20,
+        albumCount: Int = 20,
+        songCount: Int = 20
+    ) throws -> LibrarySearchResults {
+        guard !query.isEmpty else {
+            return LibrarySearchResults(artists: [], albums: [], songs: [])
+        }
+        return LibrarySearchResults(
+            artists: try artists(
+                limit: artistCount,
+                filter: LibraryArtistFilter(search: query)
+            ).items,
+            albums: try albums(
+                limit: albumCount,
+                filter: LibraryAlbumFilter(search: query)
+            ).items,
+            songs: try songs(
+                limit: songCount,
+                filter: LibrarySongFilter(search: query)
+            ).items
+        )
+    }
+
+    public func lyrics(songId: String) throws -> LibraryLyrics? {
+        let repository = LyricsRepository(db: dbManager.dbPool)
+        let result = try repository.getBySongId(songId)
+        if result != nil { try? repository.updateAccessTime(songId: songId) }
+        return result?.libraryValue
+    }
+
+    public func storeLyrics(songId: String, content: String, synced: Bool) throws {
+        let now = Int(Date().timeIntervalSince1970 * 1000)
+        try LyricsRepository(db: dbManager.dbPool).upsert(LyricsRecord(
+            songId: songId,
+            content: content,
+            synced: synced,
+            cachedAt: now,
+            lastAccessedAt: now
+        ))
+    }
+
+    func storeImportedLyrics(
+        songId: String,
+        content: String,
+        synced: Bool,
+        cachedAt: Int,
+        lastAccessedAt: Int
+    ) throws {
+        try LyricsRepository(db: dbManager.dbPool).upsert(LyricsRecord(
+            songId: songId,
+            content: content,
+            synced: synced,
+            cachedAt: cachedAt,
+            lastAccessedAt: lastAccessedAt
+        ))
+    }
+
+    public func cacheStats() throws -> LibraryCacheStats {
+        let stats = try CacheMetaRepository(db: dbManager.dbPool).getStats()
+        return LibraryCacheStats(
+            totalItems: stats.totalItems,
+            totalSizeBytes: stats.totalSizeBytes,
+            audioCount: stats.audioCount,
+            coverCount: stats.coverCount
+        )
+    }
+
+    // Cache-index access stays internal so UI code cannot bypass
+    // DownloadsStore's source, quota and file-lifetime rules.
+    func cacheMetadata() throws -> [CacheMetaRecord] {
+        try CacheMetaRepository(db: dbManager.dbPool).getAll()
+    }
+
+    func upsertCacheMetadata(_ record: CacheMetaRecord) throws {
+        try CacheMetaRepository(db: dbManager.dbPool).upsert(record)
+    }
+
+    func upsertCacheMetadata(_ records: [CacheMetaRecord]) throws {
+        try CacheMetaRepository(db: dbManager.dbPool).bulkUpsert(records)
+    }
+
+    func deleteCacheMetadata(keys: [String]) throws {
+        try CacheMetaRepository(db: dbManager.dbPool).delete(keys: keys)
+    }
+
+    public func availability() -> LibraryAvailability {
+        let timestamp = try? SyncStateRepository(
+            db: dbManager.dbPool
+        ).getFullSyncTimestamp()
+        return LibraryAvailability(
+            available: timestamp != nil,
+            lastSyncedAt: timestamp
+        )
+    }
+
+    public func storeCover(
+        id: String,
+        data: Data,
+        contentType: String,
+        size: String
+    ) throws -> LibraryCachedImage {
+        let url = try imageCache.storeCoverImage(
+            coverArtId: id,
+            data: data,
+            contentType: contentType,
+            coverSize: size
+        )
+        return cachedImage(
+            id: id,
+            url: url,
+            contentType: contentType,
+            requestedSize: size
+        )
+    }
+
+    public func resolveCover(id: String, requestedSize: String) -> LibraryCachedImage? {
+        imageCache.resolveCoverImage(coverArtId: id).map {
+            cachedImage(id: id, url: $0, contentType: nil, requestedSize: requestedSize)
+        }
+    }
+
+    public func coverSize(id: String) -> LibraryCoverSize? {
+        imageCache.getCoverImageSize(coverArtId: id).map {
+            LibraryCoverSize(sizeBytes: $0.sizeBytes, coverSize: $0.coverSize)
+        }
+    }
+
+    public func deleteCover(id: String) throws -> Bool {
+        try imageCache.deleteCoverImage(coverArtId: id)
+    }
+
+    public func clearCovers() throws -> Int {
+        try imageCache.clearCoverImages()
+    }
+
+    /// Removes server-owned metadata and cached artwork before a different
+    /// Subsonic account is allowed to use this process-wide service graph.
+    func resetAccountData(clearCachedFiles: Bool = true) throws {
+        syncEngine.cancel()
+        if clearCachedFiles { _ = try imageCache.clearCoverImages() }
+        try dbManager.dbPool.write { db in
+            _ = try ArtistRecord.deleteAll(db)
+            _ = try AlbumRecord.deleteAll(db)
+            _ = try SongRecord.deleteAll(db)
+            _ = try PlaylistRecord.deleteAll(db)
+            _ = try PlaylistDetailRecord.deleteAll(db)
+            _ = try GenreRecord.deleteAll(db)
+            _ = try LyricsRecord.deleteAll(db)
+            _ = try CacheMetaRecord.deleteAll(db)
+            _ = try SyncStateRecord.deleteAll(db)
+            try db.execute(sql: "DELETE FROM queueState")
+            try db.execute(sql: "DELETE FROM playbackState")
+            try db.execute(sql: "DELETE FROM playHistory")
+        }
+        emit(.dataChanged(tables: [
+            "artist", "album", "song", "playlist", "playlistDetail",
+            "genre", "lyrics", "cacheMeta", "syncState",
+        ]))
+    }
+
+    public func downloadCover(id: String, size: String) async throws -> LibraryCachedImage {
+        let url = try await imageCache.downloadCoverImage(coverArtId: id, size: size)
+        return cachedImage(id: id, url: url, contentType: nil, requestedSize: size)
+    }
+
+    public func downloadAvatar(username: String, size: String) async throws -> LibraryCachedImage {
+        let url = try await imageCache.downloadAvatar(username: username, size: size)
+        return cachedImage(id: username, url: url, contentType: nil, requestedSize: size)
+    }
+
+    // MARK: - Local edits
+
+    /// Ids of every starred song, album and artist in the local library.
+    public func starredIds() throws -> LibraryStarredIds {
+        LibraryStarredIds(
+            songIds: try SongRepository(db: dbManager.dbPool).starredIds(),
+            albumIds: try AlbumRepository(db: dbManager.dbPool).starredIds(),
+            artistIds: try ArtistRepository(db: dbManager.dbPool).starredIds()
+        )
+    }
+
+    /// Marks songs, albums and artists as starred or not in the local
+    /// library, so offline lists follow a favorite change before the next
+    /// sync.
+    public func setStarred(
+        songIds: [String] = [],
+        albumIds: [String] = [],
+        artistIds: [String] = [],
+        starred: Bool,
+        at date: Date = Date()
+    ) throws {
+        let starredDate: String?
+        let starredAt: Int?
+        if starred {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            starredDate = formatter.string(from: date)
+            starredAt = Int(date.timeIntervalSince1970 * 1_000)
+        } else {
+            starredDate = nil
+            starredAt = nil
+        }
+
+        try SongRepository(db: dbManager.dbPool).updateStarred(
+            ids: songIds,
+            starred: starredDate,
+            starredAt: starredAt
+        )
+        try AlbumRepository(db: dbManager.dbPool).updateStarred(
+            ids: albumIds,
+            starred: starredDate,
+            starredAt: starredAt
+        )
+        try ArtistRepository(db: dbManager.dbPool).updateStarred(
+            ids: artistIds,
+            starred: starredDate,
+            starredAt: starredAt
+        )
+
+        var tables: [String] = []
+        if !songIds.isEmpty { tables.append("songs") }
+        if !albumIds.isEmpty { tables.append("albums") }
+        if !artistIds.isEmpty { tables.append("artists") }
+        if !tables.isEmpty { emit(.dataChanged(tables: tables)) }
+    }
+
+    /// Reloads one playlist and its entries from the server into the local
+    /// library, after it was created or edited in the app.
+    public func refreshPlaylist(id: String) async throws {
+        try await syncEngine.refreshPlaylist(id: id)
+        emit(.dataChanged(tables: ["playlists"]))
+    }
+
+    /// Removes a playlist and its entries from the local library.
+    public func removePlaylist(id: String) throws {
+        try PlaylistRepository(db: dbManager.dbPool).delete(id: id)
+        emit(.dataChanged(tables: ["playlists"]))
+    }
+
+    private func cachedImage(
+        id: String,
+        url: URL,
+        contentType: String?,
+        requestedSize: String
+    ) -> LibraryCachedImage {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        return LibraryCachedImage(
+            id: id,
+            uri: url.absoluteString,
+            contentType: contentType,
+            sizeBytes: (attributes?[.size] as? NSNumber)?.intValue,
+            requestedSize: requestedSize
+        )
+    }
+
+    private func emit(_ event: LibraryEvent) {
+        let handlers = listenerQueue.sync { Array(listeners.values) }
+        for handler in handlers { handler(event) }
+    }
+}
+
+private extension ArtistRecord {
+    var libraryValue: LibraryArtist {
+        LibraryArtist(
+            id: id,
+            name: name,
+            albumCount: albumCount,
+            coverArt: coverArt,
+            artistImageUrl: artistImageUrl,
+            starred: starred,
+            starredAt: starredAt,
+            musicBrainzId: musicBrainzId,
+            sortName: sortName
+        )
+    }
+}
+
+private extension AlbumRecord {
+    var libraryValue: LibraryAlbum {
+        LibraryAlbum(
+            id: id,
+            name: name,
+            artist: artist,
+            artistId: artistId,
+            coverArt: coverArt,
+            songCount: songCount,
+            duration: duration,
+            year: year,
+            genre: genre,
+            created: created,
+            played: played,
+            playCount: playCount,
+            starred: starred,
+            starredAt: starredAt
+        )
+    }
+}
+
+private extension SongRecord {
+    var libraryValue: LibrarySong {
+        LibrarySong(
+            id: id,
+            parent: parent,
+            title: title,
+            album: album,
+            artist: artist,
+            track: track,
+            year: year,
+            genre: genre,
+            coverArt: coverArt,
+            size: size,
+            contentType: contentType,
+            suffix: suffix,
+            duration: duration,
+            bitRate: bitRate,
+            path: path,
+            playCount: playCount,
+            discNumber: discNumber,
+            created: created,
+            albumId: albumId,
+            artistId: artistId,
+            played: played,
+            starred: starred,
+            starredAt: starredAt,
+            playedAt: playedAt,
+            bpm: bpm,
+            comment: comment,
+            sortName: sortName,
+            mediaType: mediaType,
+            musicBrainzId: musicBrainzId,
+            genresJSON: genresJson,
+            replayGainJSON: replayGainJson
+        )
+    }
+}
+
+private extension PlaylistRecord {
+    var libraryValue: LibraryPlaylist {
+        LibraryPlaylist(
+            id: id,
+            name: name,
+            comment: comment,
+            songCount: songCount,
+            duration: duration,
+            isPublic: isPublic,
+            owner: owner,
+            created: created,
+            changed: changed,
+            coverArt: coverArt,
+            starred: starred,
+            starredAt: starredAt
+        )
+    }
+}
+
+private extension PlaylistDetailRecord {
+    var libraryPlaylist: LibraryPlaylist {
+        LibraryPlaylist(
+            id: id,
+            name: name,
+            comment: comment,
+            songCount: songCount,
+            duration: duration,
+            isPublic: isPublic,
+            owner: owner,
+            created: created,
+            changed: changed,
+            coverArt: coverArt,
+            starred: starred,
+            starredAt: starredAt
+        )
+    }
+}
+
+private extension GenreRecord {
+    var libraryValue: LibraryGenre {
+        LibraryGenre(value: value, songCount: songCount, albumCount: albumCount)
+    }
+}
+
+private extension LyricsRecord {
+    var libraryValue: LibraryLyrics {
+        LibraryLyrics(
+            songId: songId,
+            content: content,
+            synced: synced,
+            cachedAt: cachedAt,
+            lastAccessedAt: lastAccessedAt
+        )
+    }
+}
