@@ -182,7 +182,6 @@ struct PlaylistDetailView: View {
         if !text.isEmpty {
             Text(RichText.linkified(text))
                 .font(.subheadline)
-                .opacity(0.8)
                 .lineLimit(isDescriptionExpanded ? nil : 2)
                 .contentShape(.rect)
                 .onTapGesture {

@@ -192,6 +192,7 @@ struct AlbumDetailView: View {
     @ViewBuilder
     private func artistLink(_ album: Album) -> some View {
         let credits = album.creditedArtists.filter { $0.id?.isEmpty == false }
+        let link = DetailBand.linkColor(palette, theme: theme.palette)
         if credits.count > 1 {
             Menu {
                 ForEach(credits, id: \.self) { credit in
@@ -204,7 +205,7 @@ struct AlbumDetailView: View {
             }
             .buttonStyle(.plain)
             .menuIndicator(.hidden)
-            .foregroundStyle(.tint)
+            .foregroundStyle(link)
         } else if let credit = credits.first, let id = credit.id {
             Button {
                 router.navigate(to: .artist(id: id, name: credit.name))
@@ -212,10 +213,10 @@ struct AlbumDetailView: View {
                 Text(album.artistLine)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.tint)
+            .foregroundStyle(link)
         } else {
             Text(album.artistLine)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.primary)
         }
     }
 
@@ -236,12 +237,12 @@ struct AlbumDetailView: View {
                 Text(verbatim: String(year))
             }
             if album.explicitStatus == .explicit {
-                ExplicitBadge()
+                ExplicitBadge(style: AnyShapeStyle(Color.primary))
             }
-            AlbumCacheBadge(albumId: album.id)
+            AlbumCacheBadge(albumId: album.id, style: AnyShapeStyle(Color.primary))
         }
         .font(.footnote.weight(.semibold))
-        .foregroundStyle(.secondary)
+        .foregroundStyle(Color.primary)
         .lineLimit(1)
     }
 
