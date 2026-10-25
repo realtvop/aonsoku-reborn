@@ -320,7 +320,9 @@ final class StreamRecoveryTests: XCTestCase {
             }
         )
         audio.load(AudioLoadRequest(
-            source: .nativeFile(uri: url.absoluteString, songId: nil),
+            // Exercise stream retries with local bytes. A native-file source
+            // is deliberately rejected after repeated cache failures.
+            source: .stream(url: url.absoluteString, songId: nil),
             metadata: AudioMetadata(duration: 30)
         )) { result in
             if case .failure(let error) = result { XCTFail("\(error)") }
