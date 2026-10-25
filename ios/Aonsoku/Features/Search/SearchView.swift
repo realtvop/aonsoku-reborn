@@ -108,15 +108,23 @@ struct SearchView: View {
     }
 
     private func resultsHeader(_ title: String, route: AppRoute? = nil) -> some View {
-        CaptionHeader(title: title) {
+        Group {
             if let route {
                 NavigationLink(value: route) {
-                    Text(t("generic.seeMore"))
-                        .padding(.vertical, 4)
-                        .frame(minWidth: 44, minHeight: 44)
-                        .contentShape(.rect)
+                    TitleDisclosureLabel {
+                        Text(title)
+                            .textCase(.uppercase)
+                            .tracking(0.6)
+                    }
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(ThemeColor.mutedForeground)
+                    .lineLimit(1)
                 }
                 .buttonStyle(.touchFeedback)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityHint(t("generic.seeMore"))
+            } else {
+                CaptionHeader(title: title)
             }
         }
         .textCase(nil)

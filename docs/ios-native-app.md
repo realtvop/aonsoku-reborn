@@ -275,7 +275,9 @@ with automatic foreground sync disabled.
   Album section titles and their adjacent forward chevrons form one link
   to the full list, retaining the title's intrinsic height and press feedback,
   replacing the separate "See more" text. Shared shelf headers use the same
-  centered title-and-chevron layout throughout the app.
+  centered title-and-chevron layout throughout the app, as do the other-device
+  overview button and the headings of biography/album-note cards. These cards
+  retain their full-card tap action without a separate footer link.
   Pull to refresh runs an incremental sync. The avatar opens the account sheet.
 - **Library**: Artists, Songs, Albums, Favorites, Genres, Radio (unless
   hidden) and Downloaded as icon-tile rows, followed by the playlists with a
@@ -283,7 +285,8 @@ with automatic foreground sync disabled.
 - **Detail screens**: album, artist, playlist, genre, album lists by filter,
   artist discography and tracks, song info.
 - **Search**: browse genres when idle; while typing, artists, albums and
-  songs under the web's small uppercase captions with "See more" links.
+  songs under small uppercase captions. Captions linking to full results
+  include an adjacent, vertically centered chevron at their intrinsic height.
 - **Account sheet** (the avatar on Home and Library):
   user and server, connection and sync status, then Server, Appearance,
   Language, Playback, Lyrics, Content, Storage (with the cache manager),

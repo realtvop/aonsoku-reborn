@@ -353,18 +353,17 @@ struct AboutCard: View {
             isPresented = true
         } label: {
             VStack(alignment: .leading, spacing: 6) {
-                Text(title)
-                    .displayFont(.inline)
-                    .foregroundStyle(Color.primary)
-                    .lineLimit(1)
+                TitleDisclosureLabel {
+                    Text(title)
+                        .foregroundStyle(Color.primary)
+                        .lineLimit(1)
+                }
+                .displayFont(.inline)
                 Text(text.plainText)
                     .font(.subheadline)
                     .foregroundStyle(ThemeColor.mutedForeground)
                     .lineLimit(3)
                     .multilineTextAlignment(.leading)
-                Text(t("generic.seeMore"))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.tint)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
