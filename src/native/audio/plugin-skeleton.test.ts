@@ -286,10 +286,8 @@ describe("Aonsoku native audio packages", () => {
     expect(audioServiceSwift).toContain(
       "MPMediaItemArtwork(boundsSize: image.size)",
     );
-    expect(audioServiceSwift).toContain(
-      "imageCache.resolveCoverImage(coverArtId:",
-    );
-    expect(audioServiceSwift).toContain("imageCache.downloadCoverImage(");
+    expect(audioServiceSwift).toContain("cache.resolveCoverImage(coverArtId:");
+    expect(audioServiceSwift).toContain("cache.downloadCoverImage(");
     expect(audioServiceSwift).toContain("forName: .aonsokuCoverImageCached");
     expect(audioServiceSwift).toContain(
       "cachedCoverArtId == currentNowPlayingCoverArtId()",

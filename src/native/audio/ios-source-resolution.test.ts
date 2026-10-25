@@ -31,7 +31,9 @@ describe("iOS native audio source resolution", () => {
       'values["id"].flatMap { $0.isEmpty ? nil : $0 } ?? song.id',
     );
     expect(resolver).toContain('params["id"] = songId');
-    expect(resolver).toContain('params["estimateContentLength"] = "true"');
+    expect(resolver).toContain(
+      'params["estimateContentLength"] = String(estimateContentLengthProvider())',
+    );
   });
 
   it("preserves optional stream transcoding parameters for native playback", () => {
@@ -49,7 +51,8 @@ describe("iOS native audio source resolution", () => {
     expect(audioService).toContain(
       "durationObservation = item.observe(\\.duration",
     );
-    expect(audioService).toContain("self?.emitDuration()");
+    expect(audioService).toContain("generation == self.playbackGeneration");
+    expect(audioService).toContain("self.emitDuration()");
     expect(audioService).toContain("private func emitDuration()");
     expect(audioService).toContain("private var duration: Double");
   });
@@ -57,7 +60,11 @@ describe("iOS native audio source resolution", () => {
   it("accepts file URL cached audio entries in the native queue resolver", () => {
     const resolver = readNativeSourceResolver();
 
-    expect(resolver).toContain("let fileUrl = fileURL(from: cachedUri)");
+    expect(resolver).toContain(
+      "cachedFile(songId: song.id, explicitURI: song.cachedFileUri)",
+    );
+    expect(resolver).toContain("let url = fileURL(from: explicitURI)");
+    expect(resolver).toContain("if isUsableCachedFile(at: url) { return url }");
     expect(resolver).toContain("if let url = URL(string: uri), url.isFileURL");
     expect(resolver).toContain("return URL(fileURLWithPath: uri)");
   });
