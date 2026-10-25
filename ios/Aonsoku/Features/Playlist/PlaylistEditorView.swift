@@ -17,7 +17,12 @@ struct PlaylistEditorView: View {
     @State private var isSaving = false
     /// Validation shows once the name was edited or saving was attempted.
     @State private var showsValidation = false
-    @FocusState private var isNameFocused: Bool
+    @FocusState private var focusedField: Field?
+
+    private enum Field: Hashable {
+        case name
+        case comment
+    }
 
     @Environment(PlaylistsStore.self) private var playlists
     @Environment(ToastCenter.self) private var toasts
@@ -43,9 +48,9 @@ struct PlaylistEditorView: View {
             ThemedForm {
                 Section {
                     TextField(t("playlist.form.labels.name"), text: $name)
-                        .focused($isNameFocused)
-                        .submitLabel(.done)
-                        .onSubmit(save)
+                        .focused($focusedField, equals: .name)
+                        .submitLabel(.next)
+                        .onSubmit { focusedField = .comment }
                 } header: {
                     Text(t("playlist.form.labels.name"))
                 } footer: {
@@ -57,6 +62,7 @@ struct PlaylistEditorView: View {
                 Section {
                     TextField(t("playlist.form.labels.comment"), text: $comment, axis: .vertical)
                         .lineLimit(3 ... 8)
+                        .focused($focusedField, equals: .comment)
                 } header: {
                     Text(t("playlist.form.labels.comment"))
                 } footer: {
@@ -96,7 +102,7 @@ struct PlaylistEditorView: View {
         .interactiveDismissDisabled(isSaving)
         .onAppear {
             if isCreating {
-                isNameFocused = true
+                focusedField = .name
             }
         }
     }
@@ -119,10 +125,12 @@ struct PlaylistEditorView: View {
         guard !isSaving else { return }
         guard isNameValid else {
             showsValidation = true
+            focusedField = .name
             return
         }
         let name = trimmedName
         let comment = self.comment.trimmingCharacters(in: .whitespacesAndNewlines)
+        focusedField = nil
         isSaving = true
         Task {
             defer { isSaving = false }

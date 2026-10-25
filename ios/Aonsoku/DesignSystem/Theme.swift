@@ -627,6 +627,7 @@ struct ThemedForm<Content: View>: View {
             }
             .themedRow()
         }
+        .scrollDismissesKeyboard(.interactively)
         .themedBackground(grouped: true)
     }
 }

@@ -11,13 +11,14 @@ struct RadioEditorView: View {
     @State private var isSaving = false
     /// Fields whose problems show: those edited, or all after a save attempt.
     @State private var checked: Set<Field> = []
+    @FocusState private var focusedField: Field?
 
     @Environment(RadioStore.self) private var radios
     @Environment(ToastCenter.self) private var toasts
     @Environment(Localizer.self) private var t
     @Environment(\.dismiss) private var dismiss
 
-    private enum Field: CaseIterable {
+    private enum Field: CaseIterable, Hashable {
         case name
         case stream
         case homepage
@@ -36,20 +37,27 @@ struct RadioEditorView: View {
                 Section {
                     TextField(t("radios.table.name"), text: $name)
                         .textInputAutocapitalization(.words)
+                        .focused($focusedField, equals: .name)
+                        .submitLabel(.next)
+                        .onSubmit { focusedField = .stream }
                 } header: {
                     Text(t("radios.table.name"))
                 } footer: {
                     problem(.name)
                 }
                 Section {
-                    urlField(t("radios.table.stream"), text: $streamUrl)
+                    urlField(t("radios.table.stream"), field: .stream, text: $streamUrl)
+                        .submitLabel(.next)
+                        .onSubmit { focusedField = .homepage }
                 } header: {
                     Text(t("radios.table.stream"))
                 } footer: {
                     problem(.stream)
                 }
                 Section {
-                    urlField(t("radios.table.homepage"), text: $homePageUrl)
+                    urlField(t("radios.table.homepage"), field: .homepage, text: $homePageUrl)
+                        .submitLabel(.done)
+                        .onSubmit(save)
                 } header: {
                     Text(t("radios.table.homepage"))
                 } footer: {
@@ -84,12 +92,13 @@ struct RadioEditorView: View {
         .interactiveDismissDisabled(isSaving)
     }
 
-    private func urlField(_ title: String, text: Binding<String>) -> some View {
+    private func urlField(_ title: String, field: Field, text: Binding<String>) -> some View {
         TextField(title, text: text, prompt: Text(verbatim: "https://"))
             .keyboardType(.URL)
             .textContentType(.URL)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
+            .focused($focusedField, equals: field)
     }
 
     @ViewBuilder
@@ -141,11 +150,13 @@ struct RadioEditorView: View {
         guard !isSaving else { return }
         guard isValid else {
             checked = Set(Field.allCases)
+            focusedField = Field.allCases.first { message(for: $0) != nil }
             return
         }
         let name = trimmed(self.name)
         let streamUrl = trimmed(self.streamUrl)
         let homePageUrl = trimmed(self.homePageUrl)
+        focusedField = nil
         isSaving = true
         Task {
             defer { isSaving = false }

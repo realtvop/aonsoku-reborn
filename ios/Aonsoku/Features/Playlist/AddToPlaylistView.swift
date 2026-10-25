@@ -36,6 +36,7 @@ struct AddToPlaylistView: View {
                 }
             }
             .listStyle(.plain)
+            .scrollDismissesKeyboard(.interactively)
             .disabled(addingTo != nil)
             .overlay {
                 if owned.isEmpty {
