@@ -7,12 +7,13 @@ same failure surface through the real service boundary.
 
 ## Inventory
 
-Inventory date: 2026-10-22.
+Source inventory date: 2026-10-25. These are test declarations, not an
+executed-test result.
 
-- Android: 26 Kotlin/Java test files and 145 `@Test` cases across
+- Android: 52 Kotlin/Java test files and 394 `@Test` declarations across
   `android/app/src/{test,androidTest}` and
-  `capacitor-plugins/capacitor-native/android/src/{test,androidTest}`.
-- Native iOS: 42 XCTest files and 297 `test*` methods in
+  `android/core/src/{test,androidTest}`.
+- Native iOS: 47 XCTest files and 437 `test*` methods in
   `ios/AonsokuKit/Tests/AonsokuKitTests`.
 - Status legend:
   - **Covered**: iOS verifies the same behavior and regression risk.
@@ -21,6 +22,12 @@ Inventory date: 2026-10-22.
 
 ## Coverage matrix
 
+The matrix below records the original service parity pass. Its per-row counts
+are historical; the inventory above includes later service and app tests.
+Removed Android host/adapter tests remain as context for that pass. Native
+Android app coverage and device checks are tracked in
+`docs/android-native-parity.md`.
+
 | Area | Android test inventory | iOS final evidence | Status |
 | --- | --- | --- | --- |
 | App template unit test | `ExampleUnitTest` (1): generated arithmetic smoke test | No equivalent; it protects no Aonsoku behavior | N/A |
@@ -28,7 +35,7 @@ Inventory date: 2026-10-22.
 | Debug gesture | `DebugShakeDetectorTest` (6): sensor filtering, expiry, cooldown, fallback | iOS uses the OS shake gesture and has no custom detector algorithm | N/A |
 | Playback service manifest | `PlaybackServiceManifestTest` (4): service, permissions, intent filter | iOS has no Android service/manifest contract; background modes are an App packaging/device concern | N/A |
 | Audio cache naming | `AudioCacheUtilsTest` (2): stable safe id and MIME extension | `DownloadTests`: cache identity and content-type extension behavior | Covered |
-| Remote command allowlist | `AudioPluginRemoteCommandTest` (2): supported and rejected commands | `AudioAdapterTests`: exact coordination allowlist, rejection, selected IDs and positions | Covered |
+| Remote command allowlist | `RemoteControlCommandSupportTest` (2): supported and rejected commands | `AudioAdapterTests`: exact coordination allowlist, rejection, selected IDs and positions | Covered |
 | Handoff queue decoding | `HandoffPlaybackStateTest` (5): full, user-only, malformed, inconsistent and legacy snapshots | `HandoffTests` (5) plus `NativeIntegrationTests`: decode compatibility, fencing, injected-library resolution, missing-song rejection and queue restoration | Covered |
 | Legacy audio payload compatibility | `NativeAudioSourceParserTest` (7): all source kinds and metadata/null handling | `AudioAdapterTests` (5): all source kinds, invalid payloads, numeric metadata and command payloads | Covered |
 | Downloads and cancellation | `NativeDownloadManagerTest` (3): initialization, listener lifecycle and inactive cancellation | `DownloadTests` (8): auth/transcoding URL, missing credentials, active cancel/cancel-all, completion file and metadata finalization, stable background identifier and relaunch completion ownership, all without real network | Covered |
@@ -39,7 +46,7 @@ Inventory date: 2026-10-22.
 | Subsonic authentication | `SubsonicAuthBuilderTest` (5): token/hash, encoded password, query modes and version | `AuthenticationTests` (4): token salt/hash, encoded password, mutually exclusive query modes and numeric version parsing | Covered |
 | Subsonic HTTP | `SubsonicHttpClientTest` (2): REST/auth URL and existing query | `HTTPClientTests` (3): injected `URLSession`/`URLProtocol`, URL preservation, count/payload parsing and auth failure mapping | Covered |
 | Coordination lifecycle and reconnect | `AonsokuNativeCoordinationLifecycleTest` (9): Android service/socket ownership and disconnect paths | Android foreground-service attachment is platform-only; shared risks are covered by `CoordinationTests.testReconnectPolicyBacksOffCapsAndStopsForManualOrBackgroundState`, `LifecycleTests` and AppServices integration | Covered |
-| Coordination envelopes and snapshots | `AonsokuNativeCoordinationPluginTest` (18): hello/heartbeat/ACK/handoff, snapshots, JSON and ticket URL | `CoordinationTests` (11) and `HandoffTests`: protocol shapes, fencing data, empty snapshot rejection, JSON rejection and reserved-character ticket encoding | Covered |
+| Coordination envelopes and snapshots | `CoordinationRuntimeTest` (18): hello/heartbeat/ACK/handoff, snapshots, JSON and ticket URL | `CoordinationTests` (11) and `HandoffTests`: protocol shapes, fencing data, empty snapshot rejection, JSON rejection and reserved-character ticket encoding | Covered |
 | Coordination deduplication and sequence | `CoordinationDedupSeqTest` (14): bounded idempotence, sequence and extraction | `CoordinationTests`: bounded eviction/idempotence, clear, monotonic/reset sequence and numeric/string/absent extraction | Covered |
 | Data event contract | `EventEmitterContractTest` (4): exact events, terminal flush and coalescing | `EventEmitterTests` (3): public event names/payloads, terminal immediate flush and intermediate coalescing | Covered |
 | Image cache behavior | `ImageCacheUtilsTest` (11): ids, MIME mapping, lookup and deletion | `ImageCacheTests` (3): stable/distinct safe ids, compatible extensions, known-extension lookup and multi-extension deletion | Covered |

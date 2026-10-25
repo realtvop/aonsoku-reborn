@@ -128,6 +128,7 @@
     "songCount_other": "{{count}} 首歌曲"
   },
   "fullscreen": {
+    "close": "关闭",
     "emptyQueue": "队列中没有歌曲",
     "loadingLyrics": "搜索歌词…",
     "lyrics": "歌词",
@@ -180,7 +181,9 @@
         "poster": "海报"
       }
     },
-    "cancel": "取消"
+    "cancel": "取消",
+    "moveUp": "上移",
+    "moveDown": "下移"
   },
   "home": {
     "pinned": "已固定",
@@ -220,6 +223,7 @@
   },
   "menu": {
     "about": "关于",
+    "account": "账户",
     "language": "语言",
     "server": "服务器",
     "serverLogout": "登出"
@@ -304,6 +308,7 @@
       "star": "收藏当前歌曲",
       "unstar": "取消收藏当前歌曲",
       "volume": {
+        "label": "音量",
         "mute": "静音",
         "unmute": "取消静音"
       }
@@ -462,6 +467,11 @@
       }
     },
     "appearance": {
+      "colors": {
+        "queue": {
+          "intensity": "颜色强度"
+        }
+      },
       "general": {
         "albumCoverForSongs": {
           "info": "启用后，所有曲目的封面请求都会使用专辑封面，以减少加载时间。",
@@ -485,11 +495,6 @@
         },
         "description": "自定义队列和歌词页面。",
         "group": "队列和歌词"
-      },
-      "colors": {
-        "queue": {
-          "intensity": "颜色强度"
-        }
       }
     },
     "audio": {
@@ -675,7 +680,8 @@
         "connecting": "连接中",
         "authenticating": "认证中",
         "connected": "已连接",
-        "error": "错误"
+        "error": "错误",
+        "reconnecting": "正在重新连接"
       },
       "lastSync": {
         "label": "上次同步"
@@ -758,7 +764,13 @@
         "showDevices": "显示设备",
         "continue": "继续",
         "continueConfirmTitle": "在此设备上继续播放？",
-        "continueConfirmDesc": "这将替换此设备上当前的播放。"
+        "continueConfirmDesc": "这将替换此设备上当前的播放。",
+        "currentLocal": "此设备当前播放",
+        "willContinue": "将从 {{name}} 继续"
+      },
+      "handoff": {
+        "prepare": "正在准备曲目…",
+        "committed": "接力成功！"
       }
     },
     "privacy": {
@@ -1159,5 +1171,11 @@
   "warnings": {
     "reload": "有一首歌曲正在播放！\n你确定要重新加载页面吗？",
     "songError": "无法播放歌曲，请检查服务器！"
+  },
+  "navigation": {
+    "back": "返回"
+  },
+  "common": {
+    "noResults": "未找到结果"
   }
 }

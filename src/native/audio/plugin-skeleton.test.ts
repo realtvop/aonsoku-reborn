@@ -111,7 +111,7 @@ function readPackageJson(filePath: string): PackageJson {
 }
 
 describe("Aonsoku native audio packages", () => {
-  it("is declared as an Android-only Capacitor plugin package", () => {
+  it("keeps shared bridge definitions without Capacitor platform targets", () => {
     const manifest = readPackageJson(path.join(pluginRoot, "package.json"));
 
     expect(manifest).toMatchObject({
@@ -119,13 +119,8 @@ describe("Aonsoku native audio packages", () => {
       peerDependencies: {
         "@capacitor/core": ">=8.0.0",
       },
-      capacitor: {
-        android: {
-          src: "android",
-        },
-      },
     });
-    expect(manifest.capacitor?.ios).toBeUndefined();
+    expect(manifest.capacitor).toBeUndefined();
   });
 
   it("is included by the app through a local file dependency", () => {

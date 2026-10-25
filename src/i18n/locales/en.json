@@ -25,7 +25,8 @@
     "language": "Language",
     "server": "Server",
     "about": "About",
-    "serverLogout": "Logout"
+    "serverLogout": "Logout",
+    "account": "Account"
   },
   "generic": {
     "seeMore": "See more",
@@ -42,7 +43,9 @@
       }
     },
     "beta": "Beta",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "moveUp": "Move up",
+    "moveDown": "Move down"
   },
   "theme": {
     "label": "Theme",
@@ -313,7 +316,8 @@
     "lyrics": "Lyrics",
     "selectLyrics": "Lyrics settings",
     "switchButton": "Switch to Big Player",
-    "emptyQueue": "No songs in queue"
+    "emptyQueue": "No songs in queue",
+    "close": "Close"
   },
   "lyrics": {
     "customSelect": {
@@ -413,6 +417,7 @@
         "close": "Close Miniplayer"
       },
       "volume": {
+        "label": "Volume",
         "mute": "Mute",
         "unmute": "Unmute"
       }
@@ -656,7 +661,8 @@
         "connecting": "Connecting",
         "authenticating": "Authenticating",
         "connected": "Connected",
-        "error": "Error"
+        "error": "Error",
+        "reconnecting": "Reconnecting"
       },
       "lastSync": {
         "label": "Last sync"
@@ -739,7 +745,13 @@
         "showDevices": "Show Devices",
         "continue": "Continue",
         "continueConfirmTitle": "Continue playback here?",
-        "continueConfirmDesc": "This will replace the active local playback on this device."
+        "continueConfirmDesc": "This will replace the active local playback on this device.",
+        "currentLocal": "Current on this device",
+        "willContinue": "Will continue from {{name}}"
+      },
+      "handoff": {
+        "prepare": "Preparing track...",
+        "committed": "Handoff successful!"
       }
     },
     "server": {
@@ -780,6 +792,11 @@
       "locked": "Server URL settings are locked by this deployment."
     },
     "appearance": {
+      "colors": {
+        "queue": {
+          "intensity": "Color intensity"
+        }
+      },
       "general": {
         "group": "General",
         "description": "Customize the app's look and display behaviors.",
@@ -803,11 +820,6 @@
         },
         "description": "Customize the queue and lyrics page.",
         "group": "Queue and lyrics"
-      },
-      "colors": {
-        "queue": {
-          "intensity": "Color intensity"
-        }
       }
     },
     "audio": {
@@ -1168,5 +1180,11 @@
       "cloud": "Needs network",
       "orphan": "Removed from server (still playable offline)"
     }
+  },
+  "navigation": {
+    "back": "Back"
+  },
+  "common": {
+    "noResults": "No results found"
   }
 }

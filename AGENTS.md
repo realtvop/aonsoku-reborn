@@ -6,10 +6,10 @@ repository.
 ## Project Overview
 
 Aonsoku is a multi-runtime music streaming client for Navidrome/Subsonic
-servers. It targets the web, Electron desktop, Capacitor Android, and a fully
-native SwiftUI app for iOS 26. It supports synchronized lyrics, radio
-streaming, Discord RPC, offline library/cache features, and cross-device
-coordination with remote control and handoff.
+servers. It targets the web, Electron desktop, native Android (Kotlin +
+Jetpack Compose), and a native SwiftUI app for iOS 26. It supports synchronized
+lyrics, radio streaming, Discord RPC, offline library/cache features, and
+cross-device coordination with remote control and handoff.
 
 ## Architecture Change Hygiene
 
@@ -27,10 +27,8 @@ pnpm run electron:dev     # Electron desktop dev
 
 # Build
 pnpm run build            # Production web build (tsc + vite)
-pnpm run build:mobile     # Capacitor Android bundle with fine-grained chunks
 pnpm run electron:build   # Electron renderer/main/preload build
 pnpm run make             # Create Electron distributable packages
-pnpm exec cap sync android # Copy the preceding mobile build into Android
 
 # Lint & Format (Biome)
 pnpm run lint             # Check only
@@ -58,9 +56,16 @@ pnpm coordination:deploy # Guided login/configuration/key creation/deployment; r
 pnpm --filter @aonsoku/coordination-worker test:deploy # Deployment wizard regression tests
 pnpm --filter @aonsoku/coordination-worker deploy:raw # Direct Wrangler deployment for operators/CI
 
-# Android native plugin
-cd android && ./gradlew :aonsoku-capacitor-native:compileDebugKotlin
-cd android && ./gradlew :aonsoku-capacitor-native:testDebugUnitTest
+# Android native app (Gradle 9 wrapper, JDK 21; no Node/pnpm step required).
+# The build reads package.json (version), src/i18n/locales and public/fonts
+# straight from the repository.
+cd android && ./gradlew :core:compileDebugKotlin     # Native services module
+cd android && ./gradlew :core:testDebugUnitTest      # Service unit tests
+cd android && ./gradlew :app:testDebugUnitTest       # App unit tests + JVM smoke tests (Robolectric)
+cd android && ./gradlew :app:testDebugUnitTest --tests '*AppSmokeTest*' \
+  -PsmokeScreenshots=/tmp/aonsoku-shots [-PsmokeTheme=dark]  # Save a PNG of every screen the smoke tests visit
+cd android && ./gradlew :app:assembleDebug           # Debug APK
+node scripts/android/generate-theme-palettes.mjs     # Regenerate ThemePalettes.kt from src/themes.css
 
 # Android release signing
 # Local release builds read aonsokuRelease* from ~/.gradle/gradle.properties.
@@ -114,10 +119,15 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   is not part of the shared `src/` SPA, so web/Capacitor builds never bundle
   it. `tailwind.config.js` scans `electron/renderer/**` for its utility
   classes, and `tsconfig.electron-renderer.json` type-checks it.
-- **Capacitor Android**: `capacitor.config.ts` points the Android host at
-  `dist`. The custom native plugin lives in
-  `capacitor-plugins/capacitor-native` and is included through pnpm workspace
-  package `@aonsoku/capacitor-native`.
+- **Android (native)**: `android/` is a standalone Gradle project (Kotlin DSL,
+  version catalog in `android/gradle/libs.versions.toml`, AGP 9 with built-in
+  Kotlin) with two modules. It does not use Capacitor, a WebView, or the web
+  bundle. See "Android Native App" below.
+  - `android/core` (`:core`, namespace `github.realtvop.aonsoku.plugins`) holds
+    the long-lived native services: authentication, preferences, library/Room,
+    playback, downloads, scrobbling, and the coordination socket runtime.
+  - `android/app` (`:app`, namespace `github.realtvop.aonsoku`) is the Jetpack
+    Compose / Material 3 Expressive UI.
 - **Native iOS**: `ios/Aonsoku.xcodeproj` builds the iOS 26 SwiftUI app and
   links the local `ios/AonsokuKit` Swift package. The app does not load the
   shared `src/` SPA or Capacitor. SwiftUI owns presentation; `AonsokuKit` owns
@@ -267,58 +277,71 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   except downward pans starting on the current-track row while it is settled
   at its top anchor. That row cancels the List pan and dismisses the player;
   other rows continue to browse history. The grabber also dismisses the player.
-- Android native pages use the application-scoped
-  `github.realtvop.aonsoku.plugins.data.LibraryService` for Room queries,
-  metadata sync, lyrics, and image-cache ownership. It is created with the
-  application context, exposes typed Kotlin paging/filter/search and
-  `StateFlow`/`SharedFlow` sync notifications, and is not cancelled when
-  `DataPlugin` is destroyed. `DataPlugin` is only the Capacitor adapter: it
-  parses `PluginCall` arguments, converts entities to the existing JS shapes,
-  and forwards service events through `notifyListeners`. Android native UI
-  should call `LibraryService.getInstance(context)` directly rather than
-  locating a Capacitor plugin instance.
+- Android `LibraryService`
+  (`github.realtvop.aonsoku.plugins.data.LibraryService`) is application
+  scoped and owns Room queries, metadata sync, lyrics, and the image cache. It
+  exposes typed Kotlin paging/filter/search and `StateFlow`/`SharedFlow` sync
+  notifications. UI code calls `LibraryService.getInstance(context)` (or
+  `AppServices.library`) directly.
 - `PlaybackService` implements the typed Android `AudioService` contract in
   `audio/AudioService.kt`. Its `StateFlow` playback/queue snapshots and
   independent `SharedFlow` event stream are available from
   `PlaybackService.LocalBinder.getAudioService()`; player, MediaSession,
   foreground-service, audio-route, and system-volume resources remain owned by
-  `PlaybackService`. `AudioPlugin` adapts the existing JS method/event
-  contract and may be destroyed without releasing those service resources.
+  `PlaybackService`. It also maps ExoPlayer errors to `AudioEvent.Error`,
+  publishes coordination snapshots on playback/queue changes, and forwards
+  system-media commands issued during remote projection to the coordination
+  port.
 - Android queue resolution by song/album/playlist ID, queue edits, handoff
   preparation/rollback, and sleep timers are `AudioService` commands executed
   by `PlaybackService`. Queue commands resolve local songs through
   `LibraryService`, preserve the existing context/user/shuffle/history order,
   and return `AudioCommandResult` errors for missing local data or failed
-  handoffs. Download manager, playback persistence, and scrobble buffering are
-  also owned by `PlaybackService`; `AudioPlugin` retains only JSON parsing and
-  JS result/event adaptation.
+  handoffs. Playback persistence and scrobble buffering are also owned by
+  `PlaybackService`.
+- Android offline audio is owned by the application-scoped
+  `audio/AudioCacheService` (`AppServices.audioCache`), not by
+  `PlaybackService`: the files in the audio cache directories, their index
+  (rows of type `audio` in the Room `cacheMeta` table, carrying the source
+  `explicit`, `smart`, or `lru` and the smart-download triggers), and the one
+  download queue (four at a time; what plays now before the user's downloads
+  before smart downloads; a song is never fetched twice at once). It publishes
+  `cached` and `downloads` as `StateFlow`s plus `AudioCacheEvent`s. A request
+  for a song that is already kept fetches nothing and only changes the owner
+  when it outranks what the file was kept for. The user's downloads are
+  written to `pending-downloads.json` until they succeed and run again on
+  `resume()` after a passing failure; `AudioUnavailableException` (the server
+  refused, or sent a Subsonic error document instead of audio) drops them.
+  Files without an index row (the Capacitor app kept its index in the
+  WebView) are adopted as explicit downloads, the one kind that is never
+  removed automatically. `NativeDownloadManager` is only the transfer of one
+  song into the cache (an OkHttp call, cancelled together with its
+  coroutine). `PlaybackService` asks for an `lru` copy of what it
+  streams and touches the cached file it plays; it has no download state of
+  its own.
 - Android authentication and Subsonic HTTP access are owned by the
   application-scoped `bridge/AuthenticationService`. It owns the encrypted
   credential store, login/fallback probing, server discovery, and typed
-  requests. `BridgePlugin` keeps the existing method names and JSON fields but
-  only validates `PluginCall` input and converts service results. `LibraryService`,
-  `PlaybackService`, download/source resolution, and native scrobbling use the
-  same authentication service rather than creating plugin-scoped credential or
-  HTTP clients.
+  requests. `LibraryService`, `PlaybackService`, download/source resolution,
+  and native scrobbling use the same authentication service.
 - Android preferences are owned by the application-scoped
   `preferences/PreferencesService`, which wraps `NativePreferencesStore` and
   preserves the `pref.` keys, queue-state key, play-history codec, and existing
-  serialization. It exposes a shared change flow so native UI and the
-  Capacitor `PreferencesPlugin` can subscribe independently. The plugin only
-  converts values and forwards a `preferencesChanged` event; destroying it
-  does not close or reset the service.
+  serialization. It exposes a shared change flow.
 - Android `AppServices` is the application-scoped service graph for
-  authentication, preferences, library, audio, and coordination ports.
+  authentication, preferences, library, the audio cache, and the audio and
+  coordination ports.
   `PlaybackService` registers its `AudioService` when created and unregisters
-  only itself on destruction; `AonsokuNativeCoordinationPlugin` registers a
-  `CoordinationService` port for the WebSocket lifecycle. Remote commands,
-  native snapshots, projection, handoff preparation, fencing, and rollback
-  now use these ports rather than `AudioPlugin.activeInstance` or a
-  coordination plugin instance lookup. The WebSocket plugin remains the
-  protocol/Capacitor adapter, while playback resources and queue state remain
-  in `PlaybackService`.
-- Native UI service boundaries, binding/lifecycle rules, adapter duties, and
-  the remaining TypeScript/WebView responsibilities are documented in
+  only itself on destruction; `coordination/CoordinationRuntime` (application
+  scoped, `CoordinationRuntime.getInstance(context)`) registers the
+  `CoordinationService` port and owns the WebSocket lifecycle. Remote
+  commands, native snapshots, projection, handoff preparation, fencing, and
+  rollback use these ports. The runtime publishes socket state as a
+  `StateFlow` and forwards unconsumed envelopes, tracked command acks, and
+  reconnect requests as `CoordinationRuntimeEvent`s; `session_superseded` is
+  forwarded too, after the runtime has paused local playback. The native app
+  drives it from `data/coordination/CoordinationManager`.
+- Service boundaries and binding/lifecycle rules are documented in
   `docs/android-native-services.md`.
 - The iOS app owns long-lived native services through
   `AonsokuKit.AppServices`. `AudioService` owns a long-lived `AVQueuePlayer`,
@@ -427,8 +450,8 @@ network when an offline function is available.
 
 Playback state restore is owned by the runtime that owns playback. In the
 shared TypeScript app, when the native playback backend is active
-(`shouldUseNativePlaybackBackend()`, i.e. Capacitor Android or Electron with
-the desktop native-audio bridge), the native layer is the single source of
+(`shouldUseNativePlaybackBackend()`, Electron with the desktop native-audio
+bridge), the native layer is the single source of
 truth for the restored queue and progress:
 `src/store/player/persistence.ts` skips the renderer-side IDB songlist rehydrate
 so `syncFromNative()` (`src/player/queue-controller/native-controller.ts`) sees an
@@ -465,11 +488,13 @@ Metadata/library sync is runtime-specific:
   the main thread.
 - **Worker fallback**: if Web Workers are unavailable, sync falls back to
   `src/service/cache/metadata-sync.ts` on the main thread.
-- **Electron and Capacitor Android**: sync uses
+- **Electron**: sync uses
   `src/native/data/native-sync-adapter.ts` and the runtime's
   `AonsokuNativeData` implementation. Electron implements the bridge in
-  `electron/main/native/data/`; Android uses the Capacitor plugin. These
-  runtimes do not fall back to the browser Worker/IndexedDB sync path.
+  `electron/main/native/data/`; it does not fall back to the browser
+  Worker/IndexedDB sync path.
+- **Android (native)**: the Compose app drives `LibraryService` (Room +
+  `SyncEngine`) directly; no TypeScript is involved.
 - **Native iOS**: `AonsokuKit.LibraryService` owns GRDB-backed queries and
   `SyncEngine`/`SyncScheduler`; `LibrarySyncStore` exposes sync state to
   SwiftUI and is the sole foreground scheduling owner, so `AppModel` disables
@@ -587,8 +612,10 @@ the device drawer outside fullscreen, so home-page device links also work before
 local playback begins; fullscreen owns its own drawer while open.
 
 - Web uses the TypeScript WebSocket client (`src/coordination/wsClient.ts`).
-- Electron and Android use `src/native/coordination/facade.ts` and their
-  runtime-native coordination implementations.
+- Electron uses `src/native/coordination/facade.ts` and its native
+  coordination implementation. Native Android uses
+  `data/coordination/CoordinationManager` to drive the `:core`
+  `CoordinationRuntime` directly.
 - Native iOS uses `AonsokuKit.CoordinationService` and `CoordinationStore`
   directly. The service owns HTTP, WebSocket reconnects, snapshots, remote
   commands, and handoff transactions against `AudioService`.
@@ -677,11 +704,11 @@ Dark mode is class-based.
 
 Normal Web (`pnpm run build`) and Electron renderer builds use
 `manual-chunks.ts` to preserve the established larger `pages`, `core-vendor`,
-and `heavy-vendor` bundles. Capacitor Android builds use `pnpm run build:mobile`
+and `heavy-vendor` bundles. The legacy mobile build uses `pnpm run build:mobile`
 (`vite --mode mobile`), which leaves chunk ownership to Rollup so lazy modules
 stay separate instead of collapsing every page and dependency into startup
-chunks. Android CI and release workflows must use `build:mobile` before
-`cap sync android`; the native iOS app never builds or embeds these assets.
+chunks. Native Android and iOS builds do not build or embed these assets;
+`build:mobile` remains available for the legacy shared Capacitor code.
 
 The HTML boot shell and its inline styles load without the application
 stylesheet; `src/main.tsx` restores native preferences before dynamically
@@ -701,11 +728,352 @@ route chunks or application CSS.
 - **TypeScript**: strict mode, path alias `@/` -> `src/`.
 - **Rust**: coordination server is a separate Cargo project under
   `coordination-server/`.
-- **Native**: the Capacitor Android host lives under `android/`; the native
-  SwiftUI iOS app and `AonsokuKit` live under `ios/`; the Android Capacitor
-  plugin source lives under `capacitor-plugins/capacitor-native/`.
+- **Native**: the native Android app lives under `android/` (`:core` services
+  + `:app` Compose UI); the native SwiftUI app and `AonsokuKit` live under
+  `ios/`. `capacitor-plugins/capacitor-native/` retains shared TypeScript
+  bridge definitions with no iOS or Android Capacitor target.
 - **Git hooks**: Husky is configured (`.husky/`) and pre-commit runs
   `pnpm lint`.
+
+## Android Native App
+
+The Android app is written in Kotlin with Jetpack Compose and Material 3
+Expressive. It replaces the former Capacitor Android host; `capacitor-android`
+is no longer a runtime that ships, although the shared web code may still
+contain `capacitor-android` branches used for capability typing.
+
+- Toolchain: Gradle wrapper 9.x, AGP 9 (built-in Kotlin — do not apply
+  `org.jetbrains.kotlin.android`), Kotlin/Compose compiler plugin and KSP
+  versions pinned in `android/gradle/libs.versions.toml`, `compileSdk` 37,
+  `minSdk` 24, JDK 21. Build scripts are Kotlin DSL.
+- `android/app/build.gradle.kts` reads the product version from the root
+  `package.json` (`BuildConfig.APP_VERSION`), and its
+  `syncAonsokuSharedAssets` task packages `src/i18n/locales/*.json` as
+  `assets/i18n/` and the Poppins weights from `public/fonts` as
+  `assets/fonts/`. Translations therefore have one source of truth; add or
+  change strings in `src/i18n/locales`.
+- `versionCode`/`versionName` in `android/app/build.gradle.kts` are rewritten
+  by `capacitor-set-version` in `create-tag.yml`; keep exactly one occurrence
+  of each name in that file.
+- Release builds run R8 with resource shrinking. A resource is kept only when
+  code refers to it, so refer to resources as `R.*` constants, never by name
+  through `Resources.getIdentifier`; `:core` keeps the drawables its playback
+  notification uses in its own `res/`. Library consumer rules cover the
+  reflection the app relies on (kotlinx.serialization, Room, media3, OkHttp);
+  check `app/build/outputs/mapping/release/` after adding a dependency that
+  needs more.
+- Existing installs upgrade in place: the application id, encrypted
+  credential store, DataStore preferences (`pref.*`, `queue_state`), Room
+  library database, and audio/image cache directories are unchanged.
+- `docs/android-native-parity.md` records where the native app deliberately
+  differs from the web app, what it adds, and what only a device can check.
+  Keep it current when a difference is introduced or removed.
+
+App module layout (`android/app/src/main/java/github/realtvop/aonsoku/`):
+
+- `AppGraph` is the application-scoped object graph (manual DI) created by
+  `AonsokuApplication`; it wraps `AppServices` from `:core` and is exposed to
+  composables through `LocalAppGraph`. It loads settings and restores the
+  session before the first frame.
+- `settings/`: `AppSettings` is the single serializable preferences document,
+  stored by `SettingsRepository` under the `native_app_settings` key of
+  `PreferencesService`. On the first native launch
+  `LegacySettingsImporter` seeds it from the zustand documents the former
+  WebView app persisted (`theme_store`, `lang_store`, `player_store`,
+  `app_store`, `cache_settings`, `pinned_home_store`, `player_history`).
+- `i18n/`: `I18n` loads the packaged locale JSON at runtime and resolves
+  dotted keys, `{{name}}` interpolation, CLDR plural suffixes, and dayjs-style
+  relative time, with English as fallback. Use `t("key")` / `plural(...)` in
+  composables; never hardcode user-facing strings.
+- `theme/`: `ThemePalettes.kt` is generated from `src/themes.css` (20 web
+  themes); `ColorSchemes.kt` maps the web tokens onto Material 3 roles and
+  `AonsokuTheme` applies `MaterialExpressiveTheme` with the expressive motion
+  scheme, Poppins typography, light/dark/system mode, per-mode theme choice,
+  and Material You dynamic color on Android 12+.
+- `session/SessionManager` owns sign-in state on top of
+  `AuthenticationService`: login with protocol-version check, primary/fallback
+  server selection, and logout.
+- `data/`: `api/SubsonicApi` is the typed OkHttp client for the UI layer; it
+  signs requests with the credentials owned by `AuthenticationService`, so the
+  UI, playback, and sync share one identity. `LibraryRepository` is the single
+  read/write entry point for screens: lists read the Room library through the
+  typed, parameterized `LibraryService.queryAlbums/querySongs/queryArtists`
+  (`LibraryQueries.kt`; the legacy DAO `getFiltered` sort expressions never
+  sorted) and fall back to the server while the library is empty; detail
+  pages emit the local copy first and then the server copy (`Loadable`), and
+  everything read online is written through to Room. Server-ordered album
+  lists (recently/most played) prefer the server when online. Search reads
+  Room once the first sync has finished and asks the server before that (or
+  when nothing local matches), and the search page searches again after a
+  sync.
+  `NetworkMonitor` defines "online" as an authenticated ping to a configured
+  URL succeeding (plus metered detection); `LibrarySyncCoordinator` runs the
+  startup sync and the throttled foreground incremental sync.
+- `data/image/`: artwork is loaded by Coil through `CoverArtFetcher`, which
+  resolves `CoverArt`/`AvatarArt` models to files in the native image cache
+  (`ArtworkStore` → `LibraryService.resolveCoverImage`/`downloadCoverImage`,
+  one 700px copy per cover id, bounded parallel downloads). The loader is
+  configured in one place, `artworkImageLoader`, used by `AonsokuApplication`
+  and by the smoke tests. Screens use `CoverImage`; never build authenticated
+  image URLs in UI code.
+- `data/lyrics/`: `LyricsRepository` (`AppGraph.lyrics`) finds the lyrics of a
+  song the way the web player does. OpenSubsonic structured lyrics
+  (`getLyricsBySongId`) come from the Room `lyrics` table or the server and
+  are written back to Room, so a song keeps them offline once they were
+  shown. Lyrics as text come from the sources in the order of
+  `LyricsSettings.sourcePriority`: the music server (`getLyrics`), LRCLIB
+  (`LyricsSources`, off when `lrcLibEnabled` is false, single artist for
+  LMS), and a custom lyrics server (JSON entries or plain text, optional
+  `Authorization` value). Answers are cached per song and settings by
+  `LyricsStore` under the cache directory; lookups that found nothing are not
+  repeated for five minutes. `LyricsParser` is the pure part: LRC (several
+  timestamps per line, inline translations as a second line with the same
+  timestamp, a romanization track matched by timestamp), structured tracks
+  (the second track is the translation), and the order of preference when
+  resolving what to show (`resolve`: synced structured, unsynced structured,
+  LRC text, plain text). Per-song choices live in
+  `LyricsSettings.selected`, keyed by `LyricsSong.key` (path, artist, title,
+  album, the key the web app used): the chosen custom-server entry, whose
+  lyrics `LyricsStore` keeps under the files directory, a timing offset, or
+  lyrics turned off. Only the newest `MAX_CHOICES` are kept. As on the web, a
+  chosen entry is served by the custom source in its turn, so it does not
+  override a source placed before it. `revision` changes whenever a choice
+  may have changed what `load` returns.
+- `player/`: `PlayerController` is the only UI-facing owner of playback. It
+  binds `PlaybackService`, mirrors its `StateFlow` snapshots into
+  `PlayerState`/`PlaybackProgress`, and turns user intent into
+  `AudioCommand`s. The queue rules of the web player live here and in the
+  pure `QueuePlanner`: the context queue always starts at the current song
+  (earlier songs are dropped, or rotated to the end with repeat-all),
+  shuffle/repeat changes rebuild it from the remembered source list, and
+  starting something new asks first (`pendingReplacement` →
+  `QueueReplacementDialog`) when it would discard manually queued songs while
+  playing. It also records play history (songs played ≥ 10s, stored through
+  `PreferencesService` play history), owns like toggling for the current song
+  (server + Room, mirrored to the notification via
+  `AudioService.setLikeActive`), pushes ReplayGain settings to the service,
+  and handles the `RemoteCommand`s the service cannot complete itself
+  (`like`, `shuffle`). It mirrors the service's sleep timer as
+  `sleepTimer` (`startSleepTimer`, end of track, cancel), and `playNow`
+  starts one song (a history entry) without discarding what is queued.
+  While another device is controlled (`showRemote`, see
+  `data/coordination/`), `state`, `progress`, and `volume` show that device
+  (`PlayerState.remoteDevice`) and intents become remote commands; `local`
+  is always this device's own playback. Screens call `PlayerController`;
+  they never talk to `PlaybackService` directly.
+- `ui/`: `AonsokuApp` is the root composable (theme, strings, session gate,
+  toasts). Toasts (`Toaster` / `ToastHost`) show at the top of the screen like
+  the web app's, a newer one replaces the one on screen, and a tap dismisses
+  one. `ui/shell/MainShell` hosts the type-safe Navigation Compose graph
+  (`ui/navigation/Routes.kt`) with one back stack per top-level tab and the
+  floating navigation bar (`FloatingNavBar`: Home/Library pill plus a detached
+  Search button), with the floating `ui/player/MiniPlayer` above it once
+  something is loaded. Scrolling pages add `LocalFloatingBarsPadding` to
+  their content padding. Going back, the page on top shrinks and then fades
+  away while the page below stays as it is, so a predictive back gesture
+  shows where it leads; this relies on every page being drawn on the app
+  background, which `page<Route>` in `AppDestinations.kt` does.
+- `ui/player/`: tapping `MiniPlayer` opens `FullscreenPlayer`, a sheet that
+  `MainShell` draws over the pages and the floating bars. It slides up,
+  follows a downward drag and a predictive back gesture, closes on back, and
+  while it is open the content below is removed from the semantics tree. The
+  playback notification and the system's media controls open it too:
+  `PlaybackService` puts `EXTRA_OPEN_PLAYER` on their intent, and
+  `MainActivity` hands the request to the shell through `PlayerSheetLink`.
+  The link also tells the activity while a `VolumeBar` of this device's
+  playback is on screen; the volume keys then change the volume without the
+  system's volume panel, as the web app has it. `FullscreenPlayerState`
+  (remembered by `MainShell`) holds whether it is open and its `PlayerTab`;
+  add a tab there rather than opening a second surface. The sheet is tinted
+  with the artwork (`PlayerPalette.kt`: the backdrop mixes the cover's
+  average color into the theme background by the `songColorIntensity`
+  setting, and `PlayerPalette` picks content colors that contrast with it;
+  composables inside read `LocalPlayerPalette` instead of the theme's
+  on-colors), and it reports through `LocalSystemBarsOverride` whether the
+  system bar icons must be light or dark. `PlayingView` is the
+  artwork/progress/transport/volume view built from `PlayerControls.kt`.
+  `rememberPlayerLyrics` loads the lyrics of the current song while the
+  player is open and reloads them when a lyric setting, the choice for the
+  song, or the reachability of the server changes; the lyrics tab button is
+  only disabled once it is known that there are none. `LyricsView` shows
+  synced lyrics that follow a frame clock interpolated between the service's
+  position reports (active line lit and resting near the top, others dimmed
+  and, on Android 12+, blurred; a tap seeks; scrolling by hand hides the
+  controls and pauses following for a few seconds; a long pause, a late
+  first line included, shows dots filling up) or plain lyrics;
+  `LyricsSettingsView` is the per-song page (lyrics off, offset, custom-server
+  search and entries).
+  `QueueView` shows the play history above the current song (out of sight
+  until scrolled to), then the manually queued songs and the context queue,
+  with drag-to-reorder inside a section (`ui/components/Reorder.kt`, which
+  restricts a drag to the rows `canMove` allows) and a menu per row. Screen
+  readers move a row with the "Move up"/"Move down" actions of
+  `Modifier.moveActions` instead, as in `ReorderableColumn`.
+  `AppNavigator.onOpen` runs whenever a page is requested and closes the
+  player, so a link followed from one of its menus is not hidden behind it.
+- Screens: each page is a `@Composable XScreen()` registered with
+  `page<XRoute>` in `ui/navigation/AppDestinations.kt` and backed by a
+  `ViewModel` obtained with `graphViewModel { XViewModel(it) }`
+  (`ui/components/GraphViewModel.kt`), which builds it from `AppGraph` and
+  scopes it to the navigation entry, so page state survives while the page
+  stays on a back stack. View models read
+  through `LibraryRepository`; `LoadableSource` wraps its cached-then-fresh
+  `Loadable` flows, and pages reload on `LibraryRepository.changes`
+  (`LibraryChange`) and when `NetworkMonitor` reports the server reachable
+  again. `AppNavigator.open(route)` pushes a page unless that exact route is
+  already on top; do not use `launchSingleTop` for it, which would replace an
+  album page with another album in place and reuse its view model. Wrap
+  suspending loads in `runSuspendCatching` (`data/RunSuspendCatching.kt`),
+  never `runCatching`: the latter swallows the cancellation of a superseded
+  load, which then publishes its empty result over the fresh one.
+  - `ui/home` (carousel, pinned items, album sections), `ui/library`
+    (library root with playlists, albums with filters, artists, songs,
+    radios), `ui/search`, and `ui/detail` (album, artist, playlist,
+    favorites).
+  - Detail pages share `DetailPage` + `DetailHeader`/`DetailActions`
+    (`ui/detail/`): the header is tinted with the artwork's average color
+    (`DetailHeaderState.accent`), and the page bar (`SubPageTopBar`) turns
+    solid and titled once the header title has scrolled under it.
+  - Lazy list keys must be unique: lists that may repeat a song (album
+    tracks, playlists, favorites) key by index + id, and id-keyed lists are
+    de-duplicated before they reach a lazy layout.
+- `ui/settings/`: `SettingsScreen` shows the list of settings pages, or the
+  page `SettingsRoute.page` names (`SettingsCategory`: server, appearance,
+  language, audio, content, storage, cross-device, privacy, in the web's
+  order; opened from the account sheet in
+  `ui/shell/UserSheet.kt`, which also opens `AboutDialog`). Pages are built
+  from `SettingsComponents.kt` (`SettingsPage` with `settingsSection` groups
+  of `SwitchSetting`, `SliderSetting`, `ChoiceSetting`, `FieldSetting`,
+  `ValueSetting` rows) and write straight to `SettingsRepository`; whatever
+  consumes a setting observes it, so a page never calls into a service. A
+  section is declared outside composition, so its title is resolved with
+  `LocalStrings.current.t(...)` rather than `t(...)`. Text fields commit when
+  they lose the focus or on the keyboard's done action. Short reorderable
+  lists inside a page (the lyric source priority) use
+  `ui/components/ReorderableColumn.kt`. Web settings that have no meaning
+  natively (automatic fullscreen, pointer cursors, browser picture-in-picture)
+  are left out. The storage page (`StorageSettings.kt`) shows the pools from
+  `OfflineManager.pools`, asks before it clears one, and opens
+  `CacheManagerPage` (`SettingsRoute("storage-items")`), which lists every
+  entry of the cache index by name. Library caching cannot be switched off
+  natively: the Room library is what every list reads.
+- `data/offline/OfflineManager` (`AppGraph.offline`) decides what is kept on
+  the device and is the app's only caller of `AudioCacheService`: the user's
+  downloads of songs, albums, playlists, and artists (the songs are written to
+  Room first so they can be listed offline, and a downloaded song brings its
+  lyrics and cover along); smart downloads (`SmartDownloads.wanted` in
+  `OfflineRules.kt`: favorite songs and favorite playlists, evaluated again
+  when the rules, the favorites, the playlists, the synced library, or the
+  connection change, and never on a metered connection); the playback-cache
+  and image quotas of `AppSettings.cache`; marking cached songs the synced
+  library no longer lists (`missingFromLibrary`); and the cover-art sync that
+  follows a library sync when the setting asks for it. Signing out clears the
+  downloads and images together with the library. Song rows and queue rows
+  show `ui/components/CachedIndicator`; menus use `DownloadAction` in
+  `ui/overlays/Menus.kt`. `ui/shell/SyncStatus.kt` holds the sync tiers, the
+  mark on the account picture (`syncBadge`), and the `SyncSection` of the
+  account sheet, whose "Sync Now" runs a full sync (the one on the storage
+  page is incremental). Downloads run in the app process without a foreground
+  service: they stop with the process, and the user's own resume at the next
+  start.
+- `data/coordination/CoordinationManager` (`AppGraph.coordination`) is the
+  app's side of cross-device playback; `CoordinationRuntime` keeps the socket,
+  snapshot publication, the remote commands this device executes, both sides
+  of a handoff, and the notification projection. The manager registers this
+  device with the music server's credentials (`CoordinationApi`: challenge,
+  register as platform `android`, token refresh, registering again when the
+  server no longer knows the refresh token, device list, rename, revoke,
+  account deletion), fetches a WebSocket ticket for every connection and
+  reconnects with a backoff capped at 30 s, and keeps the devices and the
+  snapshots the server projects (`CoordinationState`). A revoked device is
+  forgotten; signing out disconnects but keeps the registration, as on the
+  web. `enterRemoteControl` begins a control session and hands the device to
+  `PlayerController`; a queue replacement there asks against that device's
+  queue and is dropped when the target changes, and queue rows cannot be
+  removed or reordered (web parity). Control ends when the device goes
+  offline or stops playing. `requestHandoff` asks first when something plays
+  here (`HandoffState.pendingDeviceId`), then asks the server for the
+  device's queue, which the runtime prepares paused; the manager reports
+  `Prepare`, `Committed`, or the error (`DevicePlayback.handoffError`) and
+  gives up after 15 s. `DevicePlayback.group` sorts the devices into this
+  device, live, offline (snapshots up to 8 h old), and hidden, like the
+  web's device panel. History sync is not implemented; the web app never
+  calls it. The UI is in `ui/devices/`: `DevicesSheet` (`Overlay.Devices`,
+  opened from the home page's `OtherDevicesSection`, the player's devices
+  button, and its "Controlling …" chip) with `HandoffConfirmationDialog`; the
+  settings page is `ui/settings/CrossDeviceSettings.kt`.
+- `actions/LibraryActions` (`AppGraph.actions`) holds the library operations
+  shared by menus, cards, and pages: resolving the songs of an
+  album/artist/playlist for play / play next / add to queue, starring,
+  playlist and radio edits with their toasts, and pinning to the home page.
+  Starring is optimistic (`LibraryRepository.setStarred` keeps an override
+  until the server answers).
+- `ui/overlays/`: context menus, forms, and confirmations are not owned by
+  the page that opens them. A page calls
+  `LocalOverlays.current.show(Overlay.X(...))`; `OverlayHost` in `MainShell`
+  renders the one current `Overlay` (song/album/artist/playlist/radio menus
+  as modal bottom sheets built with `ui/components/ActionSheet.kt`, add to
+  playlist, playlist and radio forms, delete confirmations, song info, the
+  zoomable `ArtworkViewer`, and the player's sheets in `PlayerMenus.kt`:
+  current-song menu, sleep timer, and color intensity). Add new menus as
+  `Overlay` subtypes rather than page-local sheet state. An `ActionSheet`
+  item runs after the sheet has closed, so resolve what it acts on (a queue
+  index, for example) at that moment rather than when the sheet opened.
+
+App tests (`android/app/src/test`) are JVM unit tests. Besides the pure
+logic tests, `smoke/AppSmokeTest` runs the real app on Robolectric: the real
+`AppGraph`, native services, Room, DataStore, credential store, HTTP clients,
+and the Compose UI, against `smoke/FakeSubsonicServer` (an in-process
+MockWebServer with a fixed library). It signs in, lets the library sync, and
+walks through the pages, so a page that crashes while composing, loading, or
+navigating fails the build without a device. `smoke/SmokeWorld` builds that
+world per test: it installs `FakeAndroidKeyStore`, resets the process-wide
+`:core` singletons listed in `SmokeWorld.SINGLETONS` (add new ones there),
+runs the real `PlaybackService` in-process and hands its binder to
+`PlayerController`, and offers `waitUntil`, which runs main-thread and delayed
+work while background threads make progress. The shadowed audio output plays
+as fast as data arrives, so the fake server throttles `stream`: assert on the
+current song and the queue, not on `isPlaying`. Lazy pages only compose what
+is visible, so tests scroll to what they assert. Sheets and dialogs are
+windows with their own back dispatcher (`backInSheet`), and Robolectric's
+Compose never goes idle while a dialog window holds a `value`/`onValueChange`
+text field, so text fields in dialogs and sheets use the `TextFieldState`
+overloads. `smoke/FakeCoordinationServer` (`SmokeWorld.coordination`) is the
+coordination server's HTTP API and WebSocket on MockWebServer, used by the
+device journeys and `smoke/CoordinationManagerTest`. Add a journey there when
+adding a screen.
+
+The same journeys double as a way to look at the UI without a device:
+`snapshot("name")` calls in `AppSmokeTest` save a PNG per screen when the run
+passes `-PsmokeScreenshots=<directory>` (`smoke/SmokeScreenshots`, which draws
+sheets and dialogs over the activity they cover, centered and dimmed as the
+window manager would), and `-PsmokeTheme=dark`
+takes them in the dark theme. The fake server answers `getCoverArt` with a
+colored square per id, so artwork tinting shows up too, and it stands in for
+LRCLIB and a custom lyrics server (`SmokeWorld` passes its address to
+`AppGraph(lrcLibUrl = …)`; nothing a test does may reach the internet).
+`smoke/LyricsRepositoryTest` and `smoke/OfflineManagerTest` use the same
+world without a UI. For downloads the fake server has `throttleStreams`
+(switch it off, or a download takes as long as playing the song),
+`failStreams`, and `starredPlaylists`; `holdSongSync` keeps the first sync
+from finishing. `SmokeWorld.metered(...)` sets
+whether the shadow network is metered (unmetered unless a test says so;
+Robolectric's own default counts as metered, which holds smart downloads and
+automatic syncs back). Two things
+differ from a device there: the test image loader decodes with `BitmapFactory`
+and does not crossfade (Robolectric has no `ImageDecoder`, and a fade would be
+caught half-way), and the screen size is the one in the test's `@Config` (the
+journeys assume that phone size). Review layout changes this way before asking
+for a device run.
+
+`AudioService` additions made for the native UI (all executed by
+`PlaybackService`): `PlayRadio` (internet radio as a queue-less live stream;
+`AudioPlaybackSnapshot.radioId` marks it), `ClearPlayback`, `PlayUserQueueAt`
+and `ReorderUserQueue`, `setLikeActive`, `getSleepTimerMode`, and
+`setReplayGain` (`ReplayGainCalculator` turns the song's stored ReplayGain
+tags into a player volume). Queue snapshots are now also published when the
+context queue, repeat mode, or shuffle flag changes, and an ExoPlayer failure
+is reported as `AudioEvent.Error` with state `failed`.
 
 ## Commit Message Format
 
@@ -737,7 +1105,7 @@ interface) supporting multiple playback stacks:
 | Stack | Runtime | Implementation |
 |---|---|---|
 | Web Audio (HTMLAudioElement) | web, electron | `src/player/playback/web-backend.ts` |
-| Native audio (Capacitor plugin) | capacitor-android | `src/player/playback/native-backend.ts` |
+| Android native app (no TS) | android | `android/core` `PlaybackService` / `AudioService` |
 | Native SwiftUI audio | iOS 26 | `ios/AonsokuKit/Sources/AonsokuKit/Audio/AudioService.swift` |
 | Desktop native audio bridge | electron | `electron/preload/native-audio.ts` + `electron/main/native/audio/` |
 
@@ -959,9 +1327,10 @@ feature-consistent**:
    `native-backend.ts` when the behavior applies to both.
 2. Queue logic changes -> update both `web-controller.ts` and
    `native-controller.ts`.
-3. Playback action changes -> ensure Web/Electron and Capacitor Android
-   branches are covered in `playback-actions.ts`, and mirror product behavior
-   in the native iOS `PlayerStore`/`AudioService` when applicable.
+3. Playback action changes -> cover the Web/Electron paths in
+   `playback-actions.ts` and mirror product behavior in Android
+   `PlayerController`/`AudioService` and iOS `PlayerStore`/`AudioService`
+   when applicable.
 4. New playback features -> define them in the `PlaybackBackend` interface and
    implement/degrade them in all backends.
 5. Platform capability differences (`capabilities.ts`) -> degrade gracefully

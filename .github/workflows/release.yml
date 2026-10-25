@@ -119,12 +119,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-          run_install: false
-
       - name: Setup node
         uses: actions/setup-node@v4
         with:
@@ -140,15 +134,6 @@ jobs:
         uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build mobile web assets
-        run: pnpm run build:mobile
-
-      - name: Sync Capacitor Android
-        run: pnpm exec cap sync android
 
       - name: Restore Android release keystore
         env:

@@ -1,7 +1,7 @@
 {
   "name": "@aonsoku/capacitor-native",
   "version": "0.0.0",
-  "description": "Unified Capacitor native plugin for Aonsoku Android — bridge, data, audio, preferences, and coordination.",
+  "description": "Shared native bridge definitions for Aonsoku — bridge, data, audio, preferences, and coordination.",
   "type": "module",
   "main": "src/index.ts",
   "module": "src/index.ts",
@@ -20,10 +20,5 @@
   },
   "peerDependencies": {
     "@capacitor/core": ">=8.0.0"
-  },
-  "capacitor": {
-    "android": {
-      "src": "android"
-    }
   }
 }
