@@ -11,6 +11,8 @@ enum SongMenuContext: Equatable {
     case playlist(id: String, index: Int)
     /// In the play queue.
     case queue(QueueEntry)
+    /// The current song's playback menu.
+    case nowPlaying
 }
 
 /// The actions for one song, for menus and context menus.
@@ -20,47 +22,62 @@ struct SongMenuItems: View {
 
     @Environment(Router.self) private var router
     @Environment(PlayerStore.self) private var player
-    @Environment(FavoritesStore.self) private var favorites
     @Environment(DownloadsStore.self) private var downloads
     @Environment(ToastCenter.self) private var toasts
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        Section {
-            if case let .queue(entry) = context {
-                Button(role: .destructive) {
-                    player.remove(entries: [entry])
-                } label: {
-                    Label(t("options.removeFromQueue"), systemImage: "minus.circle")
-                }
-            } else {
+        Group {
+            ControlGroup {
+                FavoriteButton(kind: .song, id: song.id)
                 Button {
-                    player.enqueue([song], position: .next, announcingWith: toasts)
+                    router.present(.addToPlaylist([song]))
                 } label: {
-                    Label(t("options.playNext"), systemImage: QueueSymbol.playNext)
+                    Label(t("options.playlist.add"), systemImage: "text.badge.plus")
                 }
-                Button {
-                    player.enqueue([song], position: .last, announcingWith: toasts)
-                } label: {
-                    Label(t("options.addLast"), systemImage: QueueSymbol.playLast)
+            }
+            menuSections
+        }
+        .mediaMenuAppearance()
+    }
+
+    @ViewBuilder
+    private var menuSections: some View {
+        if context != .nowPlaying {
+            Section {
+                if case let .queue(entry) = context {
+                    Button(role: .destructive) {
+                        player.remove(entries: [entry])
+                    } label: {
+                        Label(t("options.removeFromQueue"), systemImage: "minus.circle")
+                    }
+                } else {
+                    Button {
+                        player.enqueue([song], position: .next, announcingWith: toasts)
+                    } label: {
+                        Label(t("options.playNext"), systemImage: QueueSymbol.playNext)
+                    }
+                    Button {
+                        player.enqueue([song], position: .last, announcingWith: toasts)
+                    } label: {
+                        Label(t("options.addLast"), systemImage: QueueSymbol.playLast)
+                    }
                 }
             }
         }
-        Section {
-            Button {
-                router.present(.addToPlaylist([song]))
-            } label: {
-                Label(t("options.playlist.add"), systemImage: "text.badge.plus")
-            }
-            if case let .playlist(id, index) = context {
+        if case let .playlist(id, index) = context {
+            Section {
                 Button(role: .destructive) {
                     router.playlistSongRemoval = PlaylistSongRemoval(playlistId: id, indexes: [index])
                 } label: {
                     Label(t("options.playlist.removeSong"), systemImage: "text.badge.minus")
                 }
             }
-            FavoriteButton(kind: .song, id: song.id)
-            songDownloadButton
+        }
+        if context == .nowPlaying {
+            Section {
+                PlaybackMenuItems()
+            }
         }
         Section {
             if context != .album, let albumId = song.albumId {
@@ -83,6 +100,9 @@ struct SongMenuItems: View {
                 Label(t("options.info"), systemImage: "info.circle")
             }
         }
+        Section {
+            songDownloadButton
+        }
     }
 
     @ViewBuilder
@@ -104,6 +124,55 @@ struct SongMenuItems: View {
         }
     }
 
+}
+
+/// Playback-specific actions shared by the song and radio menus.
+private struct PlaybackMenuItems: View {
+    @Environment(PlayerStore.self) private var player
+    @Environment(Router.self) private var router
+    @Environment(Localizer.self) private var t
+
+    var body: some View {
+        SleepTimerMenu {
+            Label(t("player.sleepTimer.title"), systemImage: "moon.zzz")
+        }
+        if player.currentSong != nil {
+            Button {
+                router.present(.lyricsSettings)
+            } label: {
+                Label(t("fullscreen.selectLyrics"), systemImage: "quote.bubble")
+            }
+        }
+    }
+}
+
+/// Uses the same song actions and appearance as library context menus.
+struct NowPlayingMenuItems: View {
+    @Environment(PlayerStore.self) private var player
+
+    var body: some View {
+        Group {
+            if let song = player.currentSong {
+                SongMenuItems(song: song, context: .nowPlaying)
+            } else {
+                Section {
+                    PlaybackMenuItems()
+                }
+            }
+        }
+        .mediaMenuAppearance()
+    }
+}
+
+extension View {
+    /// Menu controls use system colors, independently of the player's white
+    /// foreground and the app's themed control tint. Destructive roles stay red.
+    func mediaMenuAppearance() -> some View {
+        foregroundStyle(.primary)
+            .tint(nil)
+            .symbolRenderingMode(.monochrome)
+            .buttonStyle(.automatic)
+    }
 }
 
 /// The actions for an album.

@@ -4,7 +4,7 @@ import SwiftUI
 /// The player in the tab bar accessory, as in Apple Music: the cover, the
 /// song, Play/Pause and Next. A tap opens Now Playing. Beside the minimized
 /// tab bar it keeps the cover, title, artist and Play/Pause. Swipe the pill
-/// horizontally to move through the queue.
+/// horizontally to move through the queue; hold it for the current song's menu.
 struct MiniPlayer: View {
     var compactProgress: CGFloat = 0
 
@@ -44,6 +44,11 @@ struct MiniPlayer: View {
             open()
         }
         .simultaneousGesture(trackSwipeGesture)
+        .contextMenu {
+            if let song = player.currentSong {
+                SongMenuItems(song: song)
+            }
+        }
         .haptic(.selection, trigger: swipeHapticTrigger)
         .onDisappear {
             settleTask?.cancel()
