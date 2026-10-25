@@ -135,8 +135,11 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   and observable stores. See `docs/ios-native-app.md`.
   Screens keep native interaction but follow the web's visual language:
   every theme paints the `src/themes.css` palette (pages on
-  `--background-foreground`), bundled Poppins sets headings only, and album,
+  `--background-foreground`), bundled Poppins sets headings only, and
   playlist and artist pages share the web image header (`DetailHeader`).
+  Album pages retain their original Apple Music-style header: a larger cover
+  over a fading artwork glow, native title and tinted artist links, genre/year
+  metadata, round Shuffle/Play controls and a toolbar favorite action.
   Keep new screens on the `ThemeColor`, `displayFont` and `ThemedForm`
   tokens rather than system grays and fonts.
   Album and playlist tracks use native plain `List` rows so `SongRow`'s

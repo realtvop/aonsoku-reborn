@@ -1,10 +1,9 @@
 import AonsokuKit
 import SwiftUI
 
-/// An album, laid out like the web's album page: the cover and title over
-/// a band of the cover's color, Shuffle, Play and the heart, the notes, the
-/// tracks by disc, the release details, then more albums by the artist and
-/// in the genre.
+/// An album, laid out like Apple Music's album page: the cover and title
+/// over the cover's glow, Play and Shuffle, the notes, the tracks by disc,
+/// the release details, then more albums by the artist and in the genre.
 struct AlbumDetailView: View {
     let albumId: String
     /// What the link already knew, shown while the album loads.
@@ -16,7 +15,6 @@ struct AlbumDetailView: View {
     @State private var comment: AttributedString?
     @State private var extras: Extras?
     @State private var palette: ArtworkPalette?
-    @State private var headerHeight: CGFloat = 360
 
     @Environment(AppModel.self) private var app
     @Environment(LibrarySyncStore.self) private var sync
@@ -49,14 +47,6 @@ struct AlbumDetailView: View {
             if let album {
                 VStack(alignment: .leading, spacing: 0) {
                     header(album)
-                        .onGeometryChange(for: CGFloat.self) { proxy in
-                            proxy.size.height
-                        } action: { height in
-                            headerHeight = height
-                        }
-                    playButtons(album)
-                        .pageMargins()
-                        .padding(.top, 16)
                     if let notes = extras?.notes {
                         AboutCard(
                             title: t("album.info.about", ["name": album.name]),
@@ -104,15 +94,11 @@ struct AlbumDetailView: View {
             }
         }
         .artworkPalette(album?.coverArt, into: $palette)
-        .detailBand(palette, headerHeight: headerHeight)
-        .themedBackground()
-        .scrollRevealedTitle(
-            album?.name ?? "",
-            threshold: sizeClass == .regular ? 200 : 290,
-            headerIsDark: DetailBand.isDark(palette, theme: theme.palette)
-        )
+        .modifier(AlbumArtworkGlow(palette: palette))
+        .scrollRevealedTitle(album?.name ?? "", threshold: sizeClass == .regular ? 220 : 330)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                FavoriteToolbarButton(kind: .album, id: albumId)
                 Menu {
                     if let album {
                         AlbumMenuItems(album: album)
@@ -139,30 +125,60 @@ struct AlbumDetailView: View {
 
     // MARK: - Header
 
+    @ViewBuilder
     private func header(_ album: Album) -> some View {
-        DetailHeader(
-            kind: t("album.headline"),
-            title: album.name,
-            metadata: metadata(album),
-            palette: palette,
-            drawsBand: false
-        ) {
-            ArtworkImage(id: album.coverArt, size: .large, cornerRadius: Layout.artworkRadius)
-        } subtitle: {
-            HStack(spacing: 6) {
-                artistLink(album)
-                    .font(.callout.weight(.semibold))
-                    .lineLimit(2)
-                if album.explicitStatus == .explicit {
-                    ExplicitBadge()
+        if sizeClass == .regular {
+            HStack(alignment: .bottom, spacing: 28) {
+                cover(album)
+                    .frame(width: 260)
+                VStack(alignment: .leading, spacing: 4) {
+                    titles(album, font: .title.bold())
+                    playButtons(album)
+                        .frame(maxWidth: 340)
+                        .padding(.top, 18)
                 }
-                AlbumCacheBadge(albumId: album.id)
+                Spacer(minLength: 0)
             }
+            .pageMargins()
+            .padding(.top, 12)
+        } else {
+            VStack(spacing: 0) {
+                cover(album)
+                    .frame(maxWidth: 290)
+                    .padding(.horizontal, 24)
+                VStack(spacing: 4) {
+                    titles(album, font: .title2.bold())
+                }
+                .multilineTextAlignment(.center)
+                .padding(.top, 18)
+                playButtons(album)
+                    .padding(.top, 18)
+            }
+            .frame(maxWidth: .infinity)
+            .pageMargins()
+            .padding(.top, 8)
         }
     }
 
-    /// The artist, linking to their page; a menu of them when the album
-    /// credits several.
+    private func cover(_ album: Album) -> some View {
+        ArtworkImage(id: album.coverArt, size: .large, cornerRadius: 10)
+            .shadow(color: .black.opacity(0.22), radius: 20, y: 10)
+    }
+
+    @ViewBuilder
+    private func titles(_ album: Album, font: Font) -> some View {
+        Text(album.name)
+            .font(font)
+            .lineLimit(3)
+        artistLink(album)
+            .font(.title3)
+            .lineLimit(2)
+        details(album)
+            .padding(.top, 2)
+    }
+
+    /// The artist in the tint color, linking to their page; a menu of them
+    /// when the album credits several.
     @ViewBuilder
     private func artistLink(_ album: Album) -> some View {
         let credits = album.creditedArtists.filter { $0.id?.isEmpty == false }
@@ -176,49 +192,74 @@ struct AlbumDetailView: View {
             } label: {
                 Text(album.artistLine)
             }
-            .buttonStyle(.plain)
+            .foregroundStyle(.tint)
         } else if let credit = credits.first, let id = credit.id {
             NavigationLink(value: AppRoute.artist(id: id, name: credit.name)) {
                 Text(album.artistLine)
             }
             .buttonStyle(.plain)
+            .foregroundStyle(.tint)
         } else {
             Text(album.artistLine)
-                .opacity(0.8)
+                .foregroundStyle(.secondary)
         }
     }
 
-    /// "2021 · Rock · 12 songs · 45 min", the web's header badges. The genre
+    /// "ROCK · 2021", with the explicit and download badges. The genre
     /// links to its albums.
-    private func metadata(_ album: Album) -> [MetadataItem] {
-        var items: [MetadataItem] = []
-        if let year = album.year, year > 0 {
-            items.append(MetadataItem(text: String(year)))
+    private func details(_ album: Album) -> some View {
+        HStack(spacing: 5) {
+            if let genre = album.primaryGenre {
+                NavigationLink(value: AppRoute.albums(.byGenre(genre))) {
+                    Text(genre.uppercased(with: locale))
+                }
+                .buttonStyle(.plain)
+            }
+            if let year = album.year, year > 0 {
+                if album.primaryGenre != nil {
+                    Text(verbatim: "·")
+                }
+                Text(verbatim: String(year))
+            }
+            if album.explicitStatus == .explicit {
+                ExplicitBadge()
+            }
+            AlbumCacheBadge(albumId: album.id)
         }
-        if let genre = album.primaryGenre {
-            items.append(MetadataItem(text: genre, route: .albums(.byGenre(genre))))
-        }
-        let count = max(album.songCount, songs.count)
-        if count > 0 {
-            items.append(MetadataItem(text: t("playlist.songCount", count: count)))
-        }
-        if album.duration > 0 {
-            items.append(MetadataItem(text: Formatters.totalDuration(album.duration, locale: locale)))
-        }
-        return items
+        .font(.footnote.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
     }
 
     private func playButtons(_ album: Album) -> some View {
-        PlayShuffleButtons(
-            canShuffle: songs.count > 1,
-            alignment: sizeClass == .regular ? .leading : .center
-        ) {
-            play(album, shuffle: false)
-        } shuffle: {
-            play(album, shuffle: true)
-        } trailing: {
-            FavoriteActionButton(kind: .album, id: album.id)
+        HStack(spacing: 18) {
+            Button {
+                play(album, shuffle: true)
+            } label: {
+                Image(systemName: "shuffle")
+                    .font(.system(size: 18, weight: .semibold))
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .controlSize(.large)
+            .accessibilityLabel(t("shortcuts.playback.shuffle"))
+            .disabled(songs.count < 2)
+
+            Button {
+                play(album, shuffle: false)
+            } label: {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 20))
+                    .foregroundStyle(theme.palette.primaryForeground)
+                    .frame(width: 40, height: 40)
+            }
+            .buttonStyle(.glassProminent)
+            .buttonBorderShape(.circle)
+            .controlSize(.large)
+            .accessibilityLabel(t("options.play"))
         }
+        .frame(maxWidth: .infinity)
         .disabled(songs.isEmpty)
     }
 
@@ -547,5 +588,52 @@ extension Album {
         let genre = genre ?? genres.first
         guard let genre, !genre.isEmpty else { return nil }
         return genre
+    }
+}
+
+private struct AlbumArtworkGlow: ViewModifier {
+    let palette: ArtworkPalette?
+
+    /// 0 at the top of the page, 1 once it has scrolled a screenful.
+    @State private var fade = 0.0
+
+    @Environment(\.themeContext) private var theme
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content
+            .scrollContentBackground(.hidden)
+            .onScrollGeometryChange(for: Double.self) { geometry in
+                let offset = geometry.contentOffset.y + geometry.contentInsets.top
+                // Steps of 5% keep the fade from redrawing every frame.
+                return (min(max(offset / 360, 0), 1) * 20).rounded() / 20
+            } action: { _, value in
+                fade = value
+            }
+            .background {
+                ZStack(alignment: .top) {
+                    theme.palette.page
+                    if let color = palette?.dominant {
+                        LinearGradient(
+                            stops: [
+                                .init(color: color.opacity(strength), location: 0),
+                                .init(color: color.opacity(strength * 0.4), location: 0.5),
+                                .init(color: color.opacity(0), location: 1),
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 560)
+                        .opacity(1 - fade)
+                        .transition(.opacity)
+                    }
+                }
+                .ignoresSafeArea()
+                .animation(.smooth(duration: 0.6), value: palette)
+            }
+    }
+
+    private var strength: Double {
+        colorScheme == .dark ? 0.55 : 0.35
     }
 }
