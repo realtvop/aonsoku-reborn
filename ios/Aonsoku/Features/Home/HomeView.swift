@@ -37,7 +37,7 @@ struct HomeView: View {
                     let albums = home.albums(in: section)
                     if !albums.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
-                            SectionHeader(title: t(section.titleKey), route: .albums(section.listFilter))
+                            albumSectionHeader(section)
                                 .pageMargins()
                             HomeShelf(items: albums) { album in
                                 AlbumTile(album: album)
@@ -72,6 +72,26 @@ struct HomeView: View {
                 await home.refreshRecentlyPlayed()
             }
         }
+    }
+
+    private func albumSectionHeader(_ section: HomeSection) -> some View {
+        NavigationLink(value: AppRoute.albums(section.listFilter)) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(t(section.titleKey))
+                    .displayFont(.section)
+                    .foregroundStyle(Color.primary)
+                    .lineLimit(1)
+                Image(systemName: "chevron.forward")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(ThemeColor.mutedForeground)
+                    .accessibilityHidden(true)
+            }
+            .frame(minHeight: 44)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.touchFeedback)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityHint(t("generic.seeMore"))
     }
 
     @ViewBuilder

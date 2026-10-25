@@ -271,6 +271,9 @@ with automatic foreground sync disabled.
   Added, Explore. Pinned and album shelves use 160pt covers on phones and
   180pt covers in regular-width layouts, with free horizontal scrolling and
   no tile snapping. The featured carousel retains its page alignment.
+  Album section titles and their adjacent forward chevrons form one link
+  to the full list, with a minimum 44pt touch height and press feedback,
+  replacing the separate "See more" text.
   Pull to refresh runs an incremental sync. The avatar opens the account sheet.
 - **Library**: Artists, Songs, Albums, Favorites, Genres, Radio (unless
   hidden) and Downloaded as icon-tile rows, followed by the playlists with a
