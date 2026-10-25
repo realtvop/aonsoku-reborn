@@ -268,8 +268,10 @@ with automatic foreground sync disabled.
   (the web header card: cover beside title, artist and details over its own
   blurred art, advancing every ten seconds unless Reduce Motion or
   VoiceOver is on), pinned items, Recently Played, Most Played, Recently
-  Added, Explore. Pull to refresh runs an incremental sync. The avatar opens
-  the account sheet.
+  Added, Explore. Pinned and album shelves use 160pt covers on phones and
+  180pt covers in regular-width layouts, with free horizontal scrolling and
+  no tile snapping. The featured carousel retains its page alignment.
+  Pull to refresh runs an incremental sync. The avatar opens the account sheet.
 - **Library**: Artists, Songs, Albums, Favorites, Genres, Radio (unless
   hidden) and Downloaded as icon-tile rows, followed by the playlists with a
   "See more" link to the full list and a New Playlist button.

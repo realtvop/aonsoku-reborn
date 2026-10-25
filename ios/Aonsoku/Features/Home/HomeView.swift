@@ -23,7 +23,7 @@ struct HomeView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         SectionHeader(title: t("home.pinned"))
                             .pageMargins()
-                        Shelf(items: pinned.resolved) { content in
+                        HomeShelf(items: pinned.resolved) { content in
                             switch content {
                             case let .album(album):
                                 AlbumTile(album: album)
@@ -39,7 +39,9 @@ struct HomeView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             SectionHeader(title: t(section.titleKey), route: .albums(section.listFilter))
                                 .pageMargins()
-                            AlbumShelf(albums: albums)
+                            HomeShelf(items: albums) { album in
+                                AlbumTile(album: album)
+                            }
                         }
                     }
                 }
@@ -90,6 +92,28 @@ struct HomeView: View {
                 )
             }
         }
+    }
+}
+
+/// Larger covers for touch browsing, with native free scrolling between tiles.
+private struct HomeShelf<Item: Identifiable, Tile: View>: View {
+    let items: [Item]
+    @ViewBuilder let tile: (Item) -> Tile
+
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            LazyHStack(alignment: .top, spacing: Layout.shelfSpacing) {
+                ForEach(items) { item in
+                    tile(item)
+                        .frame(width: sizeClass == .regular ? 180 : 160)
+                }
+            }
+        }
+        .scrollIndicators(.hidden)
+        .scrollClipDisabled()
+        .contentMargins(.horizontal, Layout.margin(sizeClass), for: .scrollContent)
     }
 }
 
