@@ -135,8 +135,13 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   and observable stores. See `docs/ios-native-app.md`.
   Screens keep native interaction but follow the web's visual language:
   every theme paints the `src/themes.css` palette (pages on
-  `--background-foreground`), bundled Poppins sets headings only, and album,
-  playlist and artist pages share the web image header (`DetailHeader`).
+  `--background-foreground`), and bundled Poppins sets headings only.
+  Playlist and artist pages share the web image header (`DetailHeader`).
+  Album pages use a system-background artwork glow and the original native
+  information layout: a 290pt cover on phones (260pt on iPad), system title,
+  regular 20pt tinted artist links, and genre/year badges. Artist and genre
+  navigation use plain buttons without disclosure arrows. The shared capsule
+  Liquid Glass playback row and its Shuffle/Favorite actions stay below.
   Keep new screens on the `ThemeColor`, `displayFont` and `ThemedForm`
   tokens rather than system grays and fonts.
   Album and playlist tracks use native plain `List` rows so `SongRow`'s
