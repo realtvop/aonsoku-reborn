@@ -44,10 +44,6 @@ struct AlbumDetailView: View {
         detail?.songs ?? []
     }
 
-    private var margin: CGFloat {
-        Layout.margin(sizeClass)
-    }
-
     var body: some View {
         List {
             if let album {
@@ -256,12 +252,12 @@ struct AlbumDetailView: View {
                         song: track.song,
                         leading: .number(numbersTracks ? track.song.track : track.index + 1),
                         subtitle: track.song.artistLine == album.artistLine ? .none : .artist,
-                        context: .album
+                        context: .album,
+                        isFirst: track.index == 0,
+                        isLast: track.index == songs.count - 1
                     ) {
                         play(album, startingAt: track.index, shuffle: false)
                     }
-                    .frame(minHeight: 48)
-                    .listRowInsets(EdgeInsets(top: 2, leading: margin, bottom: 2, trailing: margin - 8))
                     .listRowBackground(Color.clear)
                 }
             }

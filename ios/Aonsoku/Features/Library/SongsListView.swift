@@ -174,7 +174,11 @@ struct PagedSongList<Header: View, Empty: View>: View {
                     .themedRow(plain: true)
             }
             ForEach(Array(collection.items.enumerated()), id: \.element.id) { index, song in
-                SongRow(song: song) { play(index) }
+                SongRow(
+                    song: song,
+                    isFirst: index == 0,
+                    isLast: index == collection.items.count - 1 && !collection.hasMore
+                ) { play(index) }
                     .onAppear { collection.loadMoreIfNeeded(currentItem: song) }
                     .themedRow(plain: true)
             }

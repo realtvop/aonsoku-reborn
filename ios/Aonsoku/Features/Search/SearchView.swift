@@ -84,8 +84,12 @@ struct SearchView: View {
                 }
                 if !results.songs.isEmpty {
                     Section {
-                        ForEach(results.songs) { song in
-                            SongResultRow(song: song)
+                        ForEach(Array(results.songs.enumerated()), id: \.element.id) { index, song in
+                            SongResultRow(
+                                song: song,
+                                isFirst: index == 0,
+                                isLast: index == results.songs.count - 1
+                            )
                                 .themedRow(plain: true)
                         }
                     } header: {
@@ -228,11 +232,13 @@ private struct AlbumResultRow: View {
 /// A song in the results, which plays on its own when tapped.
 private struct SongResultRow: View {
     let song: Song
+    var isFirst = false
+    var isLast = false
 
     @Environment(PlayerStore.self) private var player
 
     var body: some View {
-        SongRow(song: song) {
+        SongRow(song: song, isFirst: isFirst, isLast: isLast) {
             player.play(song: song)
         }
     }

@@ -153,7 +153,7 @@ private struct DownloadedSongs: View {
                     .themedRow(plain: true)
                 }
                 ForEach(Array(songs.enumerated()), id: \.element.id) { index, song in
-                    SongRow(song: song) {
+                    SongRow(song: song, isFirst: index == 0, isLast: index == songs.count - 1) {
                         player.play(songs, startingAt: index, sourceName: title)
                     }
                     .swipeActions(edge: .trailing) {

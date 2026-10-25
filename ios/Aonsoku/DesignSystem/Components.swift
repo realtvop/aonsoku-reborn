@@ -314,18 +314,22 @@ enum SongRowSubtitle: Equatable {
 
 /// A song in a list, like the web's mobile song rows: cover or number,
 /// title and artist, its download state, length and a menu. Separators
-/// start at the title; swipe right to queue it in a native List.
+/// start at the title, with full-width list boundaries; swipe right to
+/// queue it in a native List.
 struct SongRow: View {
     let song: Song
     var leading: SongRowLeading = .artwork
     var subtitle: SongRowSubtitle = .artist
     var showsDuration = true
     var context: SongMenuContext = .standard
+    var isFirst = false
+    var isLast = false
     let play: () -> Void
 
     @Environment(PlayerStore.self) private var player
     @Environment(Localizer.self) private var t
     @Environment(\.themeContext) private var theme
+    @Environment(\.displayScale) private var displayScale
 
     var body: some View {
         HStack(spacing: 4) {
@@ -358,7 +362,18 @@ struct SongRow: View {
             .buttonStyle(.borderless)
             .accessibilityLabel(t("playlist.buttons.options", ["name": song.title]))
         }
-        .listRowSeparator(.visible, edges: .bottom)
+        .overlay(alignment: .top) {
+            if isFirst {
+                boundarySeparator.offset(y: -4)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if isLast {
+                boundarySeparator.offset(y: 4)
+            }
+        }
+        .listRowSeparator(isLast ? .hidden : .visible, edges: .bottom)
+        .listRowSeparator(isFirst ? .hidden : .automatic, edges: .top)
         .listRowSeparatorTint(theme.palette.border)
         .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
         .compactRowInsets(vertical: 4, trailingInset: 8)
@@ -368,6 +383,14 @@ struct SongRow: View {
         .swipeActions(edge: .leading) {
             EnqueueSwipeActions(songs: [song])
         }
+    }
+
+    private var boundarySeparator: some View {
+        Rectangle()
+            .fill(theme.palette.border)
+            .frame(height: 1 / displayScale)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 
     private var isCurrent: Bool {

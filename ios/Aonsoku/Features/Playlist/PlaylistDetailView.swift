@@ -214,7 +214,9 @@ struct PlaylistDetailView: View {
                 SongRow(
                     song: song,
                     showsDuration: sizeClass == .regular,
-                    context: isOwned ? .playlist(id: playlist.id, index: index) : .standard
+                    context: isOwned ? .playlist(id: playlist.id, index: index) : .standard,
+                    isFirst: index == 0,
+                    isLast: index == songs.count - 1
                 ) {
                     play(playlist, startingAt: index, shuffle: false)
                 }
