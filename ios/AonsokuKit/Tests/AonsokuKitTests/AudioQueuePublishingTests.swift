@@ -203,7 +203,11 @@ final class AudioQueueAdditionTests: XCTestCase {
         XCTAssertFalse(queue.isShuffleActive, file: file, line: line)
         XCTAssertFalse(queue.isRestored, file: file, line: line)
         let paused = await eventually {
-            audio.playbackSnapshot().state == .paused
+            let snapshot = audio.playbackSnapshot()
+            // A preceding radio/source can already be paused while the new
+            // queue is waiting for its load on the main thread.
+            return snapshot.state == .paused
+                && snapshot.metadata.title == ids.first.map { "Song \($0)" }
         }
         XCTAssertTrue(paused, "the first song should be loaded paused", file: file, line: line)
         let snapshot = audio.playbackSnapshot()
