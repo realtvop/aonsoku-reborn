@@ -29,7 +29,8 @@ struct MarqueeText: View {
         let scrolls = allowsScrolling
             && availableWidth > 0
             && textWidth > availableWidth + 0.5
-        let lead = scrolls ? min(leadFade, availableWidth / 4) : 0
+        let isMoving = scrolls && isActive && offset < 0
+        let lead = isMoving ? min(leadFade, availableWidth / 4) : 0
         let trail = scrolls ? min(trailFade, availableWidth / 4) : 0
 
         Text(text)
@@ -47,11 +48,11 @@ struct MarqueeText: View {
                     }
                     .offset(x: (isActive ? offset : 0) + lead)
                     .frame(width: availableWidth + lead, alignment: .leading)
-                    .offset(x: -lead)
                     .mask(alignment: .leading) {
                         edgeFade(lead: lead, trail: trail)
                             .frame(width: availableWidth + lead)
                     }
+                    .offset(x: -lead)
                 } else {
                     Text(text)
                         .lineLimit(1)
