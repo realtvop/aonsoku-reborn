@@ -66,9 +66,10 @@ struct LibraryView: View {
                     Image(systemName: "plus")
                         .font(.subheadline.weight(.semibold))
                         .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
+                .buttonStyle(.plain)
+                .foregroundStyle(.tint)
                 .accessibilityLabel(t("options.playlist.create"))
             }
             .pageMargins()
