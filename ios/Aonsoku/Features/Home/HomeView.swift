@@ -158,6 +158,7 @@ private struct FeaturedCarousel: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         let margin = Layout.margin(sizeClass)
@@ -202,7 +203,7 @@ private struct FeaturedCarousel: View {
     }
 
     private var canAutoAdvance: Bool {
-        albums.count > 1 && !reduceMotion && !voiceOver && !isScrolling
+        albums.count > 1 && scenePhase == .active && !reduceMotion && !voiceOver && !isScrolling
     }
 
     private func albumIndex(for page: Int) -> Int {
