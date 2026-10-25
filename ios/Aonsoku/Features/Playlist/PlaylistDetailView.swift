@@ -193,7 +193,7 @@ struct PlaylistDetailView: View {
         }
     }
 
-    private func play(_ playlist: Playlist, startingAt index: Int = 0, shuffle: Bool) {
+    private func play(_ playlist: Playlist, startingAt index: Int? = nil, shuffle: Bool) {
         guard !songs.isEmpty else { return }
         player.play(
             songs,

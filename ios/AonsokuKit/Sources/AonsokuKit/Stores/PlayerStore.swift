@@ -261,7 +261,7 @@ public final class PlayerStore {
     /// `pendingReplacement` instead, unless `confirmed` is true.
     public func play(
         _ songs: [Song],
-        startingAt index: Int = 0,
+        startingAt index: Int? = nil,
         shuffle: Bool = false,
         source: QueueSource? = nil,
         sourceName: String? = nil,
@@ -269,7 +269,8 @@ public final class PlayerStore {
     ) {
         selectionGeneration += 1
         guard !songs.isEmpty else { return }
-        let clampedIndex = min(max(index, 0), songs.count - 1)
+        let requestedIndex = index ?? (shuffle ? randomShuffleStartIndex(for: songs) : 0)
+        let clampedIndex = min(max(requestedIndex, 0), songs.count - 1)
 
         if !shuffle,
             isSameContext(
@@ -338,7 +339,7 @@ public final class PlayerStore {
     }
 
     /// Loads the album and plays it.
-    public func playAlbum(id: String, startingAt index: Int = 0, shuffle: Bool = false) async {
+    public func playAlbum(id: String, startingAt index: Int? = nil, shuffle: Bool = false) async {
         selectionGeneration += 1
         let generation = selectionGeneration
         do {
@@ -357,7 +358,7 @@ public final class PlayerStore {
         }
     }
 
-    public func playPlaylist(id: String, startingAt index: Int = 0, shuffle: Bool = false) async {
+    public func playPlaylist(id: String, startingAt index: Int? = nil, shuffle: Bool = false) async {
         selectionGeneration += 1
         let generation = selectionGeneration
         do {
@@ -1115,6 +1116,15 @@ public final class PlayerStore {
         )
         if shuffle { audio.markAsShuffled(originalSongs: original) }
         playbackStarts += 1
+    }
+
+    private func randomShuffleStartIndex(for songs: [Song]) -> Int {
+        let history = target.isRemote ? [] : (lastSnapshot?.shuffleStartHistory ?? [])
+        return NativeShuffleEngine().pickRandomStartIndex(
+            count: songs.count,
+            startHistory: history,
+            getId: { songs[$0].id }
+        )
     }
 
     private func isSameContext(songs: [Song], index: Int, source: QueueSource?) -> Bool {

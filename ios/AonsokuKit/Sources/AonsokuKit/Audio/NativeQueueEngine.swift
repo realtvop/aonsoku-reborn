@@ -497,6 +497,13 @@ class NativeQueueEngine {
     func markAsShuffled(originalSongs: [QueueSong]) {
         isShuffleActive = true
         originalContextSongs = originalSongs
+        if let song = currentSong {
+            shuffleStartHistory = shuffleEngine.pushToHistory(
+                shuffleStartHistory,
+                id: song.id,
+                maxLen: maxShuffleStartHistory
+            )
+        }
     }
 
     func setLoopState(_ state: LoopState) {

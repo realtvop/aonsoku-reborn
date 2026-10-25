@@ -206,7 +206,7 @@ struct AlbumDetailView: View {
         .disabled(songs.isEmpty)
     }
 
-    private func play(_ album: Album, startingAt index: Int = 0, shuffle: Bool) {
+    private func play(_ album: Album, startingAt index: Int? = nil, shuffle: Bool) {
         guard !songs.isEmpty else { return }
         player.play(
             songs,
