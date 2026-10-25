@@ -22,7 +22,7 @@ struct DetailHeader<Cover: View, Subtitle: View>: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
-        let isDark = DetailBand.isDark(palette, theme: theme.palette)
+        let isDark = theme.palette.isDark
         Group {
             if sizeClass == .regular {
                 HStack(alignment: .bottom, spacing: 28) {
@@ -83,10 +83,10 @@ struct DetailHeader<Cover: View, Subtitle: View>: View {
     }
 }
 
-/// The band behind a detail header: the cover's average color washed with
-/// the theme's background the way the web header overlays it, reaching up
-/// under the navigation bar, so pulling the page down shows more of it,
-/// and fading into the page below the header.
+/// The band behind a detail header: the cover's average color, held to a
+/// muted range, washed with the theme's background the way the web header
+/// overlays it, reaching up under the navigation bar, so pulling the page
+/// down shows more of it, and fading into the page below the header.
 struct DetailBand: View {
     let palette: ArtworkPalette?
 
@@ -97,12 +97,19 @@ struct DetailBand: View {
     static let overscroll: CGFloat = 1200
     /// The fade from the band into the page.
     static let fadeHeight: CGFloat = 96
-    /// How much of the background the header's text sits on, on average.
-    private static let wash = 0.35
+    /// The most saturation the cover keeps on the band, in percent.
+    private static let maxSaturation = 40.0
+    /// The lightest the band gets in dark mode, in percent, so white header
+    /// text stays clear on it.
+    private static let darkModeLightness = 30.0
+    /// The darkest the band gets in light mode, in percent, so black header
+    /// text stays clear on it.
+    private static let lightModeLightness = 60.0
 
     var body: some View {
         let background = theme.palette.background
-        let color = palette?.average.map(Color.init) ?? theme.palette.page
+        let color = palette?.average.map { Self.bandColor($0, isDark: theme.palette.isDark) }
+            ?? theme.palette.page
         VStack(spacing: 0) {
             ZStack {
                 color
@@ -131,17 +138,16 @@ struct DetailBand: View {
         .accessibilityHidden(true)
     }
 
-    /// Whether light text reads better on the washed band; the theme's own
-    /// answer until the cover's colors are known.
-    static func isDark(_ palette: ArtworkPalette?, theme: ThemePalette) -> Bool {
-        guard let average = palette?.average else { return theme.isDark }
-        let background = theme.backgroundRGB
-        let washed = RGBColor(
-            red: average.red * (1 - wash) + background.red * wash,
-            green: average.green * (1 - wash) + background.green * wash,
-            blue: average.blue * (1 - wash) + background.blue * wash
-        )
-        return washed.luminance < 0.179
+    /// The cover's average color held to a muted saturation and to the
+    /// lightness that keeps the header's text clear: dark enough for white
+    /// text in dark mode, light enough for black text in light mode.
+    static func bandColor(_ average: RGBColor, isDark: Bool) -> Color {
+        var color = HSL(average)
+        color.saturation = min(color.saturation, maxSaturation)
+        color.lightness = isDark
+            ? min(color.lightness, darkModeLightness)
+            : max(color.lightness, lightModeLightness)
+        return color.color
     }
 }
 

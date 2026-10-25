@@ -98,7 +98,7 @@ struct PlaylistDetailView: View {
         .scrollRevealedTitle(
             playlist?.name ?? "",
             threshold: sizeClass == .regular ? 200 : 290,
-            headerIsDark: DetailBand.isDark(palette, theme: theme.palette)
+            headerIsDark: theme.palette.isDark
         )
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

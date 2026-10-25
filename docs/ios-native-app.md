@@ -38,10 +38,12 @@ the same on every platform (see [Design language](#design-language)).
   the device overview.
 - **Detail headers**: album, playlist and artist pages share `DetailHeader`,
   the web image header: the cover (round for artists) over a band of the
-  cover's RMS average color washed with the theme background, which reaches
-  under the navigation bar and fades into the page. Text, and the bar while
-  the header is visible, switch between light and dark to stay readable on
-  the band. Below it, a long Play capsule on Liquid Glass sits between bare
+  cover's RMS average color, limited to 40% saturation and to at most 30%
+  lightness in dark mode or at least 60% in light mode, washed with the theme
+  background, which reaches under the navigation bar and fades into the page.
+  Header text is white in dark mode and black in light mode, and the bar
+  follows the same scheme while the header is visible. Below it, a long Play
+  capsule on Liquid Glass sits between bare
   Shuffle and heart (or download) symbols.
 - The mini player and Now Playing keep their own presentation. Now
   Playing shares only the type and the web's like color: the song title and

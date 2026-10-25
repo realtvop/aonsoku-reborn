@@ -47,7 +47,7 @@ struct AlbumDetailView: View {
             if let album {
                 VStack(alignment: .leading, spacing: 0) {
                     header(album)
-                        .environment(\.colorScheme, DetailBand.isDark(palette, theme: theme.palette) ? .dark : .light)
+                        .environment(\.colorScheme, theme.palette.isDark ? .dark : .light)
                         .onGeometryChange(for: CGFloat.self) { proxy in
                             proxy.size.height
                         } action: { height in
@@ -108,7 +108,7 @@ struct AlbumDetailView: View {
         .scrollRevealedTitle(
             album?.name ?? "",
             threshold: sizeClass == .regular ? 220 : 330,
-            headerIsDark: DetailBand.isDark(palette, theme: theme.palette)
+            headerIsDark: theme.palette.isDark
         )
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -215,7 +215,7 @@ struct AlbumDetailView: View {
             .foregroundStyle(.tint)
         } else {
             Text(album.artistLine)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.primary.opacity(0.8))
         }
     }
 
@@ -236,12 +236,12 @@ struct AlbumDetailView: View {
                 Text(verbatim: String(year))
             }
             if album.explicitStatus == .explicit {
-                ExplicitBadge()
+                ExplicitBadge(style: AnyShapeStyle(Color.primary.opacity(0.8)))
             }
-            AlbumCacheBadge(albumId: album.id)
+            AlbumCacheBadge(albumId: album.id, style: AnyShapeStyle(Color.primary.opacity(0.8)))
         }
         .font(.footnote.weight(.semibold))
-        .foregroundStyle(.secondary)
+        .foregroundStyle(Color.primary.opacity(0.8))
         .lineLimit(1)
     }
 

@@ -16,6 +16,28 @@ struct HSL: Hashable, Sendable {
         self.lightness = lightness
     }
 
+    /// The HSL color of an sRGB color.
+    init(_ color: RGBColor) {
+        let high = max(color.red, color.green, color.blue)
+        let low = min(color.red, color.green, color.blue)
+        let chroma = high - low
+        var sector = 0.0
+        if chroma > 0 {
+            sector = switch high {
+            case color.red: (color.green - color.blue) / chroma
+            case color.green: (color.blue - color.red) / chroma + 2
+            default: (color.red - color.green) / chroma + 4
+            }
+        }
+        let lightness = (high + low) / 2
+        let saturation = chroma > 0 ? chroma / (1 - abs(2 * lightness - 1)) : 0
+        self.init(
+            (sector < 0 ? sector + 6 : sector) * 60,
+            saturation * 100,
+            lightness * 100
+        )
+    }
+
     var rgb: (red: Double, green: Double, blue: Double) {
         let s = saturation / 100
         let l = lightness / 100
@@ -77,8 +99,6 @@ struct ThemePalette: Hashable {
     let groupedBackground: Color
     /// Grouped rows, cards and other raised surfaces.
     let elevated: Color
-    /// `background` as components, for blending with cover colors.
-    let backgroundRGB: RGBColor
     let isDark: Bool
 
     init(
@@ -111,8 +131,6 @@ struct ThemePalette: Hashable {
         self.accentForeground = accentForeground.color
         self.destructive = destructive.color
         self.border = border.color
-        let rgb = background.rgb
-        backgroundRGB = RGBColor(red: rgb.red, green: rgb.green, blue: rgb.blue)
         isDark = background.lightness < 50
         // Dark themes raise rows toward the foreground; light themes sink
         // the page instead, so rows keep the theme's own background.

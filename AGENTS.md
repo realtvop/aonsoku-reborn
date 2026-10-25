@@ -137,6 +137,10 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   every theme paints the `src/themes.css` palette (pages on
   `--background-foreground`), and bundled Poppins sets headings only.
   Playlist and artist pages share the web image header (`DetailHeader`).
+  Header text is white in dark mode and black in light mode, whatever the
+  cover. The cover band keeps at most 40% saturation and stays at most 30%
+  lightness in dark mode and at least 60% in light mode, so that text stays
+  clear on it.
   Album pages retain the cover-average color band over the theme page and native
   information layout: a 200pt cover on phones (220pt on iPad), system title,
   regular 20pt tinted artist links, and genre/year badges. Artist and genre
