@@ -144,8 +144,9 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   selected dark theme background, matching the web player's color treatment
   while retaining the native player's light controls. `NowPlayingBackground`
   blends these colors into one opaque fill shared by the surface and pinned
-  headers. There is no vignette, material or gradient mask in the queue;
-  its iOS scroll-edge effects are explicitly hidden. Palette changes animate
+  headers. The queue hides system scroll-edge effects and uses a top/bottom
+  marquee-style edge fade gradient mask; its width matches the playback
+  scrubber, extending directly to the top of the progress bar. Palette changes animate
   the fill without inserting or removing color layers.
   The system accessory reserves space and reports native geometry only.
   A scoped UIKit marker hides the immediate host of the public
@@ -233,7 +234,8 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   resize callbacks do not toggle the footer. The footer stays mounted to retain
   slider state, with hit testing and accessibility disabled while collapsed.
   Collapsed sliders also stop excluding touches from the player dismiss pan.
-  The compact queue is one native `List`: history, a current-track metadata
+  The compact queue is one native `List` matching the progress bar width and
+  extending directly to its top edge: history, a current-track metadata
   row with an artwork layout marker, then the upcoming section with pinned
   mode/title controls. Cover/lyrics metadata stays mounted but is invisible,
   noninteractive and accessibility-hidden while the queue owns that row, so

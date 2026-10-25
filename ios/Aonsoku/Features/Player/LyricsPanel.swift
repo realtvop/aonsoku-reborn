@@ -315,15 +315,26 @@ private struct LyricsCredit: View {
 
 /// Fades content out at the top and bottom edges.
 struct EdgeFade: View {
-    var length: CGFloat = 36
+    var top: CGFloat = 36
+    var bottom: CGFloat = 36
+
+    init(length: CGFloat = 36) {
+        self.top = length
+        self.bottom = length
+    }
+
+    init(top: CGFloat, bottom: CGFloat) {
+        self.top = top
+        self.bottom = bottom
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-                .frame(height: length)
+                .frame(height: top)
             Color.black
             LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
-                .frame(height: length)
+                .frame(height: bottom)
         }
     }
 }

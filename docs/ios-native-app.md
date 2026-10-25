@@ -215,8 +215,10 @@ with automatic foreground sync disabled.
   A stationary full-viewport probe uses public UIKit concentric corner APIs,
   so the moving player's position never changes the measured baseline.
 - **Now Playing**: one opaque color blending the cover palette with the dark
-  theme background, shared by all pages and pinned queue headers. Queue scroll
-  edges have no system material or gradient mask. Artwork
+  theme background, shared by all pages and pinned queue headers. The queue
+  matches the progress bar's width, extends directly to the top of the scrubber,
+  hides system scroll materials, and applies a marquee-style edge fade gradient mask
+  at its top and bottom. Artwork
   shrinks while paused, marquee title, favorite and more menus, scrubber,
   transport, volume, and a bottom bar for lyrics, AirPlay, Aonsoku devices,
   and the queue. The pinned SliderControl package supplies `.progressLabels`

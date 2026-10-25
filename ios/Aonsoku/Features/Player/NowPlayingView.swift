@@ -88,20 +88,9 @@ struct NowPlayingView: View {
                         .allowsHitTesting(panel == .lyrics)
                         .accessibilityHidden(panel != .lyrics)
                     Color.clear
-                        .frame(height: metadataHeight)
-                        .overlay {
-                            if panel == nil {
-                                titleRow(isCompact: false)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .transition(coverMetadataTransition(in: proxy.size.height))
-                            }
-                        }
-                        .animation(
-                            PlayerPresentationState.panelAnimation(reduceMotion: reduceMotion),
-                            value: panel == nil
-                        )
-                        .allowsHitTesting(panel == nil)
-                        .accessibilityHidden(panel != nil)
+                        .frame(height: 0)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
                     measuredTitleRow(isCompact: true)
                         .modifier(PlayerPageContent(
                             isVisible: panel == .lyrics,
@@ -126,7 +115,6 @@ struct NowPlayingView: View {
                 largeArtwork
                     .padding(.vertical, 20)
                     .frame(maxHeight: .infinity)
-                titleRow(isCompact: false)
                 bottomControls
             }
             .frame(maxWidth: 500)
@@ -293,8 +281,13 @@ struct NowPlayingView: View {
     /// Keep slider state alive while the entire footer gives space to lyrics.
     private var bottomControls: some View {
         VStack(spacing: 0) {
+            if panel == nil {
+                titleRow(isCompact: false)
+                    .padding(.horizontal, 30)
+                    .padding(.bottom, 6)
+            }
             controls
-                .padding(.top, 8)
+                .padding(.top, panel == nil ? 8 : 0)
             bottomBar
         }
         .fixedSize(horizontal: false, vertical: true)
@@ -366,6 +359,7 @@ struct NowPlayingView: View {
                 metadataEntranceDelay: panelsEnteringFromCover ? 0.16 : 0,
                 onShowCover: { selectPanel(nil) }
             ) { titleRow(isCompact: true) }
+            .padding(.horizontal, 30)
             .allowsHitTesting(panel == .queue)
             .accessibilityHidden(panel != .queue)
         }
@@ -440,7 +434,7 @@ private struct PlayerContentLayout: SwiftUI.Layout {
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         guard subviews.count == 5 else { return }
         let titleWidth = max(bounds.width - 60, 0)
-        let headerWidth = max(bounds.width - 126, 0)
+        let headerWidth = max(bounds.width - 138, 0)
         let titleSize = subviews[2].sizeThatFits(ProposedViewSize(width: titleWidth, height: nil))
         let headerSize = subviews[3].sizeThatFits(ProposedViewSize(width: headerWidth, height: nil))
         let headerHeight = max(64, headerSize.height)
@@ -452,7 +446,7 @@ private struct PlayerContentLayout: SwiftUI.Layout {
             proposal: ProposedViewSize(width: coverSide, height: coverSide)
         )
         subviews[1].place(
-            at: CGPoint(x: bounds.minX + 24, y: bounds.minY + 8 + (headerHeight - 64) / 2),
+            at: CGPoint(x: bounds.minX + 30, y: bounds.minY + 8 + (headerHeight - 64) / 2),
             proposal: ProposedViewSize(width: 64, height: 64)
         )
         subviews[2].place(
@@ -460,7 +454,7 @@ private struct PlayerContentLayout: SwiftUI.Layout {
             proposal: ProposedViewSize(width: titleWidth, height: titleSize.height)
         )
         subviews[3].place(
-            at: CGPoint(x: bounds.minX + 102, y: bounds.minY + 8 + (headerHeight - headerSize.height) / 2),
+            at: CGPoint(x: bounds.minX + 108, y: bounds.minY + 8 + (headerHeight - headerSize.height) / 2),
             proposal: ProposedViewSize(width: headerWidth, height: headerSize.height)
         )
         subviews[4].place(

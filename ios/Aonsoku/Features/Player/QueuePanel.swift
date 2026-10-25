@@ -102,7 +102,7 @@ struct QueuePanel<CurrentMetadata: View>: View {
                             .allowsHitTesting(false)
                         }
                         .id(currentID)
-                        .listRowInsets(EdgeInsets(top: 8, leading: 24, bottom: 8, trailing: 24))
+                        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                     }
@@ -245,6 +245,7 @@ struct QueuePanel<CurrentMetadata: View>: View {
                 presentation.prepareQueueForPresentation?()
             }
         }
+        .mask(EdgeFade(top: 24, bottom: 28))
     }
 
     private func registerPreparation(_ proxy: ScrollViewProxy) {
@@ -263,7 +264,7 @@ struct QueuePanel<CurrentMetadata: View>: View {
                 // position, even if that cell has been recycled offscreen.
                 presentation.queueHeaderOwner = nil
                 presentation.queueHeaderFrame = CGRect(
-                    x: 24, y: 8, width: max(viewport.width - 48, 0), height: headerHeight
+                    x: 0, y: 8, width: max(viewport.width, 0), height: headerHeight
                 )
                 presentation.isQueueHeaderVisible = true
                 presentation.isQueueHeaderPinned = false
@@ -277,7 +278,7 @@ private extension View {
         frame(minHeight: 32)
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
-            .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
+            .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
             .modifier(PlayerPageContent(isVisible: isActive))
     }
 
@@ -287,18 +288,19 @@ private extension View {
             .foregroundStyle(.white)
             .background {
                 NowPlayingBackground()
-                    .padding(.horizontal, -20)
+                    .padding(.horizontal, 0)
                     .padding(.vertical, -10)
             }
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
             .modifier(PlayerPageContent(isVisible: isActive))
     }
 
     func queueHeaderRow(isActive: Bool) -> some View {
         listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
-            .listRowInsets(EdgeInsets(top: 14, leading: 20, bottom: 2, trailing: 20))
+            .listRowInsets(EdgeInsets(top: 14, leading: 0, bottom: 2, trailing: 0))
             .modifier(PlayerPageContent(isVisible: isActive))
     }
 }
