@@ -333,6 +333,12 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   never-ready items remain bounded by the recovery attempt's progress deadline;
   late readiness cannot resume a canceled or expired attempt. Initial and
   queue loads with a saved start time use the same readiness gate.
+  Native player controls and artwork reflect playback intent: automatic loads
+  and recovery keep the pause action and expanded artwork, while the playback
+  clock stays stopped during buffering. Paused loads remain paused, and a pause
+  during a pending initial seek prevents its completion from starting playback.
+  Both player sizes show a buffering indicator after 800ms without replacing
+  the pause action.
   `PlaybackSettings.estimateContentLength` defaults to true and can be disabled
   in native Playback settings. Authentication stream URLs, queued/restored
   Subsonic URLs, recovery loads and downloads read the persisted setting for

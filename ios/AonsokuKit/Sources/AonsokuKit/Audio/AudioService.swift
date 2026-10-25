@@ -78,6 +78,8 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private var nowPlayingRevision = 0
     private var artworkTask: URLSessionDataTask?
     private var playbackState: AudioPlaybackSnapshot.State = .idle
+    /// Remains true while an automatic load or recovery waits for audio.
+    private var wantsPlayback = false
     private var currentRequestId: String?
     private var currentSource: AudioSource?
     private var currentSourceURL: URL?
@@ -310,11 +312,11 @@ public final class AudioService: NSObject, @unchecked Sendable {
                         currentTime: self.player?.currentTime() ?? .zero
                     )
                 }
-                self.emitPlaybackState(.loading, force: true)
+                self.emitPlaybackState(request.autoplay ? .loading : .paused, force: true)
 
                 let startPlayback = { [weak self] in
                     guard let self else { return }
-                    if request.autoplay {
+                    if request.autoplay, self.wantsPlayback {
                         self.player?.play()
                         self.persistence.startProgressTracking()
                     }
@@ -329,6 +331,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                         if finished {
                             startPlayback()
                         } else {
+                            self.emitPlaybackState(.failed, force: true)
                             completion(.failure(AudioServiceError(
                                 code: "load_failed",
                                 message: "Cannot seek to the requested start position."
@@ -339,6 +342,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     startPlayback()
                 }
             } catch let error as AudioServiceError {
+                self.emitPlaybackState(.failed, force: true)
                 self.emitError(code: error.code, message: error.message, requestId: request.requestId)
                 completion(.failure(error))
             } catch {
@@ -346,6 +350,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     code: "load_failed",
                     message: error.localizedDescription
                 )
+                self.emitPlaybackState(.failed, force: true)
                 self.emitError(code: serviceError.code, message: serviceError.message, requestId: request.requestId)
                 completion(.failure(serviceError))
             }
@@ -374,6 +379,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                 case .idle:
                     break
                 }
+                self.wantsPlayback = true
                 self.pausedResumePosition = nil
                 let streamBufferWasLost = isResuming && self.currentSourceKind == "stream"
                     && (self.playerItem?.isPlaybackBufferEmpty == true
@@ -396,7 +402,12 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     self.queueEngine.clearRestoredFlag()
                     self.loadQueueSong(song, autoplay: true, startTime: resume)
                 } else if self.isAtEnd, !isResuming {
-                    self.player?.seek(to: .zero) { _ in self.player?.play() }
+                    self.player?.seek(to: .zero) { [weak self] _ in
+                        self?.dispatchMain {
+                            guard let self, self.wantsPlayback else { return }
+                            self.player?.play()
+                        }
+                    }
                 } else {
                     self.player?.play()
                 }
@@ -416,6 +427,9 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     )
                     self.emitPlaybackState(.loading, force: true)
                 }
+                if self.player != nil, self.player?.timeControlStatus != .playing {
+                    self.emitPlaybackState(.loading, force: true)
+                }
                 self.persistence.startProgressTracking()
                 completion?(.success(()))
             } catch {
@@ -423,6 +437,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     code: "audio_session_failed",
                     message: error.localizedDescription
                 )
+                self.emitPlaybackState(.failed, force: true)
                 self.emitError(code: serviceError.code, message: serviceError.message)
                 completion?(.failure(serviceError))
             }
@@ -432,6 +447,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     public func pause() {
         dispatchMain { [weak self] in
             guard let self else { return }
+            self.wantsPlayback = false
             self.pausedResumePosition = self.recoveryController.resumePosition
                 ?? self.makeTime(self.currentTime)
             self.cancelTransitionStateSuppression()
@@ -755,7 +771,10 @@ public final class AudioService: NSObject, @unchecked Sendable {
         case .pause:
             pause()
         case .togglePlayPause:
-            if player?.timeControlStatus == .playing { pause() } else { play() }
+            dispatchMain { [weak self] in
+                guard let self else { return }
+                if self.wantsPlayback { self.pause() } else { self.play() }
+            }
         case .stop:
             stop()
         case .previous:
@@ -882,7 +901,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     completion(false)
                     return
                 }
-                if self.player?.timeControlStatus == .playing {
+                if self.wantsPlayback {
                     self.pause()
                     completion(true)
                 } else {
@@ -1487,6 +1506,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
         let isSeamlessTransition = prepared != nil
 
         beginPlayerItemTransition()
+        wantsPlayback = autoplay
         currentSourceURL = url
         currentSourceKind = kind
         if kind == "stream", let songId { startBackgroundCache(songId: songId) }
@@ -1681,8 +1701,9 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     self.scrobbleBuffer.pauseTracking()
                     if self.transitionStateSuppressionGeneration != generation,
                        self.playbackState != .ended,
-                       self.playbackState != .stopped {
-                        self.emitPlaybackState(.paused)
+                       self.playbackState != .stopped,
+                       self.playbackState != .failed {
+                        self.emitPlaybackState(self.wantsPlayback ? .loading : .paused)
                     }
                 case .waitingToPlayAtSpecifiedRate:
                     self.handleWaitingToPlay(
@@ -1866,6 +1887,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     private func clearPlayer(deactivateSession: Bool) {
+        wantsPlayback = false
         preloadRevision += 1
         preparedQueueItem = nil
         currentQueueSong = nil
@@ -2062,11 +2084,11 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     )
                 }
                 if !usedPreloadedItem {
-                    self.emitPlaybackState(.loading, force: true)
+                    self.emitPlaybackState(autoplay ? .loading : .paused, force: true)
                 }
                 let begin = { [weak self] in
                     guard let self else { return }
-                    if autoplay {
+                    if autoplay, self.wantsPlayback {
                         self.player?.play()
                         self.scrobbleBuffer.startTracking(
                             songId: song.id,
@@ -2088,6 +2110,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                             begin()
                         } else {
                             self?.isHandlingQueueEnd = false
+                            self?.emitPlaybackState(.failed, force: true)
                             self?.emitError(
                                 code: "load_failed",
                                 message: "Cannot seek to the saved queue position."
@@ -2099,6 +2122,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                 }
             } catch {
                 self.isHandlingQueueEnd = false
+                self.emitPlaybackState(.failed, force: true)
                 self.emitError(
                     code: "audio_session_failed",
                     message: error.localizedDescription
@@ -2518,8 +2542,8 @@ public final class AudioService: NSObject, @unchecked Sendable {
             emit(.bufferingChanged(false, requestId: currentRequestId))
             emitPlaybackState(.playing, force: true)
         case .paused:
-            emit(.bufferingChanged(false, requestId: currentRequestId))
-            emitPlaybackState(.paused, force: true)
+            emit(.bufferingChanged(wantsPlayback, requestId: currentRequestId))
+            emitPlaybackState(wantsPlayback ? .loading : .paused, force: true)
         case .waitingToPlayAtSpecifiedRate:
             emit(.bufferingChanged(true, requestId: currentRequestId))
             emitPlaybackState(.loading, force: true)
@@ -2814,10 +2838,9 @@ public final class AudioService: NSObject, @unchecked Sendable {
             info.removeValue(forKey: MPMediaItemPropertyPlaybackDuration)
         }
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
-        let isPlaying = player?.timeControlStatus == .playing ||
-            player?.timeControlStatus == .waitingToPlayAtSpecifiedRate
+        let isPlaying = wantsPlayback
         MPNowPlayingInfoCenter.default().playbackState = isPlaying ? .playing : .paused
-        info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
+        info[MPNowPlayingInfoPropertyPlaybackRate] = player?.timeControlStatus == .playing ? 1.0 : 0.0
         info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = 1.0
     }
 
@@ -2825,6 +2848,14 @@ public final class AudioService: NSObject, @unchecked Sendable {
         _ state: AudioPlaybackSnapshot.State,
         force: Bool = false
     ) {
+        switch state {
+        case .playing:
+            wantsPlayback = true
+        case .idle, .paused, .stopped, .ended, .failed:
+            wantsPlayback = false
+        case .loading:
+            break
+        }
         if !force && playbackState == state { return }
         playbackState = state
         emit(.playbackStateChanged(state, requestId: currentRequestId))
@@ -3550,6 +3581,7 @@ extension AudioService: PlaybackRecoveryDelegate {
     }
 
     func recoveryDidBegin(_ controller: PlaybackRecoveryController) {
+        emitPlaybackState(.loading)
         scrobbleBuffer.pauseTracking()
     }
 

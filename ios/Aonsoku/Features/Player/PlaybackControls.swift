@@ -20,7 +20,7 @@ struct PlaybackScrubber: View {
         if player.isRadio {
             live
         } else {
-            TimelineView(.animation(minimumInterval: 0.1, paused: !player.isPlaying || dragProgress != nil)) { _ in
+            TimelineView(.animation(minimumInterval: 0.1, paused: player.clock.rate == 0 || dragProgress != nil)) { _ in
                 scrubber(position: displayedPosition, duration: player.clock.duration)
             }
         }
@@ -141,6 +141,10 @@ struct TransportControls: View {
                 label: t(player.isPlaying ? "player.tooltips.pause" : "player.tooltips.play")
             ) {
                 player.togglePlayPause()
+            }
+            .overlay(alignment: .topTrailing) {
+                PlayerBufferingIndicator()
+                    .offset(x: 6, y: -4)
             }
             Spacer(minLength: 0)
             TransportButton(
@@ -333,5 +337,35 @@ struct SleepTimerStatus: View {
                 .monospacedDigit()
             }
         }
+    }
+}
+
+/// Keep Pause available while showing only sustained local buffering.
+struct PlayerBufferingIndicator: View {
+    @Environment(PlayerStore.self) private var player
+    @State private var isVisible = false
+
+    private var isBuffering: Bool {
+        player.remoteNowPlaying == nil && player.isPlaying && player.isBuffering
+    }
+
+    var body: some View {
+        ProgressView()
+            .controlSize(.mini)
+            .tint(.white)
+            .opacity(isVisible && isBuffering ? 1 : 0)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .task(id: isBuffering) {
+                isVisible = false
+                guard isBuffering else { return }
+                do {
+                    try await Task.sleep(for: .milliseconds(800))
+                    try Task.checkCancellation()
+                    isVisible = true
+                } catch {
+                    // Pausing, finishing the load or changing targets cancels it.
+                }
+            }
     }
 }

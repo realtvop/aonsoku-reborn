@@ -107,6 +107,7 @@ public final class PlayerStore {
     public private(set) var localSong: Song?
     /// The local radio station, when radio is playing.
     public private(set) var radio: RadioPlayback?
+    /// Playback intent, including automatic loading and buffering.
     public private(set) var localIsPlaying = false
     public private(set) var isBuffering = false
     public private(set) var localClock = PlaybackClock.zero
@@ -138,6 +139,7 @@ public final class PlayerStore {
     @ObservationIgnored public let authentication: AuthenticationService
     @ObservationIgnored private let streamURL: @Sendable (String) -> URL?
     @ObservationIgnored private let playbackSnapshot: @Sendable () -> AudioPlaybackSnapshot
+    @ObservationIgnored private var localPlaybackState: AudioPlaybackSnapshot.State = .idle
     @ObservationIgnored private var audioSubscription: UUID?
     @ObservationIgnored private var songCache: [String: Song] = [:]
     @ObservationIgnored private var lastProgressSample = 0.0
@@ -237,6 +239,7 @@ public final class PlayerStore {
         lastSnapshot = nil
         localSong = nil
         radio = nil
+        localPlaybackState = .idle
         localIsPlaying = false
         isBuffering = false
         localClock = .zero
@@ -555,7 +558,7 @@ public final class PlayerStore {
             localClock = PlaybackClock(
                 position: value,
                 duration: localClock.duration,
-                rate: localIsPlaying ? 1 : 0
+                rate: localPlaybackState == .playing && !isBuffering ? 1 : 0
             )
             audio.seek(to: value)
         }
@@ -776,18 +779,18 @@ public final class PlayerStore {
     private func handle(_ event: AudioServiceEvent) {
         switch event {
         case .playbackStateChanged(let state, _):
-            localIsPlaying = state == .playing
+            localPlaybackState = state
+            localIsPlaying = state == .playing || state == .loading
             isBuffering = state == .loading
             localClock = PlaybackClock(
                 position: localClock.position(),
                 duration: localClock.duration,
-                rate: localIsPlaying ? 1 : 0
+                rate: localPlaybackState == .playing && !isBuffering ? 1 : 0
             )
-            // Replacing the native queue loads its first item without a
-            // separate queue-content event. Adopt that authoritative queue
-            // when the new item starts loading so the UI does not keep the
-            // previous song (or "No song playing") until a later queue edit.
-            if state == .loading, radio == nil {
+            // Initial queue loads have no separate queue-content event.
+            // Adopt both automatic and paused loads so the displayed song
+            // follows the authoritative queue before any later queue edit.
+            if (state == .loading || state == .paused), radio == nil {
                 refreshFromAudio(enrich: true)
             }
             if state == .playing { errorMessage = nil }
@@ -801,23 +804,24 @@ public final class PlayerStore {
             localClock = PlaybackClock(
                 position: currentTime,
                 duration: duration,
-                rate: localIsPlaying && !isBuffering ? 1 : 0,
+                rate: localPlaybackState == .playing && !isBuffering ? 1 : 0,
                 sampledAt: now
             )
         case .durationChanged(let duration, _):
             localClock = PlaybackClock(
                 position: localClock.position(),
                 duration: duration,
-                rate: localIsPlaying && !isBuffering ? 1 : 0
+                rate: localPlaybackState == .playing && !isBuffering ? 1 : 0
             )
         case .bufferingChanged(let buffering, _):
             isBuffering = buffering
             localClock = PlaybackClock(
                 position: localClock.position(),
                 duration: localClock.duration,
-                rate: localIsPlaying && !buffering ? 1 : 0
+                rate: localPlaybackState == .playing && !buffering ? 1 : 0
             )
         case .ended:
+            localPlaybackState = .ended
             localIsPlaying = false
             isBuffering = false
             localClock = PlaybackClock(
@@ -859,12 +863,13 @@ public final class PlayerStore {
     }
 
     private func adopt(_ playback: AudioPlaybackSnapshot, enrich: Bool) {
-        localIsPlaying = playback.state == .playing
+        localPlaybackState = playback.state
+        localIsPlaying = playback.state == .playing || playback.state == .loading
         isBuffering = playback.state == .loading
         localClock = PlaybackClock(
             position: playback.currentTime,
             duration: playback.duration,
-            rate: localIsPlaying && !isBuffering ? 1 : 0
+            rate: localPlaybackState == .playing && !isBuffering ? 1 : 0
         )
         guard let snapshot = playback.queue else {
             lastSnapshot = nil

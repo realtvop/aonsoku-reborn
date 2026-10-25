@@ -289,6 +289,10 @@ struct MiniPlayer: View {
                     .frame(width: 40, height: 36)
                     .contentShape(.rect)
             }
+            .overlay(alignment: .topTrailing) {
+                PlayerBufferingIndicator()
+                    .offset(x: 2, y: -2)
+            }
             .accessibilityLabel(t(player.isPlaying ? "player.tooltips.pause" : "player.tooltips.play"))
             Button {
                 player.next()
