@@ -405,7 +405,6 @@ void EmitSeeked(DBusConnection* connection, double position_seconds) {
   dbus_message_append_args(signal, DBUS_TYPE_INT64, &position_micros,
                            DBUS_TYPE_INVALID);
   dbus_connection_send(connection, signal, nullptr);
-  dbus_connection_flush(connection);
   dbus_message_unref(signal);
 }
 
@@ -913,7 +912,9 @@ void EmitPropertiesChanged() {
   dbus_message_iter_open_container(&root, DBUS_TYPE_ARRAY, "s", &invalidated);
   dbus_message_iter_close_container(&root, &invalidated);
   dbus_connection_send(connection, signal, nullptr);
-  dbus_connection_flush(connection);
+  // DispatchLoop drains queued output. A synchronous flush here competes
+  // with its blocking read for the D-Bus I/O lock while holding g_state.mutex,
+  // and can starve playback/session updates indefinitely.
   dbus_message_unref(signal);
 }
 

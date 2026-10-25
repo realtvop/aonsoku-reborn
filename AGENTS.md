@@ -1315,8 +1315,13 @@ expand it to empty before the linker records it.
   `not found`, every bundled `.so` must carry a `$ORIGIN` rpath/RUNPATH, and
   the addon's `libmpv.so` must resolve to a path inside the bundle directory
   (proving the `$ORIGIN` bundle is self-contained rather than binding to a
-  system libmpv). macOS/Windows and cross-builds skip the deep check. The
-  AppImage target (`@reforged/maker-appimage`) is built
+  system libmpv). macOS/Windows and cross-builds skip the deep check.
+  MPRIS dispatch thread drains outgoing signals asynchronously; session updates
+  must not synchronously flush D-Bus while holding the shared state mutex.
+  The native-audio CI action compiles `scripts/native-audio/ci/mpris-session-smoke.cc`
+  against that implementation and tests 100 updates, signal delivery and shutdown
+  inside an isolated session bus with a 15-second process timeout.
+  The AppImage target (`@reforged/maker-appimage`) is built
   alongside the `.deb`/`.rpm` by `electron-forge make --platform linux` and
   is now self-contained; it shells out to the system `mksquashfs`
   (`squashfs-tools`) and downloads the AppImage type2 runtime at make time.
