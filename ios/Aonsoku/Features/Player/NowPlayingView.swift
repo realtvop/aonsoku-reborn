@@ -8,7 +8,6 @@ import SwiftUI
 /// header; on a wide iPad they open beside it.
 struct NowPlayingView: View {
     @State private var lyricsControlsHidden = false
-    @State private var bottomControlsHeight: CGFloat?
     @State private var metadataHeight: CGFloat = 64
     @State private var panelsEnteringFromCover = false
 
@@ -291,8 +290,10 @@ struct NowPlayingView: View {
             bottomBar
         }
         .fixedSize(horizontal: false, vertical: true)
-        .onGeometryChange(for: CGFloat.self, of: \.size.height) { bottomControlsHeight = $0 }
-        .frame(height: bottomControlsHidden ? 0 : bottomControlsHeight, alignment: .top)
+        // Page-specific metadata grows upward from the fixed button row.
+        // Reusing a measured height here briefly lays out the new page in
+        // the previous page's height and moves the buttons for one frame.
+        .frame(height: bottomControlsHidden ? 0 : nil, alignment: .bottom)
         .offset(y: controlsTransitionOffset)
         .opacity(bottomControlsHidden ? 0 : controlsTransitionOpacity)
         .animation(presentationAnimation, value: presentation.isExpanded)

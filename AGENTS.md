@@ -216,7 +216,9 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   over 180ms. Queue effects apply to row/header rendering, leaving the List,
   native current-song marker and viewport stationary. The content viewport
   clips these effects above the fixed playback controls.
-  Page buttons animate their selection appearance.
+  Page buttons animate their selection appearance while staying bottom-aligned.
+  The footer uses its intrinsic height directly, so cover metadata grows upward
+  without a measured-height feedback pass shifting the buttons during page changes.
   `PlayerPresentationState.panel`
   is the single page selection and derives the artwork destination synchronously.
   Lyrics/queue panels mount before their first switch; lyrics preserve scrolling
