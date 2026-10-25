@@ -66,6 +66,18 @@ extension ButtonStyle where Self == PressableStyle {
     static var pressable: PressableStyle { PressableStyle() }
 }
 
+/// Immediate press feedback without moving a row or changing its layout.
+struct TouchFeedbackStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.6 : 1)
+    }
+}
+
+extension ButtonStyle where Self == TouchFeedbackStyle {
+    static var touchFeedback: TouchFeedbackStyle { TouchFeedbackStyle() }
+}
+
 // MARK: - Headers
 
 /// A shelf title in Poppins, like the web's preview list headers. With a
@@ -95,9 +107,10 @@ struct SectionHeader: View {
                         .foregroundStyle(.tint)
                         .lineLimit(1)
                         .padding(.vertical, 6)
+                        .frame(minWidth: 44, minHeight: 44)
                         .contentShape(.rect)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.touchFeedback)
             }
         }
     }
@@ -346,9 +359,10 @@ struct SongRow: View {
                             .foregroundStyle(ThemeColor.mutedForeground)
                     }
                 }
+                .frame(minHeight: 44)
                 .contentShape(.rect)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.touchFeedback)
 
             Menu {
                 SongMenuItems(song: song, context: context)
@@ -356,7 +370,7 @@ struct SongRow: View {
                 Image(systemName: "ellipsis")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(ThemeColor.mutedForeground)
-                    .frame(width: 32, height: 44)
+                    .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
             .buttonStyle(.borderless)
@@ -991,7 +1005,7 @@ struct ActionIconButton: View {
                 .contentShape(.rect)
                 .contentTransition(.symbolEffect(.replace))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.touchFeedback)
         .opacity(isEnabled ? 1 : 0.4)
         .accessibilityLabel(label)
     }

@@ -164,7 +164,7 @@ private struct RadioRow: View {
             }
             .contentShape(.rect)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.touchFeedback)
         .listRowSeparator(.hidden)
         .compactRowInsets()
         .accessibilityLabel(station.name)

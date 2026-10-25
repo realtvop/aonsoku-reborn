@@ -113,9 +113,10 @@ struct SearchView: View {
                 NavigationLink(value: route) {
                     Text(t("generic.seeMore"))
                         .padding(.vertical, 4)
+                        .frame(minWidth: 44, minHeight: 44)
                         .contentShape(.rect)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.touchFeedback)
             }
         }
         .textCase(nil)

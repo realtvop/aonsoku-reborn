@@ -30,7 +30,7 @@ struct AddToPlaylistView: View {
                     } label: {
                         PlaylistChoiceRow(playlist: playlist, isAdding: addingTo == playlist.id)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.touchFeedback)
                     .listRowSeparator(.hidden)
                     .compactRowInsets()
                 }
