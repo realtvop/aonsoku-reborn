@@ -438,6 +438,7 @@ final class PlayerStoreTests: XCTestCase {
                 currentIndex: 0
             )
         )
+        let reads = LockedTestBox(0)
         let store = PlayerStore(
             audio: audio,
             repository: fixture.repository,
@@ -445,6 +446,20 @@ final class PlayerStoreTests: XCTestCase {
             authentication: .shared,
             streamURL: { _ in nil },
             playbackSnapshot: {
+                let isInitialRead = reads.read { $0 == 0 }
+                reads.update { $0 += 1 }
+                if !isInitialRead {
+                    // The pause event also requests a queue refresh. That
+                    // read must reflect the now-paused authoritative player.
+                    return AudioPlaybackSnapshot(
+                        state: .paused,
+                        currentTime: snapshot.currentTime,
+                        duration: snapshot.duration,
+                        bufferedTime: snapshot.bufferedTime,
+                        metadata: snapshot.metadata,
+                        queue: snapshot.queue
+                    )
+                }
                 // A newer pause arrives just after the snapshot is sampled.
                 // Reading and adopting in one actor turn must finish before
                 // that event is handled, rather than overwrite it afterward.
@@ -459,11 +474,9 @@ final class PlayerStoreTests: XCTestCase {
 
         store.start()
         let adopted = await waitForPlayerStoreTest {
-            store.localSong?.id == "current"
+            store.localSong?.id == "current" && !store.localIsPlaying
         }
         XCTAssertTrue(adopted)
-        // Let the event emitted during the read reach the store as well.
-        await Task.yield()
         XCTAssertFalse(store.localIsPlaying)
         XCTAssertFalse(store.isBuffering)
         XCTAssertEqual(store.localClock.rate, 0)
