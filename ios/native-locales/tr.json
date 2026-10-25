@@ -1,0 +1,75 @@
+{
+  "native": {
+    "generic": {
+      "retry": "Tekrar Dene"
+    },
+    "explicit": "Müstehcen",
+    "error": {
+      "title": "Bir sorun oluştu"
+    },
+    "home": {
+      "empty": {
+        "title": "Kitaplığın boş",
+        "description": "Sunucundaki albümler, tarama tamamlandığında burada görünür."
+      }
+    },
+    "search": {
+      "description": "Kitaplığında albüm, şarkı ve sanatçı ara."
+    },
+    "sort": {
+      "label": "Sırala",
+      "order": "Sıra"
+    },
+    "songs": {
+      "empty": "Şarkı yok"
+    },
+    "artists": {
+      "empty": "Sanatçı yok",
+      "search": "Sanatçı ara…"
+    },
+    "artist": {
+      "latestRelease": "En Yeni Çıkış"
+    },
+    "favorites": {
+      "noAlbums": "Henüz favori albüm yok",
+      "noArtists": "Henüz favori sanatçı yok"
+    },
+    "downloads": {
+      "noAlbums": "İndirilen albüm yok",
+      "noPlaylists": "İndirilen çalma listesi yok",
+      "noSongs": "İndirilen şarkı yok",
+      "description": "İndirdiğin albümler, çalma listeleri ve şarkılar bağlantı olmadan çalınır."
+    },
+    "playlist": {
+      "added": "“{{name}}” listesine eklendi",
+      "alreadyAdded": "Zaten “{{name}}” içinde",
+      "addedSkipped": "“{{name}}” listesine eklendi. Zaten içinde olan şarkılar atlandı.",
+      "addFailed": "Çalma listesine eklenemedi"
+    },
+    "player": {
+      "volume": "Ses"
+    },
+    "settings": {
+      "autoOpenNowPlaying": {
+        "label": "Şimdi Çalıyor'u otomatik aç",
+        "info": "Bir albüm, çalma listesi veya şarkı çalmaya başladığında Şimdi Çalıyor'u gösterir."
+      }
+    },
+    "accountSwitch": {
+      "different": {
+        "title": "Hesap değiştirilsin mi?",
+        "message": "{{server}} sunucusunda {{user}} olarak giriş yaparsan {{previousServer}} sunucusundaki {{previousUser}} hesabına ait kitaplık, indirilenler ve oynatma geçmişi bu cihazdan silinir. Sunucudan hiçbir şey kaldırılmaz."
+      },
+      "server": {
+        "title": "Bu aynı sunucu mu?",
+        "message": "Bu cihazda {{previousServer}} sunucusundaki {{user}} hesabına ait kitaplık, indirilenler ve oynatma geçmişi var. {{server}} yeni adresteki aynı sunucuysa bunları koru, değilse sil ve baştan başla."
+      },
+      "unknown": {
+        "title": "Mevcut kitaplık korunsun mu?",
+        "message": "Bu cihazda önceki bir girişten kalan bir kitaplık ve indirilenler var. {{server}} sunucusundaki {{user}} hesabına aitse bunları koru, değilse sil ve baştan başla."
+      },
+      "erase": "Sil ve devam et",
+      "keep": "Kitaplığı koru"
+    }
+  }
+}

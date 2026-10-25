@@ -1,0 +1,75 @@
+{
+  "native": {
+    "generic": {
+      "retry": "Riprova"
+    },
+    "explicit": "Esplicito",
+    "error": {
+      "title": "Si è verificato un problema"
+    },
+    "home": {
+      "empty": {
+        "title": "La tua libreria è vuota",
+        "description": "Gli album del tuo server appariranno qui dopo la scansione."
+      }
+    },
+    "search": {
+      "description": "Cerca album, brani e artisti nella tua libreria."
+    },
+    "sort": {
+      "label": "Ordina",
+      "order": "Ordine"
+    },
+    "songs": {
+      "empty": "Nessun brano"
+    },
+    "artists": {
+      "empty": "Nessun artista",
+      "search": "Cerca artisti…"
+    },
+    "artist": {
+      "latestRelease": "Ultima uscita"
+    },
+    "favorites": {
+      "noAlbums": "Ancora nessun album preferito",
+      "noArtists": "Ancora nessun artista preferito"
+    },
+    "downloads": {
+      "noAlbums": "Nessun album scaricato",
+      "noPlaylists": "Nessuna playlist scaricata",
+      "noSongs": "Nessun brano scaricato",
+      "description": "Album, playlist e brani scaricati si possono ascoltare senza connessione."
+    },
+    "playlist": {
+      "added": "Aggiunto a “{{name}}”",
+      "alreadyAdded": "Già in “{{name}}”",
+      "addedSkipped": "Aggiunto a “{{name}}”. I brani già presenti sono stati saltati.",
+      "addFailed": "Impossibile aggiungere alla playlist"
+    },
+    "player": {
+      "volume": "Volume"
+    },
+    "settings": {
+      "autoOpenNowPlaying": {
+        "label": "Apri “In riproduzione” automaticamente",
+        "info": "Mostra “In riproduzione” quando avvii un album, una playlist o un brano."
+      }
+    },
+    "accountSwitch": {
+      "different": {
+        "title": "Cambiare account?",
+        "message": "Accedendo come {{user}} su {{server}}, la libreria, i download e la cronologia di riproduzione di {{previousUser}} su {{previousServer}} verranno cancellati da questo dispositivo. Dal server non viene rimosso nulla."
+      },
+      "server": {
+        "title": "È lo stesso server?",
+        "message": "Su questo dispositivo ci sono la libreria, i download e la cronologia di riproduzione di {{user}} su {{previousServer}}. Mantienili se {{server}} è lo stesso server a un nuovo indirizzo, oppure cancellali e ricomincia da capo."
+      },
+      "unknown": {
+        "title": "Mantenere la libreria esistente?",
+        "message": "Su questo dispositivo ci sono una libreria e dei download di un accesso precedente. Mantienili se appartengono a {{user}} su {{server}}, oppure cancellali e ricomincia da capo."
+      },
+      "erase": "Cancella e continua",
+      "keep": "Mantieni libreria"
+    }
+  }
+}

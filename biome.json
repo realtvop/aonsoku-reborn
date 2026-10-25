@@ -10,6 +10,7 @@
     "includes": [
       "**",
       "!node_modules",
+      "!.claude",
       "!**/node_modules",
       "!cypress",
       "!**/*.cy.{ts,tsx}",

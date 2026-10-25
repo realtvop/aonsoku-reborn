@@ -1,0 +1,23 @@
+{
+  "originHash" : "48e5fd70f91622b8cb4531acd0f1fc934b18efb298752a1095813ff6655af61c",
+  "pins" : [
+    {
+      "identity" : "grdb.swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/groue/GRDB.swift.git",
+      "state" : {
+        "revision" : "b83108d10f42680d78f23fe4d4d80fc88dab3212",
+        "version" : "7.11.1"
+      }
+    },
+    {
+      "identity" : "slidercontrol",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/realtvop/slidercontrol",
+      "state" : {
+        "revision" : "54f8b8bb925b0971bb9b1267b38cccc2addec74f"
+      }
+    }
+  ],
+  "version" : 3
+}

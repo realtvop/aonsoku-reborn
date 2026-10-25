@@ -1,8 +1,11 @@
-import { MarqueeTitle } from "@/app/components/fullscreen/marquee-title";
+import { ScrollingText } from "@/app/components/scrolling-text/scrolling-text";
 import { cn } from "@/lib/utils";
 import { ALBUM_ARTISTS_MAX_NUMBER } from "@/utils/multipleArtists";
 import { useMiniPlayerContext } from "./context";
 import { MiniPlayerProgress } from "./progress";
+
+/** A lyric line is only on screen for a few seconds, so start sooner. */
+const LYRIC_DELAY = 1;
 
 export function MiniPlayerSongTitle() {
   const { state } = useMiniPlayerContext();
@@ -19,7 +22,7 @@ export function MiniPlayerSongTitle() {
 
   return (
     <div className="flex flex-col flex-1 justify-center max-w-full overflow-hidden">
-      <MarqueeTitle gap="mr-2">
+      <ScrollingText loop={2} delay={isShowingLyrics ? LYRIC_DELAY : undefined}>
         <span
           className={cn(
             "text-base font-medium",
@@ -29,7 +32,7 @@ export function MiniPlayerSongTitle() {
         >
           {displayTitle}
         </span>
-      </MarqueeTitle>
+      </ScrollingText>
       <div
         className={cn(
           "flex items-center gap-1 w-full",
@@ -39,9 +42,9 @@ export function MiniPlayerSongTitle() {
           "mini-player:group-hover-supported:hidden",
         )}
       >
-        <MarqueeTitle gap="mr-2">
-          <span className="w-fit max-w-full truncate">{displaySubtitle}</span>
-        </MarqueeTitle>
+        <ScrollingText className="w-full" loop={2}>
+          <span>{displaySubtitle}</span>
+        </ScrollingText>
       </div>
       <div className="hidden mini-player:group-hover-supported:flex w-full items-center h-4">
         <MiniPlayerProgress showTime compact />

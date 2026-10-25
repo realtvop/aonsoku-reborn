@@ -115,7 +115,7 @@ export const ArtworkWithInfo = memo(function ArtworkWithInfo({
             CONTENT_MAX_WIDTH,
           )}
         >
-          <AlbumName className="pb-1 [&>div]:py-0.5 [&_p]:leading-normal" />
+          <AlbumName className="pt-0.5 pb-1.5 [&_p]:leading-normal" />
         </div>
 
         <div

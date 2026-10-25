@@ -22,6 +22,13 @@
   initial-value: 0;
 }
 
+/* Registered so ScrollingText can animate the width of its leading fade. */
+@property --scrolling-text-fade-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -384,8 +391,78 @@ img {
   @apply shadow-2xl -shadow-spread-2 shadow-y-[3px] rounded-lg;
 }
 
-.rfm-marquee {
-  @apply overflow-hidden;
+/* ScrollingText (src/app/components/scrolling-text). The engine toggles
+   data-overflowing and sets the period and fade lengths. */
+@layer components {
+  .scrolling-text {
+    display: flex;
+    min-width: 0;
+    overflow: hidden;
+    overflow: clip;
+    /* Room for accents and descenders that reach past the line box. The
+       padding overlaps neighbours, so only the track takes pointer input. */
+    padding-block: 0.25em;
+    margin-block: -0.25em;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  .scrolling-text[data-align="center"] {
+    justify-content: center;
+  }
+
+  .scrolling-text[data-align="end"] {
+    justify-content: flex-end;
+  }
+
+  .scrolling-text[data-overflowing] {
+    justify-content: flex-start;
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 var(--scrolling-text-fade-start),
+      #000 calc(100% - var(--scrolling-text-fade-end, 1em)),
+      transparent
+    );
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 var(--scrolling-text-fade-start),
+      #000 calc(100% - var(--scrolling-text-fade-end, 1em)),
+      transparent
+    );
+  }
+
+  .scrolling-text-track {
+    display: flex;
+    flex: none;
+    pointer-events: auto;
+  }
+
+  .scrolling-text[data-overflowing] > .scrolling-text-track {
+    will-change: transform;
+  }
+
+  .scrolling-text-item {
+    display: flex;
+    flex: none;
+  }
+
+  .scrolling-text[data-overflowing]
+    > .scrolling-text-track
+    > .scrolling-text-item {
+    width: var(--scrolling-text-period);
+  }
+
+  .scrolling-text:not([data-overflowing])
+    > .scrolling-text-track
+    > .scrolling-text-clone {
+    display: none;
+  }
+
+  .scrolling-text-content {
+    flex: none;
+  }
 }
 
 /* Native Scroll Bar */

@@ -7,14 +7,13 @@ same failure surface through the real service boundary.
 
 ## Inventory
 
-Inventory date: 2026-10-04.
+Inventory date: 2026-10-22.
 
-- Android: 25 Kotlin/Java test files and 142 `@Test` cases across
+- Android: 26 Kotlin/Java test files and 145 `@Test` cases across
   `android/app/src/{test,androidTest}` and
   `capacitor-plugins/capacitor-native/android/src/{test,androidTest}`.
-- iOS before this parity pass: 6 XCTest files and 11 `test*` methods.
-- iOS after this parity pass: 20 XCTest files and 85 `test*` methods in
-  `capacitor-plugins/capacitor-native/ios/Tests/AonsokuNativePluginTests`.
+- Native iOS: 42 XCTest files and 297 `test*` methods in
+  `ios/AonsokuKit/Tests/AonsokuKitTests`.
 - Status legend:
   - **Covered**: iOS verifies the same behavior and regression risk.
   - **N/A**: the Android behavior has no iOS equivalent or is generated
@@ -31,7 +30,7 @@ Inventory date: 2026-10-04.
 | Audio cache naming | `AudioCacheUtilsTest` (2): stable safe id and MIME extension | `DownloadTests`: cache identity and content-type extension behavior | Covered |
 | Remote command allowlist | `AudioPluginRemoteCommandTest` (2): supported and rejected commands | `AudioAdapterTests`: exact coordination allowlist, rejection, selected IDs and positions | Covered |
 | Handoff queue decoding | `HandoffPlaybackStateTest` (5): full, user-only, malformed, inconsistent and legacy snapshots | `HandoffTests` (5) plus `NativeIntegrationTests`: decode compatibility, fencing, injected-library resolution, missing-song rejection and queue restoration | Covered |
-| Capacitor audio payload parsing | `NativeAudioSourceParserTest` (7): all source kinds and metadata/null handling | `AudioAdapterTests` (5): all source kinds, invalid payloads, numeric metadata and command payloads | Covered |
+| Legacy audio payload compatibility | `NativeAudioSourceParserTest` (7): all source kinds and metadata/null handling | `AudioAdapterTests` (5): all source kinds, invalid payloads, numeric metadata and command payloads | Covered |
 | Downloads and cancellation | `NativeDownloadManagerTest` (3): initialization, listener lifecycle and inactive cancellation | `DownloadTests` (8): auth/transcoding URL, missing credentials, active cancel/cancel-all, completion file and metadata finalization, stable background identifier and relaunch completion ownership, all without real network | Covered |
 | Queue engine | `NativeQueueEngineTest` (5): set/load, navigation, manual queue, edits and restore | `QueueTests` (6), `RestorationTests` and `NativeIntegrationTests`: delegate load/advance, manual precedence, repeat/exhaustion, current-song-preserving reorder, persistence and adapter-compatible full state | Covered |
 | Scrobble buffer | `NativeScrobbleBufferTest` (9): timing, pause/resume, persistence, ordering and mutations | `ScrobbleTests` (6): injected clock/store, zero-time suppression, pause exclusion, duration retention, ordered durable mutations and 50%/240-second eligibility | Covered |
@@ -61,10 +60,10 @@ Parity also includes iOS risks with no direct Android test counterpart:
   and success cancellation with an injected scheduler.
 - `DownloadTests` verifies background `URLSession` relaunch ownership,
   cancellation, cache finalization and metadata without network access.
-- `NativeIntegrationTests` covers the `AppServices` service graph,
+- `NativeIntegrationTests` covers the native `AppServices` service graph,
   `AudioService` queue event/persistence/restore path, handoff through the
   injected library database, `LibraryService` initialization/query/lyrics,
-  `AppLifecycleService` routing, and both audio/data Capacitor payload shapes.
+  `AppLifecycleService` routing, and legacy audio/data payload compatibility.
 - `LifecycleTests` verifies idempotent launch/background/foreground/terminate
   routing and background transfer completion ownership.
 

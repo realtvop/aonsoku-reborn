@@ -1,0 +1,75 @@
+{
+  "native": {
+    "generic": {
+      "retry": "다시 시도"
+    },
+    "explicit": "청소년 유해",
+    "error": {
+      "title": "문제가 발생했습니다"
+    },
+    "home": {
+      "empty": {
+        "title": "라이브러리가 비어 있습니다",
+        "description": "서버가 스캔을 마치면 앨범이 여기에 표시됩니다."
+      }
+    },
+    "search": {
+      "description": "라이브러리에서 앨범, 곡, 아티스트를 찾아보세요."
+    },
+    "sort": {
+      "label": "정렬",
+      "order": "순서"
+    },
+    "songs": {
+      "empty": "곡 없음"
+    },
+    "artists": {
+      "empty": "아티스트 없음",
+      "search": "아티스트 검색…"
+    },
+    "artist": {
+      "latestRelease": "최신 발매"
+    },
+    "favorites": {
+      "noAlbums": "아직 즐겨찾는 앨범이 없습니다",
+      "noArtists": "아직 즐겨찾는 아티스트가 없습니다"
+    },
+    "downloads": {
+      "noAlbums": "다운로드한 앨범 없음",
+      "noPlaylists": "다운로드한 재생목록 없음",
+      "noSongs": "다운로드한 곡 없음",
+      "description": "다운로드한 앨범, 재생목록, 곡은 연결 없이 재생할 수 있습니다."
+    },
+    "playlist": {
+      "added": "‘{{name}}’에 추가됨",
+      "alreadyAdded": "이미 ‘{{name}}’에 있음",
+      "addedSkipped": "‘{{name}}’에 추가됨. 이미 있는 곡은 건너뛰었습니다.",
+      "addFailed": "재생목록에 추가할 수 없습니다"
+    },
+    "player": {
+      "volume": "음량"
+    },
+    "settings": {
+      "autoOpenNowPlaying": {
+        "label": "‘지금 재생 중’ 자동으로 열기",
+        "info": "앨범, 재생목록 또는 곡을 재생하면 ‘지금 재생 중’을 표시합니다."
+      }
+    },
+    "accountSwitch": {
+      "different": {
+        "title": "계정을 전환하시겠습니까?",
+        "message": "{{server}}의 {{user}}(으)로 로그인하면 이 기기에서 {{previousServer}}의 {{previousUser}} 라이브러리, 다운로드 및 재생 기록이 지워집니다. 서버에서는 아무것도 삭제되지 않습니다."
+      },
+      "server": {
+        "title": "같은 서버입니까?",
+        "message": "이 기기에 {{previousServer}}의 {{user}} 라이브러리, 다운로드 및 재생 기록이 있습니다. {{server}}이(가) 주소만 바뀐 같은 서버라면 유지하고, 그렇지 않으면 지우고 새로 시작하십시오."
+      },
+      "unknown": {
+        "title": "기존 라이브러리를 유지하시겠습니까?",
+        "message": "이 기기에 이전 로그인의 라이브러리와 다운로드가 있습니다. {{server}}의 {{user}} 계정의 것이라면 유지하고, 그렇지 않으면 지우고 새로 시작하십시오."
+      },
+      "erase": "지우고 계속",
+      "keep": "라이브러리 유지"
+    }
+  }
+}
