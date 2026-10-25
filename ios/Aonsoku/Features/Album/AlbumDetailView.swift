@@ -130,7 +130,7 @@ struct AlbumDetailView: View {
         if sizeClass == .regular {
             HStack(alignment: .bottom, spacing: 28) {
                 cover(album)
-                    .frame(width: 260)
+                    .frame(width: 220, height: 220)
                 VStack(alignment: .leading, spacing: 4) {
                     titles(album, font: .title.bold())
                 }
@@ -141,7 +141,7 @@ struct AlbumDetailView: View {
         } else {
             VStack(spacing: 0) {
                 cover(album)
-                    .frame(maxWidth: 290)
+                    .frame(width: 200, height: 200)
                     .padding(.horizontal, 24)
                 VStack(spacing: 4) {
                     titles(album, font: .title2.bold())

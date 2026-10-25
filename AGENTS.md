@@ -138,7 +138,7 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   `--background-foreground`), and bundled Poppins sets headings only.
   Playlist and artist pages share the web image header (`DetailHeader`).
   Album pages use a system-background artwork glow and the original native
-  information layout: a 290pt cover on phones (260pt on iPad), system title,
+  information layout: a 200pt cover on phones (220pt on iPad), system title,
   regular 20pt tinted artist links, and genre/year badges. Artist and genre
   navigation use plain buttons without disclosure arrows. The shared capsule
   Liquid Glass playback row and its Shuffle/Favorite actions stay below.
