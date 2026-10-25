@@ -23,19 +23,18 @@ struct DetailHeader<Cover: View, Subtitle: View>: View {
 
     var body: some View {
         let isDark = DetailBand.isDark(palette, theme: theme.palette)
-        let link = DetailBand.linkColor(palette, theme: theme.palette)
         Group {
             if sizeClass == .regular {
                 HStack(alignment: .bottom, spacing: 28) {
                     framedCover(side: 220)
-                    texts(alignment: .leading, isDark: isDark, link: link)
+                    texts(alignment: .leading, isDark: isDark)
                     Spacer(minLength: 0)
                 }
                 .padding(.top, 16)
             } else {
                 VStack(spacing: 16) {
                     framedCover(side: 200)
-                    texts(alignment: .center, isDark: isDark, link: link)
+                    texts(alignment: .center, isDark: isDark)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.top, 8)
@@ -60,11 +59,12 @@ struct DetailHeader<Cover: View, Subtitle: View>: View {
             .shadow(color: .black.opacity(0.45), radius: 10, y: 3)
     }
 
-    private func texts(alignment: HorizontalAlignment, isDark: Bool, link: Color) -> some View {
+    private func texts(alignment: HorizontalAlignment, isDark: Bool) -> some View {
         let textAlignment: TextAlignment = alignment == .center ? .center : .leading
         return VStack(alignment: alignment, spacing: 4) {
             Text(kind)
                 .font(.caption.weight(.medium))
+                .opacity(0.8)
             Text(title)
                 .displayFont(.title)
                 .lineLimit(3)
@@ -73,10 +73,10 @@ struct DetailHeader<Cover: View, Subtitle: View>: View {
                 .accessibilityAddTraits(.isHeader)
             subtitle
                 .multilineTextAlignment(textAlignment)
-                .tint(link)
             if !metadata.isEmpty {
                 MetadataLine(items: metadata, alignment: alignment)
                     .font(.subheadline)
+                    .opacity(0.8)
                     .padding(.top, 2)
             }
         }
@@ -97,13 +97,8 @@ struct DetailBand: View {
     static let overscroll: CGFloat = 1200
     /// The fade from the band into the page.
     static let fadeHeight: CGFloat = 96
-    /// Where the title and the lines below it sit on the band, as the share of
-    /// the background washed over the cover's color.
-    private static let textStops = [0.35, 0.4, 0.45, 0.5]
-    /// Where the artist link sits, lower on the band than the title.
-    private static let linkStops = [0.45, 0.5]
-    /// Large text needs 3:1 against its background.
-    private static let largeTextContrast = 3.0
+    /// How much of the background the header's text sits on, on average.
+    private static let wash = 0.35
 
     var body: some View {
         let background = theme.palette.background
@@ -136,57 +131,17 @@ struct DetailBand: View {
         .accessibilityHidden(true)
     }
 
-    /// Whether light text reads better on the band behind a header's text,
-    /// the theme's own answer until the cover's colors are known. The band
-    /// grows darker or lighter toward the background as it runs down the
-    /// header, so each text color is judged by its weakest contrast over the
-    /// stops the text sits on, not over the band's average.
+    /// Whether light text reads better on the washed band; the theme's own
+    /// answer until the cover's colors are known.
     static func isDark(_ palette: ArtworkPalette?, theme: ThemePalette) -> Bool {
         guard let average = palette?.average else { return theme.isDark }
-        let bands = bandColors(at: textStops, average: average, theme: theme)
-        let white = RGBColor(red: 1, green: 1, blue: 1)
-        let black = RGBColor(red: 0, green: 0, blue: 0)
-        let lightText = bands.map { white.contrastRatio(with: $0) }.min() ?? 0
-        let darkText = bands.map { black.contrastRatio(with: $0) }.min() ?? 0
-        return lightText > darkText
-    }
-
-    /// The artist link's color: the theme's primary while it reaches large-text
-    /// contrast over the band where the link sits, otherwise the primary pulled
-    /// toward the header's text color until it does.
-    static func linkColor(_ palette: ArtworkPalette?, theme: ThemePalette) -> Color {
-        guard let average = palette?.average else { return theme.primary }
-        let bands = bandColors(at: linkStops, average: average, theme: theme)
-        let text = isDark(palette, theme: theme)
-            ? RGBColor(red: 1, green: 1, blue: 1)
-            : RGBColor(red: 0, green: 0, blue: 0)
-        for step in 0...10 {
-            let link = theme.primaryRGB.mixed(with: text, by: Double(step) / 10)
-            if bands.allSatisfy({ link.contrastRatio(with: $0) >= largeTextContrast }) {
-                return Color(link)
-            }
-        }
-        return Color(text)
-    }
-
-    /// The band's colors at `stops`, laid out the way `body` draws them.
-    private static func bandColors(
-        at stops: [Double],
-        average: RGBColor,
-        theme: ThemePalette
-    ) -> [RGBColor] {
-        stops.map { average.mixed(with: theme.backgroundRGB, by: $0) }
-    }
-}
-
-private extension RGBColor {
-    /// The color `fraction` of the way from this one to `other`.
-    func mixed(with other: RGBColor, by fraction: Double) -> RGBColor {
-        RGBColor(
-            red: red * (1 - fraction) + other.red * fraction,
-            green: green * (1 - fraction) + other.green * fraction,
-            blue: blue * (1 - fraction) + other.blue * fraction
+        let background = theme.backgroundRGB
+        let washed = RGBColor(
+            red: average.red * (1 - wash) + background.red * wash,
+            green: average.green * (1 - wash) + background.green * wash,
+            blue: average.blue * (1 - wash) + background.blue * wash
         )
+        return washed.luminance < 0.179
     }
 }
 

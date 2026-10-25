@@ -40,10 +40,8 @@ the same on every platform (see [Design language](#design-language)).
   the web image header: the cover (round for artists) over a band of the
   cover's RMS average color washed with the theme background, which reaches
   under the navigation bar and fades into the page. Text, and the bar while
-  the header is visible, switch between light and dark by their weakest
-  contrast over the lower part of the band. An album's artist link keeps the
-  theme primary only where it reaches 3:1 there, otherwise the header's text
-  color. Below it, a long Play capsule on Liquid Glass sits between bare
+  the header is visible, switch between light and dark to stay readable on
+  the band. Below it, a long Play capsule on Liquid Glass sits between bare
   Shuffle and heart (or download) symbols.
 - The mini player and Now Playing keep their own presentation. Now
   Playing shares only the type and the web's like color: the song title and

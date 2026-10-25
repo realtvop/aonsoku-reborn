@@ -137,13 +137,10 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   every theme paints the `src/themes.css` palette (pages on
   `--background-foreground`), and bundled Poppins sets headings only.
   Playlist and artist pages share the web image header (`DetailHeader`).
-  Header text is black or white by its weakest contrast over the lower part of
-  the band (`DetailBand.isDark`). Album pages retain the cover-average color
-  band over the theme page and native information layout: a 200pt cover on
-  phones (220pt on iPad), system title, regular 20pt artist links tinted with
-  the theme primary where that reaches 3:1 on the band (otherwise the header's
-  text color), and genre/year badges. Artist and genre navigation use plain
-  buttons without disclosure arrows. The shared capsule
+  Album pages retain the cover-average color band over the theme page and native
+  information layout: a 200pt cover on phones (220pt on iPad), system title,
+  regular 20pt tinted artist links, and genre/year badges. Artist and genre
+  navigation use plain buttons without disclosure arrows. The shared capsule
   Liquid Glass playback row and its Shuffle/Favorite actions stay below.
   Keep new screens on the `ThemeColor`, `displayFont` and `ThemedForm`
   tokens rather than system grays and fonts.

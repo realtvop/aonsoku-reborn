@@ -39,12 +39,6 @@ struct HSL: Hashable, Sendable {
         return Color(.sRGB, red: r, green: g, blue: b)
     }
 
-    /// The color as components, for blending with cover colors.
-    var rgbColor: RGBColor {
-        let (r, g, b) = rgb
-        return RGBColor(red: r, green: g, blue: b)
-    }
-
     /// Moves `fraction` of the way toward `other` in RGB space.
     func mixed(with other: HSL, _ fraction: Double) -> Color {
         let a = rgb
@@ -83,9 +77,8 @@ struct ThemePalette: Hashable {
     let groupedBackground: Color
     /// Grouped rows, cards and other raised surfaces.
     let elevated: Color
-    /// `background` and `primary` as components, for blending with cover colors.
+    /// `background` as components, for blending with cover colors.
     let backgroundRGB: RGBColor
-    let primaryRGB: RGBColor
     let isDark: Bool
 
     init(
@@ -118,8 +111,8 @@ struct ThemePalette: Hashable {
         self.accentForeground = accentForeground.color
         self.destructive = destructive.color
         self.border = border.color
-        backgroundRGB = background.rgbColor
-        primaryRGB = primary.rgbColor
+        let rgb = background.rgb
+        backgroundRGB = RGBColor(red: rgb.red, green: rgb.green, blue: rgb.blue)
         isDark = background.lightness < 50
         // Dark themes raise rows toward the foreground; light themes sink
         // the page instead, so rows keep the theme's own background.

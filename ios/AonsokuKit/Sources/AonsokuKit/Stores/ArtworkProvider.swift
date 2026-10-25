@@ -33,13 +33,6 @@ public struct RGBColor: Hashable, Sendable {
         }
         return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
     }
-
-    /// WCAG contrast ratio with `other`, from 1 (none) to 21 (black on white).
-    public func contrastRatio(with other: RGBColor) -> Double {
-        let lighter = max(luminance, other.luminance)
-        let darker = min(luminance, other.luminance)
-        return (lighter + 0.05) / (darker + 0.05)
-    }
 }
 
 /// Dominant colors of a cover, for Now Playing and detail backgrounds.

@@ -541,14 +541,12 @@ struct NowPlayingIndicator: View {
 
 /// The "E" mark on explicit songs and albums.
 struct ExplicitBadge: View {
-    var style: AnyShapeStyle = AnyShapeStyle(.secondary)
-
     @Environment(Localizer.self) private var t
 
     var body: some View {
         Image(systemName: "e.square.fill")
             .font(.caption)
-            .foregroundStyle(style)
+            .foregroundStyle(.secondary)
             .accessibilityLabel(t("native.explicit"))
     }
 }
@@ -640,13 +638,12 @@ struct SongCacheBadge: View {
 
 struct AlbumCacheBadge: View {
     let albumId: String
-    var style: AnyShapeStyle = AnyShapeStyle(.secondary)
 
     @Environment(DownloadsStore.self) private var downloads
 
     var body: some View {
         let _ = downloads.revision
-        CollectionCacheIndicator(state: downloads.state(ofAlbum: albumId), style: style)
+        CollectionCacheIndicator(state: downloads.state(ofAlbum: albumId))
     }
 }
 
@@ -663,7 +660,6 @@ struct PlaylistCacheBadge: View {
 
 private struct CollectionCacheIndicator: View {
     let state: CollectionCacheState
-    var style: AnyShapeStyle = AnyShapeStyle(.secondary)
 
     @Environment(Localizer.self) private var t
 
@@ -681,7 +677,7 @@ private struct CollectionCacheIndicator: View {
             }
         }
         .font(.caption)
-        .foregroundStyle(style)
+        .foregroundStyle(.secondary)
     }
 }
 
