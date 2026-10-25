@@ -95,6 +95,7 @@ private struct SyncedLyrics: View {
     @Environment(LyricsStore.self) private var store
 
     @State private var activeIndex: Int?
+    @State private var seekFeedback = 0
     /// When the user last scrolled by hand.
     @State private var manualScrollAt = Date.distantPast
 
@@ -103,15 +104,20 @@ private struct SyncedLyrics: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 28) {
                     ForEach(lyrics.lines) { line in
-                        LyricLineView(
-                            line: line,
-                            isActive: line.id == activeIndex,
-                            showsTranslation: showsTranslation
-                        )
-                        .id(line.id)
-                        .onTapGesture {
+                        Button {
                             play(from: line)
+                        } label: {
+                            LyricLineView(
+                                line: line,
+                                isActive: line.id == activeIndex,
+                                showsTranslation: showsTranslation
+                            )
+                            .multilineTextAlignment(.leading)
+                            .frame(minHeight: 44, alignment: .leading)
+                            .contentShape(.rect)
                         }
+                        .buttonStyle(.touchFeedback)
+                        .id(line.id)
                     }
                     LyricsCredit(lyrics: lyrics)
                 }
@@ -142,6 +148,7 @@ private struct SyncedLyrics: View {
             }
         }
         .mask(EdgeFade())
+        .haptic(.selection, trigger: seekFeedback)
         .task(id: LyricsFollowingTask(lyrics: lyrics, isActive: isActive)) {
             guard isActive else { return }
             // Checks the line ten times a second but only redraws when it
@@ -159,6 +166,7 @@ private struct SyncedLyrics: View {
     /// Plays from the line, which the offset moves on the song's timeline.
     private func play(from line: LyricLine) {
         manualScrollAt = .distantPast
+        seekFeedback += 1
         player.seek(to: max(line.start - store.selection.offset, 0))
         if !player.isPlaying {
             player.resume()
@@ -197,7 +205,7 @@ private struct LyricLineView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(.rect)
         .animation(.smooth(duration: 0.45), value: isActive)
-        .accessibilityAddTraits(isActive ? [.isSelected, .isButton] : .isButton)
+        .accessibilityAddTraits(isActive ? .isSelected : [])
     }
 }
 
