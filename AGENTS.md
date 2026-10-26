@@ -632,6 +632,10 @@ Electron follows the same renderer/native ownership boundary as Capacitor:
   of adding new Electron renderer `localStorage` persistence.
 - `electron/main/native/coordination/` owns coordination HTTP, token/config
   persistence, and the realtime WebSocket.
+  Desktop credentials, coordination tokens and renderer preferences are
+  persisted through `ProtectedValue` with Electron `safeStorage`. Legacy
+  plaintext values migrate on read. Without secure OS encryption (including
+  Linux `basic_text`), new secrets stay in memory for the current process.
 - `electron/main/native/media-protocol.ts` resolves renderer-facing
   `aonsoku-media://` cover/avatar/stream identifiers and injects credentials in
   the main process. Renderer code must not construct authenticated server URLs.

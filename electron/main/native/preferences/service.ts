@@ -1,7 +1,9 @@
 import type { AonsokuNativePreferencesPlugin } from "@aonsoku/capacitor-native/preferences";
 import { AonsokuStore } from "../../core/store";
+import { ProtectedValue } from "../../core/protected-value";
 
 type PreferencesStore = {
+  encryptedPreferences?: string;
   preferences?: Record<string, string>;
   queueState?: string;
   playHistory?: string[];
@@ -13,37 +15,45 @@ export class DesktopNativePreferencesService
   private readonly store = new AonsokuStore<PreferencesStore>({
     name: "native-preferences",
     defaults: {
-      preferences: {},
       playHistory: [],
     },
   });
+  // The renderer's app/player preferences can contain authentication tokens
+  // and custom-lyrics passwords, so protecting only native-credentials is insufficient.
+  private readonly preferences = new ProtectedValue<Record<string, string>>({
+    readEncrypted: () => this.store.get("encryptedPreferences"),
+    writeEncrypted: (value) => this.store.set("encryptedPreferences", value),
+    clearEncrypted: () => this.store.delete("encryptedPreferences"),
+    readLegacy: () => this.store.get("preferences"),
+    clearLegacy: () => this.store.delete("preferences"),
+  });
 
   async getAllPreferences(): Promise<{ preferences: Record<string, string> }> {
-    return { preferences: { ...(this.store.get("preferences") ?? {}) } };
+    return { preferences: { ...(this.preferences.get() ?? {}) } };
   }
 
   async setPreferences(options: {
     preferences: Record<string, string>;
   }): Promise<void> {
-    const current = this.store.get("preferences") ?? {};
-    this.store.set("preferences", {
+    const current = this.preferences.get() ?? {};
+    this.preferences.set({
       ...current,
       ...options.preferences,
     });
   }
 
   async setPreference(options: { key: string; value: string }): Promise<void> {
-    const current = this.store.get("preferences") ?? {};
-    this.store.set("preferences", {
+    const current = this.preferences.get() ?? {};
+    this.preferences.set({
       ...current,
       [options.key]: options.value,
     });
   }
 
   async deletePreference(options: { key: string }): Promise<void> {
-    const current = { ...(this.store.get("preferences") ?? {}) };
+    const current = { ...(this.preferences.get() ?? {}) };
     delete current[options.key];
-    this.store.set("preferences", current);
+    this.preferences.set(current);
   }
 
   async getQueueState(): Promise<{ state: string | null }> {

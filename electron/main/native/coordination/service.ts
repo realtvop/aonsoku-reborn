@@ -9,12 +9,14 @@ import type {
 import WebSocket from "ws";
 import type { Envelope } from "../../../../src/coordination/types";
 import { AonsokuStore } from "../../core/store";
+import { ProtectedValue } from "../../core/protected-value";
 import {
   DesktopCoordinationPlayback,
   type DesktopCoordinationPlaybackState,
 } from "./playback";
 
 interface CoordinationStore {
+  encryptedTokens?: string;
   tokens?: CoordinationTokenOptions;
   config?: CoordinationConfigOptions;
   lastSeq?: number;
@@ -26,6 +28,13 @@ type Emit = (event: string, payload: unknown) => void;
 export class DesktopNativeCoordinationService {
   private readonly store = new AonsokuStore<CoordinationStore>({
     name: "native-coordination",
+  });
+  private readonly tokens = new ProtectedValue<CoordinationTokenOptions>({
+    readEncrypted: () => this.store.get("encryptedTokens"),
+    writeEncrypted: (value) => this.store.set("encryptedTokens", value),
+    clearEncrypted: () => this.store.delete("encryptedTokens"),
+    readLegacy: () => this.store.get("tokens"),
+    clearLegacy: () => this.store.delete("tokens"),
   });
   private ws: WebSocket | null = null;
   private state:
@@ -58,13 +67,13 @@ export class DesktopNativeCoordinationService {
   }
 
   storeTokens(options: CoordinationTokenOptions): void {
-    this.store.set("tokens", options);
+    this.tokens.set(options);
   }
   loadTokens(): CoordinationTokenOptions | null {
-    return this.store.get("tokens") ?? null;
+    return this.tokens.get();
   }
   clearTokens(): void {
-    this.store.delete("tokens");
+    this.tokens.clear();
   }
   storeConfig(options: CoordinationConfigOptions): void {
     this.store.set("config", options);

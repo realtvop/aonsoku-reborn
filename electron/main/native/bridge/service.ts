@@ -11,13 +11,17 @@ import type {
   StoredCredentials,
 } from "@aonsoku/capacitor-native/bridge";
 import { AonsokuStore } from "../../core/store";
+import { ProtectedValue } from "../../core/protected-value";
 import { subsonicFetch } from "./http-agent";
 
 const APP_NAME = "Aonsoku";
 const DEFAULT_VERSION = "1.16.0";
 const TOKEN_SALT = "40n50kuPl4y3r";
 
-type CredentialStore = { credentials?: StoredCredentials };
+type CredentialStore = {
+  credentials?: StoredCredentials;
+  encryptedCredentials?: string;
+};
 
 function normalizeServerUrl(url: string): string {
   return url.replace(/\/+$/, "");
@@ -39,13 +43,20 @@ export class DesktopNativeBridgeService {
   private readonly store = new AonsokuStore<CredentialStore>({
     name: "native-credentials",
   });
+  private readonly credentials = new ProtectedValue<StoredCredentials>({
+    readEncrypted: () => this.store.get("encryptedCredentials"),
+    writeEncrypted: (value) => this.store.set("encryptedCredentials", value),
+    clearEncrypted: () => this.store.delete("encryptedCredentials"),
+    readLegacy: () => this.store.get("credentials"),
+    clearLegacy: () => this.store.delete("credentials"),
+  });
 
   storeCredentials(options: StoreCredentialsOptions): void {
     const existing = this.getCredentials();
     const password = options.password || existing?.password;
     if (!password)
       throw new Error("Missing password and no credentials stored");
-    this.store.set("credentials", {
+    this.credentials.set({
       ...options,
       serverUrl: normalizeServerUrl(options.serverUrl),
       password,
@@ -53,11 +64,11 @@ export class DesktopNativeBridgeService {
   }
 
   getCredentials(): StoredCredentials | null {
-    return this.store.get("credentials") ?? null;
+    return this.credentials.get();
   }
 
   clearCredentials(): void {
-    this.store.delete("credentials");
+    this.credentials.clear();
   }
 
   hasCredentials(): { stored: boolean } {

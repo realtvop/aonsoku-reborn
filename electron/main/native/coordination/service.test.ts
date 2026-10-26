@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   data: {} as Record<string, unknown>,
 }));
+vi.mock("electron", () => ({
+  safeStorage: { isEncryptionAvailable: () => false },
+}));
 
 vi.mock("../../core/store", () => ({
   AonsokuStore: class {
