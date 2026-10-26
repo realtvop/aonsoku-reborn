@@ -59,6 +59,48 @@ final class PlaybackLifecycleTests: XCTestCase {
         ))
     }
 
+    func testExhaustedTailBypassesRecoveryAfterUnderreportedDuration() {
+        XCTAssertTrue(QueueEndOfStreamPolicy.hasExhaustedReportedTail(
+            position: 242,
+            metadataDuration: 200,
+            bufferedEnd: 240
+        ))
+        XCTAssertTrue(QueueEndOfStreamPolicy.hasExhaustedReportedTail(
+            position: 240,
+            metadataDuration: 200,
+            bufferedEnd: 240
+        ))
+    }
+
+    func testUnderreportedDurationDoesNotFinishWhileBufferedAudioRemains() {
+        XCTAssertFalse(QueueEndOfStreamPolicy.hasExhaustedReportedTail(
+            position: 220,
+            metadataDuration: 200,
+            bufferedEnd: 240
+        ))
+    }
+
+    func testMidTrackAndUnknownTailsStillRequireRecovery() {
+        for (position, metadataDuration, bufferedEnd) in [
+            (42.0, 200.0, 40.0),
+            (242, 0, 240),
+            (242, .nan, 240),
+            (242, .infinity, 240),
+            (242, 200, 0),
+            (242, 200, .nan),
+            (242, 200, .infinity),
+            (.nan, 200, 240),
+            (.infinity, 200, 240),
+            (242, 200, 150),
+        ] {
+            XCTAssertFalse(QueueEndOfStreamPolicy.hasExhaustedReportedTail(
+                position: position,
+                metadataDuration: metadataDuration,
+                bufferedEnd: bufferedEnd
+            ))
+        }
+    }
+
     func testQueueEndOfStreamFallbackOnlyAdvancesNearTheKnownEnd() {
         var tracker = QueueEndOfStreamTracker()
         let start = Date(timeIntervalSince1970: 100)

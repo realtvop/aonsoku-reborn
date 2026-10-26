@@ -232,6 +232,23 @@ enum PlaybackRecoverySeekValidation {
     }
 }
 
+enum QueueEndOfStreamPolicy {
+    static func hasExhaustedReportedTail(
+        position: Double,
+        metadataDuration: Double,
+        bufferedEnd: Double
+    ) -> Bool {
+        // Metadata alone cannot end a song: longer media keeps playing while
+        // there is buffered audio ahead. Only bypass recovery after consuming
+        // the entire reported buffer as well as the server's duration.
+        metadataDuration.isFinite && metadataDuration > 0 &&
+            bufferedEnd.isFinite && bufferedEnd > 0 &&
+            bufferedEnd >= metadataDuration - 1 &&
+            position.isFinite && position > 5 &&
+            position >= max(metadataDuration, bufferedEnd)
+    }
+}
+
 struct QueueEndOfStreamTracker {
     private var stalledSince: Date?
 

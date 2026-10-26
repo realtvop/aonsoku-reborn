@@ -396,8 +396,15 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   in native Playback settings. Authentication stream URLs, queued/restored
   Subsonic URLs, recovery loads and downloads read the persisted setting for
   each new request; existing transfers are not restarted by a setting change.
-  Buffer-range mismatches recover at the current position instead of
-  synthesizing a track-end event or seeking to zero, including near the tail.
+  Buffer-range mismatches normally recover at the current position instead
+  of seeking to zero.
+  Once queued playback has consumed both a positive server-reported duration
+  and the end of all loaded ranges (which must reach that reported duration),
+  a buffer mismatch, empty-buffer stall or failed ending finishes through the
+  normal queue/repeat/sleep path without seek/reload retries. Buffered audio
+  beyond the reported duration continues playing; unknown durations, missing
+  ranges and mid-track stalls retain recovery. A pending recovery also checks
+  this tail condition before seeking or reloading, and finishing cancels it.
   Cache resolution skips empty files and files rejected by playback. Failed,
   truncated or repeatedly stalled local items fall back through source
   resolution instead of reloading the same cache; one cache repair download

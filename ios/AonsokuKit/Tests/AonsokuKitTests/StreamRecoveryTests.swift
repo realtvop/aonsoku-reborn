@@ -4,6 +4,112 @@ import XCTest
 
 @MainActor
 final class StreamRecoveryTests: XCTestCase {
+    func testExhaustedQueueTailAdvancesWithoutSchedulingRecovery() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.audio.shutdown() }
+        try await prepareQueue(
+            audio: fixture.audio, player: fixture.player, database: fixture.database
+        )
+
+        NotificationCenter.default.post(
+            name: .AVPlayerItemFailedToPlayToEndTime,
+            object: fixture.player.currentItem
+        )
+
+        let advanced = await waitForPlayerStoreTest {
+            fixture.audio.fullState()?.currentSongId == "second"
+        }
+        XCTAssertTrue(advanced)
+        XCTAssertEqual(fixture.recovery.state, .idle)
+        XCTAssertTrue(fixture.scheduler.pending.allSatisfy(\.isCancelled))
+        XCTAssertTrue(fixture.player.seekPositions.isEmpty)
+    }
+
+    func testPendingRecoveryFinishesExhaustedTailBeforeReloading() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.audio.shutdown() }
+        try await prepareQueue(
+            audio: fixture.audio, player: fixture.player, database: fixture.database
+        )
+        fixture.player.position = 8
+        fixture.recovery.triggerRecovery(
+            currentTime: fixture.player.currentTime(),
+            generation: 2,
+            sourceKind: .stream,
+            requiresReload: true
+        )
+        fixture.player.position = 14
+        fixture.scheduler.performNext()
+
+        let advanced = await waitForPlayerStoreTest {
+            fixture.audio.fullState()?.currentSongId == "second"
+        }
+        XCTAssertTrue(advanced)
+        XCTAssertEqual(fixture.recovery.state, .idle)
+        XCTAssertTrue(fixture.scheduler.pending.allSatisfy(\.isCancelled))
+        XCTAssertTrue(fixture.player.seekPositions.isEmpty)
+    }
+
+    func testUnderreportedQueueDurationStillRecoversWithBufferedAudioAhead() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.audio.shutdown() }
+        try await prepareQueue(
+            audio: fixture.audio, player: fixture.player, database: fixture.database
+        )
+        (fixture.player.currentItem as? RecoveryTestItem)?.bufferedEnd = 30
+
+        NotificationCenter.default.post(
+            name: .AVPlayerItemFailedToPlayToEndTime,
+            object: fixture.player.currentItem
+        )
+
+        XCTAssertEqual(fixture.audio.fullState()?.currentSongId, "first")
+        XCTAssertEqual(fixture.recovery.state, .level2(attempt: 1))
+        XCTAssertFalse(fixture.scheduler.pending.isEmpty)
+    }
+
+    func testExhaustedQueueTailRetainsRepeatOneAndProgressMonitoring() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.audio.shutdown() }
+        try await prepareQueue(
+            audio: fixture.audio, player: fixture.player, database: fixture.database,
+            repeatMode: .one
+        )
+
+        NotificationCenter.default.post(
+            name: .AVPlayerItemFailedToPlayToEndTime,
+            object: fixture.player.currentItem
+        )
+        await flushPlayerCallbacks()
+
+        let restarted = await waitForPlayerStoreTest {
+            fixture.recovery.isMonitoringProgress
+        }
+        XCTAssertTrue(restarted)
+        XCTAssertEqual(fixture.audio.fullState()?.currentSongId, "first")
+        XCTAssertEqual(fixture.recovery.state, .idle)
+        XCTAssertTrue(fixture.scheduler.pending.allSatisfy(\.isCancelled))
+    }
+
+    func testExhaustedQueueTailHonorsEndOfTrackSleep() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.audio.shutdown() }
+        try await prepareQueue(
+            audio: fixture.audio, player: fixture.player, database: fixture.database
+        )
+        fixture.audio.setSleepTimer(seconds: 0, mode: "endOfTrack")
+
+        NotificationCenter.default.post(
+            name: .AVPlayerItemFailedToPlayToEndTime,
+            object: fixture.player.currentItem
+        )
+
+        XCTAssertEqual(fixture.audio.fullState()?.currentSongId, "first")
+        XCTAssertEqual(fixture.audio.playbackSnapshot().state, .paused)
+        XCTAssertFalse(fixture.recovery.isMonitoringProgress)
+        XCTAssertTrue(fixture.scheduler.pending.allSatisfy(\.isCancelled))
+    }
+
     func testRepeatedPlayPreservesAnActiveReload() throws {
         let fixture = try makeFixture()
         defer { fixture.audio.shutdown() }
@@ -289,6 +395,41 @@ final class StreamRecoveryTests: XCTestCase {
         XCTAssertEqual(fixture.player.playCount, 0)
     }
 
+    private func prepareQueue(
+        audio: AudioService,
+        player: RecoveryTestPlayer,
+        database: TemporaryDatabase,
+        repeatMode: AudioRepeatMode = .off
+    ) async throws {
+        let url = database.directory.appendingPathComponent("recovery.wav")
+        let songs = ["first", "second"].map { id in
+            QueueSong(
+                id: id, title: id, artist: "Artist", album: "Album",
+                duration: id == "first" ? 10 : 30,
+                streamUrl: url.absoluteString,
+                cachedFileUri: url.absoluteString
+            )
+        }
+        audio.setContextQueue(
+            songs: songs, currentIndex: 0, autoplay: false, repeatMode: repeatMode
+        )
+        let loaded = await waitForPlayerStoreTest {
+            audio.playbackSnapshot().metadata.title == "first" &&
+                audio.playbackSnapshot().state == .paused
+        }
+        XCTAssertTrue(loaded)
+        let item = try XCTUnwrap(player.currentItem as? RecoveryTestItem)
+        item.bufferedEnd = 12
+        player.position = 14
+        var playError: AudioServiceError?
+        audio.play { result in
+            if case .failure(let error) = result { playError = error }
+        }
+        if let playError {
+            throw XCTSkip("The simulator cannot activate its audio session: \(playError)")
+        }
+    }
+
     private func flushPlayerCallbacks() async {
         await withCheckedContinuation { continuation in
             DispatchQueue.main.async { continuation.resume() }
@@ -348,6 +489,7 @@ private final class ManualRecoveryScheduler {
 }
 
 private final class RecoveryTestPlayer: AVPlayer {
+    var position = 12.0
     var playCount = 0
     var seekPositions: [Double] = []
     var seekItemStatuses: [AVPlayerItem.Status] = []
@@ -376,10 +518,16 @@ private final class RecoveryTestPlayer: AVPlayer {
     }
 
     override func currentTime() -> CMTime {
-        CMTime(seconds: 12, preferredTimescale: 600)
+        CMTime(seconds: position, preferredTimescale: 600)
     }
 
     override func play() { playCount += 1 }
+
+    override func seek(to time: CMTime, completionHandler: @escaping @Sendable (Bool) -> Void) {
+        position = time.seconds
+        seekPositions.append(time.seconds)
+        completionHandler(true)
+    }
 
     override func seek(
         to time: CMTime,
@@ -403,9 +551,17 @@ private final class RecoveryTestPlayer: AVPlayer {
 // depending on simulator media decoding or ever starting a real player.
 private final class RecoveryTestItem: AVPlayerItem {
     private var testStatus: AVPlayerItem.Status = .unknown
+    var bufferedEnd = 0.0
 
     override var status: AVPlayerItem.Status { testStatus }
     override var duration: CMTime { CMTime(seconds: 30, preferredTimescale: 600) }
+    override var loadedTimeRanges: [NSValue] {
+        guard bufferedEnd > 0 else { return [] }
+        return [NSValue(timeRange: CMTimeRange(
+            start: .zero,
+            duration: CMTime(seconds: bufferedEnd, preferredTimescale: 600)
+        ))]
+    }
 
     func setStatus(_ status: AVPlayerItem.Status) {
         willChangeValue(forKey: "status")

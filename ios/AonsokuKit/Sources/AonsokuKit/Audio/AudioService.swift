@@ -1668,6 +1668,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     }
                 case .failed:
                     guard self.recoveryController.isMonitoringProgress else { return }
+                    if self.finishExhaustedQueueTail(player: player, item: item) { return }
                     self.recoveryController.triggerRecovery(
                         currentTime: player.currentTime(),
                         generation: generation,
@@ -1823,7 +1824,9 @@ public final class AudioService: NSObject, @unchecked Sendable {
             let error = note.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey]
                 as? Error
             guard let self, generation == self.playbackGeneration,
+                  item === self.playerItem,
                   self.recoveryController.isMonitoringProgress else { return }
+            if self.finishExhaustedQueueTail(player: player, item: item) { return }
             NativeLogger.shared.warn(
                 "Playback ended with error: \(error?.localizedDescription ?? "unknown")",
                 source: "AudioService"
@@ -2003,6 +2006,8 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private func handleEnded() {
         guard !isHandlingQueueEnd else { return }
         isHandlingQueueEnd = true
+        recoveryController.stopProgressMonitoring()
+        recoveryController.reset()
         endOfStreamTracker.reset()
         if sleepTimerMode == "endOfTrack" {
             isHandlingQueueEnd = false
@@ -2967,6 +2972,8 @@ public final class AudioService: NSObject, @unchecked Sendable {
               player === self.player,
               recoveryController.isMonitoringProgress,
               player.timeControlStatus == .waitingToPlayAtSpecifiedRate else { return }
+        if let item = playerItem,
+           finishExhaustedQueueTail(player: player, item: item) { return }
 
         recoveryController.triggerRecovery(
             currentTime: player.currentTime(),
@@ -2984,9 +2991,10 @@ public final class AudioService: NSObject, @unchecked Sendable {
               player === self.player,
               item === playerItem,
               recoveryController.isMonitoringProgress,
-              !isPlayerAtEnd,
               currentSourceKind != "radio",
               item.isPlaybackBufferEmpty else { return }
+        if finishExhaustedQueueTail(player: player, item: item) { return }
+        guard !isPlayerAtEnd else { return }
 
         let position = player.currentTime().seconds
         guard position.isFinite else { return }
@@ -3007,6 +3015,8 @@ public final class AudioService: NSObject, @unchecked Sendable {
 
     private func checkEndOfStreamFallback(player: AVPlayer) {
         if let item = playerItem,
+           finishExhaustedQueueTail(player: player, item: item) { return }
+        if let item = playerItem,
            recoverTruncatedCachedItem(item: item, player: player, generation: playbackGeneration) {
             return
         }
@@ -3024,6 +3034,25 @@ public final class AudioService: NSObject, @unchecked Sendable {
             source: "AudioService"
         )
         handleEnded()
+    }
+
+    private func finishExhaustedQueueTail(player: AVPlayer, item: AVPlayerItem) -> Bool {
+        guard isQueueActive, wantsPlayback,
+              recoveryController.isMonitoringProgress,
+              currentSourceKind != "radio",
+              player === self.player, item === playerItem,
+              !isSeeking, !isRecoveryReload,
+              QueueEndOfStreamPolicy.hasExhaustedReportedTail(
+                position: player.currentTime().seconds,
+                metadataDuration: loadedDuration ?? metadata.duration ?? 0,
+                bufferedEnd: bufferedTime
+              ) else { return false }
+        NativeLogger.shared.info(
+            "Reported track duration and loaded buffer exhausted; finishing without recovery.",
+            source: "AudioService"
+        )
+        handleEnded()
+        return true
     }
 
     private func checkBufferPositionCoherence(
@@ -3068,6 +3097,8 @@ public final class AudioService: NSObject, @unchecked Sendable {
         guard generation == playbackGeneration,
               player === self.player,
               recoveryController.isMonitoringProgress else { return }
+        if let item = playerItem,
+           finishExhaustedQueueTail(player: player, item: item) { return }
 
         // Loaded ranges describe available media, not the end of the song.
         // Keep the current position even when the mismatch is near the tail.
@@ -3405,9 +3436,22 @@ extension AudioService: NativeQueueEngineDelegate {
         seekToStart song: QueueSong
     ) {
         dispatchMain { [weak self] in
-            guard let self else { return }
+            guard let self, let player = self.player else { return }
+            let generation = self.playbackGeneration
             self.isHandlingQueueEnd = false
-            self.player?.seek(to: .zero) { _ in self.player?.play() }
+            player.seek(to: .zero) { [weak self, weak player] _ in
+                self?.dispatchMain {
+                    guard let self, let player,
+                          generation == self.playbackGeneration,
+                          player === self.player, self.wantsPlayback else { return }
+                    player.play()
+                    self.recoveryController.startProgressMonitoring(
+                        generation: generation,
+                        sourceKind: self.recoverySourceKind(),
+                        currentTime: player.currentTime()
+                    )
+                }
+            }
         }
     }
 }
@@ -3421,6 +3465,8 @@ extension AudioService: PlaybackRecoveryDelegate {
         guard generation == playbackGeneration, let player else { return }
         let revision = controller.revision
         guard controller.isCurrentAttempt(generation: generation, revision: revision) else { return }
+        if let item = playerItem,
+           finishExhaustedQueueTail(player: player, item: item) { return }
         if case .level1(let attempt) = controller.state {
             emit(.recoveryAttempt(level: 1, attempt: attempt, maxAttempts: 3))
         }
@@ -3447,6 +3493,8 @@ extension AudioService: PlaybackRecoveryDelegate {
         let revision = controller.revision
         guard generation == playbackGeneration,
               controller.isCurrentAttempt(generation: generation, revision: revision) else { return }
+        if let player, let item = playerItem,
+           finishExhaustedQueueTail(player: player, item: item) { return }
         var retryingLocalItem = false
         if case .level2(let attempt) = controller.state {
             emit(.recoveryAttempt(level: 2, attempt: attempt, maxAttempts: 2))
