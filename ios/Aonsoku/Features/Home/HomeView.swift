@@ -72,6 +72,7 @@ struct HomeView: View {
             // Keeps Recently Played current while Home is on screen, as the
             // web does every two minutes.
             guard network.isOnline else { return }
+            await home.refreshAutomatically()
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(120))
                 guard !Task.isCancelled else { return }

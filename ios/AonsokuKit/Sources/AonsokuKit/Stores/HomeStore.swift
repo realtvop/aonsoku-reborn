@@ -14,15 +14,25 @@ public final class HomeStore {
     @ObservationIgnored private var loadTask: Task<Void, Never>?
     @ObservationIgnored private let preferences: PreferencesService?
     @ObservationIgnored private var accountKey: String?
-    private static let cacheKey = "home.snapshot.v1"
+    static let cacheKey = "home.snapshot.v1"
     public private(set) var hasCarousel = false
+    @ObservationIgnored private let now: () -> Date
+    @ObservationIgnored private var carouselUpdatedAt: Date?
+    @ObservationIgnored private var exploreUpdatedAt: Date?
+    private static let randomCacheLifetime: TimeInterval = 24 * 60 * 60
 
+    @ObservationIgnored private var loadRevision: UInt64 = 0
+    @ObservationIgnored private var taskRefreshesRandom = false
     @ObservationIgnored private var hasLoaded = false
     @ObservationIgnored private var generation: UInt64 = 0
 
-    public init(repository: LibraryRepository, preferences: PreferencesService? = nil) {
+    public init(
+        repository: LibraryRepository, preferences: PreferencesService? = nil,
+        now: @escaping () -> Date = Date.init
+    ) {
         self.repository = repository
         self.preferences = preferences
+        self.now = now
     }
 
     /// Restore the account's last Home results before its first frame.
@@ -33,6 +43,8 @@ public final class HomeStore {
            snapshot.accountKey == accountKey {
             carousel = snapshot.carousel ?? []
             hasCarousel = snapshot.carousel != nil
+            carouselUpdatedAt = snapshot.carouselUpdatedAt ?? now()
+            exploreUpdatedAt = snapshot.exploreUpdatedAt ?? now()
             for section in HomeSection.allCases {
                 sections[section] = snapshot.sections[section.rawValue]
             }
@@ -42,19 +54,23 @@ public final class HomeStore {
            !albums.isEmpty {
             carousel = albums
             hasCarousel = true
+            carouselUpdatedAt = now()
         }
         for section in HomeSection.allCases where sections[section] == nil {
             if let albums = try? repository.cachedHomeAlbums(section, size: HomeSection.size), !albums.isEmpty {
                 sections[section] = albums
+                if section == .explore { exploreUpdatedAt = now() }
             }
         }
+        persist()
     }
 
     private func persist() {
         guard let accountKey else { return }
         let values = Dictionary(uniqueKeysWithValues: sections.map { ($0.key.rawValue, $0.value) })
         try? preferences?.setJSON(HomeSnapshot(
-            accountKey: accountKey, carousel: hasCarousel ? carousel : nil, sections: values
+            accountKey: accountKey, carousel: hasCarousel ? carousel : nil, sections: values,
+            carouselUpdatedAt: carouselUpdatedAt, exploreUpdatedAt: exploreUpdatedAt
         ), for: Self.cacheKey)
     }
 
@@ -70,13 +86,18 @@ public final class HomeStore {
     /// Loads once; later calls return immediately.
     public func loadIfNeeded() async {
         guard !hasLoaded else { return }
-        await runRefresh()
+        await runRefresh(refreshRandom: false)
+    }
+
+    /// Refreshes automatically without replacing fresh random recommendations.
+    public func refreshAutomatically() async {
+        await runRefresh(refreshRandom: false)
     }
 
     /// Reloads the carousel and every section. Sections that fail keep their
     /// previous albums.
     public func refresh() async {
-        await runRefresh()
+        await runRefresh(refreshRandom: true)
     }
 
     /// Reloads only Recently Played; the Home screen calls it every two
@@ -98,27 +119,42 @@ public final class HomeStore {
         hasLoaded = false
         accountKey = nil
         hasCarousel = false
+        carouselUpdatedAt = nil
+        exploreUpdatedAt = nil
         carousel = []
         sections = [:]
         phase = .idle
     }
 
-    private func runRefresh() async {
+    private func runRefresh(refreshRandom: Bool) async {
+        let generation = generation
         if let loadTask {
+            let revision = loadRevision
+            let needsManualRefresh = refreshRandom && !taskRefreshesRandom
             await loadTask.value
+            guard generation == self.generation else { return }
+            if revision == loadRevision { self.loadTask = nil }
+            if needsManualRefresh { await runRefresh(refreshRandom: true) }
             return
         }
-        let generation = generation
+        loadRevision &+= 1
+        let revision = loadRevision
+        taskRefreshesRandom = refreshRandom
         let task = Task { [weak self] in
             guard let self else { return }
-            await self.performRefresh(generation: generation)
+            await self.performRefresh(generation: generation, refreshRandom: refreshRandom)
         }
         loadTask = task
         await task.value
-        if generation == self.generation { loadTask = nil }
+        if generation == self.generation, revision == loadRevision { loadTask = nil }
     }
 
-    private func performRefresh(generation: UInt64) async {
+    private func isExpired(_ date: Date?) -> Bool {
+        guard let date else { return true }
+        return now().timeIntervalSince(date) >= Self.randomCacheLifetime
+    }
+
+    private func performRefresh(generation: UInt64, refreshRandom: Bool) async {
         let hadContent = !isEmpty
         phase = .loading
         var successes = 0
@@ -126,15 +162,21 @@ public final class HomeStore {
         let needsCarousel = !hasCarousel
         let missingSections = Set(HomeSection.allCases.filter { sections[$0] == nil })
 
+        let refreshCarousel = refreshRandom || carousel.isEmpty || isExpired(carouselUpdatedAt)
+        let refreshExplore = refreshRandom || albums(in: .explore).isEmpty || isExpired(exploreUpdatedAt)
+
         await withTaskGroup(of: HomeRefreshResult.self) { group in
-            group.addTask { [repository] in
-                do {
-                    return .carousel(try await repository.carouselAlbums(fallbackToLocal: needsCarousel))
-                } catch {
-                    return .failure(error.localizedDescription)
+            if refreshCarousel {
+                group.addTask { [repository] in
+                    do {
+                        return .carousel(try await repository.carouselAlbums(fallbackToLocal: needsCarousel))
+                    } catch {
+                        return .failure(error.localizedDescription)
+                    }
                 }
             }
             for section in HomeSection.allCases {
+                if section == .explore, !refreshExplore { continue }
                 group.addTask { [repository] in
                     do {
                         return .section(
@@ -153,9 +195,11 @@ public final class HomeStore {
                 case let .carousel(albums):
                     carousel = albums
                     hasCarousel = true
+                    carouselUpdatedAt = now()
                     successes += 1
                 case let .section(section, albums):
                     sections[section] = albums
+                    if section == .explore { exploreUpdatedAt = now() }
                     successes += 1
                 case let .failure(message):
                     if firstError == nil { firstError = message }
@@ -184,4 +228,6 @@ private struct HomeSnapshot: Codable {
     let accountKey: String
     let carousel: [Album]?
     let sections: [String: [Album]]
+    var carouselUpdatedAt: Date?
+    var exploreUpdatedAt: Date?
 }

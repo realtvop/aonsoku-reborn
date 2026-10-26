@@ -140,7 +140,12 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   restores an account/server-scoped `home.snapshot.v1` preference before its
   first frame, seeds missing results from the local library, then refreshes
   sections independently online. Failed refreshes retain cached results and
-  offline launches retain the saved carousel/order.
+  offline launches retain the saved carousel/order. Carousel and Explore
+  selections have independent 24-hour timestamps: startup/reconnect refreshes
+  retain fresh selections, while pull-to-refresh rerolls them. Dynamic section
+  refreshes do not extend random-selection expiry. Untimed snapshots and local
+  seeds are adopted and persisted without an initial reroll. Erasing account
+  data removes the Home snapshot too.
   Screens keep native interaction but follow the web's visual language:
   every theme paints the `src/themes.css` palette (pages on
   `--background-foreground`), and bundled Poppins sets headings only.

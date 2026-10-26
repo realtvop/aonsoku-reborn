@@ -246,6 +246,53 @@ final class HomeStoreTests: XCTestCase {
         XCTAssertEqual(state.read(\.calls), calls)
     }
 
+    func testRandomSnapshotsSurviveStartupAndDynamicRefreshUntilExpiry() async throws {
+        let database = try TemporaryDatabase()
+        let preferences = PreferencesService(db: database.manager.dbPool)
+        let api = FakeSubsonicAPI()
+        let calls = LockedTestBox(0)
+        let clock = LockedTestBox(Date(timeIntervalSince1970: 1_800_000_000))
+        api.albumListHandler = { type, size, _, _, _, _ in
+            calls.update { $0 += 1 }
+            let number = calls.read { $0 }
+            return [Album(id: "\(type.rawValue)-\(size)-\(number)", name: type.rawValue)]
+        }
+        let repository = LibraryRepository(
+            api: api, library: LibraryService(dbManager: database.manager), connectivity: FixedConnectivity()
+        )
+        func restoredStore() -> HomeStore {
+            let store = HomeStore(repository: repository, preferences: preferences, now: { clock.read { $0 } })
+            store.restoreCached(accountKey: "server:user")
+            return store
+        }
+        let initial = restoredStore()
+        await initial.loadIfNeeded()
+        let carousel = initial.carousel
+        let explore = initial.albums(in: .explore)
+        XCTAssertEqual(calls.read { $0 }, 5)
+
+        clock.update { $0 += 12 * 60 * 60 }
+        let restarted = restoredStore()
+        await restarted.loadIfNeeded()
+        XCTAssertEqual(calls.read { $0 }, 8)
+        XCTAssertEqual(restarted.carousel, carousel)
+        XCTAssertEqual(restarted.albums(in: .explore), explore)
+        await restarted.refreshAutomatically()
+        XCTAssertEqual(calls.read { $0 }, 11)
+        XCTAssertEqual(restarted.carousel, carousel)
+
+        // Dynamic refreshes must not extend the random lists' original lifetime.
+        clock.update { $0 += 13 * 60 * 60 }
+        let expired = restoredStore()
+        await expired.loadIfNeeded()
+        XCTAssertEqual(calls.read { $0 }, 16)
+        XCTAssertNotEqual(expired.carousel, carousel)
+        let beforeManual = expired.carousel
+        await expired.refresh()
+        XCTAssertEqual(calls.read { $0 }, 21)
+        XCTAssertNotEqual(expired.carousel, beforeManual)
+    }
+
     func testInitialTotalFailureSetsFailedPhase() async throws {
         let database = try TemporaryDatabase()
         let api = FakeSubsonicAPI()

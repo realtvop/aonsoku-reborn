@@ -465,6 +465,7 @@ public final class AppModel {
         try services.library.resetAccountData()
         _ = try services.audio.clearAudioFiles()
         services.preferences.remove("pinned.v1")
+        services.preferences.remove(HomeStore.cacheKey)
         services.preferences.remove("lyrics.selections.v1")
         history.clear()
         artwork.purgeMemory()
