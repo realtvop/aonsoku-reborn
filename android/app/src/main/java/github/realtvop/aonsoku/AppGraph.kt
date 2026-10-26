@@ -3,6 +3,7 @@ package github.realtvop.aonsoku
 import android.app.Application
 import androidx.compose.runtime.staticCompositionLocalOf
 import github.realtvop.aonsoku.actions.LibraryActions
+import github.realtvop.aonsoku.data.HomeCache
 import github.realtvop.aonsoku.data.LibraryChange
 import github.realtvop.aonsoku.data.LibraryRepository
 import github.realtvop.aonsoku.data.LibrarySyncCoordinator
@@ -58,6 +59,7 @@ class AppGraph(
     )
     val artwork = ArtworkStore(services.library, network, scope)
     val library = LibraryRepository(api, services.library, network)
+    val homeCache = HomeCache(services.preferences)
     val lyrics = LyricsRepository(
         api = api,
         library = services.library,
@@ -176,6 +178,7 @@ class AppGraph(
         sync.onSessionEnded()
         offline.end()
         session.logout()
+        homeCache.clear()
         services.library.clearLibraryData()
         lyrics.clearCache()
         settings.update {

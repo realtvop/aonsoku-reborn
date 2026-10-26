@@ -306,6 +306,11 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   except downward pans starting on the current-track row while it is settled
   at its top anchor. That row cancels the List pan and dismisses the player;
   other rows continue to browse history. The grabber also dismisses the player.
+- Android Home restores its account/server-scoped `home.snapshot.v1` from
+  `HomeCache` (native preferences), seeds missing results from Room, then
+  refreshes each section independently online. Missing sections use individual
+  placeholders; failed refreshes keep prior content. Sign-out clears the
+  snapshot; offline launches keep the saved carousel and section order.
 - Android `LibraryService`
   (`github.realtvop.aonsoku.plugins.data.LibraryService`) is application
   scoped and owns Room queries, metadata sync, lyrics, and the image cache. It

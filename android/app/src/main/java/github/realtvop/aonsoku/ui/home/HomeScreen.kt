@@ -111,7 +111,7 @@ fun HomeScreen() {
                     item(key = "devices") {
                         OtherDevicesSection(onOpen = { overlays.show(Overlay.Devices) })
                     }
-                    if (state.isEmpty) {
+                    if (state.isEmpty && !state.carouselLoading && state.loadingSections.isEmpty()) {
                         item(key = "empty") {
                             EmptyState(
                                 title = t(if (online) "album.list.empty.title" else "offline.mode"),
@@ -126,6 +126,9 @@ fun HomeScreen() {
                                 modifier = Modifier.fillParentMaxHeight(0.7f),
                             )
                         }
+                    }
+                    if (state.carouselLoading && state.carousel.isEmpty()) {
+                        item(key = "carousel-loading") { HomePlaceholder(carousel = true) }
                     }
                     if (state.carousel.isNotEmpty()) {
                         item(key = "carousel") {
@@ -163,7 +166,9 @@ fun HomeScreen() {
                     }
                     items(HomeSection.entries, key = { it.name }) { section ->
                         val albums = state.sections[section].orEmpty()
-                        if (albums.isNotEmpty()) {
+                        if (section in state.loadingSections && section !in state.sections) {
+                            HomePlaceholder()
+                        } else if (albums.isNotEmpty()) {
                             AlbumRowSection(
                                 title = t(section.titleKey),
                                 albums = albums,
@@ -174,6 +179,26 @@ fun HomeScreen() {
                             )
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomePlaceholder(carousel: Boolean = false) {
+    val color = MaterialTheme.colorScheme.surfaceContainerHighest
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (carousel) {
+            Box(Modifier.fillMaxWidth().height(180.dp).background(color, MaterialTheme.shapes.large))
+        } else {
+            Box(Modifier.width(140.dp).height(22.dp).background(color, MaterialTheme.shapes.small))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                repeat(3) {
+                    Box(Modifier.width(PreviewCardWidth).height(170.dp).background(color, MaterialTheme.shapes.medium))
                 }
             }
         }

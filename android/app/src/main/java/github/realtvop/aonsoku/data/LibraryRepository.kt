@@ -163,7 +163,7 @@ class LibraryRepository(
 
     // region Home
 
-    suspend fun homeAlbums(section: HomeSection): List<Album> {
+    suspend fun homeAlbums(section: HomeSection, fallbackToLocal: Boolean = true): List<Album> {
         if (online) {
             remote { api.getAlbumList(section.apiType, size = HOME_SECTION_SIZE).albums }
                 ?.let { albums ->
@@ -171,6 +171,11 @@ class LibraryRepository(
                     return albums
                 }
         }
+        check(fallbackToLocal) { "Unable to refresh Home" }
+        return cachedHomeAlbums(section)
+    }
+
+    suspend fun cachedHomeAlbums(section: HomeSection): List<Album> {
         val sort = when (section) {
             HomeSection.RecentlyPlayed -> AlbumSort.RecentlyPlayed
             HomeSection.MostPlayed -> AlbumSort.MostPlayed
@@ -181,17 +186,21 @@ class LibraryRepository(
             .items.map { it.toModel() }
     }
 
-    suspend fun carouselAlbums(): List<Album> {
+    suspend fun carouselAlbums(fallbackToLocal: Boolean = true): List<Album> {
         if (online) {
             remote { api.getAlbumList(AlbumFilters.RANDOM, size = CAROUSEL_SIZE).albums }
                 ?.let { return it }
         }
-        return library.queryAlbums(AlbumQuery(sort = AlbumSort.Random, limit = CAROUSEL_SIZE))
-            .items.map { it.toModel() }
+        check(fallbackToLocal) { "Unable to refresh Home carousel" }
+        return cachedCarouselAlbums()
     }
 
+    suspend fun cachedCarouselAlbums(): List<Album> =
+        library.queryAlbums(AlbumQuery(sort = AlbumSort.Random, limit = CAROUSEL_SIZE))
+            .items.map { it.toModel() }
+
     /** Pinned albums and playlists, most recently played first. */
-    suspend fun pinnedItems(pinned: List<PinnedHomeItem>): List<PinnedEntry> {
+    suspend fun pinnedItems(pinned: List<PinnedHomeItem>, localOnly: Boolean = false): List<PinnedEntry> {
         val items = pinned.distinctBy { it.type to it.id }
         if (items.isEmpty()) return emptyList()
         val localAlbums = library.getAlbumsByIds(items.filter { it.type == "album" }.map { it.id })
@@ -204,7 +213,7 @@ class LibraryRepository(
                 async {
                     if (item.type == "album") {
                         val album = localAlbums[item.id]?.toModel()
-                            ?: if (online) remote { api.getAlbum(item.id) } else null
+                            ?: if (online && !localOnly) remote { api.getAlbum(item.id) } else null
                         album?.let {
                             PinnedEntry.PinnedAlbum(
                                 album = it.copy(song = null),
@@ -214,7 +223,7 @@ class LibraryRepository(
                     } else {
                         val detail = library.getPlaylist(item.id)?.toModel()
                         val playlist = detail ?: localPlaylists[item.id]?.toModel()
-                            ?: if (online) remote { api.getPlaylist(item.id) } else null
+                            ?: if (online && !localOnly) remote { api.getPlaylist(item.id) } else null
                         playlist?.let {
                             val lastPlayed = it.entry.orEmpty()
                                 .maxOfOrNull { song -> parseIsoTimestamp(song.played) ?: 0 }
