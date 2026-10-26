@@ -46,7 +46,6 @@ class HomeViewModel(
     private var restoredCache = false
     private var hasCarousel = false
     private var carouselUpdatedAt: Long? = null
-    private var exploreUpdatedAt: Long? = null
 
     val state: StateFlow<HomeState> = _state.asStateFlow()
 
@@ -136,7 +135,6 @@ class HomeViewModel(
         if (accountKey() != owner) return
         hasCarousel = carousel != null
         carouselUpdatedAt = snapshot?.carouselUpdatedAt ?: now().takeIf { hasCarousel }
-        exploreUpdatedAt = snapshot?.exploreUpdatedAt ?: now().takeIf { HomeSection.Explore in sections }
         _state.update {
             it.copy(
                 loading = false,
@@ -158,30 +156,24 @@ class HomeViewModel(
             restoredCache = false
             hasCarousel = false
             carouselUpdatedAt = null
-            exploreUpdatedAt = null
             _state.value = HomeState()
         }
         if (!restoredCache) restoreCache(owner)
         if (accountKey() != owner) return@coroutineScope
-        if (!graph.network.online) {
-            _state.update { it.copy(carouselLoading = false, loadingSections = emptySet()) }
-            return@coroutineScope
-        }
+        val online = graph.network.online
         val refreshCarousel = refreshRandom || _state.value.carousel.isEmpty() || expired(carouselUpdatedAt)
-        val refreshExplore = refreshRandom || _state.value.sections[HomeSection.Explore].isNullOrEmpty() || expired(exploreUpdatedAt)
         _state.update {
             it.copy(
                 carouselLoading = refreshCarousel && !hasCarousel,
-                loadingSections = HomeSection.entries.filter { section -> section !in it.sections }.toSet(),
+                loadingSections = if (online) HomeSection.entries.filter { section -> section !in it.sections }.toSet() else emptySet(),
             )
         }
-        val tasks = HomeSection.entries.filter { it != HomeSection.Explore || refreshExplore }.map { section ->
+        val tasks = HomeSection.entries.filter { online }.map { section ->
             async {
                 val albums = runSuspendCatching {
                     graph.library.homeAlbums(section, fallbackToLocal = false)
                 }.getOrNull()
                 if (accountKey() == owner) {
-                    if (section == HomeSection.Explore && albums != null) exploreUpdatedAt = now()
                     _state.update {
                         it.copy(
                             sections = if (albums != null) it.sections + (section to albums) else it.sections,
@@ -226,14 +218,13 @@ class HomeViewModel(
                 carousel = current.carousel.takeIf { hasCarousel },
                 sections = current.sections.mapKeys { it.key.name },
                 carouselUpdatedAt = carouselUpdatedAt,
-                exploreUpdatedAt = exploreUpdatedAt,
             ))
         }
     }
 
     private suspend fun reloadPinnedNow(owner: String) {
         val pins = runSuspendCatching {
-            graph.library.pinnedItems(graph.settings.current.pinnedHome)
+            graph.library.pinnedItems(graph.settings.current.pinnedHome, refreshFromServer = true)
         }.getOrNull() ?: return
         if (accountKey() == owner) _state.update { it.copy(pinned = pins) }
     }

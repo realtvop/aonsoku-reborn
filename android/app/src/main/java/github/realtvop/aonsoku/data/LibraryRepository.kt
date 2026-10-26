@@ -187,6 +187,8 @@ class LibraryRepository(
     }
 
     suspend fun carouselAlbums(fallbackToLocal: Boolean = true): List<Album> {
+        val local = runSuspendCatching { cachedCarouselAlbums() }.getOrDefault(emptyList())
+        if (local.isNotEmpty()) return local
         if (online) {
             remote { api.getAlbumList(AlbumFilters.RANDOM, size = CAROUSEL_SIZE).albums }
                 ?.let { return it }
@@ -200,7 +202,9 @@ class LibraryRepository(
             .items.map { it.toModel() }
 
     /** Pinned albums and playlists, most recently played first. */
-    suspend fun pinnedItems(pinned: List<PinnedHomeItem>, localOnly: Boolean = false): List<PinnedEntry> {
+    suspend fun pinnedItems(
+        pinned: List<PinnedHomeItem>, localOnly: Boolean = false, refreshFromServer: Boolean = false,
+    ): List<PinnedEntry> {
         val items = pinned.distinctBy { it.type to it.id }
         if (items.isEmpty()) return emptyList()
         val localAlbums = library.getAlbumsByIds(items.filter { it.type == "album" }.map { it.id })
@@ -212,8 +216,10 @@ class LibraryRepository(
             items.map { item ->
                 async {
                     if (item.type == "album") {
-                        val album = localAlbums[item.id]?.toModel()
-                            ?: if (online && !localOnly) remote { api.getAlbum(item.id) } else null
+                        val local = localAlbums[item.id]?.toModel()
+                        val album = if (online && !localOnly && (refreshFromServer || local == null)) {
+                            remote { api.getAlbum(item.id) } ?: local
+                        } else local
                         album?.let {
                             PinnedEntry.PinnedAlbum(
                                 album = it.copy(song = null),
@@ -222,8 +228,10 @@ class LibraryRepository(
                         }
                     } else {
                         val detail = library.getPlaylist(item.id)?.toModel()
-                        val playlist = detail ?: localPlaylists[item.id]?.toModel()
-                            ?: if (online && !localOnly) remote { api.getPlaylist(item.id) } else null
+                        val local = detail ?: localPlaylists[item.id]?.toModel()
+                        val playlist = if (online && !localOnly && (refreshFromServer || local == null)) {
+                            remote { api.getPlaylist(item.id) } ?: local
+                        } else local
                         playlist?.let {
                             val lastPlayed = it.entry.orEmpty()
                                 .maxOfOrNull { song -> parseIsoTimestamp(song.played) ?: 0 }

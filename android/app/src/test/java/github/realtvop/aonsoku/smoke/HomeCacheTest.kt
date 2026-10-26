@@ -3,6 +3,7 @@ package github.realtvop.aonsoku.smoke
 import android.app.Application
 import github.realtvop.aonsoku.data.HomeCache
 import github.realtvop.aonsoku.data.HomeSnapshot
+import github.realtvop.aonsoku.data.HomeSection
 import github.realtvop.aonsoku.data.model.Album
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -26,7 +27,6 @@ class HomeCacheTest {
             carousel = listOf(Album(id = "second"), Album(id = "first")),
             sections = mapOf("Explore" to listOf(Album(id = "explore"))),
             carouselUpdatedAt = 1_800_000_000_000L,
-            exploreUpdatedAt = 1_800_000_000_000L,
         )
         world.await { cache.write(snapshot) }
         // Updating a dynamic section must not slide the recommendation expiry.
@@ -36,8 +36,20 @@ class HomeCacheTest {
         val restored = world.await { reopened.read("server:user") }!!
         assertEquals(listOf("second", "first"), restored.carousel!!.map { it.id })
         assertEquals(snapshot.carouselUpdatedAt, restored.carouselUpdatedAt)
-        assertEquals(snapshot.exploreUpdatedAt, restored.exploreUpdatedAt)
         assertNull(world.await { reopened.read("server:other-user") })
+    }
+
+    @Test
+    fun carouselSamplesLocalMetadataButExploreStillRequestsTheServer() {
+        world.signIn()
+        world.waitUntil("the library to sync") { world.graph.settings.current.cache.lastSyncedAt != null }
+        val before = world.server.calls.count { it.queryParameter("type") == "random" }
+        val carousel = world.await { world.graph.library.carouselAlbums(fallbackToLocal = false) }
+        assertEquals(minOf(10, world.server.albums.size), carousel.size)
+        assertEquals(carousel.size, carousel.map { it.id }.toSet().size)
+        assertEquals(before, world.server.calls.count { it.queryParameter("type") == "random" })
+        world.await { world.graph.library.homeAlbums(HomeSection.Explore, fallbackToLocal = false) }
+        assertEquals(before + 1, world.server.calls.count { it.queryParameter("type") == "random" })
     }
 
     @Test
@@ -51,6 +63,5 @@ class HomeCacheTest {
         val restored = world.await { world.graph.homeCache.read("server:user") }!!
         assertEquals(listOf("kept"), restored.carousel!!.map { it.id })
         assertNull(restored.carouselUpdatedAt)
-        assertNull(restored.exploreUpdatedAt)
     }
 }
