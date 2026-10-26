@@ -16,10 +16,10 @@ struct HomeView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: Layout.sectionSpacing) {
                 OtherDevicesSection()
-                if showsSkeleton {
-                    HomeSkeleton()
-                } else {
-                    if !home.carousel.isEmpty {
+                Group {
+                    if !home.hasCarousel, isLoading {
+                        HomeSkeleton(showCarousel: true, shelfCount: 0)
+                    } else if !home.carousel.isEmpty {
                         FeaturedCarousel(albums: home.carousel)
                     }
                     if !pinned.resolved.isEmpty {
@@ -38,7 +38,9 @@ struct HomeView: View {
                     }
                     ForEach(HomeSection.allCases) { section in
                         let albums = home.albums(in: section)
-                        if !albums.isEmpty {
+                        if home.sections[section] == nil, isLoading {
+                            HomeSkeleton(showCarousel: false, shelfCount: 1)
+                        } else if !albums.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
                                 SectionHeader(title: t(section.titleKey), route: .albums(section.listFilter))
                                     .pageMargins()
@@ -78,9 +80,8 @@ struct HomeView: View {
         }
     }
 
-    private var showsSkeleton: Bool {
-        home.isEmpty && pinned.resolved.isEmpty
-            && (home.phase == .idle || home.phase == .loading)
+    private var isLoading: Bool {
+        home.phase == .idle || home.phase == .loading
     }
 
     @ViewBuilder
@@ -106,28 +107,32 @@ struct HomeView: View {
 
 /// Mirrors the featured card and album shelves while the first Home load runs.
 private struct HomeSkeleton: View {
+    var showCarousel = true
+    var shelfCount = 3
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     private var tileWidth: CGFloat { sizeClass == .regular ? 180 : 160 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Layout.sectionSpacing) {
-            HStack(spacing: sizeClass == .regular ? 22 : 14) {
-                block()
-                    .aspectRatio(1, contentMode: .fit)
-                VStack(alignment: .leading, spacing: 8) {
-                    Spacer(minLength: 0)
-                    block().frame(height: 20)
-                    block().frame(width: 100, height: 14)
+            if showCarousel {
+                HStack(spacing: sizeClass == .regular ? 22 : 14) {
+                    block()
+                        .aspectRatio(1, contentMode: .fit)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Spacer(minLength: 0)
+                        block().frame(height: 20)
+                        block().frame(width: 100, height: 14)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(sizeClass == .regular ? 22 : 14)
-            .frame(height: sizeClass == .regular ? 250 : 150)
-            .background(ThemeColor.card, in: .rect(cornerRadius: 14))
-            .pageMargins()
+                .padding(sizeClass == .regular ? 22 : 14)
+                .frame(height: sizeClass == .regular ? 250 : 150)
+                .background(ThemeColor.card, in: .rect(cornerRadius: 14))
+                .pageMargins()
 
-            ForEach(0..<3, id: \.self) { _ in
+            }
+            ForEach(0..<shelfCount, id: \.self) { _ in
                 VStack(alignment: .leading, spacing: 12) {
                     block().frame(width: 160, height: 24)
                         .pageMargins()

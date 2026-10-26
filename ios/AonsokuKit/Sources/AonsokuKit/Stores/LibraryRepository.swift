@@ -238,7 +238,7 @@ public final class LibraryRepository: @unchecked Sendable {
     /// Albums for a Home section (web `useHomeData`): the server lists when
     /// online, else the local library (newest by created, frequent by summed
     /// play count, recent by last played, random shuffled).
-    public func homeAlbums(_ section: HomeSection, size: Int) async throws -> [Album] {
+    public func homeAlbums(_ section: HomeSection, size: Int, fallbackToLocal: Bool = true) async throws -> [Album] {
         if connectivity.isOnline {
             do {
                 let type: AlbumListType = switch section {
@@ -256,14 +256,16 @@ public final class LibraryRepository: @unchecked Sendable {
                     genre: nil
                 )
             } catch let error as SubsonicAPIError where error.isConnectivityFailure {
+                guard fallbackToLocal else { throw error }
                 return try localHomeAlbums(section, size: size)
             }
         }
+        guard fallbackToLocal else { throw SubsonicAPIError.offline }
         return try localHomeAlbums(section, size: size)
     }
 
     /// Random albums for the Home carousel.
-    public func carouselAlbums(size: Int = HomeSection.carouselSize) async throws -> [Album] {
+    public func carouselAlbums(size: Int = HomeSection.carouselSize, fallbackToLocal: Bool = true) async throws -> [Album] {
         if connectivity.isOnline {
             do {
                 return try await api.albumList(
@@ -274,8 +276,11 @@ public final class LibraryRepository: @unchecked Sendable {
                     toYear: nil,
                     genre: nil
                 )
-            } catch let error as SubsonicAPIError where error.isConnectivityFailure {}
+            } catch let error as SubsonicAPIError where error.isConnectivityFailure {
+                guard fallbackToLocal else { throw error }
+            }
         }
+        guard fallbackToLocal else { throw SubsonicAPIError.offline }
         return try localHomeAlbums(.explore, size: size)
     }
 

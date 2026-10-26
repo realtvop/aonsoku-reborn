@@ -136,8 +136,11 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   Startup restores local settings and the session before the first SwiftUI
   frame, opening Home directly for signed-in users or Login otherwise,
   without a separate in-app splash screen. Home shows theme-colored featured
-  card and album-shelf skeletons during its initial data load; refreshes keep
-  existing content visible.
+  card and album-shelf skeletons for individual missing Home sections. Home
+  restores an account/server-scoped `home.snapshot.v1` preference before its
+  first frame, seeds missing results from the local library, then refreshes
+  sections independently online. Failed refreshes retain cached results and
+  offline launches retain the saved carousel/order.
   Screens keep native interaction but follow the web's visual language:
   every theme paints the `src/themes.css` palette (pages on
   `--background-foreground`), and bundled Poppins sets headings only.

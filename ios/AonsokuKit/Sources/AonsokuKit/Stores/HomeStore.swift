@@ -12,11 +12,50 @@ public final class HomeStore {
 
     @ObservationIgnored public let repository: LibraryRepository
     @ObservationIgnored private var loadTask: Task<Void, Never>?
+    @ObservationIgnored private let preferences: PreferencesService?
+    @ObservationIgnored private var accountKey: String?
+    private static let cacheKey = "home.snapshot.v1"
+    public private(set) var hasCarousel = false
+
     @ObservationIgnored private var hasLoaded = false
     @ObservationIgnored private var generation: UInt64 = 0
 
-    public init(repository: LibraryRepository) {
+    public init(repository: LibraryRepository, preferences: PreferencesService? = nil) {
         self.repository = repository
+        self.preferences = preferences
+    }
+
+    /// Restore the account's last Home results before its first frame.
+    public func restoreCached(accountKey: String) {
+        reset()
+        self.accountKey = accountKey
+        if let snapshot = preferences?.getJSON(Self.cacheKey, as: HomeSnapshot.self),
+           snapshot.accountKey == accountKey {
+            carousel = snapshot.carousel ?? []
+            hasCarousel = snapshot.carousel != nil
+            for section in HomeSection.allCases {
+                sections[section] = snapshot.sections[section.rawValue]
+            }
+        }
+        // An existing synced library can seed a first launch without a snapshot.
+        if !hasCarousel, let albums = try? repository.localHomeAlbums(.explore, size: HomeSection.carouselSize),
+           !albums.isEmpty {
+            carousel = albums
+            hasCarousel = true
+        }
+        for section in HomeSection.allCases where sections[section] == nil {
+            if let albums = try? repository.localHomeAlbums(section, size: HomeSection.size), !albums.isEmpty {
+                sections[section] = albums
+            }
+        }
+    }
+
+    private func persist() {
+        guard let accountKey else { return }
+        let values = Dictionary(uniqueKeysWithValues: sections.map { ($0.key.rawValue, $0.value) })
+        try? preferences?.setJSON(HomeSnapshot(
+            accountKey: accountKey, carousel: hasCarousel ? carousel : nil, sections: values
+        ), for: Self.cacheKey)
     }
 
     public func albums(in section: HomeSection) -> [Album] {
@@ -46,9 +85,10 @@ public final class HomeStore {
         let generation = generation
         guard let albums = try? await repository.homeAlbums(
             .recentlyPlayed,
-            size: HomeSection.size
+            size: HomeSection.size, fallbackToLocal: sections[.recentlyPlayed] == nil
         ), generation == self.generation else { return }
         sections[.recentlyPlayed] = albums
+        persist()
     }
 
     public func reset() {
@@ -56,6 +96,8 @@ public final class HomeStore {
         loadTask?.cancel()
         loadTask = nil
         hasLoaded = false
+        accountKey = nil
+        hasCarousel = false
         carousel = []
         sections = [:]
         phase = .idle
@@ -73,7 +115,7 @@ public final class HomeStore {
         }
         loadTask = task
         await task.value
-        loadTask = nil
+        if generation == self.generation { loadTask = nil }
     }
 
     private func performRefresh(generation: UInt64) async {
@@ -81,13 +123,13 @@ public final class HomeStore {
         phase = .loading
         var successes = 0
         var firstError: String?
-        var nextCarousel: [Album]?
-        var nextSections: [HomeSection: [Album]] = [:]
+        let needsCarousel = !hasCarousel
+        let missingSections = Set(HomeSection.allCases.filter { sections[$0] == nil })
 
         await withTaskGroup(of: HomeRefreshResult.self) { group in
             group.addTask { [repository] in
                 do {
-                    return .carousel(try await repository.carouselAlbums())
+                    return .carousel(try await repository.carouselAlbums(fallbackToLocal: needsCarousel))
                 } catch {
                     return .failure(error.localizedDescription)
                 }
@@ -97,7 +139,7 @@ public final class HomeStore {
                     do {
                         return .section(
                             section,
-                            try await repository.homeAlbums(section, size: HomeSection.size)
+                            try await repository.homeAlbums(section, size: HomeSection.size, fallbackToLocal: missingSections.contains(section))
                         )
                     } catch {
                         return .failure(error.localizedDescription)
@@ -106,12 +148,14 @@ public final class HomeStore {
             }
 
             for await result in group {
+                guard generation == self.generation, !Task.isCancelled else { continue }
                 switch result {
                 case let .carousel(albums):
-                    nextCarousel = albums
+                    carousel = albums
+                    hasCarousel = true
                     successes += 1
                 case let .section(section, albums):
-                    nextSections[section] = albums
+                    sections[section] = albums
                     successes += 1
                 case let .failure(message):
                     if firstError == nil { firstError = message }
@@ -120,8 +164,7 @@ public final class HomeStore {
         }
 
         guard generation == self.generation, !Task.isCancelled else { return }
-        if let nextCarousel { carousel = nextCarousel }
-        for (section, albums) in nextSections { sections[section] = albums }
+        persist()
         hasLoaded = true
         if successes == 0, !hadContent {
             phase = .failed(firstError ?? "Unable to load Home")
@@ -135,4 +178,10 @@ private enum HomeRefreshResult: Sendable {
     case carousel([Album])
     case section(HomeSection, [Album])
     case failure(String)
+}
+
+private struct HomeSnapshot: Codable {
+    let accountKey: String
+    let carousel: [Album]?
+    let sections: [String: [Album]]
 }

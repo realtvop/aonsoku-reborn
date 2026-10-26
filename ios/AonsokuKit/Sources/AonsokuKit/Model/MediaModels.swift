@@ -10,7 +10,7 @@ import Foundation
 
 /// One credited artist. OpenSubsonic servers send ids; legacy servers only
 /// send the display string.
-public struct ArtistCredit: Hashable, Sendable {
+public struct ArtistCredit: Codable, Hashable, Sendable {
     public var id: String?
     public var name: String
 
@@ -59,12 +59,12 @@ public struct ReplayGainInfo: Hashable, Sendable {
     }
 }
 
-public enum ExplicitStatus: String, Hashable, Sendable {
+public enum ExplicitStatus: String, Codable, Hashable, Sendable {
     case explicit
     case clean
 }
 
-public struct DiscTitle: Hashable, Sendable {
+public struct DiscTitle: Codable, Hashable, Sendable {
     public var disc: Int
     public var title: String
 
@@ -75,7 +75,7 @@ public struct DiscTitle: Hashable, Sendable {
 }
 
 /// A partial date as OpenSubsonic reports release dates.
-public struct ItemDate: Hashable, Sendable {
+public struct ItemDate: Codable, Hashable, Sendable {
     public var year: Int?
     public var month: Int?
     public var day: Int?
@@ -233,7 +233,7 @@ public struct Song: Identifiable, Hashable, Sendable {
 
 // MARK: - Album
 
-public struct Album: Identifiable, Hashable, Sendable {
+public struct Album: Codable, Identifiable, Hashable, Sendable {
     public var id: String
     public var name: String
     public var artist: String

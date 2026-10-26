@@ -106,7 +106,7 @@ public final class AppModel {
             settings: settings,
             connectivity: network.connectivity
         )
-        home = HomeStore(repository: repository)
+        home = HomeStore(repository: repository, preferences: services.preferences)
         pinned = PinnedHomeStore(preferences: services.preferences, repository: repository)
         favorites = FavoritesStore(api: api, library: services.library)
         playlists = PlaylistsStore(repository: repository, api: api)
@@ -308,6 +308,10 @@ public final class AppModel {
         isActive = true
         smartDownloadsReady = false
         services.library.initialize(startAutomaticSync: false)
+        if let account = session.account {
+            let key = "\(account.primaryUrl.utf8.count):\(account.primaryUrl)\(account.username)"
+            home.restoreCached(accountKey: key)
+        }
         pinned.load()
         history.load()
         player.start()
