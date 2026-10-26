@@ -176,6 +176,7 @@ class AppGraph(
         coordination.end()
         player.shutdown()
         sync.onSessionEnded()
+        artwork.reset()
         offline.end()
         session.logout()
         homeCache.clear()

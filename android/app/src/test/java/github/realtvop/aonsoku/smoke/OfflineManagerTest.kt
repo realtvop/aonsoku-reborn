@@ -1,6 +1,7 @@
 package github.realtvop.aonsoku.smoke
 
 import android.app.Application
+import kotlinx.coroutines.async
 import github.realtvop.aonsoku.data.LibraryChange
 import github.realtvop.aonsoku.data.model.Song
 import github.realtvop.aonsoku.data.offline.CachedItemType
@@ -37,6 +38,22 @@ class OfflineManagerTest {
     @Before
     fun serveWholeFiles() {
         world.server.throttleStreams = false
+    }
+
+    @Test
+    fun anOldArtworkResponseCannotRepopulateTheCacheAfterSignOut() {
+        signIn()
+        world.server.holdArtwork = true
+        world.server.requests.clear()
+        val request = world.graph.scope.async {
+            runCatching { library.downloadCoverImage("old-account-cover", "700") }
+        }
+        world.waitUntil("the old cover request to start") { world.server.requested("getCoverArt") }
+        world.await { world.graph.signOut() }
+        world.server.holdArtwork = false
+        assertTrue(world.await { request.await() }.isFailure)
+        assertNull(world.await { library.resolveCoverImage("old-account-cover") })
+        assertEquals(0, world.await { library.getCoverCacheStats() }.count)
     }
 
     @Test

@@ -25,6 +25,13 @@ class ArtworkStore(
 ) {
     private val downloads = Semaphore(MAX_PARALLEL_DOWNLOADS)
     private val inFlight = ConcurrentHashMap<String, Deferred<File?>>()
+    private var generation = 0L
+
+    fun reset() {
+        generation++
+        inFlight.values.forEach { it.cancel() }
+        inFlight.clear()
+    }
 
     /**
      * Returns the first cached file among [ids]; when none is cached the
@@ -58,8 +65,12 @@ class ArtworkStore(
      * the cache.
      */
     private suspend fun download(key: String, block: suspend () -> File): File? {
+        val revision = generation
         val created = scope.async(start = CoroutineStart.LAZY) {
-            downloads.withPermit { runSuspendCatching { block() }.getOrNull() }
+            downloads.withPermit {
+                if (revision != generation) return@withPermit null
+                runSuspendCatching { block() }.getOrNull()?.takeIf { revision == generation }
+            }
         }
         val existing = inFlight.putIfAbsent(key, created)
         if (existing != null) {

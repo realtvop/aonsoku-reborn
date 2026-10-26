@@ -83,6 +83,8 @@ class FakeSubsonicServer {
     @Volatile
     var holdSongSync = false
 
+    @Volatile var holdArtwork = false
+
     val url: String get() = server.url("/").toString().trimEnd('/')
 
     /** The server also stands in for LRCLIB and for a custom lyrics server. */
@@ -104,6 +106,7 @@ class FakeSubsonicServer {
     }
 
     fun shutdown() {
+        holdArtwork = false
         holdSongSync = false
         runCatching { server.shutdown() }
     }
@@ -343,9 +346,12 @@ class FakeSubsonicServer {
                             .toString(),
                     )
             }
-            "getCoverArt", "getAvatar" -> MockResponse()
+            "getCoverArt", "getAvatar" -> {
+                while (holdArtwork) Thread.sleep(HOLD_STEP_MS)
+                MockResponse()
                 .setHeader("Content-Type", "image/png")
                 .setBody(Buffer().write(artwork(param("id") ?: param("username").orEmpty())))
+            }
             // Served slowly: the shadowed audio output plays as fast as data
             // arrives, and a song that stays current is what tests can rely on.
             "stream", "download" -> if (failStreams) MockResponse().setResponseCode(503) else MockResponse()

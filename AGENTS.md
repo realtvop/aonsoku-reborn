@@ -395,6 +395,9 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   metadata before credentials can change.
   Sign-out also removes selected lyrics bodies and their per-song choice,
   disabled and offset metadata, in addition to ordinary lyrics caches.
+  Artwork requests carry a publication generation; clearing the image cache
+  invalidates old downloads before serializing file/index publication. Sign-out
+  also resets application-owned artwork tasks, including queued requests.
 - The iOS app owns long-lived native services through
   `AonsokuKit.AppServices`. `AudioService` owns a long-lived `AVQueuePlayer`,
   the queue, downloads, scrobbling, playback persistence, system media
