@@ -89,7 +89,7 @@ class SmokeWorld : TestWatcher() {
 
     @OptIn(DelicateCoilApi::class)
     override fun finished(description: Description) {
-        runCatching { graph.player.shutdown() }
+        runCatching { await { graph.player.shutdown() } }
         runCatching { playback?.destroy() }
         runCatching { graph.coordination.end() }
         runCatching { graph.scope.cancel() }

@@ -390,6 +390,9 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   drives it from `data/coordination/CoordinationManager`.
 - Service boundaries and binding/lifecycle rules are documented in
   `docs/android-native-services.md`.
+  Android sign-out awaits playback clearing, invalidates scrobble submissions,
+  drops pending scrobbles and listening history, and clears remembered song
+  metadata before credentials can change.
 - The iOS app owns long-lived native services through
   `AonsokuKit.AppServices`. `AudioService` owns a long-lived `AVQueuePlayer`,
   the queue, downloads, scrobbling, playback persistence, system media

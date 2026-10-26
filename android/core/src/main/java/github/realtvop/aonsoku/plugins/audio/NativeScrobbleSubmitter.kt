@@ -8,6 +8,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 class NativeScrobbleSubmitter(private val httpClient: SubsonicHttpClient) {
+    @Volatile private var generation = 0L
+
+    fun invalidate() { generation++ }
     private val thresholdPercent = 0.5
     private val thresholdMaxSeconds: Double = 240.0
 
@@ -39,26 +42,30 @@ class NativeScrobbleSubmitter(private val httpClient: SubsonicHttpClient) {
 
         if (playedSeconds < threshold || threshold <= 0.0) return
 
+        val revision = generation
         CoroutineScope(Dispatchers.IO).launch {
+            if (revision != generation) return@launch
             if (submitAsync(songId = entry.songId, timestamp = entry.timestamp, credentials = credentials)) {
-                buffer.removeEntries(setOf(entry.songId))
+                if (revision == generation) buffer.removeEntries(setOf(entry.songId))
             }
         }
     }
 
     suspend fun submitPending(buffer: NativeScrobbleBuffer, credentials: ServerCredentials) {
+        val revision = generation
         val pendingEntries = buffer.getEntries()
         if (pendingEntries.isEmpty()) return
 
         val submittedIds = mutableSetOf<String>()
         for (entry in pendingEntries) {
+            if (revision != generation) return
             if (submitAsync(songId = entry.songId, timestamp = entry.timestamp, credentials = credentials)) {
                 submittedIds.add(entry.songId)
             } else {
                 break
             }
         }
-        if (submittedIds.isNotEmpty()) {
+        if (revision == generation && submittedIds.isNotEmpty()) {
             buffer.removeEntries(submittedIds)
         }
     }

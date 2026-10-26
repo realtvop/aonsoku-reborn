@@ -149,9 +149,16 @@ class PlayerController(
     }
 
     /** Stops playback and releases the service, for example on sign-out. */
-    fun shutdown() {
+    suspend fun shutdown() {
+        serviceJob?.cancel()
+        tracked = null
         hideRemote()
+        service?.clearAccountPlayback()
+        github.realtvop.aonsoku.plugins.audio.ScrobbleFileStore(context).save(emptyList())
         clearLocal()
+        knownSongs.evictAll()
+        historyWrite?.join()
+        clearPlayHistory()
         if (bindRequested) {
             runCatching { context.unbindService(connection) }
             bindRequested = false
@@ -926,10 +933,14 @@ class PlayerController(
         }
     }
 
+    private var historyWrite: Job? = null
+
     private fun recordHistory(queueSong: QueueSong) {
         val song = songFor(queueSong)
         val maxSize = settings.current.playHistoryMaxSize
-        scope.launch {
+        val previous = historyWrite
+        historyWrite = scope.launch {
+            previous?.join()
             runCatching {
                 preferences.addToPlayHistory(
                     SubsonicApi.json.encodeToString(Song.serializer(), song),

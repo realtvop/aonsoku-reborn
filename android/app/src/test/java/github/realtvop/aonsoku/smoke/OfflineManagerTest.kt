@@ -227,11 +227,14 @@ class OfflineManagerTest {
         offline.download(listOf(harbor))
         world.waitUntil("the download") { harbor.id in cached }
         val file = audioCache.file(harbor.id)!!
+        world.await { world.graph.services.preferences.addToPlayHistory("{\"id\":\"old-user-song\"}", 100) }
+        world.graph.player.remember(listOf(harbor))
 
         world.await { world.graph.signOut() }
 
         assertTrue(cached.isEmpty())
         assertFalse(file.exists())
+        assertTrue(world.await { world.graph.services.preferences.getPlayHistory(100) }.isEmpty())
         assertEquals(0, world.await { library.getCoverCacheStats() }.count)
     }
 

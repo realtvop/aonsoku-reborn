@@ -8,6 +8,17 @@ import org.junit.Before
 import org.junit.Test
 
 class NativeScrobbleBufferTest {
+    @Test
+    fun clearingAccountAlsoDropsTheTrackBeingPlayed() {
+        val storage = InMemoryScrobbleStore()
+        val old = NativeScrobbleBuffer(storage)
+        old.startTracking("old-account-song", 200.0)
+        Thread.sleep(2)
+        old.clear()
+        assertNull(old.stopTracking())
+        assertTrue(NativeScrobbleBuffer(storage).getEntries().isEmpty())
+    }
+
     private lateinit var store: InMemoryScrobbleStore
     private lateinit var buffer: NativeScrobbleBuffer
 

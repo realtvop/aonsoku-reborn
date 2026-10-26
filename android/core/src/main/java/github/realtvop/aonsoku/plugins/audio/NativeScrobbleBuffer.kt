@@ -52,6 +52,11 @@ class NativeScrobbleBuffer(private val store: ScrobbleEntryStore) {
     fun getEntries(): List<ScrobbleEntry> = entries.toList()
 
     fun clear() {
+        currentSongId = null
+        currentSongDuration = null
+        segmentStartTime = null
+        accumulatedMs = 0
+        lastEntryDuration = null
         entries.clear()
         store.save(emptyList())
     }

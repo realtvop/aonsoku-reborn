@@ -439,6 +439,13 @@ class PlaybackService : MediaSessionService(), AudioService {
         }
     }
 
+    /** Ends account-owned playback before credentials can change. */
+    suspend fun clearAccountPlayback() {
+        execute(AudioCommand.ClearPlayback)
+        scrobbleSubmitter.invalidate()
+        scrobbleBuffer.clear()
+    }
+
     inner class LocalBinder : Binder() {
         fun getService(): PlaybackService = this@PlaybackService
         fun getAudioService(): AudioService = this@PlaybackService
