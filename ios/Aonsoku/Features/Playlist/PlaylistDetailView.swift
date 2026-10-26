@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// A playlist, laid out like the web's playlist page: the cover, name and
@@ -61,66 +62,72 @@ struct PlaylistDetailView: View {
     }
 
     var body: some View {
-        List {
-            if let playlist {
-                header(playlist)
-                    .onGeometryChange(for: CGFloat.self) { proxy in
-                        proxy.size.height
-                    } action: { height in
-                        headerHeight = height
-                    }
-                    .listRowInsets(EdgeInsets())
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-                playButtons(playlist)
-                    .listRowInsets(EdgeInsets(top: 8, leading: margin, bottom: 12, trailing: margin))
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-                songRows(playlist)
-                footer
-            }
-        }
-        .listStyle(.plain)
-        .overlay {
-            if playlist == nil {
-                if case let .failed(message) = phase {
-                    ErrorStateView(message: message) {
-                        Task { await refreshIfNeeded() }
-                    }
-                } else {
-                    LoadingStateView()
+        WithPerceptionTracking {
+            List {
+                if let playlist {
+                    header(playlist)
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            proxy.size.height
+                        } action: { height in
+                            headerHeight = height
+                        }
+                        .listRowInsets(EdgeInsets())
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                    playButtons(playlist)
+                        .listRowInsets(EdgeInsets(top: 8, leading: margin, bottom: 12, trailing: margin))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                    songRows(playlist)
+                    footer
                 }
             }
-        }
-        .artworkPalette(coverArt, into: $palette)
-        .detailBand(palette, headerHeight: headerHeight)
-        .themedBackground()
-        .scrollRevealedTitle(
-            playlist?.name ?? "",
-            threshold: sizeClass == .regular ? 200 : 290,
-            headerIsDark: theme.palette.isDark
-        )
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    if let playlist {
-                        PlaylistMenuItems(playlist: playlist)
+            .listStyle(.plain)
+            .overlay {
+                WithPerceptionTracking {
+                    if playlist == nil {
+                        if case let .failed(message) = phase {
+                            ErrorStateView(message: message) {
+                                Task { await refreshIfNeeded() }
+                            }
+                        } else {
+                            LoadingStateView()
+                        }
                     }
-                } label: {
-                    Label(
-                        t("playlist.buttons.options", ["name": playlist?.name ?? ""]),
-                        systemImage: "ellipsis"
-                    )
                 }
-                .disabled(playlist == nil)
             }
-        }
-        .offlineBanner()
-        .task(id: reloadKey) {
-            await refreshIfNeeded()
-        }
-        .refreshable {
-            await load()
+            .artworkPalette(coverArt, into: $palette)
+            .detailBand(palette, headerHeight: headerHeight)
+            .themedBackground()
+            .scrollRevealedTitle(
+                playlist?.name ?? "",
+                threshold: sizeClass == .regular ? 200 : 290,
+                headerIsDark: theme.palette.isDark
+            )
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    WithPerceptionTracking {
+                        Menu {
+                            if let playlist {
+                                PlaylistMenuItems(playlist: playlist)
+                            }
+                        } label: {
+                            Label(
+                                t("playlist.buttons.options", ["name": playlist?.name ?? ""]),
+                                systemImage: "ellipsis"
+                            )
+                        }
+                        .disabled(playlist == nil)
+                    }
+                }
+            }
+            .offlineBanner()
+            .task(id: reloadKey) {
+                await refreshIfNeeded()
+            }
+            .refreshable {
+                await load()
+            }
         }
     }
 
@@ -211,30 +218,32 @@ struct PlaylistDetailView: View {
         if !songs.isEmpty {
             // By position: a playlist can hold the same song twice.
             ForEach(Array(songs.enumerated()), id: \.offset) { index, song in
-                SongRow(
-                    song: song,
-                    showsDuration: sizeClass == .regular,
-                    context: isOwned ? .playlist(id: playlist.id, index: index) : .standard,
-                    isFirst: index == 0,
-                    isLast: index == songs.count - 1
-                ) {
-                    play(playlist, startingAt: index, shuffle: false)
-                }
-                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    if isOwned {
-                        // The row stays until the removal is confirmed.
-                        Button {
-                            router.playlistSongRemoval = PlaylistSongRemoval(
-                                playlistId: playlist.id,
-                                indexes: [index]
-                            )
-                        } label: {
-                            Label(t("options.playlist.removeSong"), systemImage: "minus.circle")
-                        }
-                        .tint(.red)
+                WithPerceptionTracking {
+                    SongRow(
+                        song: song,
+                        showsDuration: sizeClass == .regular,
+                        context: isOwned ? .playlist(id: playlist.id, index: index) : .standard,
+                        isFirst: index == 0,
+                        isLast: index == songs.count - 1
+                    ) {
+                        play(playlist, startingAt: index, shuffle: false)
                     }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        if isOwned {
+                            // The row stays until the removal is confirmed.
+                            Button {
+                                router.playlistSongRemoval = PlaylistSongRemoval(
+                                    playlistId: playlist.id,
+                                    indexes: [index]
+                                )
+                            } label: {
+                                Label(t("options.playlist.removeSong"), systemImage: "minus.circle")
+                            }
+                            .tint(.red)
+                        }
+                    }
+                    .listRowBackground(Color.clear)
                 }
-                .listRowBackground(Color.clear)
             }
         } else {
             Group {

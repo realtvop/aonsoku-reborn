@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// Internet radio stations saved on the server. A tap tunes in, or pauses
@@ -13,81 +14,87 @@ struct RadiosView: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        List {
-            ForEach(Array(radios.stations.enumerated()), id: \.element.id) { index, station in
-                RadioRow(station: station, isCurrent: isCurrent(station), isPlaying: player.isPlaying) {
-                    tune(index)
+        WithPerceptionTracking {
+            List {
+                ForEach(Array(radios.stations.enumerated()), id: \.element.id) { index, station in
+                    WithPerceptionTracking {
+                        RadioRow(station: station, isCurrent: isCurrent(station), isPlaying: player.isPlaying) {
+                            tune(index)
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            // Not a destructive role: the row stays until the
+                            // deletion is confirmed.
+                            Button {
+                                pendingDeletion = station
+                            } label: {
+                                Label(t("radios.table.actions.delete"), systemImage: "trash")
+                            }
+                            .tint(.red)
+                            Button {
+                                router.present(.radioEditor(station))
+                            } label: {
+                                Label(t("radios.table.actions.edit"), systemImage: "pencil")
+                            }
+                        }
+                        .contextMenu {
+                            Button(t("radios.table.actions.edit"), systemImage: "pencil") {
+                                router.present(.radioEditor(station))
+                            }
+                            if let homepage = station.homepage {
+                                Link(destination: homepage) {
+                                    Label(homepage.host() ?? homepage.absoluteString, systemImage: "safari")
+                                }
+                            }
+                            Divider()
+                            Button(t("radios.table.actions.delete"), systemImage: "trash", role: .destructive) {
+                                pendingDeletion = station
+                            }
+                        }
+                        .themedRow(plain: true)
+                    }
                 }
-                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    // Not a destructive role: the row stays until the
-                    // deletion is confirmed.
-                    Button {
-                        pendingDeletion = station
-                    } label: {
-                        Label(t("radios.table.actions.delete"), systemImage: "trash")
+            }
+            .listStyle(.plain)
+            .loadStates(radios.phase, isEmpty: radios.stations.isEmpty) {
+                Task { await radios.load() }
+            } empty: {
+                EmptyStateView(title: t("radios.empty.title"), systemImage: "dot.radiowaves.left.and.right") {
+                    Button(t("radios.addRadio")) {
+                        router.present(.radioEditor(nil))
                     }
-                    .tint(.red)
-                    Button {
-                        router.present(.radioEditor(station))
-                    } label: {
-                        Label(t("radios.table.actions.edit"), systemImage: "pencil")
-                    }
+                    .buttonStyle(.glassProminent)
                 }
-                .contextMenu {
-                    Button(t("radios.table.actions.edit"), systemImage: "pencil") {
-                        router.present(.radioEditor(station))
-                    }
-                    if let homepage = station.homepage {
-                        Link(destination: homepage) {
-                            Label(homepage.host() ?? homepage.absoluteString, systemImage: "safari")
+            }
+            .offlineBanner()
+            .themedBackground()
+            .navigationTitle(t("sidebar.radios"))
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    WithPerceptionTracking {
+                        Button(t("radios.addRadio"), systemImage: "plus") {
+                            router.present(.radioEditor(nil))
                         }
                     }
-                    Divider()
-                    Button(t("radios.table.actions.delete"), systemImage: "trash", role: .destructive) {
-                        pendingDeletion = station
-                    }
-                }
-                .themedRow(plain: true)
-            }
-        }
-        .listStyle(.plain)
-        .loadStates(radios.phase, isEmpty: radios.stations.isEmpty) {
-            Task { await radios.load() }
-        } empty: {
-            EmptyStateView(title: t("radios.empty.title"), systemImage: "dot.radiowaves.left.and.right") {
-                Button(t("radios.addRadio")) {
-                    router.present(.radioEditor(nil))
-                }
-                .buttonStyle(.glassProminent)
-            }
-        }
-        .offlineBanner()
-        .themedBackground()
-        .navigationTitle(t("sidebar.radios"))
-        .navigationBarTitleDisplayMode(.large)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(t("radios.addRadio"), systemImage: "plus") {
-                    router.present(.radioEditor(nil))
                 }
             }
-        }
-        .refreshable { await radios.load() }
-        .task {
-            guard radios.phase == .idle else { return }
-            await radios.load()
-        }
-        .alert(
-            t("radios.form.delete.title"),
-            isPresented: isConfirmingDeletion,
-            presenting: pendingDeletion
-        ) { station in
-            Button(t("radios.table.actions.delete"), role: .destructive) {
-                delete(station)
+            .refreshable { await radios.load() }
+            .task {
+                guard radios.phase == .idle else { return }
+                await radios.load()
             }
-            Button(t("generic.cancel"), role: .cancel) {}
-        } message: { _ in
-            Text(t("radios.form.delete.description"))
+            .alert(
+                t("radios.form.delete.title"),
+                isPresented: isConfirmingDeletion,
+                presenting: pendingDeletion
+            ) { station in
+                Button(t("radios.table.actions.delete"), role: .destructive) {
+                    delete(station)
+                }
+                Button(t("generic.cancel"), role: .cancel) {}
+            } message: { _ in
+                Text(t("radios.form.delete.description"))
+            }
         }
     }
 
@@ -135,44 +142,48 @@ private struct RadioRow: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                RadioBadge(name: station.name)
-                    .clipShape(.rect(cornerRadius: Layout.rowArtworkRadius, style: .continuous))
-                    .frame(width: 48, height: 48)
-                    .overlay {
-                        if isCurrent {
-                            NowPlayingIndicator(isPlaying: isPlaying, size: 20)
-                                .foregroundStyle(.white)
-                        } else {
-                            Image(systemName: "dot.radiowaves.left.and.right")
-                                .font(.title3.weight(.semibold))
-                                .foregroundStyle(.white)
+        WithPerceptionTracking {
+            Button(action: action) {
+                HStack(spacing: 12) {
+                    RadioBadge(name: station.name)
+                        .clipShape(.rect(cornerRadius: Layout.rowArtworkRadius, style: .continuous))
+                        .frame(width: 48, height: 48)
+                        .overlay {
+                            WithPerceptionTracking {
+                                if isCurrent {
+                                    NowPlayingIndicator(isPlaying: isPlaying, size: 20)
+                                        .foregroundStyle(.white)
+                                } else {
+                                    Image(systemName: "dot.radiowaves.left.and.right")
+                                        .font(.title3.weight(.semibold))
+                                        .foregroundStyle(.white)
+                                }
+                            }
                         }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(station.name)
+                            .font(.callout.weight(.medium))
+                            .foregroundStyle(isCurrent ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.primary))
+                            .lineLimit(1)
+                        Text(station.homepage?.host() ?? station.streamUrl)
+                            .font(.footnote)
+                            .foregroundStyle(ThemeColor.mutedForeground)
+                            .lineLimit(1)
                     }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(station.name)
-                        .font(.callout.weight(.medium))
-                        .foregroundStyle(isCurrent ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.primary))
-                        .lineLimit(1)
-                    Text(station.homepage?.host() ?? station.streamUrl)
-                        .font(.footnote)
-                        .foregroundStyle(ThemeColor.mutedForeground)
-                        .lineLimit(1)
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
+                .contentShape(.rect)
             }
-            .contentShape(.rect)
+            .buttonStyle(.touchFeedback)
+            .listRowSeparator(.hidden)
+            .compactRowInsets()
+            .accessibilityLabel(station.name)
+            .accessibilityHint(
+                isCurrent && isPlaying
+                    ? t("radios.table.pauseTooltip", ["name": station.name])
+                    : t("radios.table.playTooltip", ["name": station.name])
+            )
         }
-        .buttonStyle(.touchFeedback)
-        .listRowSeparator(.hidden)
-        .compactRowInsets()
-        .accessibilityLabel(station.name)
-        .accessibilityHint(
-            isCurrent && isPlaying
-                ? t("radios.table.pauseTooltip", ["name": station.name])
-                : t("radios.table.playTooltip", ["name": station.name])
-        )
     }
 }
 
@@ -181,18 +192,20 @@ struct RadioBadge: View {
     let name: String
 
     var body: some View {
-        let hue = GenreTile.hue(for: name)
-        RoundedRectangle(cornerRadius: 6, style: .continuous)
-            .fill(
-                LinearGradient(
-                    colors: [
-                        Color(hue: hue, saturation: 0.55, brightness: 0.78),
-                        Color(hue: (hue + 0.06).truncatingRemainder(dividingBy: 1), saturation: 0.7, brightness: 0.48),
-                    ],
-                    startPoint: .topTrailing,
-                    endPoint: .bottomLeading
+        WithPerceptionTracking {
+            let hue = GenreTile.hue(for: name)
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(hue: hue, saturation: 0.55, brightness: 0.78),
+                            Color(hue: (hue + 0.06).truncatingRemainder(dividingBy: 1), saturation: 0.7, brightness: 0.48),
+                        ],
+                        startPoint: .topTrailing,
+                        endPoint: .bottomLeading
+                    )
                 )
-            )
+        }
     }
 }
 

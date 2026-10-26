@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// Everything downloaded to the device, which plays without a connection:
@@ -27,38 +28,42 @@ struct DownloadsView: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        Group {
-            switch kind {
-            case .albums: DownloadedAlbums()
-            case .playlists: DownloadedPlaylists()
-            case .songs: DownloadedSongs()
-            }
-        }
-        .safeAreaBar(edge: .top) {
-            VStack(spacing: 10) {
-                Picker(t("offline.badge.downloaded"), selection: $kind) {
-                    ForEach(Kind.allCases) { kind in
-                        Text(t(kind.titleKey)).tag(kind)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                if !downloads.activeDownloads.isEmpty {
-                    ActiveDownloadsBar(summary: downloads.activeDownloads) {
-                        downloads.cancelAll()
-                    }
-                    .transition(.move(edge: .top).combined(with: .opacity))
+        WithPerceptionTracking {
+            Group {
+                switch kind {
+                case .albums: DownloadedAlbums()
+                case .playlists: DownloadedPlaylists()
+                case .songs: DownloadedSongs()
                 }
             }
-            .pageMargins()
-            .padding(.bottom, 8)
-            .animation(.smooth, value: downloads.activeDownloads.isEmpty)
+            .safeAreaBar(edge: .top) {
+                VStack(spacing: 10) {
+                    Picker(t("offline.badge.downloaded"), selection: $kind) {
+                        ForEach(Kind.allCases) { kind in
+                            WithPerceptionTracking {
+                                Text(t(kind.titleKey)).tag(kind)
+                            }
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    if !downloads.activeDownloads.isEmpty {
+                        ActiveDownloadsBar(summary: downloads.activeDownloads) {
+                            downloads.cancelAll()
+                        }
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                }
+                .pageMargins()
+                .padding(.bottom, 8)
+                .animation(.smooth, value: downloads.activeDownloads.isEmpty)
+            }
+            .themedBackground()
+            .navigationTitle(t("offline.badge.downloaded"))
+            // A large title would sit under the blur of the bar holding the
+            // picker, so the title stays inline.
+            .navigationBarTitleDisplayMode(.inline)
         }
-        .themedBackground()
-        .navigationTitle(t("offline.badge.downloaded"))
-        // A large title would sit under the blur of the bar holding the
-        // picker, so the title stays inline.
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -70,23 +75,25 @@ private struct ActiveDownloadsBar: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        HStack(spacing: 12) {
-            ProgressRing(progress: summary.overallProgress, diameter: 22)
-                .foregroundStyle(.tint)
-            Text(t("settings.storage.sync.downloading", count: summary.activeCount))
-                .font(.subheadline.weight(.medium))
-                .contentTransition(.numericText())
-                .lineLimit(1)
-            Spacer(minLength: 8)
-            Button(t("generic.cancel"), action: cancel)
-                .buttonStyle(.glass)
-                .controlSize(.small)
+        WithPerceptionTracking {
+            HStack(spacing: 12) {
+                ProgressRing(progress: summary.overallProgress, diameter: 22)
+                    .foregroundStyle(.tint)
+                Text(t("settings.storage.sync.downloading", count: summary.activeCount))
+                    .font(.subheadline.weight(.medium))
+                    .contentTransition(.numericText())
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                Button(t("generic.cancel"), action: cancel)
+                    .buttonStyle(.glass)
+                    .controlSize(.small)
+            }
+            .padding(.leading, 14)
+            .padding(.trailing, 8)
+            .padding(.vertical, 8)
+            .glassEffect(.regular, in: .capsule)
+            .animation(.smooth, value: summary.activeCount)
         }
-        .padding(.leading, 14)
-        .padding(.trailing, 8)
-        .padding(.vertical, 8)
-        .glassEffect(.regular, in: .capsule)
-        .animation(.smooth, value: summary.activeCount)
     }
 }
 
@@ -95,17 +102,23 @@ private struct DownloadedAlbums: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        DownloadedItems(emptyTitle: t("native.downloads.noAlbums"), systemImage: "square.stack") {
-            await downloads.downloadedAlbums()
-        } content: { albums in
-            ScrollView {
-                TileGrid {
-                    ForEach(albums) { album in
-                        AlbumTile(album: album)
+        WithPerceptionTracking {
+            DownloadedItems(emptyTitle: t("native.downloads.noAlbums"), systemImage: "square.stack") {
+                await downloads.downloadedAlbums()
+            } content: { albums in
+                ScrollView {
+                    TileGrid {
+                        WithPerceptionTracking {
+                            ForEach(albums) { album in
+                                WithPerceptionTracking {
+                                    AlbumTile(album: album)
+                                }
+                            }
+                        }
                     }
+                    .padding(.top, 8)
+                    .padding(.bottom, 24)
                 }
-                .padding(.top, 8)
-                .padding(.bottom, 24)
             }
         }
     }
@@ -116,17 +129,23 @@ private struct DownloadedPlaylists: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        DownloadedItems(emptyTitle: t("native.downloads.noPlaylists"), systemImage: "music.note.list") {
-            await downloads.downloadedPlaylists()
-        } content: { playlists in
-            ScrollView {
-                TileGrid {
-                    ForEach(playlists) { playlist in
-                        PlaylistTile(playlist: playlist)
+        WithPerceptionTracking {
+            DownloadedItems(emptyTitle: t("native.downloads.noPlaylists"), systemImage: "music.note.list") {
+                await downloads.downloadedPlaylists()
+            } content: { playlists in
+                ScrollView {
+                    TileGrid {
+                        WithPerceptionTracking {
+                            ForEach(playlists) { playlist in
+                                WithPerceptionTracking {
+                                    PlaylistTile(playlist: playlist)
+                                }
+                            }
+                        }
                     }
+                    .padding(.top, 8)
+                    .padding(.bottom, 24)
                 }
-                .padding(.top, 8)
-                .padding(.bottom, 24)
             }
         }
     }
@@ -138,37 +157,41 @@ private struct DownloadedSongs: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        DownloadedItems(emptyTitle: t("native.downloads.noSongs"), systemImage: "music.note") {
-            await downloads.downloadedSongs()
-        } content: { songs in
-            List {
-                if !songs.isEmpty {
-                    PlayShuffleButtons {
-                        player.play(songs, sourceName: title)
-                    } shuffle: {
-                        player.play(songs, shuffle: true, sourceName: title)
-                    }
-                    .padding(.vertical, 8)
-                    .listRowSeparator(.hidden)
-                    .themedRow(plain: true)
-                }
-                ForEach(Array(songs.enumerated()), id: \.element.id) { index, song in
-                    SongRow(song: song, isFirst: index == 0, isLast: index == songs.count - 1) {
-                        player.play(songs, startingAt: index, sourceName: title)
-                    }
-                    .swipeActions(edge: .trailing) {
-                        // The row leaves when the download index changes.
-                        Button {
-                            Task { await downloads.remove(songIds: [song.id]) }
-                        } label: {
-                            Label(t("options.removeDownload"), systemImage: "trash")
+        WithPerceptionTracking {
+            DownloadedItems(emptyTitle: t("native.downloads.noSongs"), systemImage: "music.note") {
+                await downloads.downloadedSongs()
+            } content: { songs in
+                List {
+                    if !songs.isEmpty {
+                        PlayShuffleButtons {
+                            player.play(songs, sourceName: title)
+                        } shuffle: {
+                            player.play(songs, shuffle: true, sourceName: title)
                         }
-                        .tint(.red)
+                        .padding(.vertical, 8)
+                        .listRowSeparator(.hidden)
+                        .themedRow(plain: true)
                     }
-                    .themedRow(plain: true)
+                    ForEach(Array(songs.enumerated()), id: \.element.id) { index, song in
+                        WithPerceptionTracking {
+                            SongRow(song: song, isFirst: index == 0, isLast: index == songs.count - 1) {
+                                player.play(songs, startingAt: index, sourceName: title)
+                            }
+                            .swipeActions(edge: .trailing) {
+                                // The row leaves when the download index changes.
+                                Button {
+                                    Task { await downloads.remove(songIds: [song.id]) }
+                                } label: {
+                                    Label(t("options.removeDownload"), systemImage: "trash")
+                                }
+                                .tint(.red)
+                            }
+                            .themedRow(plain: true)
+                        }
+                    }
                 }
+                .listStyle(.plain)
             }
-            .listStyle(.plain)
         }
     }
 
@@ -191,18 +214,20 @@ private struct DownloadedItems<Item: Sendable, Content: View>: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        content(items ?? [])
-            .loadStates(items == nil ? .loading : .loaded, isEmpty: items?.isEmpty ?? true) {
-                // Reading the index does not fail.
-            } empty: {
-                EmptyStateView(
-                    title: emptyTitle,
-                    systemImage: systemImage,
-                    description: t("native.downloads.description")
-                )
-            }
-            .task(id: downloads.revision) {
-                items = await load()
-            }
+        WithPerceptionTracking {
+            content(items ?? [])
+                .loadStates(items == nil ? .loading : .loaded, isEmpty: items?.isEmpty ?? true) {
+                    // Reading the index does not fail.
+                } empty: {
+                    EmptyStateView(
+                        title: emptyTitle,
+                        systemImage: systemImage,
+                        description: t("native.downloads.description")
+                    )
+                }
+                .task(id: downloads.revision) {
+                    items = await load()
+                }
+        }
     }
 }

@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// Library sync, smart downloads, cache quotas and the cache manager, like
@@ -23,44 +24,50 @@ struct StorageSettingsView: View {
     }
 
     var body: some View {
-        let cache = settings.settings.cache
-        ThemedForm {
-            librarySync(cache)
-            Section {
-                Picker(selection: settings.binding(\.cache.downloadConcurrency)) {
-                    ForEach(CacheSettings.downloadConcurrencyOptions, id: \.self) { count in
-                        Text(String(count)).tag(count)
+        WithPerceptionTracking {
+            let cache = settings.settings.cache
+            ThemedForm {
+                WithPerceptionTracking {
+                    librarySync(cache)
+                    Section {
+                        Picker(selection: settings.binding(\.cache.downloadConcurrency)) {
+                            ForEach(CacheSettings.downloadConcurrencyOptions, id: \.self) { count in
+                                WithPerceptionTracking {
+                                    Text(String(count)).tag(count)
+                                }
+                            }
+                        } label: {
+                            Text(t("native.settings.downloadConcurrency.label"))
+                        }
+                    } footer: {
+                        Text(t("native.settings.downloadConcurrency.info"))
                     }
-                } label: {
-                    Text(t("native.settings.downloadConcurrency.label"))
+                    smartDownloads(cache.smartRules)
+                    limits(cache)
+                    Section {
+                        NavigationLink(value: SettingsPage.cacheManager) {
+                            Text(t("settings.storage.cacheManager.group"))
+                        }
+                    } footer: {
+                        Text(t("settings.storage.cacheManager.description"))
+                    }
                 }
-            } footer: {
-                Text(t("native.settings.downloadConcurrency.info"))
             }
-            smartDownloads(cache.smartRules)
-            limits(cache)
-            Section {
-                NavigationLink(value: SettingsPage.cacheManager) {
-                    Text(t("settings.storage.cacheManager.group"))
+            .navigationTitle(t("settings.options.storage"))
+            .task(id: downloads.revision) {
+                await downloads.refreshUsage()
+            }
+            .confirmationDialog(
+                pendingClear.map { clearTitle($0) } ?? "",
+                isPresented: isConfirmingClear,
+                titleVisibility: .visible,
+                presenting: pendingClear
+            ) { target in
+                Button(clearTitle(target), role: .destructive) {
+                    clear(target)
                 }
-            } footer: {
-                Text(t("settings.storage.cacheManager.description"))
+                Button(t("generic.cancel"), role: .cancel) {}
             }
-        }
-        .navigationTitle(t("settings.options.storage"))
-        .task(id: downloads.revision) {
-            await downloads.refreshUsage()
-        }
-        .confirmationDialog(
-            pendingClear.map { clearTitle($0) } ?? "",
-            isPresented: isConfirmingClear,
-            titleVisibility: .visible,
-            presenting: pendingClear
-        ) { target in
-            Button(clearTitle(target), role: .destructive) {
-                clear(target)
-            }
-            Button(t("generic.cancel"), role: .cancel) {}
         }
     }
 
@@ -81,8 +88,10 @@ struct StorageSettingsView: View {
             )
             Picker(selection: settings.binding(\.cache.coverArtConcurrency)) {
                 ForEach(Array(CacheSettings.coverArtConcurrencyRange), id: \.self) { count in
-                    Text(count == 1 ? t("settings.storage.sync.coverArtConcurrencyOff") : String(count))
-                        .tag(count)
+                    WithPerceptionTracking {
+                        Text(count == 1 ? t("settings.storage.sync.coverArtConcurrencyOff") : String(count))
+                            .tag(count)
+                    }
                 }
             } label: {
                 Text(t("settings.storage.sync.coverArtConcurrency"))
@@ -243,35 +252,39 @@ private struct PoolRow: View {
     @Environment(\.locale) private var locale
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(title)
-                    .font(.body.weight(.medium))
-                Spacer()
-                Button(t("settings.storage.limits.clearAudio"), role: .destructive, action: clear)
-                    .buttonStyle(.borderless)
-                    .disabled(usage.count == 0 && !allowsEmptyClear)
-            }
-            Text(description)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            Text("\(Formatters.cacheSize(usage.sizeBytes, locale: locale)) · \(entries)")
-                .font(.footnote.weight(.medium))
-                .monospacedDigit()
-            if let quota {
-                Picker(t("settings.storage.limits.quota"), selection: quota) {
-                    ForEach(CacheSettings.quotaOptions, id: \.self) { option in
-                        Text(option == 0 ? t("settings.storage.limits.unlimited") : Formatters.cacheSize(option, locale: locale))
-                            .tag(option)
-                    }
+        WithPerceptionTracking {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(title)
+                        .font(.body.weight(.medium))
+                    Spacer()
+                    Button(t("settings.storage.limits.clearAudio"), role: .destructive, action: clear)
+                        .buttonStyle(.borderless)
+                        .disabled(usage.count == 0 && !allowsEmptyClear)
                 }
-                .font(.subheadline)
-            } else {
-                LabeledContent(t("settings.storage.limits.quota"), value: t("settings.storage.limits.unlimited"))
+                Text(description)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Text("\(Formatters.cacheSize(usage.sizeBytes, locale: locale)) · \(entries)")
+                    .font(.footnote.weight(.medium))
+                    .monospacedDigit()
+                if let quota {
+                    Picker(t("settings.storage.limits.quota"), selection: quota) {
+                        ForEach(CacheSettings.quotaOptions, id: \.self) { option in
+                            WithPerceptionTracking {
+                                Text(option == 0 ? t("settings.storage.limits.unlimited") : Formatters.cacheSize(option, locale: locale))
+                                    .tag(option)
+                            }
+                        }
+                    }
                     .font(.subheadline)
+                } else {
+                    LabeledContent(t("settings.storage.limits.quota"), value: t("settings.storage.limits.unlimited"))
+                        .font(.subheadline)
+                }
             }
+            .padding(.vertical, 4)
         }
-        .padding(.vertical, 4)
     }
 }
 
@@ -290,69 +303,79 @@ struct CacheManagerView: View {
     @Environment(\.locale) private var locale
 
     var body: some View {
-        ThemedList {
-            if !items.isEmpty {
-                Section {
-                    ForEach(items) { item in
-                        CachedItemRow(item: item)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button {
-                                    pendingDeletion = item
-                                } label: {
-                                    Label(t("settings.storage.cacheManager.list.delete"), systemImage: "trash")
+        WithPerceptionTracking {
+            ThemedList {
+                WithPerceptionTracking {
+                    if !items.isEmpty {
+                        Section {
+                            ForEach(items) { item in
+                                WithPerceptionTracking {
+                                    CachedItemRow(item: item)
+                                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                            Button {
+                                                pendingDeletion = item
+                                            } label: {
+                                                Label(t("settings.storage.cacheManager.list.delete"), systemImage: "trash")
+                                            }
+                                            .tint(.red)
+                                        }
+                                        .contextMenu {
+                                            Button(role: .destructive) {
+                                                pendingDeletion = item
+                                            } label: {
+                                                Label(t("settings.storage.cacheManager.list.delete"), systemImage: "trash")
+                                            }
+                                        }
                                 }
-                                .tint(.red)
                             }
-                            .contextMenu {
-                                Button(role: .destructive) {
-                                    pendingDeletion = item
-                                } label: {
-                                    Label(t("settings.storage.cacheManager.list.delete"), systemImage: "trash")
-                                }
-                            }
-                    }
-                } header: {
-                    Text(t(
-                        "settings.storage.cacheManager.list.total",
-                        ["count": Formatters.number(items.count, locale: locale), "size": Formatters.cacheSize(totalBytes, locale: locale)]
-                    ))
-                }
-            }
-        }
-        .loadStates(phase, isEmpty: items.isEmpty) {
-            Task { await load() }
-        } empty: {
-            EmptyStateView(title: t("settings.storage.cacheManager.list.empty"), systemImage: "internaldrive")
-        }
-        .navigationTitle(t("settings.storage.cacheManager.group"))
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Picker(t("album.list.filter.label"), selection: $filter) {
-                        ForEach(CacheFilter.allCases) { filter in
-                            Text(t(filter.labelKey))
-                                .tag(filter)
+                        } header: {
+                            Text(t(
+                                "settings.storage.cacheManager.list.total",
+                                ["count": Formatters.number(items.count, locale: locale), "size": Formatters.cacheSize(totalBytes, locale: locale)]
+                            ))
                         }
                     }
-                } label: {
-                    Label(t("album.list.filter.label"), systemImage: "line.3.horizontal.decrease")
                 }
             }
-        }
-        .task(id: LoadKey(filter: filter, revision: downloads.revision)) {
-            await load()
-        }
-        .alert(
-            t("settings.storage.cacheManager.confirmDelete.title"),
-            isPresented: isConfirmingDeletion,
-            presenting: pendingDeletion
-        ) { item in
-            Button(t("settings.storage.cacheManager.list.delete"), role: .destructive) {
-                delete(item)
+            .loadStates(phase, isEmpty: items.isEmpty) {
+                Task { await load() }
+            } empty: {
+                EmptyStateView(title: t("settings.storage.cacheManager.list.empty"), systemImage: "internaldrive")
             }
-            Button(t("generic.cancel"), role: .cancel) {}
-        } message: { item in
-            Text(t("settings.storage.cacheManager.confirmDelete.description", ["name": item.name]))
+            .navigationTitle(t("settings.storage.cacheManager.group"))
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    WithPerceptionTracking {
+                        Menu {
+                            Picker(t("album.list.filter.label"), selection: $filter) {
+                                ForEach(CacheFilter.allCases) { filter in
+                                    WithPerceptionTracking {
+                                        Text(t(filter.labelKey))
+                                            .tag(filter)
+                                    }
+                                }
+                            }
+                        } label: {
+                            Label(t("album.list.filter.label"), systemImage: "line.3.horizontal.decrease")
+                        }
+                    }
+                }
+            }
+            .task(id: LoadKey(filter: filter, revision: downloads.revision)) {
+                await load()
+            }
+            .alert(
+                t("settings.storage.cacheManager.confirmDelete.title"),
+                isPresented: isConfirmingDeletion,
+                presenting: pendingDeletion
+            ) { item in
+                Button(t("settings.storage.cacheManager.list.delete"), role: .destructive) {
+                    delete(item)
+                }
+                Button(t("generic.cancel"), role: .cancel) {}
+            } message: { item in
+                Text(t("settings.storage.cacheManager.confirmDelete.description", ["name": item.name]))
+            }
         }
     }
 
@@ -394,28 +417,30 @@ private struct CachedItemRow: View {
     @Environment(\.locale) private var locale
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: symbol)
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .frame(width: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.name)
-                    .lineLimit(1)
-                if let subtitle = item.subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(.subheadline)
+        WithPerceptionTracking {
+            HStack(spacing: 12) {
+                Image(systemName: symbol)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.name)
+                        .lineLimit(1)
+                    if let subtitle = item.subtitle, !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Text(details)
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                }
-                Text(details)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                if item.removedFromServer {
-                    Label(t("settings.storage.cacheManager.list.removedFromServer"), systemImage: "exclamationmark.icloud")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
+                    if item.removedFromServer {
+                        Label(t("settings.storage.cacheManager.list.removedFromServer"), systemImage: "exclamationmark.icloud")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
                 }
             }
         }

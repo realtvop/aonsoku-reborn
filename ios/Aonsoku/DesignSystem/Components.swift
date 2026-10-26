@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 // MARK: - Layout
@@ -40,8 +41,10 @@ private struct CompactRowInsetsModifier: ViewModifier {
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     func body(content: Content) -> some View {
-        let margin = Layout.margin(sizeClass)
-        content.listRowInsets(EdgeInsets(top: vertical, leading: margin, bottom: vertical, trailing: margin - trailingInset))
+        WithPerceptionTracking {
+            let margin = Layout.margin(sizeClass)
+            content.listRowInsets(EdgeInsets(top: vertical, leading: margin, bottom: vertical, trailing: margin - trailingInset))
+        }
     }
 }
 
@@ -49,16 +52,20 @@ private struct PageMarginsModifier: ViewModifier {
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     func body(content: Content) -> some View {
-        content.padding(.horizontal, Layout.margin(sizeClass))
+        WithPerceptionTracking {
+            content.padding(.horizontal, Layout.margin(sizeClass))
+        }
     }
 }
 
 /// Shrinks tiles slightly while pressed.
 struct PressableStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(.spring(duration: 0.25), value: configuration.isPressed)
+        WithPerceptionTracking {
+            configuration.label
+                .scaleEffect(configuration.isPressed ? 0.97 : 1)
+                .animation(.spring(duration: 0.25), value: configuration.isPressed)
+        }
     }
 }
 
@@ -69,8 +76,10 @@ extension ButtonStyle where Self == PressableStyle {
 /// Immediate press feedback without moving a row or changing its layout.
 struct TouchFeedbackStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .opacity(configuration.isPressed ? 0.6 : 1)
+        WithPerceptionTracking {
+            configuration.label
+                .opacity(configuration.isPressed ? 0.6 : 1)
+        }
     }
 }
 
@@ -86,15 +95,17 @@ struct TitleDisclosureLabel<Title: View>: View {
     @ViewBuilder let title: Title
 
     var body: some View {
-        HStack(alignment: .center, spacing: 6) {
-            title
-            Image(systemName: "chevron.forward")
-                .imageScale(.small)
-                .foregroundStyle(ThemeColor.mutedForeground)
-                .fixedSize()
-                .accessibilityHidden(true)
+        WithPerceptionTracking {
+            HStack(alignment: .center, spacing: 6) {
+                title
+                Image(systemName: "chevron.forward")
+                    .imageScale(.small)
+                    .foregroundStyle(ThemeColor.mutedForeground)
+                    .fixedSize()
+                    .accessibilityHidden(true)
+            }
+            .contentShape(.rect)
         }
-        .contentShape(.rect)
     }
 }
 
@@ -109,23 +120,25 @@ struct SectionHeader: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        Group {
-            if let route {
-                NavigationLink(value: route) {
-                    TitleDisclosureLabel {
-                        heading
+        WithPerceptionTracking {
+            Group {
+                if let route {
+                    NavigationLink(value: route) {
+                        TitleDisclosureLabel {
+                            heading
+                        }
+                        .displayFont(.section)
                     }
-                    .displayFont(.section)
+                    .buttonStyle(.touchFeedback)
+                    .accessibilityHint(moreTitle ?? t("generic.seeMore"))
+                } else {
+                    heading
+                        .displayFont(.section)
                 }
-                .buttonStyle(.touchFeedback)
-                .accessibilityHint(moreTitle ?? t("generic.seeMore"))
-            } else {
-                heading
-                    .displayFont(.section)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityAddTraits(.isHeader)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityAddTraits(.isHeader)
     }
 
     private var heading: some View {
@@ -149,33 +162,35 @@ struct AlbumTile: View {
     var caption: Caption = .artist
 
     var body: some View {
-        NavigationLink(value: AppRoute.album(album)) {
-            VStack(alignment: .leading, spacing: 8) {
-                ArtworkImage(id: album.coverArt, cornerRadius: Layout.artworkRadius)
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 4) {
-                        Text(album.name)
-                            .lineLimit(1)
-                        if album.explicitStatus == .explicit {
-                            ExplicitBadge()
+        WithPerceptionTracking {
+            NavigationLink(value: AppRoute.album(album)) {
+                VStack(alignment: .leading, spacing: 8) {
+                    ArtworkImage(id: album.coverArt, cornerRadius: Layout.artworkRadius)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 4) {
+                            Text(album.name)
+                                .lineLimit(1)
+                            if album.explicitStatus == .explicit {
+                                ExplicitBadge()
+                            }
                         }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.primary)
+                        HStack(spacing: 4) {
+                            Text(captionText)
+                                .lineLimit(1)
+                            AlbumCacheBadge(albumId: album.id)
+                        }
+                        .font(.caption)
+                        .foregroundStyle(ThemeColor.mutedForeground)
                     }
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.primary)
-                    HStack(spacing: 4) {
-                        Text(captionText)
-                            .lineLimit(1)
-                        AlbumCacheBadge(albumId: album.id)
-                    }
-                    .font(.caption)
-                    .foregroundStyle(ThemeColor.mutedForeground)
                 }
+                .contentShape(.rect)
             }
-            .contentShape(.rect)
-        }
-        .buttonStyle(.pressable)
-        .contextMenu {
-            AlbumMenuItems(album: album)
+            .buttonStyle(.pressable)
+            .contextMenu {
+                AlbumMenuItems(album: album)
+            }
         }
     }
 
@@ -194,28 +209,30 @@ struct PlaylistTile: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        NavigationLink(value: AppRoute.playlist(id: playlist.id)) {
-            VStack(alignment: .leading, spacing: 8) {
-                ArtworkImage(id: playlist.coverArt, cornerRadius: Layout.artworkRadius, placeholder: "music.note.list")
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(playlist.name)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color.primary)
-                        .lineLimit(1)
-                    HStack(spacing: 4) {
-                        Text(t("playlist.songCount", count: playlist.songCount))
+        WithPerceptionTracking {
+            NavigationLink(value: AppRoute.playlist(id: playlist.id)) {
+                VStack(alignment: .leading, spacing: 8) {
+                    ArtworkImage(id: playlist.coverArt, cornerRadius: Layout.artworkRadius, placeholder: "music.note.list")
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(playlist.name)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color.primary)
                             .lineLimit(1)
-                        PlaylistCacheBadge(playlistId: playlist.id)
+                        HStack(spacing: 4) {
+                            Text(t("playlist.songCount", count: playlist.songCount))
+                                .lineLimit(1)
+                            PlaylistCacheBadge(playlistId: playlist.id)
+                        }
+                        .font(.caption)
+                        .foregroundStyle(ThemeColor.mutedForeground)
                     }
-                    .font(.caption)
-                    .foregroundStyle(ThemeColor.mutedForeground)
                 }
+                .contentShape(.rect)
             }
-            .contentShape(.rect)
-        }
-        .buttonStyle(.pressable)
-        .contextMenu {
-            PlaylistMenuItems(playlist: playlist)
+            .buttonStyle(.pressable)
+            .contextMenu {
+                PlaylistMenuItems(playlist: playlist)
+            }
         }
     }
 }
@@ -225,19 +242,21 @@ struct ArtistTile: View {
     let artist: Artist
 
     var body: some View {
-        NavigationLink(value: AppRoute.artist(id: artist.id, name: artist.name)) {
-            VStack(spacing: 8) {
-                ArtworkImage(id: artist.coverArt, isCircular: true, placeholder: "music.mic")
-                Text(artist.name)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.primary)
-                    .lineLimit(1)
+        WithPerceptionTracking {
+            NavigationLink(value: AppRoute.artist(id: artist.id, name: artist.name)) {
+                VStack(spacing: 8) {
+                    ArtworkImage(id: artist.coverArt, isCircular: true, placeholder: "music.mic")
+                    Text(artist.name)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.primary)
+                        .lineLimit(1)
+                }
+                .contentShape(.rect)
             }
-            .contentShape(.rect)
-        }
-        .buttonStyle(.pressable)
-        .contextMenu {
-            ArtistMenuItems(artist: artist)
+            .buttonStyle(.pressable)
+            .contextMenu {
+                ArtistMenuItems(artist: artist)
+            }
         }
     }
 }
@@ -250,8 +269,12 @@ struct AlbumShelf: View {
     var caption: AlbumTile.Caption = .artist
 
     var body: some View {
-        Shelf(items: albums) { album in
-            AlbumTile(album: album, caption: caption)
+        WithPerceptionTracking {
+            Shelf(items: albums) { album in
+                WithPerceptionTracking {
+                    AlbumTile(album: album, caption: caption)
+                }
+            }
         }
     }
 }
@@ -268,25 +291,29 @@ struct Shelf<Item: Identifiable, Tile: View>: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
-        let isRegular = sizeClass == .regular
-        ScrollView(.horizontal) {
-            LazyHStack(alignment: .top, spacing: Layout.shelfSpacing) {
-                ForEach(items) { item in
-                    tile(item)
-                        .containerRelativeFrame(
-                            .horizontal,
-                            count: isRegular ? 11 : 10,
-                            span: isRegular ? 2 : compactSpan,
-                            spacing: Layout.shelfSpacing
-                        )
+        WithPerceptionTracking {
+            let isRegular = sizeClass == .regular
+            ScrollView(.horizontal) {
+                LazyHStack(alignment: .top, spacing: Layout.shelfSpacing) {
+                    ForEach(items) { item in
+                        WithPerceptionTracking {
+                            tile(item)
+                                .containerRelativeFrame(
+                                    .horizontal,
+                                    count: isRegular ? 11 : 10,
+                                    span: isRegular ? 2 : compactSpan,
+                                    spacing: Layout.shelfSpacing
+                                )
+                        }
+                    }
                 }
+                .scrollTargetLayout()
             }
-            .scrollTargetLayout()
+            .scrollTargetBehavior(.viewAligned)
+            .scrollIndicators(.hidden)
+            .scrollClipDisabled()
+            .contentMargins(.horizontal, Layout.margin(sizeClass), for: .scrollContent)
         }
-        .scrollTargetBehavior(.viewAligned)
-        .scrollIndicators(.hidden)
-        .scrollClipDisabled()
-        .contentMargins(.horizontal, Layout.margin(sizeClass), for: .scrollContent)
     }
 }
 
@@ -296,16 +323,22 @@ struct AlbumGrid: View {
     var caption: AlbumTile.Caption = .artist
 
     var body: some View {
-        TileGrid {
-            ForEach(collection.items) { album in
-                AlbumTile(album: album, caption: caption)
-                    .onAppear { collection.loadMoreIfNeeded(currentItem: album) }
+        WithPerceptionTracking {
+            TileGrid {
+                WithPerceptionTracking {
+                    ForEach(collection.items) { album in
+                        WithPerceptionTracking {
+                            AlbumTile(album: album, caption: caption)
+                                .onAppear { collection.loadMoreIfNeeded(currentItem: album) }
+                        }
+                    }
+                }
             }
-        }
-        if collection.phase == .loadingMore {
-            ProgressView()
-                .frame(maxWidth: .infinity)
-                .padding()
+            if collection.phase == .loadingMore {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding()
+            }
         }
     }
 }
@@ -317,14 +350,16 @@ struct TileGrid<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: minimumWidth), spacing: 16, alignment: .top)],
-            alignment: .leading,
-            spacing: 24
-        ) {
-            content
+        WithPerceptionTracking {
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: minimumWidth), spacing: 16, alignment: .top)],
+                alignment: .leading,
+                spacing: 24
+            ) {
+                content
+            }
+            .pageMargins()
         }
-        .pageMargins()
     }
 }
 
@@ -365,57 +400,63 @@ struct SongRow: View {
     @Environment(\.displayScale) private var displayScale
 
     var body: some View {
-        HStack(spacing: 4) {
-            Button(action: play) {
-                HStack(spacing: 12) {
-                    leadingView
-                    titles
-                    Spacer(minLength: 4)
-                    SongCacheBadge(songId: song.id)
-                    if showsDuration {
-                        Text(Formatters.clock(TimeInterval(song.duration)))
-                            .font(.footnote)
-                            .monospacedDigit()
-                            .foregroundStyle(ThemeColor.mutedForeground)
+        WithPerceptionTracking {
+            HStack(spacing: 4) {
+                Button(action: play) {
+                    HStack(spacing: 12) {
+                        leadingView
+                        titles
+                        Spacer(minLength: 4)
+                        SongCacheBadge(songId: song.id)
+                        if showsDuration {
+                            Text(Formatters.clock(TimeInterval(song.duration)))
+                                .font(.footnote)
+                                .monospacedDigit()
+                                .foregroundStyle(ThemeColor.mutedForeground)
+                        }
+                    }
+                    .frame(minHeight: 44)
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.touchFeedback)
+
+                Menu {
+                    SongMenuItems(song: song, context: context)
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(ThemeColor.mutedForeground)
+                        .frame(width: 44, height: 44)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(t("playlist.buttons.options", ["name": song.title]))
+            }
+            .overlay(alignment: .top) {
+                WithPerceptionTracking {
+                    if isFirst {
+                        boundarySeparator.offset(y: -4)
                     }
                 }
-                .frame(minHeight: 44)
-                .contentShape(.rect)
             }
-            .buttonStyle(.touchFeedback)
-
-            Menu {
+            .overlay(alignment: .bottom) {
+                WithPerceptionTracking {
+                    if isLast {
+                        boundarySeparator.offset(y: 4)
+                    }
+                }
+            }
+            .listRowSeparator(isLast ? .hidden : .visible, edges: .bottom)
+            .listRowSeparator(isFirst ? .hidden : .automatic, edges: .top)
+            .listRowSeparatorTint(theme.palette.border)
+            .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
+            .compactRowInsets(vertical: 4, trailingInset: 8)
+            .contextMenu {
                 SongMenuItems(song: song, context: context)
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(ThemeColor.mutedForeground)
-                    .frame(width: 44, height: 44)
-                    .contentShape(.rect)
             }
-            .buttonStyle(.borderless)
-            .accessibilityLabel(t("playlist.buttons.options", ["name": song.title]))
-        }
-        .overlay(alignment: .top) {
-            if isFirst {
-                boundarySeparator.offset(y: -4)
+            .swipeActions(edge: .leading) {
+                EnqueueSwipeActions(songs: [song])
             }
-        }
-        .overlay(alignment: .bottom) {
-            if isLast {
-                boundarySeparator.offset(y: 4)
-            }
-        }
-        .listRowSeparator(isLast ? .hidden : .visible, edges: .bottom)
-        .listRowSeparator(isFirst ? .hidden : .automatic, edges: .top)
-        .listRowSeparatorTint(theme.palette.border)
-        .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
-        .compactRowInsets(vertical: 4, trailingInset: 8)
-        .contextMenu {
-            SongMenuItems(song: song, context: context)
-        }
-        .swipeActions(edge: .leading) {
-            EnqueueSwipeActions(songs: [song])
         }
     }
 
@@ -450,11 +491,13 @@ struct SongRow: View {
             SongArtwork(song: song, cornerRadius: Layout.rowArtworkRadius)
                 .frame(width: 44, height: 44)
                 .overlay {
-                    if isCurrent {
-                        RoundedRectangle(cornerRadius: Layout.rowArtworkRadius, style: .continuous)
-                            .fill(.black.opacity(0.4))
-                        NowPlayingIndicator(isPlaying: player.isPlaying, size: 18)
-                            .foregroundStyle(.white)
+                    WithPerceptionTracking {
+                        if isCurrent {
+                            RoundedRectangle(cornerRadius: Layout.rowArtworkRadius, style: .continuous)
+                                .fill(.black.opacity(0.4))
+                            NowPlayingIndicator(isPlaying: player.isPlaying, size: 18)
+                                .foregroundStyle(.white)
+                        }
                     }
                 }
         case let .number(number):
@@ -507,11 +550,13 @@ struct SongArtwork: View {
     @Environment(SettingsStore.self) private var settings
 
     var body: some View {
-        ArtworkImage(
-            id: song.coverArtId(preferAlbum: settings.settings.playback.useAlbumCoverForSongs),
-            size: size,
-            cornerRadius: cornerRadius
-        )
+        WithPerceptionTracking {
+            ArtworkImage(
+                id: song.coverArtId(preferAlbum: settings.settings.playback.useAlbumCoverForSongs),
+                size: size,
+                cornerRadius: cornerRadius
+            )
+        }
     }
 }
 
@@ -545,31 +590,33 @@ struct NowPlayingIndicator: View {
     private static let period = 0.6
 
     var body: some View {
-        let isAnimating = isPlaying && !reduceMotion
-        TimelineView(.animation(paused: !isAnimating)) { context in
-            Canvas { canvas, canvasSize in
-                let unit = canvasSize.width / 24
-                let time = context.date.timeIntervalSinceReferenceDate
-                for (index, bar) in Self.bars.enumerated() {
-                    var scale = bar.from
-                    if isAnimating {
-                        let phase = ((time - bar.delay) / Self.period).truncatingRemainder(dividingBy: 1)
-                        let eased = (1 - cos(2 * .pi * phase)) / 2
-                        scale = bar.from + (bar.to - bar.from) * eased
+        WithPerceptionTracking {
+            let isAnimating = isPlaying && !reduceMotion
+            TimelineView(.animation(paused: !isAnimating)) { context in
+                Canvas { canvas, canvasSize in
+                    let unit = canvasSize.width / 24
+                    let time = context.date.timeIntervalSinceReferenceDate
+                    for (index, bar) in Self.bars.enumerated() {
+                        var scale = bar.from
+                        if isAnimating {
+                            let phase = ((time - bar.delay) / Self.period).truncatingRemainder(dividingBy: 1)
+                            let eased = (1 - cos(2 * .pi * phase)) / 2
+                            scale = bar.from + (bar.to - bar.from) * eased
+                        }
+                        let height = bar.height * unit * scale
+                        let rect = CGRect(
+                            x: (1 + 6 * CGFloat(index)) * unit,
+                            y: canvasSize.height - 2 * unit - height,
+                            width: 4 * unit,
+                            height: height
+                        )
+                        canvas.fill(Path(roundedRect: rect, cornerRadius: unit), with: .foreground)
                     }
-                    let height = bar.height * unit * scale
-                    let rect = CGRect(
-                        x: (1 + 6 * CGFloat(index)) * unit,
-                        y: canvasSize.height - 2 * unit - height,
-                        width: 4 * unit,
-                        height: height
-                    )
-                    canvas.fill(Path(roundedRect: rect, cornerRadius: unit), with: .foreground)
                 }
             }
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
         }
-        .frame(width: size, height: size)
-        .accessibilityHidden(true)
     }
 }
 
@@ -580,10 +627,12 @@ struct ExplicitBadge: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        Image(systemName: "e.square.fill")
-            .font(.caption)
-            .foregroundStyle(style)
-            .accessibilityLabel(t("native.explicit"))
+        WithPerceptionTracking {
+            Image(systemName: "e.square.fill")
+                .font(.caption)
+                .foregroundStyle(style)
+                .accessibilityLabel(t("native.explicit"))
+        }
     }
 }
 
@@ -596,18 +645,20 @@ struct EnqueueSwipeActions: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        Button {
-            player.enqueue(songs, position: .next, announcingWith: toasts)
-        } label: {
-            Label(t("options.playNext"), systemImage: QueueSymbol.playNext)
+        WithPerceptionTracking {
+            Button {
+                player.enqueue(songs, position: .next, announcingWith: toasts)
+            } label: {
+                Label(t("options.playNext"), systemImage: QueueSymbol.playNext)
+            }
+            .tint(.indigo)
+            Button {
+                player.enqueue(songs, position: .last, announcingWith: toasts)
+            } label: {
+                Label(t("options.addLast"), systemImage: QueueSymbol.playLast)
+            }
+            .tint(.orange)
         }
-        .tint(.indigo)
-        Button {
-            player.enqueue(songs, position: .last, announcingWith: toasts)
-        } label: {
-            Label(t("options.addLast"), systemImage: QueueSymbol.playLast)
-        }
-        .tint(.orange)
     }
 }
 
@@ -646,29 +697,31 @@ struct SongCacheBadge: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        let _ = downloads.revision
-        Group {
-            switch downloads.state(ofSong: songId) {
-            case .notCached:
-                EmptyView()
-            case let .downloading(progress):
-                ProgressRing(progress: progress)
-                    .accessibilityLabel(t("offline.badge.downloading"))
-            case let .cached(source, removedFromServer):
-                if removedFromServer {
-                    Image(systemName: "exclamationmark.icloud")
-                        .accessibilityLabel(t("offline.badge.orphan"))
-                } else if source == .explicit {
-                    Image(systemName: "arrow.down.circle.fill")
-                        .accessibilityLabel(t("offline.badge.downloaded"))
-                } else if source == .smart {
-                    Image(systemName: "arrow.down.circle.dotted")
-                        .accessibilityLabel(t("offline.badge.smart"))
+        WithPerceptionTracking {
+            let _ = downloads.revision
+            Group {
+                switch downloads.state(ofSong: songId) {
+                case .notCached:
+                    EmptyView()
+                case let .downloading(progress):
+                    ProgressRing(progress: progress)
+                        .accessibilityLabel(t("offline.badge.downloading"))
+                case let .cached(source, removedFromServer):
+                    if removedFromServer {
+                        Image(systemName: "exclamationmark.icloud")
+                            .accessibilityLabel(t("offline.badge.orphan"))
+                    } else if source == .explicit {
+                        Image(systemName: "arrow.down.circle.fill")
+                            .accessibilityLabel(t("offline.badge.downloaded"))
+                    } else if source == .smart {
+                        Image(systemName: "arrow.down.circle.dotted")
+                            .accessibilityLabel(t("offline.badge.smart"))
+                    }
                 }
             }
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
-        .font(.caption)
-        .foregroundStyle(.secondary)
     }
 }
 
@@ -679,8 +732,10 @@ struct AlbumCacheBadge: View {
     @Environment(DownloadsStore.self) private var downloads
 
     var body: some View {
-        let _ = downloads.revision
-        CollectionCacheIndicator(state: downloads.state(ofAlbum: albumId), style: style)
+        WithPerceptionTracking {
+            let _ = downloads.revision
+            CollectionCacheIndicator(state: downloads.state(ofAlbum: albumId), style: style)
+        }
     }
 }
 
@@ -690,8 +745,10 @@ struct PlaylistCacheBadge: View {
     @Environment(DownloadsStore.self) private var downloads
 
     var body: some View {
-        let _ = downloads.revision
-        CollectionCacheIndicator(state: downloads.state(ofPlaylist: playlistId))
+        WithPerceptionTracking {
+            let _ = downloads.revision
+            CollectionCacheIndicator(state: downloads.state(ofPlaylist: playlistId))
+        }
     }
 }
 
@@ -702,20 +759,22 @@ private struct CollectionCacheIndicator: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        Group {
-            switch state {
-            case .notCached:
-                EmptyView()
-            case let .downloading(completed, total):
-                ProgressRing(progress: total > 0 ? Double(completed) / Double(total) : nil)
-                    .accessibilityLabel(t("offline.badge.downloading"))
-            case .cached:
-                Image(systemName: "arrow.down.circle.fill")
-                    .accessibilityLabel(t("offline.badge.downloaded"))
+        WithPerceptionTracking {
+            Group {
+                switch state {
+                case .notCached:
+                    EmptyView()
+                case let .downloading(completed, total):
+                    ProgressRing(progress: total > 0 ? Double(completed) / Double(total) : nil)
+                        .accessibilityLabel(t("offline.badge.downloading"))
+                case .cached:
+                    Image(systemName: "arrow.down.circle.fill")
+                        .accessibilityLabel(t("offline.badge.downloaded"))
+                }
             }
+            .font(.caption)
+            .foregroundStyle(style)
         }
-        .font(.caption)
-        .foregroundStyle(style)
     }
 }
 
@@ -725,21 +784,23 @@ struct ProgressRing: View {
     var diameter: CGFloat = 13
 
     var body: some View {
-        if let progress {
-            ZStack {
-                Circle()
-                    .stroke(.quaternary, lineWidth: 2)
-                Circle()
-                    .trim(from: 0, to: max(min(progress, 1), 0.03))
-                    .stroke(.tint, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                    .animation(.easeOut(duration: 0.3), value: progress)
-            }
-            .frame(width: diameter, height: diameter)
-        } else {
-            ProgressView()
-                .controlSize(.mini)
+        WithPerceptionTracking {
+            if let progress {
+                ZStack {
+                    Circle()
+                        .stroke(.quaternary, lineWidth: 2)
+                    Circle()
+                        .trim(from: 0, to: max(min(progress, 1), 0.03))
+                        .stroke(.tint, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .animation(.easeOut(duration: 0.3), value: progress)
+                }
                 .frame(width: diameter, height: diameter)
+            } else {
+                ProgressView()
+                    .controlSize(.mini)
+                    .frame(width: diameter, height: diameter)
+            }
         }
     }
 }
@@ -749,10 +810,12 @@ struct ProgressRing: View {
 /// A page's first load.
 struct LoadingStateView: View {
     var body: some View {
-        ProgressView()
-            .controlSize(.large)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.vertical, 80)
+        WithPerceptionTracking {
+            ProgressView()
+                .controlSize(.large)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.vertical, 80)
+        }
     }
 }
 
@@ -766,19 +829,21 @@ struct ErrorStateView: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        ContentUnavailableView {
-            if network.isOnline {
-                Label(t("native.error.title"), systemImage: "exclamationmark.triangle")
-            } else {
-                Label(t("offline.disconnected"), systemImage: "wifi.slash")
+        WithPerceptionTracking {
+            ContentUnavailableView {
+                if network.isOnline {
+                    Label(t("native.error.title"), systemImage: "exclamationmark.triangle")
+                } else {
+                    Label(t("offline.disconnected"), systemImage: "wifi.slash")
+                }
+            } description: {
+                if let message, network.isOnline {
+                    Text(message)
+                }
+            } actions: {
+                Button(t("native.generic.retry"), action: retry)
+                    .buttonStyle(.glass)
             }
-        } description: {
-            if let message, network.isOnline {
-                Text(message)
-            }
-        } actions: {
-            Button(t("native.generic.retry"), action: retry)
-                .buttonStyle(.glass)
         }
     }
 }
@@ -791,14 +856,16 @@ struct EmptyStateView<Actions: View>: View {
     @ViewBuilder var actions: Actions
 
     var body: some View {
-        ContentUnavailableView {
-            Label(title, systemImage: systemImage)
-        } description: {
-            if let description {
-                Text(description)
+        WithPerceptionTracking {
+            ContentUnavailableView {
+                Label(title, systemImage: systemImage)
+            } description: {
+                if let description {
+                    Text(description)
+                }
+            } actions: {
+                actions
             }
-        } actions: {
-            actions
         }
     }
 }
@@ -830,14 +897,16 @@ private struct PagedStates<Item: Identifiable & Sendable, Empty: View>: View {
     let empty: Empty
 
     var body: some View {
-        if collection.isEmpty {
-            switch collection.phase {
-            case .idle, .loading, .loadingMore:
-                LoadingStateView()
-            case let .failed(message):
-                ErrorStateView(message: message) { collection.retry() }
-            case .loaded:
-                empty
+        WithPerceptionTracking {
+            if collection.isEmpty {
+                switch collection.phase {
+                case .idle, .loading, .loadingMore:
+                    LoadingStateView()
+                case let .failed(message):
+                    ErrorStateView(message: message) { collection.retry() }
+                case .loaded:
+                    empty
+                }
             }
         }
     }
@@ -865,14 +934,16 @@ private struct LoadStates<Empty: View>: View {
     let empty: Empty
 
     var body: some View {
-        if isEmpty {
-            switch phase {
-            case .idle, .loading:
-                LoadingStateView()
-            case let .failed(message):
-                ErrorStateView(message: message, retry: retry)
-            case .loaded:
-                empty
+        WithPerceptionTracking {
+            if isEmpty {
+                switch phase {
+                case .idle, .loading:
+                    LoadingStateView()
+                case let .failed(message):
+                    ErrorStateView(message: message, retry: retry)
+                case .loaded:
+                    empty
+                }
             }
         }
     }
@@ -884,14 +955,16 @@ struct OfflineBanner: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        if !network.isOnline {
-            Label(t("offline.mode"), systemImage: "wifi.slash")
-                .font(.footnote.weight(.semibold))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .glassEffect(.regular, in: .capsule)
-                .padding(.bottom, 6)
-                .transition(.move(edge: .top).combined(with: .opacity))
+        WithPerceptionTracking {
+            if !network.isOnline {
+                Label(t("offline.mode"), systemImage: "wifi.slash")
+                    .font(.footnote.weight(.semibold))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .glassEffect(.regular, in: .capsule)
+                    .padding(.bottom, 6)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
         }
     }
 }
@@ -908,12 +981,14 @@ private struct OfflineBannerModifier: ViewModifier {
     @Environment(NetworkMonitor.self) private var network
 
     func body(content: Content) -> some View {
-        content
-            .safeAreaInset(edge: .top, spacing: 0) {
-                OfflineBanner()
-                    .frame(maxWidth: .infinity)
-            }
-            .animation(.smooth, value: network.isOnline)
+        WithPerceptionTracking {
+            content
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    OfflineBanner()
+                        .frame(maxWidth: .infinity)
+                }
+                .animation(.smooth, value: network.isOnline)
+        }
     }
 }
 
@@ -949,13 +1024,15 @@ struct PlayShuffleButtons<Trailing: View>: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        HStack(spacing: 20) {
-            ActionIconButton(systemImage: "shuffle", label: t("shortcuts.playback.shuffle"), action: shuffle)
-                .disabled(!canShuffle)
-            PlayButton(label: t("options.play"), action: play)
-            trailing
+        WithPerceptionTracking {
+            HStack(spacing: 20) {
+                ActionIconButton(systemImage: "shuffle", label: t("shortcuts.playback.shuffle"), action: shuffle)
+                    .disabled(!canShuffle)
+                PlayButton(label: t("options.play"), action: play)
+                trailing
+            }
+            .frame(maxWidth: .infinity, alignment: alignment)
         }
-        .frame(maxWidth: .infinity, alignment: alignment)
     }
 }
 
@@ -977,9 +1054,11 @@ extension PlayShuffleButtons where Trailing == ActionSpacer {
 /// An empty slot the size of an `ActionIconButton`.
 struct ActionSpacer: View {
     var body: some View {
-        Color.clear
-            .frame(width: 48, height: 48)
-            .accessibilityHidden(true)
+        WithPerceptionTracking {
+            Color.clear
+                .frame(width: 48, height: 48)
+                .accessibilityHidden(true)
+        }
     }
 }
 
@@ -992,17 +1071,19 @@ struct PlayButton: View {
     @Environment(\.themeContext) private var theme
 
     var body: some View {
-        Button(action: action) {
-            Label(label, systemImage: "play.fill")
-                .labelStyle(.titleAndIcon)
-                .font(.headline)
-                .foregroundStyle(theme.palette.primaryForeground)
-                .lineLimit(1)
-                .frame(minWidth: 112, minHeight: 30)
+        WithPerceptionTracking {
+            Button(action: action) {
+                Label(label, systemImage: "play.fill")
+                    .labelStyle(.titleAndIcon)
+                    .font(.headline)
+                    .foregroundStyle(theme.palette.primaryForeground)
+                    .lineLimit(1)
+                    .frame(minWidth: 112, minHeight: 30)
+            }
+            .buttonStyle(.glassProminent)
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
         }
-        .buttonStyle(.glassProminent)
-        .buttonBorderShape(.capsule)
-        .controlSize(.large)
     }
 }
 
@@ -1017,16 +1098,18 @@ struct ActionIconButton: View {
     @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(foreground)
-                .frame(width: 48, height: 48)
-                .contentShape(.rect)
-                .contentTransition(.symbolEffect(.replace))
+        WithPerceptionTracking {
+            Button(action: action) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(foreground)
+                    .frame(width: 48, height: 48)
+                    .contentShape(.rect)
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .buttonStyle(.touchFeedback)
+            .opacity(isEnabled ? 1 : 0.4)
+            .accessibilityLabel(label)
         }
-        .buttonStyle(.touchFeedback)
-        .opacity(isEnabled ? 1 : 0.4)
-        .accessibilityLabel(label)
     }
 }

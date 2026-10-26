@@ -1,15 +1,15 @@
 import Foundation
-import Observation
+import Perception
 
 /// App settings, persisted as JSON under `settings.v1` in the native
 /// preferences. Unknown or missing fields decode to their defaults.
 @MainActor
-@Observable
+@Perceptible
 public final class SettingsStore {
     public private(set) var settings = AppSettings()
 
-    @ObservationIgnored public let preferences: PreferencesService
-    @ObservationIgnored private var handlers: [@MainActor (AppSettings, AppSettings) -> Void] = []
+    @PerceptionIgnored public let preferences: PreferencesService
+    @PerceptionIgnored private var handlers: [@MainActor (AppSettings, AppSettings) -> Void] = []
 
     nonisolated public static let storageKey = "settings.v1"
 

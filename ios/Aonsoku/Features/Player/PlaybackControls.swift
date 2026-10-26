@@ -1,6 +1,7 @@
 import AVKit
 import AonsokuKit
 import SliderControl
+import Perception
 import SwiftUI
 
 // MARK: - Scrubber
@@ -17,11 +18,13 @@ struct PlaybackScrubber: View {
     @State private var pendingSeek: (position: TimeInterval, at: Date)?
 
     var body: some View {
-        if player.isRadio {
-            live
-        } else {
-            TimelineView(.animation(minimumInterval: 0.1, paused: player.clock.rate == 0 || dragProgress != nil)) { _ in
-                scrubber(position: displayedPosition, duration: player.clock.duration)
+        WithPerceptionTracking {
+            if player.isRadio {
+                live
+            } else {
+                TimelineView(.animation(minimumInterval: 0.1, paused: player.clock.rate == 0 || dragProgress != nil)) { _ in
+                    scrubber(position: displayedPosition, duration: player.clock.duration)
+                }
             }
         }
     }
@@ -125,39 +128,43 @@ struct TransportControls: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        HStack(spacing: 0) {
-            Spacer(minLength: 0)
-            TransportButton(
-                symbol: "backward.fill",
-                size: 28 * scale,
-                label: t("player.tooltips.previous")
-            ) {
-                player.previous()
+        WithPerceptionTracking {
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                TransportButton(
+                    symbol: "backward.fill",
+                    size: 28 * scale,
+                    label: t("player.tooltips.previous")
+                ) {
+                    player.previous()
+                }
+                Spacer(minLength: 0)
+                TransportButton(
+                    symbol: player.isPlaying ? "pause.fill" : "play.fill",
+                    size: 42 * scale,
+                    label: t(player.isPlaying ? "player.tooltips.pause" : "player.tooltips.play")
+                ) {
+                    player.togglePlayPause()
+                }
+                .overlay(alignment: .topTrailing) {
+                    WithPerceptionTracking {
+                        PlayerBufferingIndicator()
+                            .offset(x: 6, y: -4)
+                    }
+                }
+                Spacer(minLength: 0)
+                TransportButton(
+                    symbol: "forward.fill",
+                    size: 28 * scale,
+                    label: t("player.tooltips.next")
+                ) {
+                    player.next()
+                }
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
-            TransportButton(
-                symbol: player.isPlaying ? "pause.fill" : "play.fill",
-                size: 42 * scale,
-                label: t(player.isPlaying ? "player.tooltips.pause" : "player.tooltips.play")
-            ) {
-                player.togglePlayPause()
-            }
-            .overlay(alignment: .topTrailing) {
-                PlayerBufferingIndicator()
-                    .offset(x: 6, y: -4)
-            }
-            Spacer(minLength: 0)
-            TransportButton(
-                symbol: "forward.fill",
-                size: 28 * scale,
-                label: t("player.tooltips.next")
-            ) {
-                player.next()
-            }
-            Spacer(minLength: 0)
+            .disabled(!player.hasMedia)
+            .opacity(player.hasMedia ? 1 : 0.4)
         }
-        .disabled(!player.hasMedia)
-        .opacity(player.hasMedia ? 1 : 0.4)
     }
 }
 
@@ -168,30 +175,36 @@ private struct TransportButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button {
-            action()
-        } label: {
-            Image(systemName: symbol)
-                .font(.system(size: size))
-                .contentTransition(.symbolEffect(.replace))
-                .frame(width: max(size * 1.9, 44), height: max(size * 1.9, 44))
-                .contentShape(.rect)
+        WithPerceptionTracking {
+            Button {
+                action()
+            } label: {
+                Image(systemName: symbol)
+                    .font(.system(size: size))
+                    .contentTransition(.symbolEffect(.replace))
+                    .frame(width: max(size * 1.9, 44), height: max(size * 1.9, 44))
+                    .contentShape(.rect)
+            }
+            .buttonStyle(TransportButtonStyle())
+            .accessibilityLabel(label)
         }
-        .buttonStyle(TransportButtonStyle())
-        .accessibilityLabel(label)
     }
 }
 
 private struct TransportButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(.white)
-            .background {
-                Circle()
-                    .fill(.white.opacity(configuration.isPressed ? 0.16 : 0))
-            }
-            .scaleEffect(configuration.isPressed ? 0.86 : 1)
-            .animation(.spring(duration: 0.25), value: configuration.isPressed)
+        WithPerceptionTracking {
+            configuration.label
+                .foregroundStyle(.white)
+                .background {
+                    WithPerceptionTracking {
+                        Circle()
+                            .fill(.white.opacity(configuration.isPressed ? 0.16 : 0))
+                    }
+                }
+                .scaleEffect(configuration.isPressed ? 0.86 : 1)
+                .animation(.spring(duration: 0.25), value: configuration.isPressed)
+        }
     }
 }
 
@@ -207,51 +220,53 @@ struct VolumeSlider: View {
     @State private var lastSentValue: Double?
 
     var body: some View {
-        let value = dragValue ?? player.volume
-        SliderControlView(
-            value: Binding(
-                get: { value },
-                set: { newValue in
-                    dragValue = newValue
-                    // Keep inertia smooth without a remote command for
-                    // every frame. A trailing update sends the exact value.
-                    if abs(newValue - (lastSentValue ?? player.volume)) >= 0.01 {
-                        sendVolume(newValue)
+        WithPerceptionTracking {
+            let value = dragValue ?? player.volume
+            SliderControlView(
+                value: Binding(
+                    get: { value },
+                    set: { newValue in
+                        dragValue = newValue
+                        // Keep inertia smooth without a remote command for
+                        // every frame. A trailing update sends the exact value.
+                        if abs(newValue - (lastSentValue ?? player.volume)) >= 0.01 {
+                            sendVolume(newValue)
+                        }
                     }
+                )
+            ) { editing in
+                isEditing = editing
+                if editing {
+                    dragValue = value
                 }
-            )
-        ) { editing in
-            isEditing = editing
-            if editing {
-                dragValue = value
             }
-        }
-        .trackColor(.white.opacity(0.22))
-        .progressColor(.white.opacity(0.8), enlarged: .white)
-        .volumeIcons()
-        .playerSliderRegion(.volume)
-        .task(id: isEditing ? nil : dragValue) {
-            guard !isEditing, let dragValue else { return }
-            do {
-                try await Task.sleep(for: .milliseconds(100))
-                if lastSentValue != dragValue {
-                    sendVolume(dragValue)
-                }
-                // Retain the optimistic value through inertia and delayed
-                // system/remote echoes, then resume observing output volume.
-                try await Task.sleep(for: .seconds(1.5))
-                self.dragValue = nil
-                lastSentValue = nil
-            } catch {}
-        }
-        .accessibilityElement()
-        .accessibilityLabel(t("native.player.volume"))
-        .accessibilityValue(value.formatted(.percent.precision(.fractionLength(0))))
-        .accessibilityAdjustableAction { direction in
-            let step = direction == .increment ? 0.1 : -0.1
-            let nextValue = min(max(value + step, 0), 1)
-            dragValue = nextValue
-            sendVolume(nextValue)
+            .trackColor(.white.opacity(0.22))
+            .progressColor(.white.opacity(0.8), enlarged: .white)
+            .volumeIcons()
+            .playerSliderRegion(.volume)
+            .task(id: isEditing ? nil : dragValue) {
+                guard !isEditing, let dragValue else { return }
+                do {
+                    try await Task.sleep(for: .milliseconds(100))
+                    if lastSentValue != dragValue {
+                        sendVolume(dragValue)
+                    }
+                    // Retain the optimistic value through inertia and delayed
+                    // system/remote echoes, then resume observing output volume.
+                    try await Task.sleep(for: .seconds(1.5))
+                    self.dragValue = nil
+                    lastSentValue = nil
+                } catch {}
+            }
+            .accessibilityElement()
+            .accessibilityLabel(t("native.player.volume"))
+            .accessibilityValue(value.formatted(.percent.precision(.fractionLength(0))))
+            .accessibilityAdjustableAction { direction in
+                let step = direction == .increment ? 0.1 : -0.1
+                let nextValue = min(max(value + step, 0), 1)
+                dragValue = nextValue
+                sendVolume(nextValue)
+            }
         }
     }
 
@@ -287,32 +302,36 @@ struct SleepTimerMenu<Label: View>: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        Menu {
-            if player.sleepTimer.isActive {
-                Button(role: .destructive) {
-                    player.cancelSleepTimer()
-                } label: {
-                    SwiftUI.Label(t("player.sleepTimer.cancel"), systemImage: "xmark.circle")
-                }
-            }
-            Section(t("player.sleepTimer.title")) {
-                ForEach(SleepTimerState.presetMinutes, id: \.self) { minutes in
-                    Button(t("player.sleepTimer.minutes", ["count": String(minutes)])) {
-                        player.setSleepTimer(minutes: minutes)
+        WithPerceptionTracking {
+            Menu {
+                if player.sleepTimer.isActive {
+                    Button(role: .destructive) {
+                        player.cancelSleepTimer()
+                    } label: {
+                        SwiftUI.Label(t("player.sleepTimer.cancel"), systemImage: "xmark.circle")
                     }
                 }
-                Button {
-                    player.setSleepTimerEndOfTrack()
-                } label: {
-                    if player.sleepTimer == .endOfTrack {
-                        SwiftUI.Label(t("player.sleepTimer.endOfTrack"), systemImage: "checkmark")
-                    } else {
-                        Text(t("player.sleepTimer.endOfTrack"))
+                Section(t("player.sleepTimer.title")) {
+                    ForEach(SleepTimerState.presetMinutes, id: \.self) { minutes in
+                        WithPerceptionTracking {
+                            Button(t("player.sleepTimer.minutes", ["count": String(minutes)])) {
+                                player.setSleepTimer(minutes: minutes)
+                            }
+                        }
+                    }
+                    Button {
+                        player.setSleepTimerEndOfTrack()
+                    } label: {
+                        if player.sleepTimer == .endOfTrack {
+                            SwiftUI.Label(t("player.sleepTimer.endOfTrack"), systemImage: "checkmark")
+                        } else {
+                            Text(t("player.sleepTimer.endOfTrack"))
+                        }
                     }
                 }
+            } label: {
+                label
             }
-        } label: {
-            label
         }
     }
 }
@@ -323,18 +342,20 @@ struct SleepTimerStatus: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        switch player.sleepTimer {
-        case .off:
-            EmptyView()
-        case .endOfTrack:
-            Text(t("player.sleepTimer.endOfTrack"))
-        case let .countdown(endsAt):
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                Text(t(
-                    "player.sleepTimer.remaining",
-                    ["time": Formatters.clock(max(endsAt.timeIntervalSince(context.date), 0))]
-                ))
-                .monospacedDigit()
+        WithPerceptionTracking {
+            switch player.sleepTimer {
+            case .off:
+                EmptyView()
+            case .endOfTrack:
+                Text(t("player.sleepTimer.endOfTrack"))
+            case let .countdown(endsAt):
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    Text(t(
+                        "player.sleepTimer.remaining",
+                        ["time": Formatters.clock(max(endsAt.timeIntervalSince(context.date), 0))]
+                    ))
+                    .monospacedDigit()
+                }
             }
         }
     }
@@ -350,22 +371,24 @@ struct PlayerBufferingIndicator: View {
     }
 
     var body: some View {
-        ProgressView()
-            .controlSize(.mini)
-            .tint(.white)
-            .opacity(isVisible && isBuffering ? 1 : 0)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-            .task(id: isBuffering) {
-                isVisible = false
-                guard isBuffering else { return }
-                do {
-                    try await Task.sleep(for: .milliseconds(800))
-                    try Task.checkCancellation()
-                    isVisible = true
-                } catch {
-                    // Pausing, finishing the load or changing targets cancels it.
+        WithPerceptionTracking {
+            ProgressView()
+                .controlSize(.mini)
+                .tint(.white)
+                .opacity(isVisible && isBuffering ? 1 : 0)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+                .task(id: isBuffering) {
+                    isVisible = false
+                    guard isBuffering else { return }
+                    do {
+                        try await Task.sleep(for: .milliseconds(800))
+                        try Task.checkCancellation()
+                        isVisible = true
+                    } catch {
+                        // Pausing, finishing the load or changing targets cancels it.
+                    }
                 }
-            }
+        }
     }
 }

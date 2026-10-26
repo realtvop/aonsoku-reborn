@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// Where a song menu appears, which adds the items that only make sense
@@ -27,18 +28,20 @@ struct SongMenuItems: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        Group {
-            ControlGroup {
-                FavoriteButton(kind: .song, id: song.id)
-                Button {
-                    router.present(.addToPlaylist([song]))
-                } label: {
-                    Label(t("options.playlist.add"), systemImage: "text.badge.plus")
+        WithPerceptionTracking {
+            Group {
+                ControlGroup {
+                    FavoriteButton(kind: .song, id: song.id)
+                    Button {
+                        router.present(.addToPlaylist([song]))
+                    } label: {
+                        Label(t("options.playlist.add"), systemImage: "text.badge.plus")
+                    }
                 }
+                menuSections
             }
-            menuSections
+            .mediaMenuAppearance()
         }
-        .mediaMenuAppearance()
     }
 
     @ViewBuilder
@@ -133,14 +136,16 @@ private struct PlaybackMenuItems: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        SleepTimerMenu {
-            Label(t("player.sleepTimer.title"), systemImage: "moon.zzz")
-        }
-        if player.currentSong != nil {
-            Button {
-                router.present(.lyricsSettings)
-            } label: {
-                Label(t("fullscreen.selectLyrics"), systemImage: "quote.bubble")
+        WithPerceptionTracking {
+            SleepTimerMenu {
+                Label(t("player.sleepTimer.title"), systemImage: "moon.zzz")
+            }
+            if player.currentSong != nil {
+                Button {
+                    router.present(.lyricsSettings)
+                } label: {
+                    Label(t("fullscreen.selectLyrics"), systemImage: "quote.bubble")
+                }
             }
         }
     }
@@ -151,16 +156,18 @@ struct NowPlayingMenuItems: View {
     @Environment(PlayerStore.self) private var player
 
     var body: some View {
-        Group {
-            if let song = player.currentSong {
-                SongMenuItems(song: song, context: .nowPlaying)
-            } else {
-                Section {
-                    PlaybackMenuItems()
+        WithPerceptionTracking {
+            Group {
+                if let song = player.currentSong {
+                    SongMenuItems(song: song, context: .nowPlaying)
+                } else {
+                    Section {
+                        PlaybackMenuItems()
+                    }
                 }
             }
+            .mediaMenuAppearance()
         }
-        .mediaMenuAppearance()
     }
 }
 
@@ -189,43 +196,45 @@ struct AlbumMenuItems: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        Section {
-            Button {
-                Task { await player.playAlbum(id: album.id) }
-            } label: {
-                Label(t("options.play"), systemImage: "play")
+        WithPerceptionTracking {
+            Section {
+                Button {
+                    Task { await player.playAlbum(id: album.id) }
+                } label: {
+                    Label(t("options.play"), systemImage: "play")
+                }
+                Button {
+                    Task { await player.playAlbum(id: album.id, shuffle: true) }
+                } label: {
+                    Label(t("shortcuts.playback.shuffle"), systemImage: "shuffle")
+                }
+                Button {
+                    withSongs { player.enqueue($0, position: .next, announcingWith: toasts) }
+                } label: {
+                    Label(t("options.playNext"), systemImage: QueueSymbol.playNext)
+                }
+                Button {
+                    withSongs { player.enqueue($0, position: .last, announcingWith: toasts) }
+                } label: {
+                    Label(t("options.addLast"), systemImage: QueueSymbol.playLast)
+                }
             }
-            Button {
-                Task { await player.playAlbum(id: album.id, shuffle: true) }
-            } label: {
-                Label(t("shortcuts.playback.shuffle"), systemImage: "shuffle")
+            Section {
+                Button {
+                    withSongs { router.present(.addToPlaylist($0)) }
+                } label: {
+                    Label(t("options.playlist.add"), systemImage: "text.badge.plus")
+                }
+                PinButton(itemId: album.id, kind: .album)
+                FavoriteButton(kind: .album, id: album.id)
+                collectionDownloadButton
             }
-            Button {
-                withSongs { player.enqueue($0, position: .next, announcingWith: toasts) }
-            } label: {
-                Label(t("options.playNext"), systemImage: QueueSymbol.playNext)
-            }
-            Button {
-                withSongs { player.enqueue($0, position: .last, announcingWith: toasts) }
-            } label: {
-                Label(t("options.addLast"), systemImage: QueueSymbol.playLast)
-            }
-        }
-        Section {
-            Button {
-                withSongs { router.present(.addToPlaylist($0)) }
-            } label: {
-                Label(t("options.playlist.add"), systemImage: "text.badge.plus")
-            }
-            PinButton(itemId: album.id, kind: .album)
-            FavoriteButton(kind: .album, id: album.id)
-            collectionDownloadButton
-        }
-        if showsArtistLink, let artistId = album.artistId {
-            Button {
-                router.navigate(to: .artist(id: artistId, name: album.artist))
-            } label: {
-                Label(t("options.goto.artist"), systemImage: "music.mic")
+            if showsArtistLink, let artistId = album.artistId {
+                Button {
+                    router.navigate(to: .artist(id: artistId, name: album.artist))
+                } label: {
+                    Label(t("options.goto.artist"), systemImage: "music.mic")
+                }
             }
         }
     }
@@ -274,43 +283,45 @@ struct PlaylistMenuItems: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        Section {
-            Button {
-                Task { await player.playPlaylist(id: playlist.id) }
-            } label: {
-                Label(t("options.play"), systemImage: "play")
-            }
-            Button {
-                Task { await player.playPlaylist(id: playlist.id, shuffle: true) }
-            } label: {
-                Label(t("shortcuts.playback.shuffle"), systemImage: "shuffle")
-            }
-            Button {
-                withSongs { player.enqueue($0, position: .next, announcingWith: toasts) }
-            } label: {
-                Label(t("options.playNext"), systemImage: QueueSymbol.playNext)
-            }
-            Button {
-                withSongs { player.enqueue($0, position: .last, announcingWith: toasts) }
-            } label: {
-                Label(t("options.addLast"), systemImage: QueueSymbol.playLast)
-            }
-        }
-        Section {
-            PinButton(itemId: playlist.id, kind: .playlist)
-            collectionDownloadButton
-        }
-        if playlist.isOwned(by: session.account?.username) {
+        WithPerceptionTracking {
             Section {
                 Button {
-                    router.present(.editPlaylist(playlist))
+                    Task { await player.playPlaylist(id: playlist.id) }
                 } label: {
-                    Label(t("options.playlist.edit"), systemImage: "pencil")
+                    Label(t("options.play"), systemImage: "play")
                 }
-                Button(role: .destructive) {
-                    router.playlistPendingDeletion = playlist
+                Button {
+                    Task { await player.playPlaylist(id: playlist.id, shuffle: true) }
                 } label: {
-                    Label(t("options.playlist.delete"), systemImage: "trash")
+                    Label(t("shortcuts.playback.shuffle"), systemImage: "shuffle")
+                }
+                Button {
+                    withSongs { player.enqueue($0, position: .next, announcingWith: toasts) }
+                } label: {
+                    Label(t("options.playNext"), systemImage: QueueSymbol.playNext)
+                }
+                Button {
+                    withSongs { player.enqueue($0, position: .last, announcingWith: toasts) }
+                } label: {
+                    Label(t("options.addLast"), systemImage: QueueSymbol.playLast)
+                }
+            }
+            Section {
+                PinButton(itemId: playlist.id, kind: .playlist)
+                collectionDownloadButton
+            }
+            if playlist.isOwned(by: session.account?.username) {
+                Section {
+                    Button {
+                        router.present(.editPlaylist(playlist))
+                    } label: {
+                        Label(t("options.playlist.edit"), systemImage: "pencil")
+                    }
+                    Button(role: .destructive) {
+                        router.playlistPendingDeletion = playlist
+                    } label: {
+                        Label(t("options.playlist.delete"), systemImage: "trash")
+                    }
                 }
             }
         }
@@ -357,34 +368,36 @@ struct ArtistMenuItems: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        Section {
-            Button {
-                Task { await player.playArtist(id: artist.id, name: artist.name) }
-            } label: {
-                Label(t("options.play"), systemImage: "play")
+        WithPerceptionTracking {
+            Section {
+                Button {
+                    Task { await player.playArtist(id: artist.id, name: artist.name) }
+                } label: {
+                    Label(t("options.play"), systemImage: "play")
+                }
+                Button {
+                    Task { await player.playArtist(id: artist.id, name: artist.name, shuffle: true) }
+                } label: {
+                    Label(t("shortcuts.playback.shuffle"), systemImage: "shuffle")
+                }
+                Button {
+                    withSongs { player.enqueue($0, position: .next, announcingWith: toasts) }
+                } label: {
+                    Label(t("options.playNext"), systemImage: QueueSymbol.playNext)
+                }
+                Button {
+                    withSongs { player.enqueue($0, position: .last, announcingWith: toasts) }
+                } label: {
+                    Label(t("options.addLast"), systemImage: QueueSymbol.playLast)
+                }
             }
-            Button {
-                Task { await player.playArtist(id: artist.id, name: artist.name, shuffle: true) }
-            } label: {
-                Label(t("shortcuts.playback.shuffle"), systemImage: "shuffle")
-            }
-            Button {
-                withSongs { player.enqueue($0, position: .next, announcingWith: toasts) }
-            } label: {
-                Label(t("options.playNext"), systemImage: QueueSymbol.playNext)
-            }
-            Button {
-                withSongs { player.enqueue($0, position: .last, announcingWith: toasts) }
-            } label: {
-                Label(t("options.addLast"), systemImage: QueueSymbol.playLast)
-            }
-        }
-        Section {
-            FavoriteButton(kind: .artist, id: artist.id)
-            Button {
-                Task { await downloads.download(artistId: artist.id) }
-            } label: {
-                Label(t("options.downloadArtist"), systemImage: "arrow.down.circle")
+            Section {
+                FavoriteButton(kind: .artist, id: artist.id)
+                Button {
+                    Task { await downloads.download(artistId: artist.id) }
+                } label: {
+                    Label(t("options.downloadArtist"), systemImage: "arrow.down.circle")
+                }
             }
         }
     }
@@ -412,14 +425,16 @@ struct FavoriteButton: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        let isFavorite = favorites.isFavorite(kind, id: id)
-        Button {
-            Task { await favorites.toggle(kind, id: id) }
-        } label: {
-            Label(
-                t(isFavorite ? "options.unlike" : "options.like"),
-                systemImage: isFavorite ? "heart.slash" : "heart"
-            )
+        WithPerceptionTracking {
+            let isFavorite = favorites.isFavorite(kind, id: id)
+            Button {
+                Task { await favorites.toggle(kind, id: id) }
+            } label: {
+                Label(
+                    t(isFavorite ? "options.unlike" : "options.like"),
+                    systemImage: isFavorite ? "heart.slash" : "heart"
+                )
+            }
         }
     }
 }
@@ -433,11 +448,13 @@ struct PinButton: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        let isPinned = pinned.isPinned(itemId, kind: kind)
-        Button {
-            pinned.toggle(itemId, kind: kind)
-        } label: {
-            Label(t(isPinned ? "options.unpin" : "options.pin"), systemImage: isPinned ? "pin.slash" : "pin")
+        WithPerceptionTracking {
+            let isPinned = pinned.isPinned(itemId, kind: kind)
+            Button {
+                pinned.toggle(itemId, kind: kind)
+            } label: {
+                Label(t(isPinned ? "options.unpin" : "options.pin"), systemImage: isPinned ? "pin.slash" : "pin")
+            }
         }
     }
 }

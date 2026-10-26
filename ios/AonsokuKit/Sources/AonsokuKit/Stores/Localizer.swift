@@ -1,5 +1,5 @@
 import Foundation
-import Observation
+import Perception
 
 /// Translations shared with the web app. Strings come from the i18next
 /// files in `src/i18n/locales`, copied into the app bundle as
@@ -7,17 +7,17 @@ import Observation
 /// overlays native-only strings when present. Missing keys fall back to
 /// English, then to the key itself.
 @MainActor
-@Observable
+@Perceptible
 public final class Localizer {
     /// The active language.
     public private(set) var language: AppLanguage
     /// The user's choice, or nil to follow the system languages.
     public private(set) var selectedCode: String?
 
-    @ObservationIgnored public let bundle: Bundle
-    @ObservationIgnored public let preferredLanguages: [String]
-    @ObservationIgnored private var files: [String: [String: Any]] = [:]
-    @ObservationIgnored private var missingFiles = Set<String>()
+    @PerceptionIgnored public let bundle: Bundle
+    @PerceptionIgnored public let preferredLanguages: [String]
+    @PerceptionIgnored private var files: [String: [String: Any]] = [:]
+    @PerceptionIgnored private var missingFiles = Set<String>()
 
     public init(bundle: Bundle = .main, preferredLanguages: [String] = Locale.preferredLanguages) {
         self.bundle = bundle

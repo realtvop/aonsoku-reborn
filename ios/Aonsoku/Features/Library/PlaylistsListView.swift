@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// The user's playlists and those shared with them, most recently changed
@@ -12,58 +13,64 @@ struct PlaylistsListView: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        List {
-            if !isSearching, !playlists.playlists.isEmpty {
-                NewPlaylistRow {
-                    router.present(.createPlaylist(songs: []))
-                }
-                .themedRow(plain: true)
-            }
-            ForEach(filtered) { playlist in
-                PlaylistRow(playlist: playlist)
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        if playlist.isOwned(by: session.account?.username) {
-                            // Not a destructive role: the row stays until the
-                            // deletion is confirmed.
-                            Button {
-                                router.playlistPendingDeletion = playlist
-                            } label: {
-                                Label(t("options.playlist.delete"), systemImage: "trash")
-                            }
-                            .tint(.red)
-                            Button {
-                                router.present(.editPlaylist(playlist))
-                            } label: {
-                                Label(t("options.playlist.edit"), systemImage: "pencil")
-                            }
-                        }
+        WithPerceptionTracking {
+            List {
+                if !isSearching, !playlists.playlists.isEmpty {
+                    NewPlaylistRow {
+                        router.present(.createPlaylist(songs: []))
                     }
                     .themedRow(plain: true)
-            }
-        }
-        .listStyle(.plain)
-        .loadStates(playlists.phase, isEmpty: playlists.playlists.isEmpty) {
-            Task { await playlists.reload() }
-        } empty: {
-            EmptyStateView(title: t("sidebar.emptyPlaylist"), systemImage: "music.note.list") {
-                Button(t("options.playlist.create")) {
-                    router.present(.createPlaylist(songs: []))
                 }
-                .buttonStyle(.glassProminent)
+                ForEach(filtered) { playlist in
+                    WithPerceptionTracking {
+                        PlaylistRow(playlist: playlist)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                if playlist.isOwned(by: session.account?.username) {
+                                    // Not a destructive role: the row stays until the
+                                    // deletion is confirmed.
+                                    Button {
+                                        router.playlistPendingDeletion = playlist
+                                    } label: {
+                                        Label(t("options.playlist.delete"), systemImage: "trash")
+                                    }
+                                    .tint(.red)
+                                    Button {
+                                        router.present(.editPlaylist(playlist))
+                                    } label: {
+                                        Label(t("options.playlist.edit"), systemImage: "pencil")
+                                    }
+                                }
+                            }
+                            .themedRow(plain: true)
+                    }
+                }
             }
-        }
-        .overlay {
-            if isSearching, filtered.isEmpty, !playlists.playlists.isEmpty {
-                EmptyStateView(title: t("options.playlist.notFound"), systemImage: "magnifyingglass")
+            .listStyle(.plain)
+            .loadStates(playlists.phase, isEmpty: playlists.playlists.isEmpty) {
+                Task { await playlists.reload() }
+            } empty: {
+                EmptyStateView(title: t("sidebar.emptyPlaylist"), systemImage: "music.note.list") {
+                    Button(t("options.playlist.create")) {
+                        router.present(.createPlaylist(songs: []))
+                    }
+                    .buttonStyle(.glassProminent)
+                }
             }
+            .overlay {
+                WithPerceptionTracking {
+                    if isSearching, filtered.isEmpty, !playlists.playlists.isEmpty {
+                        EmptyStateView(title: t("options.playlist.notFound"), systemImage: "magnifyingglass")
+                    }
+                }
+            }
+            .offlineBanner()
+            .themedBackground()
+            .navigationTitle(t("sidebar.playlists"))
+            .navigationBarTitleDisplayMode(.large)
+            .searchable(text: $searchText, prompt: Text(t("options.playlist.search")))
+            .refreshable { await playlists.reload() }
+            .task { await playlists.loadIfNeeded() }
         }
-        .offlineBanner()
-        .themedBackground()
-        .navigationTitle(t("sidebar.playlists"))
-        .navigationBarTitleDisplayMode(.large)
-        .searchable(text: $searchText, prompt: Text(t("options.playlist.search")))
-        .refreshable { await playlists.reload() }
-        .task { await playlists.loadIfNeeded() }
     }
 
     private var trimmedSearch: String {
@@ -87,26 +94,30 @@ struct NewPlaylistRow: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: Layout.rowArtworkRadius, style: .continuous)
-                    .fill(ThemeColor.border)
-                    .frame(width: 48, height: 48)
-                    .overlay {
-                        Image(systemName: "plus")
-                            .font(.title3.weight(.semibold))
-                            .foregroundStyle(.tint)
-                    }
-                Text(t("options.playlist.create"))
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(.tint)
-                Spacer(minLength: 0)
+        WithPerceptionTracking {
+            Button(action: action) {
+                HStack(spacing: 12) {
+                    RoundedRectangle(cornerRadius: Layout.rowArtworkRadius, style: .continuous)
+                        .fill(ThemeColor.border)
+                        .frame(width: 48, height: 48)
+                        .overlay {
+                            WithPerceptionTracking {
+                                Image(systemName: "plus")
+                                    .font(.title3.weight(.semibold))
+                                    .foregroundStyle(.tint)
+                            }
+                        }
+                    Text(t("options.playlist.create"))
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(.tint)
+                    Spacer(minLength: 0)
+                }
+                .contentShape(.rect)
             }
-            .contentShape(.rect)
+            .buttonStyle(.plain)
+            .listRowSeparator(.hidden)
+            .compactRowInsets()
         }
-        .buttonStyle(.plain)
-        .listRowSeparator(.hidden)
-        .compactRowInsets()
     }
 }
 
@@ -119,33 +130,35 @@ struct PlaylistRow: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        NavigationLink(value: AppRoute.playlist(id: playlist.id)) {
-            HStack(spacing: 12) {
-                ArtworkImage(
-                    id: playlist.coverArt,
-                    size: .small,
-                    cornerRadius: Layout.rowArtworkRadius,
-                    placeholder: "music.note.list"
-                )
-                .frame(width: 48, height: 48)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(playlist.name)
-                        .font(.callout.weight(.medium))
-                        .lineLimit(1)
-                    HStack(spacing: 4) {
-                        Text(details)
+        WithPerceptionTracking {
+            NavigationLink(value: AppRoute.playlist(id: playlist.id)) {
+                HStack(spacing: 12) {
+                    ArtworkImage(
+                        id: playlist.coverArt,
+                        size: .small,
+                        cornerRadius: Layout.rowArtworkRadius,
+                        placeholder: "music.note.list"
+                    )
+                    .frame(width: 48, height: 48)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(playlist.name)
+                            .font(.callout.weight(.medium))
                             .lineLimit(1)
-                        PlaylistCacheBadge(playlistId: playlist.id)
+                        HStack(spacing: 4) {
+                            Text(details)
+                                .lineLimit(1)
+                            PlaylistCacheBadge(playlistId: playlist.id)
+                        }
+                        .font(.footnote)
+                        .foregroundStyle(ThemeColor.mutedForeground)
                     }
-                    .font(.footnote)
-                    .foregroundStyle(ThemeColor.mutedForeground)
                 }
             }
-        }
-        .listRowSeparator(.hidden)
-        .compactRowInsets()
-        .contextMenu {
-            PlaylistMenuItems(playlist: playlist)
+            .listRowSeparator(.hidden)
+            .compactRowInsets()
+            .contextMenu {
+                PlaylistMenuItems(playlist: playlist)
+            }
         }
     }
 

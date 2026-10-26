@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// The player in the tab bar accessory, as in Apple Music: the cover, the
@@ -29,38 +30,40 @@ struct MiniPlayer: View {
     private let trackSpacing: CGFloat = 32
 
     var body: some View {
-        HStack(spacing: mix(10, 7)) {
-            PlayerArtwork(cornerRadius: 4.5, size: .small)
-                .frame(width: mix(30, 24), height: mix(30, 24))
-            titles
-            Spacer(minLength: 4)
-            controls
-        }
-        .padding(.leading, mix(20, 14))
-        .padding(.trailing, mix(7, 3))
-        .foregroundStyle(.primary)
-        .contentShape(.rect)
-        .onTapGesture {
-            open()
-        }
-        .simultaneousGesture(trackSwipeGesture)
-        .contextMenu {
-            if let song = player.currentSong {
-                SongMenuItems(song: song)
+        WithPerceptionTracking {
+            HStack(spacing: mix(10, 7)) {
+                PlayerArtwork(cornerRadius: 4.5, size: .small)
+                    .frame(width: mix(30, 24), height: mix(30, 24))
+                titles
+                Spacer(minLength: 4)
+                controls
             }
-        }
-        .haptic(.selection, trigger: swipeHapticTrigger)
-        .onDisappear {
-            settleTask?.cancel()
-            settleTask = nil
-        }
-        .onChange(of: player.currentSong?.id) {
-            guard settleTask == nil, swipeContext != nil else { return }
-            resetSwipe(animated: false)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityAction(named: t("fullscreen.switchButton")) {
-            open()
+            .padding(.leading, mix(20, 14))
+            .padding(.trailing, mix(7, 3))
+            .foregroundStyle(.primary)
+            .contentShape(.rect)
+            .onTapGesture {
+                open()
+            }
+            .simultaneousGesture(trackSwipeGesture)
+            .contextMenu {
+                if let song = player.currentSong {
+                    SongMenuItems(song: song)
+                }
+            }
+            .haptic(.selection, trigger: swipeHapticTrigger)
+            .onDisappear {
+                settleTask?.cancel()
+                settleTask = nil
+            }
+            .onChange(of: player.currentSong?.id) {
+                guard settleTask == nil, swipeContext != nil else { return }
+                resetSwipe(animated: false)
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityAction(named: t("fullscreen.switchButton")) {
+                open()
+            }
         }
     }
 
@@ -295,8 +298,10 @@ struct MiniPlayer: View {
                     .contentShape(.rect)
             }
             .overlay(alignment: .topTrailing) {
-                PlayerBufferingIndicator()
-                    .offset(x: 2, y: -2)
+                WithPerceptionTracking {
+                    PlayerBufferingIndicator()
+                        .offset(x: 2, y: -2)
+                }
             }
             .accessibilityLabel(t(player.isPlaying ? "player.tooltips.pause" : "player.tooltips.play"))
             Button {
@@ -366,28 +371,36 @@ struct PlayerArtwork: View {
     @Environment(PlayerStore.self) private var player
 
     var body: some View {
-        if let song = player.currentSong {
-            SongArtwork(song: song, size: size, cornerRadius: cornerRadius)
-        } else if player.isRadio {
-            RadioBadge(name: player.radio?.current?.name ?? "")
-                .overlay {
-                    GeometryReader { proxy in
-                        Image(systemName: "dot.radiowaves.left.and.right")
-                            .font(.system(size: proxy.size.width * 0.32, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        WithPerceptionTracking {
+            if let song = player.currentSong {
+                SongArtwork(song: song, size: size, cornerRadius: cornerRadius)
+            } else if player.isRadio {
+                RadioBadge(name: player.radio?.current?.name ?? "")
+                    .overlay {
+                        WithPerceptionTracking {
+                            GeometryReader { proxy in
+                                WithPerceptionTracking {
+                                    Image(systemName: "dot.radiowaves.left.and.right")
+                                        .font(.system(size: proxy.size.width * 0.32, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                }
+                            }
+                        }
                     }
-                }
-                .clipShape(.rect(cornerRadius: cornerRadius, style: .continuous))
-                .aspectRatio(1, contentMode: .fit)
-        } else {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(.fill.tertiary)
-                .overlay {
-                    Image(systemName: "music.note")
-                        .foregroundStyle(.secondary)
-                }
-                .aspectRatio(1, contentMode: .fit)
+                    .clipShape(.rect(cornerRadius: cornerRadius, style: .continuous))
+                    .aspectRatio(1, contentMode: .fit)
+            } else {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(.fill.tertiary)
+                    .overlay {
+                        WithPerceptionTracking {
+                            Image(systemName: "music.note")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .aspectRatio(1, contentMode: .fit)
+            }
         }
     }
 }
@@ -425,18 +438,20 @@ private struct MiniPlayerPreviewContainer: View {
     @State private var router = Router()
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            Color.black.ignoresSafeArea()
+        WithPerceptionTracking {
+            ZStack(alignment: .bottom) {
+                Color.black.ignoresSafeArea()
 
-            HStack {
-                MiniPlayer(compactProgress: 0)
+                HStack {
+                    MiniPlayer(compactProgress: 0)
+                }
+                .frame(height: 36)
+                .padding(.vertical, 6)
+                .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
             }
-            .frame(height: 36)
-            .padding(.vertical, 6)
-            .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
+            .appEnvironment(app, router: router)
         }
-        .appEnvironment(app, router: router)
     }
 }

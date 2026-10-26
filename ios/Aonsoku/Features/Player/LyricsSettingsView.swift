@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// Lyrics for the playing song, like the web lyrics settings: hide them,
@@ -18,44 +19,52 @@ struct LyricsSettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
-            ThemedForm {
-                if let song = player.currentSong {
-                    Section {
-                        header(song)
-                        Toggle(t("lyrics.customSelect.disableLyrics"), isOn: isDisabled)
-                    }
-                    offset
-                    currentSelection(song)
-                    if isCustomServerReady {
-                        search
-                        results
-                    } else {
-                        Section {
-                        } footer: {
-                            Text(t("lyrics.customSelect.serverDisabled"))
+        WithPerceptionTracking {
+            NavigationStack {
+                WithPerceptionTracking {
+                    ThemedForm {
+                        WithPerceptionTracking {
+                            if let song = player.currentSong {
+                                Section {
+                                    header(song)
+                                    Toggle(t("lyrics.customSelect.disableLyrics"), isOn: isDisabled)
+                                }
+                                offset
+                                currentSelection(song)
+                                if isCustomServerReady {
+                                    search
+                                    results
+                                } else {
+                                    Section {
+                                    } footer: {
+                                        Text(t("lyrics.customSelect.serverDisabled"))
+                                    }
+                                }
+                            } else {
+                                ContentUnavailableView(t("lyrics.customSelect.noSong"), systemImage: "quote.bubble")
+                            }
                         }
                     }
-                } else {
-                    ContentUnavailableView(t("lyrics.customSelect.noSong"), systemImage: "quote.bubble")
-                }
-            }
-            .navigationTitle(t("lyrics.customSelect.title"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(role: .close) {
-                        dismiss()
+                    .navigationTitle(t("lyrics.customSelect.title"))
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            WithPerceptionTracking {
+                                Button(role: .close) {
+                                    dismiss()
+                                }
+                            }
+                        }
                     }
                 }
             }
-        }
-        .presentationDetents([.medium, .large])
-        .task(id: player.currentSong?.id) {
-            guard let song = player.currentSong else { return }
-            searchTitle = song.title
-            searchArtist = song.artist
-            await runSearch()
+            .presentationDetents([.medium, .large])
+            .task(id: player.currentSong?.id) {
+                guard let song = player.currentSong else { return }
+                searchTitle = song.title
+                searchArtist = song.artist
+                await runSearch()
+            }
         }
     }
 
@@ -194,17 +203,19 @@ struct LyricsSettingsView: View {
             } else {
                 Section {
                     ForEach(candidates) { candidate in
-                        Button {
-                            choose(candidate)
-                        } label: {
-                            CandidateRow(
-                                candidate: candidate,
-                                isSelected: candidate.id == lyrics.selection.key,
-                                isChoosing: choosing == candidate.id
-                            )
+                        WithPerceptionTracking {
+                            Button {
+                                choose(candidate)
+                            } label: {
+                                CandidateRow(
+                                    candidate: candidate,
+                                    isSelected: candidate.id == lyrics.selection.key,
+                                    isChoosing: choosing == candidate.id
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(choosing != nil)
                         }
-                        .buttonStyle(.plain)
-                        .disabled(choosing != nil)
                     }
                 }
             }
@@ -255,45 +266,47 @@ private struct CandidateRow: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Text(candidate.title)
-                        .font(.headline)
-                        .lineLimit(1)
-                    if candidate.romaji?.isEmpty == false {
-                        Text(t("lyrics.customSelect.hasRomaji"))
-                            .font(.caption2.weight(.semibold))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.fill.tertiary, in: .capsule)
+        WithPerceptionTracking {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(candidate.title)
+                            .font(.headline)
+                            .lineLimit(1)
+                        if candidate.romaji?.isEmpty == false {
+                            Text(t("lyrics.customSelect.hasRomaji"))
+                                .font(.caption2.weight(.semibold))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(.fill.tertiary, in: .capsule)
+                        }
                     }
+                    Text([candidate.artist, candidate.album ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    if let serverId = candidate.serverId, !serverId.isEmpty {
+                        Text(t("lyrics.customSelect.lyricsId", ["id": serverId]))
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                    Text(preview.isEmpty ? t("lyrics.customSelect.noPreview") : preview)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
                 }
-                Text([candidate.artist, candidate.album ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                if let serverId = candidate.serverId, !serverId.isEmpty {
-                    Text(t("lyrics.customSelect.lyricsId", ["id": serverId]))
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+                Spacer(minLength: 8)
+                if isChoosing {
+                    ProgressView()
+                } else {
+                    Text(t(isSelected ? "lyrics.customSelect.selected" : "lyrics.customSelect.select"))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(isSelected ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
                 }
-                Text(preview.isEmpty ? t("lyrics.customSelect.noPreview") : preview)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(3)
             }
-            Spacer(minLength: 8)
-            if isChoosing {
-                ProgressView()
-            } else {
-                Text(t(isSelected ? "lyrics.customSelect.selected" : "lyrics.customSelect.select"))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(isSelected ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
-            }
+            .padding(.vertical, 4)
+            .contentShape(.rect)
         }
-        .padding(.vertical, 4)
-        .contentShape(.rect)
     }
 
     /// The first lines without LRC timestamps.

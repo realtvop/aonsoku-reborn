@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// Liked songs, albums and artists, one kind at a time under a segmented
@@ -25,30 +26,34 @@ struct FavoritesView: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        Group {
-            switch kind {
-            case .songs: FavoriteSongs()
-            case .albums: FavoriteAlbums()
-            case .artists: FavoriteArtists()
-            }
-        }
-        .safeAreaBar(edge: .top) {
-            Picker(t("favorites.headline"), selection: $kind) {
-                ForEach(Kind.allCases) { kind in
-                    Text(t(kind.titleKey)).tag(kind)
+        WithPerceptionTracking {
+            Group {
+                switch kind {
+                case .songs: FavoriteSongs()
+                case .albums: FavoriteAlbums()
+                case .artists: FavoriteArtists()
                 }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .pageMargins()
-            .padding(.bottom, 8)
+            .safeAreaBar(edge: .top) {
+                Picker(t("favorites.headline"), selection: $kind) {
+                    ForEach(Kind.allCases) { kind in
+                        WithPerceptionTracking {
+                            Text(t(kind.titleKey)).tag(kind)
+                        }
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .pageMargins()
+                .padding(.bottom, 8)
+            }
+            .offlineBanner()
+            .themedBackground()
+            .navigationTitle(t("favorites.headline"))
+            // A large title would sit under the blur of the bar holding the
+            // picker, so the title stays inline.
+            .navigationBarTitleDisplayMode(.inline)
         }
-        .offlineBanner()
-        .themedBackground()
-        .navigationTitle(t("favorites.headline"))
-        // A large title would sit under the blur of the bar holding the
-        // picker, so the title stays inline.
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -60,23 +65,27 @@ private struct FavoriteSongs: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        QueriedCollection(query: SongListQuery(scope: .favorites)) { repository, query, offset, limit in
-            try await repository.songs(query, offset: offset, limit: limit)
-        } content: { collection in
-            PagedSongList(collection: collection) { index in
-                player.play(collection.items, startingAt: index, sourceName: t("favorites.headline"))
-            } header: {
-                PlayShuffleButtons {
-                    playAll(collection, shuffle: false)
-                } shuffle: {
-                    playAll(collection, shuffle: true)
+        WithPerceptionTracking {
+            QueriedCollection(query: SongListQuery(scope: .favorites)) { repository, query, offset, limit in
+                WithPerceptionTracking {
+                    try await repository.songs(query, offset: offset, limit: limit)
                 }
-                .padding(.vertical, 8)
-            } empty: {
-                EmptyStateView(title: t("favorites.noSongs"), systemImage: "heart")
+            } content: { collection in
+                PagedSongList(collection: collection) { index in
+                    player.play(collection.items, startingAt: index, sourceName: t("favorites.headline"))
+                } header: {
+                    PlayShuffleButtons {
+                        playAll(collection, shuffle: false)
+                    } shuffle: {
+                        playAll(collection, shuffle: true)
+                    }
+                    .padding(.vertical, 8)
+                } empty: {
+                    EmptyStateView(title: t("favorites.noSongs"), systemImage: "heart")
+                }
+                .navigationSubtitle(collection.isEmpty ? "" : t("favorites.songCount", count: collection.total))
+                .reloadsOnChange(of: favorites.revision, collection)
             }
-            .navigationSubtitle(collection.isEmpty ? "" : t("favorites.songCount", count: collection.total))
-            .reloadsOnChange(of: favorites.revision, collection)
         }
     }
 
@@ -105,20 +114,24 @@ private struct FavoriteAlbums: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        QueriedCollection(query: AlbumListFilter.favorites) { repository, filter, offset, limit in
-            try await repository.albums(filter, offset: offset, limit: limit)
-        } content: { collection in
-            ScrollView {
-                AlbumGrid(collection: collection)
-                    .padding(.top, 8)
-                    .padding(.bottom, 24)
+        WithPerceptionTracking {
+            QueriedCollection(query: AlbumListFilter.favorites) { repository, filter, offset, limit in
+                WithPerceptionTracking {
+                    try await repository.albums(filter, offset: offset, limit: limit)
+                }
+            } content: { collection in
+                ScrollView {
+                    AlbumGrid(collection: collection)
+                        .padding(.top, 8)
+                        .padding(.bottom, 24)
+                }
+                .pagedStates(collection) {
+                    EmptyStateView(title: t("native.favorites.noAlbums"), systemImage: "heart")
+                }
+                .refreshable { await collection.refresh() }
+                .navigationSubtitle(collection.isEmpty ? "" : t("artist.info.albumsCount", count: collection.total))
+                .reloadsOnChange(of: favorites.revision, collection)
             }
-            .pagedStates(collection) {
-                EmptyStateView(title: t("native.favorites.noAlbums"), systemImage: "heart")
-            }
-            .refreshable { await collection.refresh() }
-            .navigationSubtitle(collection.isEmpty ? "" : t("artist.info.albumsCount", count: collection.total))
-            .reloadsOnChange(of: favorites.revision, collection)
         }
     }
 }
@@ -128,14 +141,18 @@ private struct FavoriteArtists: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        QueriedCollection(query: "starred") { repository, _, offset, limit in
-            try await repository.artists(starredOnly: true, offset: offset, limit: limit)
-        } content: { collection in
-            PagedArtistList(collection: collection) {
-                EmptyStateView(title: t("native.favorites.noArtists"), systemImage: "heart")
+        WithPerceptionTracking {
+            QueriedCollection(query: "starred") { repository, _, offset, limit in
+                WithPerceptionTracking {
+                    try await repository.artists(starredOnly: true, offset: offset, limit: limit)
+                }
+            } content: { collection in
+                PagedArtistList(collection: collection) {
+                    EmptyStateView(title: t("native.favorites.noArtists"), systemImage: "heart")
+                }
+                .navigationSubtitle("")
+                .reloadsOnChange(of: favorites.revision, collection)
             }
-            .navigationSubtitle("")
-            .reloadsOnChange(of: favorites.revision, collection)
         }
     }
 }

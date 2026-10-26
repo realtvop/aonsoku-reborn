@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 import UIKit
 
@@ -21,14 +22,18 @@ private struct ShakeToDebugModifier: ViewModifier {
     @State private var isPresented = false
 
     func body(content: Content) -> some View {
-        content
-            .onReceive(NotificationCenter.default.publisher(for: .deviceDidShake)) { _ in
-                isPresented = true
-            }
-            .sheet(isPresented: $isPresented) {
-                DebugPanel()
-                    .ignoresSafeArea()
-            }
+        WithPerceptionTracking {
+            content
+                .onReceive(NotificationCenter.default.publisher(for: .deviceDidShake)) { _ in
+                    isPresented = true
+                }
+                .sheet(isPresented: $isPresented) {
+                    WithPerceptionTracking {
+                        DebugPanel()
+                            .ignoresSafeArea()
+                    }
+                }
+        }
     }
 }
 

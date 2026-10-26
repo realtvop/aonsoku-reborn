@@ -11,6 +11,7 @@
 		4E5A00000000000000000102 /* locales in Resources */ = {isa = PBXBuildFile; fileRef = 4E5A00000000000000000202 /* locales */; };
 		4E5A00000000000000000103 /* native-locales in Resources */ = {isa = PBXBuildFile; fileRef = 4E5A00000000000000000203 /* native-locales */; };
 		4E5A00000000000000000104 /* SliderControl in Frameworks */ = {isa = PBXBuildFile; productRef = 4E5A00000000000000000902 /* SliderControl */; };
+		4E5A00000000000000000105 /* Perception in Frameworks */ = {isa = PBXBuildFile; productRef = 4E5A00000000000000000903 /* Perception */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -47,6 +48,7 @@
 			files = (
 				4E5A00000000000000000101 /* AonsokuKit in Frameworks */,
 				4E5A00000000000000000104 /* SliderControl in Frameworks */,
+				4E5A00000000000000000105 /* Perception in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -93,6 +95,7 @@
 			packageProductDependencies = (
 				4E5A00000000000000000901 /* AonsokuKit */,
 				4E5A00000000000000000902 /* SliderControl */,
+				4E5A00000000000000000903 /* Perception */,
 			);
 			productName = Aonsoku;
 			productReference = 4E5A00000000000000000201 /* Aonsoku.app */;
@@ -125,6 +128,7 @@
 			packageReferences = (
 				4E5A00000000000000000801 /* XCLocalSwiftPackageReference "AonsokuKit" */,
 				4E5A00000000000000000802 /* XCRemoteSwiftPackageReference "slidercontrol" */,
+				4E5A00000000000000000803 /* XCRemoteSwiftPackageReference "swift-perception" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 4E5A00000000000000000002 /* Products */;
@@ -395,6 +399,14 @@
 				revision = 54f8b8bb925b0971bb9b1267b38cccc2addec74f;
 			};
 		};
+		4E5A00000000000000000803 /* XCRemoteSwiftPackageReference "swift-perception" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/swift-perception";
+			requirement = {
+				kind = exactVersion;
+				version = 2.0.12;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -406,6 +418,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 4E5A00000000000000000802 /* XCRemoteSwiftPackageReference "slidercontrol" */;
 			productName = SliderControl;
+		};
+		4E5A00000000000000000903 /* Perception */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4E5A00000000000000000803 /* XCRemoteSwiftPackageReference "swift-perception" */;
+			productName = Perception;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

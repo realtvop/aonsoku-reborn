@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// The server addresses, which one is in use, and the library scan, like
@@ -19,59 +20,63 @@ struct ServerSettingsView: View {
     @Environment(\.locale) private var locale
 
     var body: some View {
-        ThemedForm {
-            Section {
-                URLField(
-                    title: t("settings.server.primaryUrl.label"),
-                    text: $primaryUrl,
-                    prompt: t("settings.server.primaryUrl.placeholder")
-                )
-            } header: {
-                Text(t("settings.server.primaryUrl.label"))
-            } footer: {
-                Text(t("settings.server.primaryUrl.info"))
-            }
-            Section {
-                URLField(
-                    title: t("settings.server.fallbackUrl.label"),
-                    text: $fallbackUrl,
-                    prompt: t("settings.server.fallbackUrl.placeholder")
-                )
-            } header: {
-                Text(t("settings.server.fallbackUrl.label"))
-            } footer: {
-                Text(t("settings.server.fallbackUrl.info"))
-            }
-            Section {
-                Button {
-                    save()
-                } label: {
-                    HStack {
-                        Text(t(isSaving ? "settings.server.saving" : "settings.server.save"))
-                        if isSaving {
-                            Spacer()
-                            ProgressView()
-                        }
+        WithPerceptionTracking {
+            ThemedForm {
+                WithPerceptionTracking {
+                    Section {
+                        URLField(
+                            title: t("settings.server.primaryUrl.label"),
+                            text: $primaryUrl,
+                            prompt: t("settings.server.primaryUrl.placeholder")
+                        )
+                    } header: {
+                        Text(t("settings.server.primaryUrl.label"))
+                    } footer: {
+                        Text(t("settings.server.primaryUrl.info"))
                     }
+                    Section {
+                        URLField(
+                            title: t("settings.server.fallbackUrl.label"),
+                            text: $fallbackUrl,
+                            prompt: t("settings.server.fallbackUrl.placeholder")
+                        )
+                    } header: {
+                        Text(t("settings.server.fallbackUrl.label"))
+                    } footer: {
+                        Text(t("settings.server.fallbackUrl.info"))
+                    }
+                    Section {
+                        Button {
+                            save()
+                        } label: {
+                            HStack {
+                                Text(t(isSaving ? "settings.server.saving" : "settings.server.save"))
+                                if isSaving {
+                                    Spacer()
+                                    ProgressView()
+                                }
+                            }
+                        }
+                        .disabled(isSaving || !network.isOnline)
+                    }
+                    Section {
+                        LabeledContent(t("settings.server.activeUrl.label")) {
+                            Text(session.account?.activeUrl ?? t("settings.server.activeUrl.empty"))
+                                .textSelection(.enabled)
+                        }
+                        LabeledContent(t("settings.server.activeType.label"), value: activeType)
+                    } footer: {
+                        Text(t("settings.server.activeType.info"))
+                    }
+                    management
                 }
-                .disabled(isSaving || !network.isOnline)
             }
-            Section {
-                LabeledContent(t("settings.server.activeUrl.label")) {
-                    Text(session.account?.activeUrl ?? t("settings.server.activeUrl.empty"))
-                        .textSelection(.enabled)
-                }
-                LabeledContent(t("settings.server.activeType.label"), value: activeType)
-            } footer: {
-                Text(t("settings.server.activeType.info"))
+            .navigationTitle(t("settings.options.server"))
+            .disabled(isSaving)
+            .onAppear(perform: prefill)
+            .task {
+                await loadScanStatus()
             }
-            management
-        }
-        .navigationTitle(t("settings.options.server"))
-        .disabled(isSaving)
-        .onAppear(perform: prefill)
-        .task {
-            await loadScanStatus()
         }
     }
 

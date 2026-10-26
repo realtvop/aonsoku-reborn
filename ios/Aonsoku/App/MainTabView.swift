@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// The signed-in interface: Home, Library and Search, each with its own
@@ -11,42 +12,52 @@ struct MainTabView: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        @Bindable var router = router
-        TabView(selection: selection) {
-            Tab(t("sidebar.home"), systemImage: "house.fill", value: AppTab.home) {
-                NavigationStack(path: $router.homePath) {
-                    HomeView()
-                        .appDestinations()
+        WithPerceptionTracking {
+            @Perception.Bindable var router = router
+            TabView(selection: selection) {
+                Tab(t("sidebar.home"), systemImage: "house.fill", value: AppTab.home) {
+                    NavigationStack(path: $router.homePath) {
+                        WithPerceptionTracking {
+                            HomeView()
+                                .appDestinations()
+                        }
+                    }
+                }
+                Tab(t("sidebar.library"), systemImage: "books.vertical.fill", value: AppTab.library) {
+                    NavigationStack(path: $router.libraryPath) {
+                        WithPerceptionTracking {
+                            LibraryView()
+                                .appDestinations()
+                        }
+                    }
+                }
+                Tab(t("sidebar.miniSearch"), systemImage: "magnifyingglass", value: AppTab.search, role: .search) {
+                    NavigationStack(path: $router.searchPath) {
+                        WithPerceptionTracking {
+                            SearchView()
+                                .appDestinations()
+                        }
+                    }
                 }
             }
-            Tab(t("sidebar.library"), systemImage: "books.vertical.fill", value: AppTab.library) {
-                NavigationStack(path: $router.libraryPath) {
-                    LibraryView()
-                        .appDestinations()
+            .tabViewStyle(.sidebarAdaptable)
+            .tabBarMinimizeBehavior(.onScrollDown)
+            .tabViewBottomAccessory {
+                PlayerAccessorySlot()
+            }
+            .nowPlayingPresentation()
+            .sheet(isPresented: $router.isAccountPresented) {
+                WithPerceptionTracking {
+                    AccountView()
                 }
             }
-            Tab(t("sidebar.miniSearch"), systemImage: "magnifyingglass", value: AppTab.search, role: .search) {
-                NavigationStack(path: $router.searchPath) {
-                    SearchView()
-                        .appDestinations()
+            .onChange(of: player.playbackStarts) {
+                if settings.settings.playback.autoOpenNowPlaying, router.topLayer == .root {
+                    router.presentNowPlaying()
                 }
             }
+            .globalPresentations(.root)
         }
-        .tabViewStyle(.sidebarAdaptable)
-        .tabBarMinimizeBehavior(.onScrollDown)
-        .tabViewBottomAccessory {
-            PlayerAccessorySlot()
-        }
-        .nowPlayingPresentation()
-        .sheet(isPresented: $router.isAccountPresented) {
-            AccountView()
-        }
-        .onChange(of: player.playbackStarts) {
-            if settings.settings.playback.autoOpenNowPlaying, router.topLayer == .root {
-                router.presentNowPlaying()
-            }
-        }
-        .globalPresentations(.root)
     }
 
     /// Selecting the current tab again pops it to its root.

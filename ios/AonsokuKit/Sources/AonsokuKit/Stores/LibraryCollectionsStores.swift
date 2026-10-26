@@ -1,5 +1,5 @@
 import Foundation
-import Observation
+import Perception
 
 // MARK: - Pinned
 
@@ -42,18 +42,18 @@ public enum PinnedContent: Identifiable, Hashable, Sendable {
 
 /// Pins on Home, persisted under `pinned.v1` as `[PinnedItem]`, newest first.
 @MainActor
-@Observable
+@Perceptible
 public final class PinnedHomeStore {
     public private(set) var items: [PinnedItem] = []
     /// Pins that still exist, sorted by last played (newest first), then
     /// name, as on the web Home page.
     public private(set) var resolved: [PinnedContent] = []
 
-    @ObservationIgnored public let preferences: PreferencesService
-    @ObservationIgnored public let repository: LibraryRepository
-    @ObservationIgnored private var resolveGeneration = 0
-    @ObservationIgnored private var refreshTask: Task<Void, Never>?
-    @ObservationIgnored private var refreshRevision: UInt64 = 0
+    @PerceptionIgnored public let preferences: PreferencesService
+    @PerceptionIgnored public let repository: LibraryRepository
+    @PerceptionIgnored private var resolveGeneration = 0
+    @PerceptionIgnored private var refreshTask: Task<Void, Never>?
+    @PerceptionIgnored private var refreshRevision: UInt64 = 0
 
     public init(preferences: PreferencesService, repository: LibraryRepository) {
         self.preferences = preferences
@@ -191,7 +191,7 @@ public enum FavoriteKind: String, Hashable, Sendable {
 /// the server, and roll back with an error toast when the server rejects
 /// them. The local library is updated so offline lists stay consistent.
 @MainActor
-@Observable
+@Perceptible
 public final class FavoritesStore {
     public private(set) var songIds: Set<String> = []
     public private(set) var albumIds: Set<String> = []
@@ -199,13 +199,13 @@ public final class FavoritesStore {
     /// Increments after every change, for lists that should reload.
     public private(set) var revision = 0
 
-    @ObservationIgnored public let api: any SubsonicAPI
-    @ObservationIgnored public let library: LibraryService
-    @ObservationIgnored public weak var toasts: ToastCenter?
-    @ObservationIgnored private var requests: [FavoriteRequestKey: FavoriteRequest] = [:]
-    @ObservationIgnored private var requestTasks: [FavoriteRequestKey: Task<Void, Never>] = [:]
-    @ObservationIgnored private var pendingMutations: Set<FavoriteRequestKey> = []
-    @ObservationIgnored private var loadGeneration: UInt64 = 0
+    @PerceptionIgnored public let api: any SubsonicAPI
+    @PerceptionIgnored public let library: LibraryService
+    @PerceptionIgnored public weak var toasts: ToastCenter?
+    @PerceptionIgnored private var requests: [FavoriteRequestKey: FavoriteRequest] = [:]
+    @PerceptionIgnored private var requestTasks: [FavoriteRequestKey: Task<Void, Never>] = [:]
+    @PerceptionIgnored private var pendingMutations: Set<FavoriteRequestKey> = []
+    @PerceptionIgnored private var loadGeneration: UInt64 = 0
 
     public init(api: any SubsonicAPI, library: LibraryService, toasts: ToastCenter? = nil) {
         self.api = api
@@ -467,16 +467,16 @@ private struct FavoriteRequest {
 
 /// The user's playlists and playlist editing.
 @MainActor
-@Observable
+@Perceptible
 public final class PlaylistsStore {
     public private(set) var playlists: [Playlist] = []
     public private(set) var phase: LoadPhase = .idle
     /// Increments after an edit so open playlist screens reload.
     public private(set) var revision = 0
 
-    @ObservationIgnored public let repository: LibraryRepository
-    @ObservationIgnored public let api: any SubsonicAPI
-    @ObservationIgnored private var loadGeneration: UInt64 = 0
+    @PerceptionIgnored public let repository: LibraryRepository
+    @PerceptionIgnored public let api: any SubsonicAPI
+    @PerceptionIgnored private var loadGeneration: UInt64 = 0
 
     public init(repository: LibraryRepository, api: any SubsonicAPI) {
         self.repository = repository
@@ -610,13 +610,13 @@ public final class PlaylistsStore {
 
 /// Internet radio stations stored on the server.
 @MainActor
-@Observable
+@Perceptible
 public final class RadioStore {
     public private(set) var stations: [RadioStation] = []
     public private(set) var phase: LoadPhase = .idle
 
-    @ObservationIgnored public let api: any SubsonicAPI
-    @ObservationIgnored private var loadGeneration: UInt64 = 0
+    @PerceptionIgnored public let api: any SubsonicAPI
+    @PerceptionIgnored private var loadGeneration: UInt64 = 0
 
     public init(api: any SubsonicAPI) {
         self.api = api
@@ -672,16 +672,16 @@ public final class RadioStore {
 /// ten seconds of accumulated local playback. Nothing is recorded while
 /// controlling another device.
 @MainActor
-@Observable
+@Perceptible
 public final class ListeningHistoryStore {
     public private(set) var songs: [Song] = []
 
-    @ObservationIgnored public let preferences: PreferencesService
+    @PerceptionIgnored public let preferences: PreferencesService
     /// Entries kept; from `HistorySettings.maxSize`.
-    @ObservationIgnored public var maxSize = HistorySettings().maxSize
-    @ObservationIgnored private var trackedSong: Song?
-    @ObservationIgnored private var accumulatedPlayback: TimeInterval = 0
-    @ObservationIgnored private var playingSince: Date?
+    @PerceptionIgnored public var maxSize = HistorySettings().maxSize
+    @PerceptionIgnored private var trackedSong: Song?
+    @PerceptionIgnored private var accumulatedPlayback: TimeInterval = 0
+    @PerceptionIgnored private var playingSince: Date?
 
     public init(preferences: PreferencesService) {
         self.preferences = preferences

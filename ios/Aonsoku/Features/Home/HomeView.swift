@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// Home, laid out like the web's: what other devices are playing, the
@@ -13,73 +14,81 @@ struct HomeView: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: Layout.sectionSpacing) {
-                OtherDevicesSection()
-                Group {
-                    if !home.hasCarousel, isLoading {
-                        HomeSkeleton(showCarousel: true, shelfCount: 0)
-                    } else if !home.carousel.isEmpty {
-                        FeaturedCarousel(albums: home.carousel)
-                    }
-                    if !pinned.resolved.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            SectionHeader(title: t("home.pinned"))
-                                .pageMargins()
-                            HomeShelf(items: pinned.resolved) { content in
-                                switch content {
-                                case let .album(album):
-                                    AlbumTile(album: album)
-                                case let .playlist(playlist):
-                                    PlaylistTile(playlist: playlist)
+        WithPerceptionTracking {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: Layout.sectionSpacing) {
+                    OtherDevicesSection()
+                    Group {
+                        if !home.hasCarousel, isLoading {
+                            HomeSkeleton(showCarousel: true, shelfCount: 0)
+                        } else if !home.carousel.isEmpty {
+                            FeaturedCarousel(albums: home.carousel)
+                        }
+                        if !pinned.resolved.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                SectionHeader(title: t("home.pinned"))
+                                    .pageMargins()
+                                HomeShelf(items: pinned.resolved) { content in
+                                    WithPerceptionTracking {
+                                        switch content {
+                                        case let .album(album):
+                                            AlbumTile(album: album)
+                                        case let .playlist(playlist):
+                                            PlaylistTile(playlist: playlist)
+                                        }
+                                    }
                                 }
                             }
                         }
-                    }
-                    ForEach(HomeSection.allCases) { section in
-                        let albums = home.albums(in: section)
-                        if home.sections[section] == nil, isLoading {
-                            HomeSkeleton(showCarousel: false, shelfCount: 1)
-                        } else if !albums.isEmpty {
-                            VStack(alignment: .leading, spacing: 12) {
-                                SectionHeader(title: t(section.titleKey), route: .albums(section.listFilter))
-                                    .pageMargins()
-                                HomeShelf(items: albums) { album in
-                                    AlbumTile(album: album)
+                        ForEach(HomeSection.allCases) { section in
+                            WithPerceptionTracking {
+                                let albums = home.albums(in: section)
+                                if home.sections[section] == nil, isLoading {
+                                    HomeSkeleton(showCarousel: false, shelfCount: 1)
+                                } else if !albums.isEmpty {
+                                    VStack(alignment: .leading, spacing: 12) {
+                                        SectionHeader(title: t(section.titleKey), route: .albums(section.listFilter))
+                                            .pageMargins()
+                                        HomeShelf(items: albums) { album in
+                                            WithPerceptionTracking {
+                                                AlbumTile(album: album)
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
+                .padding(.top, 8)
+                .padding(.bottom, 24)
             }
-            .padding(.top, 8)
-            .padding(.bottom, 24)
-        }
-        .overlay { states }
-        .offlineBanner()
-        .themedBackground()
-        .rootPageHeader(t("sidebar.home"))
-        .refreshable {
-            async let albums: Void = home.refresh()
-            async let pins: Void = pinned.refresh()
-            _ = await (albums, pins)
-            if network.isOnline, !sync.isSyncing {
-                sync.syncIncremental()
+            .overlay { states }
+            .offlineBanner()
+            .themedBackground()
+            .rootPageHeader(t("sidebar.home"))
+            .refreshable {
+                async let albums: Void = home.refresh()
+                async let pins: Void = pinned.refresh()
+                _ = await (albums, pins)
+                if network.isOnline, !sync.isSyncing {
+                    sync.syncIncremental()
+                }
             }
-        }
-        .task { await home.loadIfNeeded() }
-        .task(id: pinned.items) { await pinned.refresh() }
-        .task(id: network.isOnline) {
-            // Keeps Recently Played current while Home is on screen, as the
-            // web does every two minutes.
-            guard network.isOnline else { return }
-            async let albums: Void = home.refreshAutomatically()
-            async let pins: Void = pinned.refresh()
-            _ = await (albums, pins)
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(120))
-                guard !Task.isCancelled else { return }
-                await home.refreshRecentlyPlayed()
+            .task { await home.loadIfNeeded() }
+            .task(id: pinned.items) { await pinned.refresh() }
+            .task(id: network.isOnline) {
+                // Keeps Recently Played current while Home is on screen, as the
+                // web does every two minutes.
+                guard network.isOnline else { return }
+                async let albums: Void = home.refreshAutomatically()
+                async let pins: Void = pinned.refresh()
+                _ = await (albums, pins)
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(120))
+                    guard !Task.isCancelled else { return }
+                    await home.refreshRecentlyPlayed()
+                }
             }
         }
     }
@@ -118,49 +127,55 @@ private struct HomeSkeleton: View {
     private var tileWidth: CGFloat { sizeClass == .regular ? 180 : 160 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Layout.sectionSpacing) {
-            if showCarousel {
-                HStack(spacing: sizeClass == .regular ? 22 : 14) {
-                    block()
-                        .aspectRatio(1, contentMode: .fit)
-                    VStack(alignment: .leading, spacing: 8) {
-                        Spacer(minLength: 0)
-                        block().frame(height: 20)
-                        block().frame(width: 100, height: 14)
+        WithPerceptionTracking {
+            VStack(alignment: .leading, spacing: Layout.sectionSpacing) {
+                if showCarousel {
+                    HStack(spacing: sizeClass == .regular ? 22 : 14) {
+                        block()
+                            .aspectRatio(1, contentMode: .fit)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Spacer(minLength: 0)
+                            block().frame(height: 20)
+                            block().frame(width: 100, height: 14)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(sizeClass == .regular ? 22 : 14)
-                .frame(height: sizeClass == .regular ? 250 : 150)
-                .background(ThemeColor.card, in: .rect(cornerRadius: 14))
-                .pageMargins()
+                    .padding(sizeClass == .regular ? 22 : 14)
+                    .frame(height: sizeClass == .regular ? 250 : 150)
+                    .background(ThemeColor.card, in: .rect(cornerRadius: 14))
+                    .pageMargins()
 
-            }
-            ForEach(0..<shelfCount, id: \.self) { _ in
-                VStack(alignment: .leading, spacing: 12) {
-                    block().frame(width: 160, height: 24)
-                        .pageMargins()
-                    ScrollView(.horizontal) {
-                        HStack(alignment: .top, spacing: Layout.shelfSpacing) {
-                            ForEach(0..<4, id: \.self) { _ in
-                                VStack(alignment: .leading, spacing: 8) {
-                                    block().frame(height: tileWidth)
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        block().frame(height: 16)
-                                        block().frame(width: tileWidth * 0.65, height: 12)
+                }
+                ForEach(0..<shelfCount, id: \.self) { _ in
+                    WithPerceptionTracking {
+                        VStack(alignment: .leading, spacing: 12) {
+                            block().frame(width: 160, height: 24)
+                                .pageMargins()
+                            ScrollView(.horizontal) {
+                                HStack(alignment: .top, spacing: Layout.shelfSpacing) {
+                                    ForEach(0..<4, id: \.self) { _ in
+                                        WithPerceptionTracking {
+                                            VStack(alignment: .leading, spacing: 8) {
+                                                block().frame(height: tileWidth)
+                                                VStack(alignment: .leading, spacing: 4) {
+                                                    block().frame(height: 16)
+                                                    block().frame(width: tileWidth * 0.65, height: 12)
+                                                }
+                                            }
+                                            .frame(width: tileWidth)
+                                        }
                                     }
                                 }
-                                .frame(width: tileWidth)
                             }
+                            .scrollIndicators(.hidden)
+                            .contentMargins(.horizontal, Layout.margin(sizeClass), for: .scrollContent)
                         }
                     }
-                    .scrollIndicators(.hidden)
-                    .contentMargins(.horizontal, Layout.margin(sizeClass), for: .scrollContent)
                 }
             }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
         }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
     }
 
     private func block() -> some View {
@@ -177,17 +192,21 @@ private struct HomeShelf<Item: Identifiable, Tile: View>: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
-        ScrollView(.horizontal) {
-            LazyHStack(alignment: .top, spacing: Layout.shelfSpacing) {
-                ForEach(items) { item in
-                    tile(item)
-                        .frame(width: sizeClass == .regular ? 180 : 160)
+        WithPerceptionTracking {
+            ScrollView(.horizontal) {
+                LazyHStack(alignment: .top, spacing: Layout.shelfSpacing) {
+                    ForEach(items) { item in
+                        WithPerceptionTracking {
+                            tile(item)
+                                .frame(width: sizeClass == .regular ? 180 : 160)
+                        }
+                    }
                 }
             }
+            .scrollIndicators(.hidden)
+            .scrollClipDisabled()
+            .contentMargins(.horizontal, Layout.margin(sizeClass), for: .scrollContent)
         }
-        .scrollIndicators(.hidden)
-        .scrollClipDisabled()
-        .contentMargins(.horizontal, Layout.margin(sizeClass), for: .scrollContent)
     }
 }
 
@@ -202,48 +221,52 @@ private struct OtherDevicesSection: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        let devices = coordination.groups.live + coordination.groups.offlineSnapshots
-        if !devices.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                Button {
-                    router.present(.devices)
-                } label: {
-                    TitleDisclosureLabel {
-                        Label {
-                            Text(t("settings.crossDevice.playback.otherDevices"))
-                                .textCase(.uppercase)
-                                .tracking(0.6)
-                                .foregroundStyle(ThemeColor.mutedForeground)
-                        } icon: {
-                            Image(systemName: "hifispeaker.2.fill")
-                                .foregroundStyle(.tint)
-                        }
-                    }
-                    .font(.caption.weight(.bold))
-                    .lineLimit(1)
-                }
-                .buttonStyle(.touchFeedback)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityHint(t("settings.crossDevice.playback.showDevices"))
-                VStack(spacing: 8) {
-                    ForEach(devices) { summary in
-                        Button {
-                            router.present(.devices)
-                        } label: {
-                            HStack(spacing: 8) {
-                                DevicePlaybackRow(summary: summary)
-                                Image(systemName: "chevron.forward")
-                                    .font(.footnote.weight(.semibold))
-                                    .foregroundStyle(ThemeColor.mutedForeground.opacity(0.6))
+        WithPerceptionTracking {
+            let devices = coordination.groups.live + coordination.groups.offlineSnapshots
+            if !devices.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    Button {
+                        router.present(.devices)
+                    } label: {
+                        TitleDisclosureLabel {
+                            Label {
+                                Text(t("settings.crossDevice.playback.otherDevices"))
+                                    .textCase(.uppercase)
+                                    .tracking(0.6)
+                                    .foregroundStyle(ThemeColor.mutedForeground)
+                            } icon: {
+                                Image(systemName: "hifispeaker.2.fill")
+                                    .foregroundStyle(.tint)
                             }
-                            .padding(12)
-                            .cardSurface(cornerRadius: 14)
                         }
-                        .buttonStyle(.pressable)
+                        .font(.caption.weight(.bold))
+                        .lineLimit(1)
+                    }
+                    .buttonStyle(.touchFeedback)
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityHint(t("settings.crossDevice.playback.showDevices"))
+                    VStack(spacing: 8) {
+                        ForEach(devices) { summary in
+                            WithPerceptionTracking {
+                                Button {
+                                    router.present(.devices)
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        DevicePlaybackRow(summary: summary)
+                                        Image(systemName: "chevron.forward")
+                                            .font(.footnote.weight(.semibold))
+                                            .foregroundStyle(ThemeColor.mutedForeground.opacity(0.6))
+                                    }
+                                    .padding(12)
+                                    .cardSurface(cornerRadius: 14)
+                                }
+                                .buttonStyle(.pressable)
+                            }
+                        }
                     }
                 }
+                .pageMargins()
             }
-            .pageMargins()
         }
     }
 }
@@ -265,38 +288,42 @@ private struct FeaturedCarousel: View {
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        let margin = Layout.margin(sizeClass)
-        ScrollView(.horizontal) {
-            LazyHStack(spacing: margin) {
-                // The end copies let both swipes and autoplay cross the seam.
-                ForEach(0..<pageCount, id: \.self) { page in
-                    FeaturedCard(album: albums[albumIndex(for: page)])
-                        .containerRelativeFrame(.horizontal)
+        WithPerceptionTracking {
+            let margin = Layout.margin(sizeClass)
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: margin) {
+                    // The end copies let both swipes and autoplay cross the seam.
+                    ForEach(0..<pageCount, id: \.self) { page in
+                        WithPerceptionTracking {
+                            FeaturedCard(album: albums[albumIndex(for: page)])
+                                .containerRelativeFrame(.horizontal)
+                        }
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.viewAligned)
+            .scrollPosition(id: $selection)
+            .scrollIndicators(.hidden)
+            .scrollClipDisabled()
+            .contentMargins(.horizontal, margin, for: .scrollContent)
+            .onScrollPhaseChange { _, phase in
+                isScrolling = phase != .idle
+                if phase == .idle {
+                    recenterSelection()
                 }
             }
-            .scrollTargetLayout()
-        }
-        .scrollTargetBehavior(.viewAligned)
-        .scrollPosition(id: $selection)
-        .scrollIndicators(.hidden)
-        .scrollClipDisabled()
-        .contentMargins(.horizontal, margin, for: .scrollContent)
-        .onScrollPhaseChange { _, phase in
-            isScrolling = phase != .idle
-            if phase == .idle {
-                recenterSelection()
+            .onChange(of: albums.map(\.id), initial: true) { _, _ in
+                setSelectionWithoutAnimation(albums.count > 1 ? 1 : 0)
             }
-        }
-        .onChange(of: albums.map(\.id), initial: true) { _, _ in
-            setSelectionWithoutAnimation(albums.count > 1 ? 1 : 0)
-        }
-        .task(id: canAutoAdvance ? albums.map(\.id) : []) {
-            guard canAutoAdvance else { return }
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(10))
-                guard !Task.isCancelled, canAutoAdvance else { return }
-                withAnimation(.smooth(duration: 0.6)) {
-                    selection = min((selection ?? 1) + 1, albums.count + 1)
+            .task(id: canAutoAdvance ? albums.map(\.id) : []) {
+                guard canAutoAdvance else { return }
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(10))
+                    guard !Task.isCancelled, canAutoAdvance else { return }
+                    withAnimation(.smooth(duration: 0.6)) {
+                        selection = min((selection ?? 1) + 1, albums.count + 1)
+                    }
                 }
             }
         }
@@ -347,60 +374,66 @@ private struct FeaturedCard: View {
     private static let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
 
     var body: some View {
-        let height: CGFloat = sizeClass == .regular ? 250 : 150
-        let padding: CGFloat = sizeClass == .regular ? 22 : 14
-        NavigationLink(value: AppRoute.album(album)) {
-            HStack(spacing: padding) {
-                ArtworkImage(id: album.coverArt, cornerRadius: 8)
-                    .frame(width: height - padding * 2, height: height - padding * 2)
-                    .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
-                VStack(alignment: .leading, spacing: 2) {
-                    Spacer(minLength: 0)
-                    Text(album.name)
-                        .displayFont(.card)
-                        .lineLimit(2)
-                    Text(album.artistLine)
-                        .font(.subheadline.weight(.semibold))
-                        .opacity(0.7)
-                        .lineLimit(1)
-                    if let details {
-                        Text(details)
-                            .font(.caption.weight(.medium))
-                            .opacity(0.6)
+        WithPerceptionTracking {
+            let height: CGFloat = sizeClass == .regular ? 250 : 150
+            let padding: CGFloat = sizeClass == .regular ? 22 : 14
+            NavigationLink(value: AppRoute.album(album)) {
+                HStack(spacing: padding) {
+                    ArtworkImage(id: album.coverArt, cornerRadius: 8)
+                        .frame(width: height - padding * 2, height: height - padding * 2)
+                        .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Spacer(minLength: 0)
+                        Text(album.name)
+                            .displayFont(.card)
+                            .lineLimit(2)
+                        Text(album.artistLine)
+                            .font(.subheadline.weight(.semibold))
+                            .opacity(0.7)
                             .lineLimit(1)
-                            .padding(.top, 2)
+                        if let details {
+                            Text(details)
+                                .font(.caption.weight(.medium))
+                                .opacity(0.6)
+                                .lineLimit(1)
+                                .padding(.top, 2)
+                        }
+                    }
+                    .foregroundStyle(Color.primary)
+                    .multilineTextAlignment(.leading)
+                    .padding(.trailing, 44)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(padding)
+                .frame(height: height)
+                .background { backdrop }
+                .clipShape(Self.shape)
+                .overlay {
+                    WithPerceptionTracking {
+                        Self.shape.strokeBorder(theme.palette.border, lineWidth: 1)
                     }
                 }
-                .foregroundStyle(Color.primary)
-                .multilineTextAlignment(.leading)
-                .padding(.trailing, 44)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Self.shape)
             }
-            .padding(padding)
-            .frame(height: height)
-            .background { backdrop }
-            .clipShape(Self.shape)
-            .overlay {
-                Self.shape.strokeBorder(theme.palette.border, lineWidth: 1)
+            .buttonStyle(.pressable)
+            .contextMenu {
+                AlbumMenuItems(album: album)
             }
-            .contentShape(Self.shape)
-        }
-        .buttonStyle(.pressable)
-        .contextMenu {
-            AlbumMenuItems(album: album)
-        }
-        .overlay(alignment: .bottomTrailing) {
-            Button {
-                Task { await player.playAlbum(id: album.id) }
-            } label: {
-                Image(systemName: "play.fill")
-                    .font(.body)
-                    .frame(width: 24, height: 24)
+            .overlay(alignment: .bottomTrailing) {
+                WithPerceptionTracking {
+                    Button {
+                        Task { await player.playAlbum(id: album.id) }
+                    } label: {
+                        Image(systemName: "play.fill")
+                            .font(.body)
+                            .frame(width: 24, height: 24)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .padding(padding - 4)
+                    .accessibilityLabel(t("options.play"))
+                }
             }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
-            .padding(padding - 4)
-            .accessibilityLabel(t("options.play"))
         }
     }
 

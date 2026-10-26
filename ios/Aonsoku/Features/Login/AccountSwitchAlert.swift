@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 extension View {
@@ -22,26 +23,28 @@ private struct AccountSwitchAlert: ViewModifier {
     @State private var isShowing = false
 
     func body(content: Content) -> some View {
-        content
-            .alert(title, isPresented: $isShowing, presenting: request) { request in
-                if request.canKeepLibrary {
-                    Button(t("native.accountSwitch.keep")) {
-                        decide { try app.keepLibraryData() }
+        WithPerceptionTracking {
+            content
+                .alert(title, isPresented: $isShowing, presenting: request) { request in
+                    if request.canKeepLibrary {
+                        Button(t("native.accountSwitch.keep")) {
+                            decide { try app.keepLibraryData() }
+                        }
                     }
+                    Button(t("native.accountSwitch.erase"), role: .destructive) {
+                        decide { try app.confirmAccountSwitch() }
+                    }
+                    Button(t("generic.cancel"), role: .cancel) {
+                        app.cancelAccountSwitch()
+                    }
+                } message: { request in
+                    Text(message(for: request))
                 }
-                Button(t("native.accountSwitch.erase"), role: .destructive) {
-                    decide { try app.confirmAccountSwitch() }
+                .onChange(of: app.pendingAccountSwitch, initial: true) { _, pending in
+                    if let pending { request = pending }
+                    isShowing = pending != nil
                 }
-                Button(t("generic.cancel"), role: .cancel) {
-                    app.cancelAccountSwitch()
-                }
-            } message: { request in
-                Text(message(for: request))
-            }
-            .onChange(of: app.pendingAccountSwitch, initial: true) { _, pending in
-                if let pending { request = pending }
-                isShowing = pending != nil
-            }
+        }
     }
 
     private var title: String {

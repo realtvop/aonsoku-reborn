@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// Adds songs to one of the user's playlists, or to a new one.
@@ -17,62 +18,72 @@ struct AddToPlaylistView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
-            List {
-                if !isSearching {
-                    NewPlaylistRow {
-                        router.present(.createPlaylist(songs: songs))
-                    }
-                }
-                ForEach(filtered) { playlist in
-                    Button {
-                        add(to: playlist)
-                    } label: {
-                        PlaylistChoiceRow(playlist: playlist, isAdding: addingTo == playlist.id)
-                    }
-                    .buttonStyle(.touchFeedback)
-                    .listRowSeparator(.hidden)
-                    .compactRowInsets()
-                }
-            }
-            .listStyle(.plain)
-            .scrollDismissesKeyboard(.interactively)
-            .disabled(addingTo != nil)
-            .overlay {
-                if owned.isEmpty {
-                    switch playlists.phase {
-                    case .idle, .loading:
-                        LoadingStateView()
-                    case let .failed(message):
-                        ErrorStateView(message: message) {
-                            Task { await playlists.reload() }
+        WithPerceptionTracking {
+            NavigationStack {
+                WithPerceptionTracking {
+                    List {
+                        if !isSearching {
+                            NewPlaylistRow {
+                                router.present(.createPlaylist(songs: songs))
+                            }
                         }
-                    case .loaded:
-                        EmptyView()
+                        ForEach(filtered) { playlist in
+                            WithPerceptionTracking {
+                                Button {
+                                    add(to: playlist)
+                                } label: {
+                                    PlaylistChoiceRow(playlist: playlist, isAdding: addingTo == playlist.id)
+                                }
+                                .buttonStyle(.touchFeedback)
+                                .listRowSeparator(.hidden)
+                                .compactRowInsets()
+                            }
+                        }
                     }
-                } else if isSearching, filtered.isEmpty {
-                    EmptyStateView(title: t("options.playlist.notFound"), systemImage: "magnifyingglass")
+                    .listStyle(.plain)
+                    .scrollDismissesKeyboard(.interactively)
+                    .disabled(addingTo != nil)
+                    .overlay {
+                        WithPerceptionTracking {
+                            if owned.isEmpty {
+                                switch playlists.phase {
+                                case .idle, .loading:
+                                    LoadingStateView()
+                                case let .failed(message):
+                                    ErrorStateView(message: message) {
+                                        Task { await playlists.reload() }
+                                    }
+                                case .loaded:
+                                    EmptyView()
+                                }
+                            } else if isSearching, filtered.isEmpty {
+                                EmptyStateView(title: t("options.playlist.notFound"), systemImage: "magnifyingglass")
+                            }
+                        }
+                    }
+                    .themedBackground()
+                    .navigationTitle(t("options.playlist.add"))
+                    .navigationBarTitleDisplayMode(.inline)
+                    .searchable(
+                        text: $searchText,
+                        placement: .navigationBarDrawer(displayMode: .always),
+                        prompt: Text(t("options.playlist.search"))
+                    )
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            WithPerceptionTracking {
+                                Button(role: .close) {
+                                    dismiss()
+                                }
+                            }
+                        }
+                    }
                 }
             }
-            .themedBackground()
-            .navigationTitle(t("options.playlist.add"))
-            .navigationBarTitleDisplayMode(.inline)
-            .searchable(
-                text: $searchText,
-                placement: .navigationBarDrawer(displayMode: .always),
-                prompt: Text(t("options.playlist.search"))
-            )
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(role: .close) {
-                        dismiss()
-                    }
-                }
+            .presentationDetents([.medium, .large])
+            .task {
+                await playlists.loadIfNeeded()
             }
-        }
-        .presentationDetents([.medium, .large])
-        .task {
-            await playlists.loadIfNeeded()
         }
     }
 
@@ -130,29 +141,31 @@ private struct PlaylistChoiceRow: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        HStack(spacing: 12) {
-            ArtworkImage(
-                id: playlist.coverArt,
-                size: .small,
-                cornerRadius: Layout.rowArtworkRadius,
-                placeholder: "music.note.list"
-            )
-            .frame(width: 48, height: 48)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(playlist.name)
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(Color.primary)
-                    .lineLimit(1)
-                Text(t("playlist.songCount", count: playlist.songCount))
-                    .font(.footnote)
-                    .foregroundStyle(ThemeColor.mutedForeground)
-                    .lineLimit(1)
+        WithPerceptionTracking {
+            HStack(spacing: 12) {
+                ArtworkImage(
+                    id: playlist.coverArt,
+                    size: .small,
+                    cornerRadius: Layout.rowArtworkRadius,
+                    placeholder: "music.note.list"
+                )
+                .frame(width: 48, height: 48)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(playlist.name)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(Color.primary)
+                        .lineLimit(1)
+                    Text(t("playlist.songCount", count: playlist.songCount))
+                        .font(.footnote)
+                        .foregroundStyle(ThemeColor.mutedForeground)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                if isAdding {
+                    ProgressView()
+                }
             }
-            Spacer(minLength: 0)
-            if isAdding {
-                ProgressView()
-            }
+            .contentShape(.rect)
         }
-        .contentShape(.rect)
     }
 }

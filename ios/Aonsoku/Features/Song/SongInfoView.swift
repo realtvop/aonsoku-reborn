@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// Everything the server knows about a song, like the web song details
@@ -19,36 +20,44 @@ struct SongInfoView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ThemedList {
-                Section {
-                    header
-                }
-                Section {
-                    general
-                }
-                Section {
-                    file
-                }
-                if let gain = song.replayGain {
-                    Section(t("settings.audio.replayGain.group")) {
-                        replayGain(gain)
+        WithPerceptionTracking {
+            NavigationStack {
+                WithPerceptionTracking {
+                    ThemedList {
+                        WithPerceptionTracking {
+                            Section {
+                                header
+                            }
+                            Section {
+                                general
+                            }
+                            Section {
+                                file
+                            }
+                            if let gain = song.replayGain {
+                                Section(t("settings.audio.replayGain.group")) {
+                                    replayGain(gain)
+                                }
+                            }
+                        }
+                    }
+                    .navigationTitle(t("songInfo.title"))
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            WithPerceptionTracking {
+                                Button(role: .close) {
+                                    dismiss()
+                                }
+                            }
+                        }
                     }
                 }
             }
-            .navigationTitle(t("songInfo.title"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(role: .close) {
-                        dismiss()
-                    }
-                }
+            .presentationDetents([.medium, .large])
+            .task {
+                await refresh()
             }
-        }
-        .presentationDetents([.medium, .large])
-        .task {
-            await refresh()
         }
     }
 
@@ -97,7 +106,9 @@ struct SongInfoView: View {
             LabeledContent(t("table.columns.contributors")) {
                 VStack(alignment: .trailing, spacing: 2) {
                     ForEach(Array(song.contributors.enumerated()), id: \.offset) { _, contributor in
-                        Text(contributorLine(contributor))
+                        WithPerceptionTracking {
+                            Text(contributorLine(contributor))
+                        }
                     }
                 }
                 .multilineTextAlignment(.trailing)
@@ -114,8 +125,10 @@ struct SongInfoView: View {
             row(t("table.columns.recordLabel"), recordLabels.joined(separator: "\n"))
         }
         ForEach(genres, id: \.self) { genre in
-            link(t("table.columns.genres"), genre) {
-                router.navigate(to: .albums(.byGenre(genre)))
+            WithPerceptionTracking {
+                link(t("table.columns.genres"), genre) {
+                    router.navigate(to: .albums(.byGenre(genre)))
+                }
             }
         }
         row(t("table.columns.duration"), Formatters.clock(TimeInterval(song.duration)))
@@ -201,12 +214,14 @@ struct SongInfoView: View {
     @ViewBuilder
     private func artists(_ label: String, _ credits: [ArtistCredit]) -> some View {
         ForEach(Array(credits.enumerated()), id: \.offset) { _, credit in
-            if let id = credit.id, !id.isEmpty {
-                link(label, credit.name) {
-                    router.navigate(to: .artist(id: id, name: credit.name))
+            WithPerceptionTracking {
+                if let id = credit.id, !id.isEmpty {
+                    link(label, credit.name) {
+                        router.navigate(to: .artist(id: id, name: credit.name))
+                    }
+                } else {
+                    row(label, credit.name)
                 }
-            } else {
-                row(label, credit.name)
             }
         }
     }

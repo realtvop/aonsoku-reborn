@@ -453,8 +453,10 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   the remote `add_to_queue_next`/`add_to_queue_last` commands, starts a queue
   from them and loads the first song paused, so the coordination snapshot
   exists at once and playback begins only on a later play. SwiftUI reads
-  `@Observable` stores created by `AppModel`; views do not locate services
-  through a bridge or open the database directly.
+  `@Perceptible` stores created by `AppModel` through Perception, which
+  backports property-level observation to iOS 16. View bodies and escaping
+  reader, row and presentation builders use `WithPerceptionTracking`; views
+  do not locate services through a bridge or open the database directly.
 - `LibraryService` is the public iOS library boundary for native UI. It owns
   GRDB repository access, metadata sync/scheduling, typed library queries, and
   cover/avatar caching through `AppServices.library`; native UI must not open

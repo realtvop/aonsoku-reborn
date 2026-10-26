@@ -1,5 +1,5 @@
 import Foundation
-import Observation
+import Perception
 
 /// Offline downloads and the cache manager (web `src/service/cache/*`).
 ///
@@ -9,32 +9,32 @@ import Observation
 /// evicted oldest first over the quota. Albums and playlists get marker
 /// rows so they show as downloaded.
 @MainActor
-@Observable
+@Perceptible
 public final class DownloadsStore {
     public private(set) var usage = CacheUsage()
     public private(set) var activeDownloads = ActiveDownloadsSummary()
     /// Increments when the index changes, for screens listing downloads.
     public private(set) var revision = 0
 
-    @ObservationIgnored public let audio: AudioService
-    @ObservationIgnored public let library: LibraryService
-    @ObservationIgnored public let repository: LibraryRepository
-    @ObservationIgnored public let settings: SettingsStore
-    @ObservationIgnored public weak var favorites: FavoritesStore?
-    @ObservationIgnored public weak var toasts: ToastCenter?
-    @ObservationIgnored public var onAssetsCleared: (() -> Void)?
+    @PerceptionIgnored public let audio: AudioService
+    @PerceptionIgnored public let library: LibraryService
+    @PerceptionIgnored public let repository: LibraryRepository
+    @PerceptionIgnored public let settings: SettingsStore
+    @PerceptionIgnored public weak var favorites: FavoritesStore?
+    @PerceptionIgnored public weak var toasts: ToastCenter?
+    @PerceptionIgnored public var onAssetsCleared: (() -> Void)?
 
-    @ObservationIgnored private var rows: [String: CacheMetaRecord] = [:]
-    @ObservationIgnored private var progress: [String: DownloadProgress] = [:]
-    @ObservationIgnored private var progressOrder: [String] = []
-    @ObservationIgnored private var pending: [String: PendingDownload] = [:]
-    @ObservationIgnored private var collectionSongIds: [String: [String]] = [:]
-    @ObservationIgnored private var audioObservation: UUID?
-    @ObservationIgnored private var didToastBatchFailure = false
-    @ObservationIgnored private var started = false
-    @ObservationIgnored private var lifecycleGeneration: UInt64 = 0
-    @ObservationIgnored private let now: @Sendable () -> Date
-    @ObservationIgnored private let commands: DownloadCommands
+    @PerceptionIgnored private var rows: [String: CacheMetaRecord] = [:]
+    @PerceptionIgnored private var progress: [String: DownloadProgress] = [:]
+    @PerceptionIgnored private var progressOrder: [String] = []
+    @PerceptionIgnored private var pending: [String: PendingDownload] = [:]
+    @PerceptionIgnored private var collectionSongIds: [String: [String]] = [:]
+    @PerceptionIgnored private var audioObservation: UUID?
+    @PerceptionIgnored private var didToastBatchFailure = false
+    @PerceptionIgnored private var started = false
+    @PerceptionIgnored private var lifecycleGeneration: UInt64 = 0
+    @PerceptionIgnored private let now: @Sendable () -> Date
+    @PerceptionIgnored private let commands: DownloadCommands
 
     public init(
         audio: AudioService,

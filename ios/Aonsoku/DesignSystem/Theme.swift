@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 // MARK: - Tokens
@@ -203,19 +204,21 @@ private struct ThemeRootModifier: ViewModifier {
     @Environment(\.colorScheme) private var systemScheme
 
     func body(content: Content) -> some View {
-        let appearance = settings.settings.appearance
-        let preferred: ColorScheme? = switch appearance.themeMode {
-        case .light: .light
-        case .dark: .dark
-        case .system: nil
+        WithPerceptionTracking {
+            let appearance = settings.settings.appearance
+            let preferred: ColorScheme? = switch appearance.themeMode {
+            case .light: .light
+            case .dark: .dark
+            case .system: nil
+            }
+            let scheme = preferred ?? systemScheme
+            let theme = scheme == .dark ? appearance.darkTheme : appearance.lightTheme
+            let context = ThemeContext(theme: theme)
+            content
+                .environment(\.themeContext, context)
+                .tint(context.palette.primary)
+                .preferredColorScheme(preferred)
         }
-        let scheme = preferred ?? systemScheme
-        let theme = scheme == .dark ? appearance.darkTheme : appearance.lightTheme
-        let context = ThemeContext(theme: theme)
-        content
-            .environment(\.themeContext, context)
-            .tint(context.palette.primary)
-            .preferredColorScheme(preferred)
     }
 }
 
@@ -243,12 +246,16 @@ private struct ThemedBackgroundModifier: ViewModifier {
     let grouped: Bool
 
     func body(content: Content) -> some View {
-        content
-            .scrollContentBackground(.hidden)
-            .background {
-                (grouped ? theme.palette.groupedBackground : theme.palette.page)
-                    .ignoresSafeArea()
-            }
+        WithPerceptionTracking {
+            content
+                .scrollContentBackground(.hidden)
+                .background {
+                    WithPerceptionTracking {
+                        (grouped ? theme.palette.groupedBackground : theme.palette.page)
+                            .ignoresSafeArea()
+                    }
+                }
+        }
     }
 }
 
@@ -257,9 +264,11 @@ private struct ThemedRowModifier: ViewModifier {
     let plain: Bool
 
     func body(content: Content) -> some View {
-        content
-            .listRowBackground(plain ? Color.clear : theme.palette.elevated)
-            .listRowSeparatorTint(theme.palette.border)
+        WithPerceptionTracking {
+            content
+                .listRowBackground(plain ? Color.clear : theme.palette.elevated)
+                .listRowSeparatorTint(theme.palette.border)
+        }
     }
 }
 
@@ -621,14 +630,16 @@ struct ThemedForm<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        Form {
-            Group {
-                content
+        WithPerceptionTracking {
+            Form {
+                Group {
+                    content
+                }
+                .themedRow()
             }
-            .themedRow()
+            .scrollDismissesKeyboard(.interactively)
+            .themedBackground(grouped: true)
         }
-        .scrollDismissesKeyboard(.interactively)
-        .themedBackground(grouped: true)
     }
 }
 
@@ -637,12 +648,14 @@ struct ThemedList<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        List {
-            Group {
-                content
+        WithPerceptionTracking {
+            List {
+                Group {
+                    content
+                }
+                .themedRow()
             }
-            .themedRow()
+            .themedBackground(grouped: true)
         }
-        .themedBackground(grouped: true)
     }
 }

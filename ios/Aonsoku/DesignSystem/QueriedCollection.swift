@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// Owns a paged list for `query` and replaces it when the query changes.
@@ -21,17 +22,19 @@ struct QueriedCollection<Query: Hashable & Sendable, Item: Identifiable & Sendab
     @State private var loadedQuery: Query?
 
     var body: some View {
-        Group {
-            if let collection {
-                content(collection)
-            } else {
-                LoadingStateView()
+        WithPerceptionTracking {
+            Group {
+                if let collection {
+                    content(collection)
+                } else {
+                    LoadingStateView()
+                }
             }
-        }
-        .task(id: query) { await load() }
-        .onChange(of: sync.revision) {
-            guard let collection, collection.items.count <= pageSize else { return }
-            collection.reload()
+            .task(id: query) { await load() }
+            .onChange(of: sync.revision) {
+                guard let collection, collection.items.count <= pageSize else { return }
+                collection.reload()
+            }
         }
     }
 

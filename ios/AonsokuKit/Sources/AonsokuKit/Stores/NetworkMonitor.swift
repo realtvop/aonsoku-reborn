@@ -1,6 +1,6 @@
 import Foundation
 import Network
-import Observation
+import Perception
 
 /// Network status readable from any thread, for repositories and sync.
 public protocol Connectivity: Sendable {
@@ -24,7 +24,7 @@ public struct FixedConnectivity: Connectivity {
 /// Tracks the current network path with `NWPathMonitor` and publishes it to
 /// SwiftUI. `connectivity` mirrors the same values behind a lock.
 @MainActor
-@Observable
+@Perceptible
 public final class NetworkMonitor {
     /// The path is satisfied. True until the first path update arrives.
     public private(set) var isOnline = true
@@ -36,13 +36,13 @@ public final class NetworkMonitor {
     public var isMetered: Bool { isExpensive || isConstrained }
 
     public nonisolated let connectivity: any Connectivity
-    @ObservationIgnored private nonisolated let sharedConnectivity: LockedConnectivity
-    @ObservationIgnored private nonisolated let queue = DispatchQueue(
+    @PerceptionIgnored private nonisolated let sharedConnectivity: LockedConnectivity
+    @PerceptionIgnored private nonisolated let queue = DispatchQueue(
         label: "github.realtvop.aonsoku.network-monitor"
     )
-    @ObservationIgnored private let monitorsPaths: Bool
-    @ObservationIgnored private var monitor: NWPathMonitor?
-    @ObservationIgnored private var generation = UUID()
+    @PerceptionIgnored private let monitorsPaths: Bool
+    @PerceptionIgnored private var monitor: NWPathMonitor?
+    @PerceptionIgnored private var generation = UUID()
 
     public init() {
         let sharedConnectivity = LockedConnectivity(isOnline: true, isMetered: false)

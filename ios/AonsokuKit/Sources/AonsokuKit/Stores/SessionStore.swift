@@ -1,5 +1,5 @@
 import Foundation
-import Observation
+import Perception
 
 /// The signed-in server, persisted under `session.account.v1`. The Keychain
 /// credentials hold the active URL; this keeps the primary and fallback
@@ -74,7 +74,7 @@ public enum ServerCompatibility: Hashable, Sendable {
 /// Sign-in state. Credentials stay in the Keychain owned by
 /// `AuthenticationService`; library data is kept on sign-out (web logout).
 @MainActor
-@Observable
+@Perceptible
 public final class SessionStore {
     public static let accountStorageKey = "session.account.v1"
 
@@ -82,10 +82,10 @@ public final class SessionStore {
     /// The signed-in user's roles, loaded with `getUser` when online.
     public private(set) var user: SubsonicUser?
 
-    @ObservationIgnored public let authentication: AuthenticationService
-    @ObservationIgnored public let preferences: PreferencesService
-    @ObservationIgnored public let api: any SubsonicAPI
-    @ObservationIgnored private let authenticationClient: SessionAuthenticationClient
+    @PerceptionIgnored public let authentication: AuthenticationService
+    @PerceptionIgnored public let preferences: PreferencesService
+    @PerceptionIgnored public let api: any SubsonicAPI
+    @PerceptionIgnored private let authenticationClient: SessionAuthenticationClient
 
     public init(
         authentication: AuthenticationService,

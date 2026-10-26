@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// Square cover art from the cover cache, with a symbol while it loads or
@@ -12,27 +13,35 @@ struct ArtworkImage: View {
     var placeholder = "music.note"
 
     var body: some View {
-        ArtworkReader(id: id, size: size) { image in
-            Rectangle()
-                .fill(.fill.tertiary)
-                .overlay {
-                    if let image {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
-                            .transition(.opacity)
-                    } else {
-                        PlaceholderSymbol(name: placeholder)
-                    }
+        WithPerceptionTracking {
+            ArtworkReader(id: id, size: size) { image in
+                WithPerceptionTracking {
+                    Rectangle()
+                        .fill(.fill.tertiary)
+                        .overlay {
+                            WithPerceptionTracking {
+                                if let image {
+                                    Image(uiImage: image)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .transition(.opacity)
+                                } else {
+                                    PlaceholderSymbol(name: placeholder)
+                                }
+                            }
+                        }
+                        .aspectRatio(1, contentMode: .fit)
+                        .clipShape(shape)
+                        .overlay {
+                            WithPerceptionTracking {
+                                shape.stroke(.primary.opacity(0.08), lineWidth: 0.5)
+                            }
+                        }
+                        .animation(.easeOut(duration: 0.2), value: image != nil)
                 }
-                .aspectRatio(1, contentMode: .fit)
-                .clipShape(shape)
-                .overlay {
-                    shape.stroke(.primary.opacity(0.08), lineWidth: 0.5)
-                }
-                .animation(.easeOut(duration: 0.2), value: image != nil)
+            }
+            .accessibilityHidden(true)
         }
-        .accessibilityHidden(true)
     }
 
     private var shape: AnyShape {
@@ -52,21 +61,27 @@ struct ArtworkBackdrop: View {
     var focus = UnitPoint(x: 0.5, y: 0.4)
 
     var body: some View {
-        ArtworkReader(id: id, size: size) { image in
-            GeometryReader { proxy in
-                if let image {
-                    let frame = Self.fill(image.size, in: proxy.size, focus: focus)
-                    Image(uiImage: image)
-                        .resizable()
-                        .frame(width: frame.width, height: frame.height)
-                        .offset(x: frame.minX, y: frame.minY)
-                        .transition(.opacity)
+        WithPerceptionTracking {
+            ArtworkReader(id: id, size: size) { image in
+                WithPerceptionTracking {
+                    GeometryReader { proxy in
+                        WithPerceptionTracking {
+                            if let image {
+                                let frame = Self.fill(image.size, in: proxy.size, focus: focus)
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .frame(width: frame.width, height: frame.height)
+                                    .offset(x: frame.minX, y: frame.minY)
+                                    .transition(.opacity)
+                            }
+                        }
+                    }
+                    .clipped()
+                    .animation(.easeOut(duration: 0.3), value: image != nil)
                 }
             }
-            .clipped()
-            .animation(.easeOut(duration: 0.3), value: image != nil)
+            .accessibilityHidden(true)
         }
-        .accessibilityHidden(true)
     }
 
     /// Where an image of `imageSize` goes to fill `bounds` with `focus` as
@@ -97,18 +112,20 @@ struct ArtworkReader<Content: View>: View {
     @State private var loaded: LoadedImage?
 
     var body: some View {
-        content(currentImage)
-            .task(id: key) { await load() }
-            .onReceive(
-                NotificationCenter.default.publisher(for: .aonsokuCoverImageCached)
-            ) { notification in
-                guard let id,
-                      notification.userInfo?[ImageCacheNotification.coverArtIdKey]
-                          as? String == id else {
-                    return
+        WithPerceptionTracking {
+            content(currentImage)
+                .task(id: key) { await load() }
+                .onReceive(
+                    NotificationCenter.default.publisher(for: .aonsokuCoverImageCached)
+                ) { notification in
+                    guard let id,
+                          notification.userInfo?[ImageCacheNotification.coverArtIdKey]
+                              as? String == id else {
+                        return
+                    }
+                    Task { await load() }
                 }
-                Task { await load() }
-            }
+        }
     }
 
     private var key: String? {
@@ -140,28 +157,34 @@ struct AvatarImage: View {
     @State private var image: UIImage?
 
     var body: some View {
-        Circle()
-            .fill(.tint)
-            .overlay {
-                LinearGradient(colors: [.white.opacity(0.2), .clear], startPoint: .top, endPoint: .bottom)
-            }
-            .overlay {
-                if let image {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                } else {
-                    Text(username.prefix(1).uppercased())
-                        .font(.system(size: size * 0.45, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white)
+        WithPerceptionTracking {
+            Circle()
+                .fill(.tint)
+                .overlay {
+                    WithPerceptionTracking {
+                        LinearGradient(colors: [.white.opacity(0.2), .clear], startPoint: .top, endPoint: .bottom)
+                    }
                 }
-            }
-            .frame(width: size, height: size)
-            .clipShape(.circle)
-            .task(id: username) {
-                image = await app.artwork.avatar(username: username)
-            }
-            .accessibilityHidden(true)
+                .overlay {
+                    WithPerceptionTracking {
+                        if let image {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFill()
+                        } else {
+                            Text(username.prefix(1).uppercased())
+                                .font(.system(size: size * 0.45, weight: .semibold, design: .rounded))
+                                .foregroundStyle(.white)
+                        }
+                    }
+                }
+                .frame(width: size, height: size)
+                .clipShape(.circle)
+                .task(id: username) {
+                    image = await app.artwork.avatar(username: username)
+                }
+                .accessibilityHidden(true)
+        }
     }
 }
 
@@ -174,11 +197,15 @@ private struct PlaceholderSymbol: View {
     let name: String
 
     var body: some View {
-        GeometryReader { proxy in
-            Image(systemName: name)
-                .font(.system(size: max(proxy.size.width * 0.3, 10), weight: .medium))
-                .foregroundStyle(.tertiary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        WithPerceptionTracking {
+            GeometryReader { proxy in
+                WithPerceptionTracking {
+                    Image(systemName: name)
+                        .font(.system(size: max(proxy.size.width * 0.3, 10), weight: .medium))
+                        .foregroundStyle(.tertiary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
         }
     }
 }

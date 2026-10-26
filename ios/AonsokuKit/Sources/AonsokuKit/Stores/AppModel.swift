@@ -1,11 +1,11 @@
 import Foundation
-import Observation
+import Perception
 
 /// The app's composition root. Creates every store, connects them, and runs
 /// the launch, sign-in and sign-out sequences. The SwiftUI app creates one
 /// and puts it in the environment.
 @MainActor
-@Observable
+@Perceptible
 public final class AppModel {
     /// `start()` has loaded settings, the language and the session.
     public private(set) var isStarted = false
@@ -19,33 +19,33 @@ public final class AppModel {
     public private(set) var pendingAccountSwitch: AccountSwitchRequest?
     public var isAwaitingAccountDecision: Bool { pendingAccountSwitch != nil }
 
-    @ObservationIgnored public let services: AppServices
-    @ObservationIgnored public let api: any SubsonicAPI
-    @ObservationIgnored public let repository: LibraryRepository
-    @ObservationIgnored public let artwork: ArtworkProvider
+    @PerceptionIgnored public let services: AppServices
+    @PerceptionIgnored public let api: any SubsonicAPI
+    @PerceptionIgnored public let repository: LibraryRepository
+    @PerceptionIgnored public let artwork: ArtworkProvider
 
-    @ObservationIgnored public let network: NetworkMonitor
-    @ObservationIgnored public let toasts: ToastCenter
-    @ObservationIgnored public let localizer: Localizer
-    @ObservationIgnored public let settings: SettingsStore
-    @ObservationIgnored public let session: SessionStore
-    @ObservationIgnored public let sync: LibrarySyncStore
-    @ObservationIgnored public let home: HomeStore
-    @ObservationIgnored public let pinned: PinnedHomeStore
-    @ObservationIgnored public let favorites: FavoritesStore
-    @ObservationIgnored public let playlists: PlaylistsStore
-    @ObservationIgnored public let radios: RadioStore
-    @ObservationIgnored public let history: ListeningHistoryStore
-    @ObservationIgnored public let player: PlayerStore
-    @ObservationIgnored public let lyrics: LyricsStore
-    @ObservationIgnored public let downloads: DownloadsStore
-    @ObservationIgnored public let coordination: CoordinationStore
+    @PerceptionIgnored public let network: NetworkMonitor
+    @PerceptionIgnored public let toasts: ToastCenter
+    @PerceptionIgnored public let localizer: Localizer
+    @PerceptionIgnored public let settings: SettingsStore
+    @PerceptionIgnored public let session: SessionStore
+    @PerceptionIgnored public let sync: LibrarySyncStore
+    @PerceptionIgnored public let home: HomeStore
+    @PerceptionIgnored public let pinned: PinnedHomeStore
+    @PerceptionIgnored public let favorites: FavoritesStore
+    @PerceptionIgnored public let playlists: PlaylistsStore
+    @PerceptionIgnored public let radios: RadioStore
+    @PerceptionIgnored public let history: ListeningHistoryStore
+    @PerceptionIgnored public let player: PlayerStore
+    @PerceptionIgnored public let lyrics: LyricsStore
+    @PerceptionIgnored public let downloads: DownloadsStore
+    @PerceptionIgnored public let coordination: CoordinationStore
 
-    @ObservationIgnored private var activation: Task<Void, Never>?
-    @ObservationIgnored private var smartDownloadsReady = false
-    @ObservationIgnored private var smartDownloadsTask: Task<Void, Never>?
-    @ObservationIgnored private var smartDownloadsGeneration: UInt64 = 0
-    @ObservationIgnored private var smartDownloadsNeedFavoritesReload = false
+    @PerceptionIgnored private var activation: Task<Void, Never>?
+    @PerceptionIgnored private var smartDownloadsReady = false
+    @PerceptionIgnored private var smartDownloadsTask: Task<Void, Never>?
+    @PerceptionIgnored private var smartDownloadsGeneration: UInt64 = 0
+    @PerceptionIgnored private var smartDownloadsNeedFavoritesReload = false
 
     static let libraryOwnerStorageKey = "session.library-owner.v1"
     static let pendingAccountSwitchStorageKey = "session.pending-account-switch.v1"
@@ -493,7 +493,7 @@ public final class AppModel {
     private func observePlayback() {
         guard isActive else { return }
         let player = player
-        withObservationTracking {
+        withPerceptionTracking {
             _ = player.currentSong
             _ = player.isPlaying
             _ = player.target

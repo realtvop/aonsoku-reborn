@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// Songs in a list: the whole library, or one artist's or genre's. Search
@@ -18,35 +19,41 @@ struct SongsListView: View {
     }
 
     var body: some View {
-        QueriedCollection(query: effectiveQuery, debounce: isSearching ? .milliseconds(300) : .zero) { repository, query, offset, limit in
-            try await repository.songs(query, offset: offset, limit: limit)
-        } content: { collection in
-            PagedSongList(collection: collection) { index in
-                player.play(collection.items, startingAt: index, source: source, sourceName: title)
-            } header: {
-                PlayShuffleButtons {
-                    player.play(collection.items, source: source, sourceName: title)
-                } shuffle: {
-                    shuffle(collection)
+        WithPerceptionTracking {
+            QueriedCollection(query: effectiveQuery, debounce: isSearching ? .milliseconds(300) : .zero) { repository, query, offset, limit in
+                WithPerceptionTracking {
+                    try await repository.songs(query, offset: offset, limit: limit)
                 }
-                .padding(.vertical, 8)
-            } empty: {
-                if isSearching {
-                    EmptyStateView(title: t("command.noResults"), systemImage: "magnifyingglass")
-                } else {
-                    EmptyStateView(title: t("native.songs.empty"), systemImage: "music.note")
+            } content: { collection in
+                PagedSongList(collection: collection) { index in
+                    player.play(collection.items, startingAt: index, source: source, sourceName: title)
+                } header: {
+                    PlayShuffleButtons {
+                        player.play(collection.items, source: source, sourceName: title)
+                    } shuffle: {
+                        shuffle(collection)
+                    }
+                    .padding(.vertical, 8)
+                } empty: {
+                    if isSearching {
+                        EmptyStateView(title: t("command.noResults"), systemImage: "magnifyingglass")
+                    } else {
+                        EmptyStateView(title: t("native.songs.empty"), systemImage: "music.note")
+                    }
                 }
+                .navigationSubtitle(collection.isEmpty ? "" : t("playlist.songCount", count: collection.total))
             }
-            .navigationSubtitle(collection.isEmpty ? "" : t("playlist.songCount", count: collection.total))
-        }
-        .offlineBanner()
-        .themedBackground()
-        .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.large)
-        .searchable(text: $searchText, prompt: Text(t("songs.list.search.placeholder")))
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                sortMenu
+            .offlineBanner()
+            .themedBackground()
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.large)
+            .searchable(text: $searchText, prompt: Text(t("songs.list.search.placeholder")))
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    WithPerceptionTracking {
+                        sortMenu
+                    }
+                }
             }
         }
     }
@@ -95,7 +102,9 @@ struct SongsListView: View {
         Menu {
             Picker(t("native.sort.label"), selection: sort) {
                 ForEach(SongSort.allCases, id: \.self) { sort in
-                    Text(t(sort.labelKey)).tag(sort)
+                    WithPerceptionTracking {
+                        Text(t(sort.labelKey)).tag(sort)
+                    }
                 }
             }
             .pickerStyle(.inline)
@@ -167,30 +176,34 @@ struct PagedSongList<Header: View, Empty: View>: View {
     @ViewBuilder let empty: Empty
 
     var body: some View {
-        List {
-            if !collection.isEmpty {
-                header
-                    .listRowSeparator(.hidden)
-                    .themedRow(plain: true)
+        WithPerceptionTracking {
+            List {
+                if !collection.isEmpty {
+                    header
+                        .listRowSeparator(.hidden)
+                        .themedRow(plain: true)
+                }
+                ForEach(Array(collection.items.enumerated()), id: \.element.id) { index, song in
+                    WithPerceptionTracking {
+                        SongRow(
+                            song: song,
+                            isFirst: index == 0,
+                            isLast: index == collection.items.count - 1 && !collection.hasMore
+                        ) { play(index) }
+                            .onAppear { collection.loadMoreIfNeeded(currentItem: song) }
+                            .themedRow(plain: true)
+                    }
+                }
+                if collection.phase == .loadingMore {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .listRowSeparator(.hidden)
+                        .themedRow(plain: true)
+                }
             }
-            ForEach(Array(collection.items.enumerated()), id: \.element.id) { index, song in
-                SongRow(
-                    song: song,
-                    isFirst: index == 0,
-                    isLast: index == collection.items.count - 1 && !collection.hasMore
-                ) { play(index) }
-                    .onAppear { collection.loadMoreIfNeeded(currentItem: song) }
-                    .themedRow(plain: true)
-            }
-            if collection.phase == .loadingMore {
-                ProgressView()
-                    .frame(maxWidth: .infinity)
-                    .listRowSeparator(.hidden)
-                    .themedRow(plain: true)
-            }
+            .listStyle(.plain)
+            .pagedStates(collection) { empty }
+            .refreshable { await collection.refresh() }
         }
-        .listStyle(.plain)
-        .pagedStates(collection) { empty }
-        .refreshable { await collection.refresh() }
     }
 }

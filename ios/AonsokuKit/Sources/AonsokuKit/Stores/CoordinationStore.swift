@@ -1,5 +1,5 @@
 import Foundation
-import Observation
+import Perception
 
 /// A device and its last playback, as listed in the device sheet
 /// (web `use-device-playback-models.ts`).
@@ -73,20 +73,20 @@ public enum HandoffStatus: Equatable, Sendable {
 /// handoff. While controlling a device it is the player's
 /// `RemotePlaybackSource`.
 @MainActor
-@Observable
+@Perceptible
 public final class CoordinationStore: RemotePlaybackSource {
     public private(set) var state = CoordinationState()
     public private(set) var groups = DeviceGroups()
     public private(set) var handoffStatus = HandoffStatus.idle
     public private(set) var remoteNowPlaying: RemoteNowPlaying?
 
-    @ObservationIgnored public let service: CoordinationService
-    @ObservationIgnored public let repository: LibraryRepository
-    @ObservationIgnored public weak var toasts: ToastCenter?
-    @ObservationIgnored private var observation: CoordinationObservation?
-    @ObservationIgnored private var songCache: [String: Song] = [:]
-    @ObservationIgnored private var rebuildGeneration = 0
-    @ObservationIgnored private var observationGeneration = 0
+    @PerceptionIgnored public let service: CoordinationService
+    @PerceptionIgnored public let repository: LibraryRepository
+    @PerceptionIgnored public weak var toasts: ToastCenter?
+    @PerceptionIgnored private var observation: CoordinationObservation?
+    @PerceptionIgnored private var songCache: [String: Song] = [:]
+    @PerceptionIgnored private var rebuildGeneration = 0
+    @PerceptionIgnored private var observationGeneration = 0
 
     public init(service: CoordinationService, repository: LibraryRepository) {
         self.service = service

@@ -1,5 +1,5 @@
 import Foundation
-import Observation
+import Perception
 
 /// Lyrics for the playing song (web `src/service/lyrics.ts`): sources in the
 /// configured priority, the custom lyrics server, per-song candidate
@@ -8,7 +8,7 @@ import Observation
 /// Selections are stored under `lyrics.selections.v1`, keyed by the song key
 /// (`[path, artist, title, album].joined("\u{1F}")`), at most 50 songs.
 @MainActor
-@Observable
+@Perceptible
 public final class LyricsStore {
     /// The loading state for `songId`.
     public private(set) var state = LyricsLoadState.idle
@@ -17,24 +17,24 @@ public final class LyricsStore {
     /// The current song's selection; `.init()` when it has none.
     public private(set) var selection = CustomLyricsSelection()
 
-    @ObservationIgnored public let api: any SubsonicAPI
-    @ObservationIgnored public let library: LibraryService
-    @ObservationIgnored public let settings: SettingsStore
-    @ObservationIgnored public let preferences: PreferencesService
+    @PerceptionIgnored public let api: any SubsonicAPI
+    @PerceptionIgnored public let library: LibraryService
+    @PerceptionIgnored public let settings: SettingsStore
+    @PerceptionIgnored public let preferences: PreferencesService
     /// The signed-in server type, for the LMS artist rule.
-    @ObservationIgnored public var serverType: @MainActor () -> String? = { nil }
-    @ObservationIgnored public var urlSession: URLSession = .shared
+    @PerceptionIgnored public var serverType: @MainActor () -> String? = { nil }
+    @PerceptionIgnored public var urlSession: URLSession = .shared
 
-    @ObservationIgnored private var currentSong: Song?
-    @ObservationIgnored private var currentSongKey: String?
-    @ObservationIgnored private var inFlight: [String: InFlightLoad] = [:]
-    @ObservationIgnored private var memoryCache: [String: MemoryEntry] = [:]
-    @ObservationIgnored private var memoryOrder: [String] = []
-    @ObservationIgnored private var revision = UUID()
-    @ObservationIgnored private let cachedLyrics: (String) throws -> LibraryLyrics?
-    @ObservationIgnored private let storeCachedLyrics: (String, String, Bool) throws -> Void
-    @ObservationIgnored private let now: () -> Date
-    @ObservationIgnored private let appVersion: () -> String
+    @PerceptionIgnored private var currentSong: Song?
+    @PerceptionIgnored private var currentSongKey: String?
+    @PerceptionIgnored private var inFlight: [String: InFlightLoad] = [:]
+    @PerceptionIgnored private var memoryCache: [String: MemoryEntry] = [:]
+    @PerceptionIgnored private var memoryOrder: [String] = []
+    @PerceptionIgnored private var revision = UUID()
+    @PerceptionIgnored private let cachedLyrics: (String) throws -> LibraryLyrics?
+    @PerceptionIgnored private let storeCachedLyrics: (String, String, Bool) throws -> Void
+    @PerceptionIgnored private let now: () -> Date
+    @PerceptionIgnored private let appVersion: () -> String
 
     private static let selectionsKey = "lyrics.selections.v1"
     private static let memoryLimit = 24

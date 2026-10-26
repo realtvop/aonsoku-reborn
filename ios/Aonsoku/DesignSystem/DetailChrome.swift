@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 // MARK: - Header
@@ -22,33 +23,37 @@ struct DetailHeader<Cover: View, Subtitle: View>: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
-        let isDark = theme.palette.isDark
-        Group {
-            if sizeClass == .regular {
-                HStack(alignment: .bottom, spacing: 28) {
-                    framedCover(side: 220)
-                    texts(alignment: .leading, isDark: isDark)
-                    Spacer(minLength: 0)
+        WithPerceptionTracking {
+            let isDark = theme.palette.isDark
+            Group {
+                if sizeClass == .regular {
+                    HStack(alignment: .bottom, spacing: 28) {
+                        framedCover(side: 220)
+                        texts(alignment: .leading, isDark: isDark)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.top, 16)
+                } else {
+                    VStack(spacing: 16) {
+                        framedCover(side: 200)
+                        texts(alignment: .center, isDark: isDark)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 8)
                 }
-                .padding(.top, 16)
-            } else {
-                VStack(spacing: 16) {
-                    framedCover(side: 200)
-                    texts(alignment: .center, isDark: isDark)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.top, 8)
             }
-        }
-        .pageMargins()
-        .padding(.bottom, 8)
-        .foregroundStyle(isDark ? Color.white : Color.black)
-        .environment(\.colorScheme, isDark ? .dark : .light)
-        .background {
-            if drawsBand {
-                DetailBand(palette: palette)
-                    .padding(.top, -DetailBand.overscroll)
-                    .padding(.bottom, -DetailBand.fadeHeight)
+            .pageMargins()
+            .padding(.bottom, 8)
+            .foregroundStyle(isDark ? Color.white : Color.black)
+            .environment(\.colorScheme, isDark ? .dark : .light)
+            .background {
+                WithPerceptionTracking {
+                    if drawsBand {
+                        DetailBand(palette: palette)
+                            .padding(.top, -DetailBand.overscroll)
+                            .padding(.bottom, -DetailBand.fadeHeight)
+                    }
+                }
             }
         }
     }
@@ -107,35 +112,37 @@ struct DetailBand: View {
     private static let lightModeLightness = 60.0
 
     var body: some View {
-        let background = theme.palette.background
-        let color = palette?.average.map { Self.bandColor($0, isDark: theme.palette.isDark) }
-            ?? theme.palette.page
-        VStack(spacing: 0) {
-            ZStack {
-                color
-                background.opacity(0.2)
+        WithPerceptionTracking {
+            let background = theme.palette.background
+            let color = palette?.average.map { Self.bandColor($0, isDark: theme.palette.isDark) }
+                ?? theme.palette.page
+            VStack(spacing: 0) {
+                ZStack {
+                    color
+                    background.opacity(0.2)
+                }
+                .frame(height: Self.overscroll)
+                ZStack {
+                    color
+                    LinearGradient(
+                        colors: [background.opacity(0.2), background.opacity(0.35), background.opacity(0.5)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+                ZStack {
+                    color
+                    LinearGradient(
+                        colors: [background.opacity(0.5), theme.palette.page],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+                .frame(height: Self.fadeHeight)
             }
-            .frame(height: Self.overscroll)
-            ZStack {
-                color
-                LinearGradient(
-                    colors: [background.opacity(0.2), background.opacity(0.35), background.opacity(0.5)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            }
-            ZStack {
-                color
-                LinearGradient(
-                    colors: [background.opacity(0.5), theme.palette.page],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            }
-            .frame(height: Self.fadeHeight)
+            .animation(.smooth(duration: 0.6), value: palette)
+            .accessibilityHidden(true)
         }
-        .animation(.smooth(duration: 0.6), value: palette)
-        .accessibilityHidden(true)
     }
 
     /// The cover's average color held to a muted saturation and to the
@@ -172,24 +179,28 @@ private struct ListDetailBand: ViewModifier {
     @State private var scroll = Scroll()
 
     func body(content: Content) -> some View {
-        content
-            .onScrollGeometryChange(for: Scroll.self) { geometry in
-                // Past the band, the value stops changing, so scrolling the
-                // rest of the list does not redraw it.
-                let limit = headerHeight + DetailBand.fadeHeight + 1
-                return Scroll(
-                    offset: min(geometry.contentOffset.y + geometry.contentInsets.top, limit),
-                    inset: geometry.contentInsets.top
-                )
-            } action: { _, value in
-                scroll = value
-            }
-            .background(alignment: .top) {
-                DetailBand(palette: palette)
-                    .frame(height: DetailBand.overscroll + headerHeight + DetailBand.fadeHeight)
-                    .offset(y: scroll.inset - scroll.offset - DetailBand.overscroll)
-                    .ignoresSafeArea()
-            }
+        WithPerceptionTracking {
+            content
+                .onScrollGeometryChange(for: Scroll.self) { geometry in
+                    // Past the band, the value stops changing, so scrolling the
+                    // rest of the list does not redraw it.
+                    let limit = headerHeight + DetailBand.fadeHeight + 1
+                    return Scroll(
+                        offset: min(geometry.contentOffset.y + geometry.contentInsets.top, limit),
+                        inset: geometry.contentInsets.top
+                    )
+                } action: { _, value in
+                    scroll = value
+                }
+                .background(alignment: .top) {
+                    WithPerceptionTracking {
+                        DetailBand(palette: palette)
+                            .frame(height: DetailBand.overscroll + headerHeight + DetailBand.fadeHeight)
+                            .offset(y: scroll.inset - scroll.offset - DetailBand.overscroll)
+                            .ignoresSafeArea()
+                    }
+                }
+        }
     }
 }
 
@@ -213,27 +224,31 @@ private struct ScrollRevealedTitle: ViewModifier {
     @State private var isRevealed = false
 
     func body(content: Content) -> some View {
-        content
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarColorScheme(barColorScheme, for: .navigationBar)
-            .onScrollGeometryChange(for: Bool.self) { geometry in
-                geometry.contentOffset.y + geometry.contentInsets.top > threshold
-            } action: { _, revealed in
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isRevealed = revealed
+        WithPerceptionTracking {
+            content
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbarColorScheme(barColorScheme, for: .navigationBar)
+                .onScrollGeometryChange(for: Bool.self) { geometry in
+                    geometry.contentOffset.y + geometry.contentInsets.top > threshold
+                } action: { _, revealed in
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isRevealed = revealed
+                    }
                 }
-            }
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text(title)
-                        .displayFont(.inline)
-                        .lineLimit(1)
-                        .opacity(isRevealed ? 1 : 0)
-                        .accessibilityHidden(!isRevealed)
+                .toolbar {
+                    ToolbarItem(placement: .principal) {
+                        WithPerceptionTracking {
+                            Text(title)
+                                .displayFont(.inline)
+                                .lineLimit(1)
+                                .opacity(isRevealed ? 1 : 0)
+                                .accessibilityHidden(!isRevealed)
+                        }
+                    }
+                    .sharedBackgroundVisibility(.hidden)
                 }
-                .sharedBackgroundVisibility(.hidden)
-            }
+        }
     }
 
     private var barColorScheme: ColorScheme? {
@@ -253,16 +268,18 @@ struct FavoriteToolbarButton: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        let isFavorite = favorites.isFavorite(kind, id: id)
-        Button {
-            Task { await favorites.toggle(kind, id: id) }
-        } label: {
-            Image(systemName: isFavorite ? "heart.fill" : "heart")
-                .contentTransition(.symbolEffect(.replace))
-                .symbolEffect(.bounce, value: isFavorite)
+        WithPerceptionTracking {
+            let isFavorite = favorites.isFavorite(kind, id: id)
+            Button {
+                Task { await favorites.toggle(kind, id: id) }
+            } label: {
+                Image(systemName: isFavorite ? "heart.fill" : "heart")
+                    .contentTransition(.symbolEffect(.replace))
+                    .symbolEffect(.bounce, value: isFavorite)
+            }
+            .accessibilityLabel(t(isFavorite ? "options.unlike" : "options.like"))
+            .haptic(.impact(weight: .light), trigger: isFavorite)
         }
-        .accessibilityLabel(t(isFavorite ? "options.unlike" : "options.like"))
-        .haptic(.impact(weight: .light), trigger: isFavorite)
     }
 }
 
@@ -276,16 +293,18 @@ struct FavoriteActionButton: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        let isFavorite = favorites.isFavorite(kind, id: id)
-        ActionIconButton(
-            systemImage: isFavorite ? "heart.fill" : "heart",
-            label: t(isFavorite ? "options.unlike" : "options.like"),
-            foreground: isFavorite ? AnyShapeStyle(Color.red) : AnyShapeStyle(.tint)
-        ) {
-            Task { await favorites.toggle(kind, id: id) }
+        WithPerceptionTracking {
+            let isFavorite = favorites.isFavorite(kind, id: id)
+            ActionIconButton(
+                systemImage: isFavorite ? "heart.fill" : "heart",
+                label: t(isFavorite ? "options.unlike" : "options.like"),
+                foreground: isFavorite ? AnyShapeStyle(Color.red) : AnyShapeStyle(.tint)
+            ) {
+                Task { await favorites.toggle(kind, id: id) }
+            }
+            .symbolEffect(.bounce, value: isFavorite)
+            .haptic(.impact(weight: .light), trigger: isFavorite)
         }
-        .symbolEffect(.bounce, value: isFavorite)
-        .haptic(.impact(weight: .light), trigger: isFavorite)
     }
 }
 
@@ -298,31 +317,33 @@ struct PlaylistDownloadButton: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        let _ = downloads.revision
-        switch downloads.state(ofPlaylist: playlistId) {
-        case .notCached:
-            ActionIconButton(systemImage: "arrow.down.circle", label: t("options.downloadPlaylist")) {
-                Task { await downloads.download(playlistId: playlistId) }
-            }
-        case let .downloading(completed, total):
-            ProgressRing(progress: total > 0 ? Double(completed) / Double(total) : nil, diameter: 22)
-                .frame(width: 48, height: 48)
-                .accessibilityElement()
-                .accessibilityLabel(t("offline.badge.downloading"))
-        case .cached:
-            Menu {
-                Button(t("options.removeDownload"), systemImage: "trash", role: .destructive) {
-                    Task { await downloads.remove(playlistId: playlistId) }
+        WithPerceptionTracking {
+            let _ = downloads.revision
+            switch downloads.state(ofPlaylist: playlistId) {
+            case .notCached:
+                ActionIconButton(systemImage: "arrow.down.circle", label: t("options.downloadPlaylist")) {
+                    Task { await downloads.download(playlistId: playlistId) }
                 }
-            } label: {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(.tint)
+            case let .downloading(completed, total):
+                ProgressRing(progress: total > 0 ? Double(completed) / Double(total) : nil, diameter: 22)
                     .frame(width: 48, height: 48)
-                    .contentShape(.rect)
+                    .accessibilityElement()
+                    .accessibilityLabel(t("offline.badge.downloading"))
+            case .cached:
+                Menu {
+                    Button(t("options.removeDownload"), systemImage: "trash", role: .destructive) {
+                        Task { await downloads.remove(playlistId: playlistId) }
+                    }
+                } label: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(.tint)
+                        .frame(width: 48, height: 48)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(t("offline.badge.downloaded"))
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(t("offline.badge.downloaded"))
         }
     }
 }
@@ -349,30 +370,34 @@ struct AboutCard: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        Button {
-            isPresented = true
-        } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                TitleDisclosureLabel {
-                    Text(title)
-                        .foregroundStyle(Color.primary)
-                        .lineLimit(1)
+        WithPerceptionTracking {
+            Button {
+                isPresented = true
+            } label: {
+                VStack(alignment: .leading, spacing: 6) {
+                    TitleDisclosureLabel {
+                        Text(title)
+                            .foregroundStyle(Color.primary)
+                            .lineLimit(1)
+                    }
+                    .displayFont(.inline)
+                    Text(text.plainText)
+                        .font(.subheadline)
+                        .foregroundStyle(ThemeColor.mutedForeground)
+                        .lineLimit(3)
+                        .multilineTextAlignment(.leading)
                 }
-                .displayFont(.inline)
-                Text(text.plainText)
-                    .font(.subheadline)
-                    .foregroundStyle(ThemeColor.mutedForeground)
-                    .lineLimit(3)
-                    .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .cardSurface()
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-            .cardSurface()
-        }
-        .buttonStyle(.pressable)
-        .accessibilityHint(t("generic.seeMore"))
-        .sheet(isPresented: $isPresented) {
-            AboutSheet(title: title, text: text, links: links)
+            .buttonStyle(.pressable)
+            .accessibilityHint(t("generic.seeMore"))
+            .sheet(isPresented: $isPresented) {
+                WithPerceptionTracking {
+                    AboutSheet(title: title, text: text, links: links)
+                }
+            }
         }
     }
 }
@@ -385,39 +410,47 @@ private struct AboutSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    Text(text)
-                        .font(.body)
-                        .lineSpacing(3)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    if !links.isEmpty {
-                        VStack(spacing: 10) {
-                            ForEach(links) { link in
-                                Link(destination: link.url) {
-                                    Label(link.title, systemImage: "arrow.up.forward.app")
-                                        .frame(maxWidth: .infinity)
+        WithPerceptionTracking {
+            NavigationStack {
+                WithPerceptionTracking {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 24) {
+                            Text(text)
+                                .font(.body)
+                                .lineSpacing(3)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            if !links.isEmpty {
+                                VStack(spacing: 10) {
+                                    ForEach(links) { link in
+                                        WithPerceptionTracking {
+                                            Link(destination: link.url) {
+                                                Label(link.title, systemImage: "arrow.up.forward.app")
+                                                    .frame(maxWidth: .infinity)
+                                            }
+                                            .buttonStyle(.glass)
+                                            .controlSize(.large)
+                                        }
+                                    }
                                 }
-                                .buttonStyle(.glass)
-                                .controlSize(.large)
+                            }
+                        }
+                        .padding(20)
+                    }
+                    .navigationTitle(title)
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            WithPerceptionTracking {
+                                Button(role: .close) {
+                                    dismiss()
+                                }
                             }
                         }
                     }
                 }
-                .padding(20)
             }
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(role: .close) {
-                        dismiss()
-                    }
-                }
-            }
+            .presentationDetents([.medium, .large])
         }
-        .presentationDetents([.medium, .large])
     }
 }

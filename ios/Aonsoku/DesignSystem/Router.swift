@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 enum AppTab: Hashable {
@@ -78,7 +79,7 @@ struct PlaylistSongRemoval: Equatable {
 
 /// Navigation and presentation state for the signed-in interface.
 @MainActor
-@Observable
+@Perceptible
 final class Router {
     /// What is presented over the tabs. Sheets and alerts attach to the
     /// topmost layer, because a view that already presents cannot present
@@ -199,29 +200,31 @@ private struct RouteView: View {
     let route: AppRoute
 
     var body: some View {
-        switch route {
-        case let .album(id, preview):
-            AlbumDetailView(albumId: id, preview: preview)
-        case let .artist(id, name):
-            ArtistDetailView(artistId: id, name: name)
-        case let .playlist(id):
-            PlaylistDetailView(playlistId: id)
-        case let .albums(filter):
-            AlbumsListView(filter: filter)
-        case let .songs(query):
-            SongsListView(query: query)
-        case .artists:
-            ArtistsListView()
-        case .playlists:
-            PlaylistsListView()
-        case .favorites:
-            FavoritesView()
-        case .genres:
-            GenresView()
-        case .radios:
-            RadiosView()
-        case .downloads:
-            DownloadsView()
+        WithPerceptionTracking {
+            switch route {
+            case let .album(id, preview):
+                AlbumDetailView(albumId: id, preview: preview)
+            case let .artist(id, name):
+                ArtistDetailView(artistId: id, name: name)
+            case let .playlist(id):
+                PlaylistDetailView(playlistId: id)
+            case let .albums(filter):
+                AlbumsListView(filter: filter)
+            case let .songs(query):
+                SongsListView(query: query)
+            case .artists:
+                ArtistsListView()
+            case .playlists:
+                PlaylistsListView()
+            case .favorites:
+                FavoritesView()
+            case .genres:
+                GenresView()
+            case .radios:
+                RadiosView()
+            case .downloads:
+                DownloadsView()
+            }
         }
     }
 }
@@ -235,47 +238,51 @@ private struct GlobalPresentationsModifier: ViewModifier {
     let layer: Router.Layer
 
     func body(content: Content) -> some View {
-        content
-            .sheet(item: sheet) { sheet in
-                GlobalSheetView(sheet: sheet)
-            }
-            .alert(t("queue.replacementConfirmation.title"), isPresented: isAskingReplacement) {
-                Button(t("queue.replacementConfirmation.replace"), role: .destructive) {
-                    player.resolveReplacement(.replace)
+        WithPerceptionTracking {
+            content
+                .sheet(item: sheet) { sheet in
+                    WithPerceptionTracking {
+                        GlobalSheetView(sheet: sheet)
+                    }
                 }
-                Button(t("queue.replacementConfirmation.playNext")) {
-                    player.resolveReplacement(.playNext)
+                .alert(t("queue.replacementConfirmation.title"), isPresented: isAskingReplacement) {
+                    Button(t("queue.replacementConfirmation.replace"), role: .destructive) {
+                        player.resolveReplacement(.replace)
+                    }
+                    Button(t("queue.replacementConfirmation.playNext")) {
+                        player.resolveReplacement(.playNext)
+                    }
+                    Button(t("generic.cancel"), role: .cancel) {
+                        player.resolveReplacement(.cancel)
+                    }
+                } message: {
+                    Text(t("queue.replacementConfirmation.description"))
                 }
-                Button(t("generic.cancel"), role: .cancel) {
-                    player.resolveReplacement(.cancel)
+                .alert(
+                    t("playlist.form.delete.title"),
+                    isPresented: isConfirmingDeletion,
+                    presenting: router.playlistPendingDeletion
+                ) { playlist in
+                    Button(t("options.playlist.delete"), role: .destructive) {
+                        delete(playlist)
+                    }
+                    Button(t("generic.cancel"), role: .cancel) {}
+                } message: { _ in
+                    Text(t("playlist.form.delete.description"))
                 }
-            } message: {
-                Text(t("queue.replacementConfirmation.description"))
-            }
-            .alert(
-                t("playlist.form.delete.title"),
-                isPresented: isConfirmingDeletion,
-                presenting: router.playlistPendingDeletion
-            ) { playlist in
-                Button(t("options.playlist.delete"), role: .destructive) {
-                    delete(playlist)
+                .alert(
+                    t("playlist.form.removeSong.title", count: router.playlistSongRemoval?.indexes.count ?? 1),
+                    isPresented: isConfirmingSongRemoval,
+                    presenting: router.playlistSongRemoval
+                ) { removal in
+                    Button(t("options.playlist.removeSong"), role: .destructive) {
+                        remove(removal)
+                    }
+                    Button(t("generic.cancel"), role: .cancel) {}
+                } message: { _ in
+                    Text(t("playlist.form.removeSong.description"))
                 }
-                Button(t("generic.cancel"), role: .cancel) {}
-            } message: { _ in
-                Text(t("playlist.form.delete.description"))
-            }
-            .alert(
-                t("playlist.form.removeSong.title", count: router.playlistSongRemoval?.indexes.count ?? 1),
-                isPresented: isConfirmingSongRemoval,
-                presenting: router.playlistSongRemoval
-            ) { removal in
-                Button(t("options.playlist.removeSong"), role: .destructive) {
-                    remove(removal)
-                }
-                Button(t("generic.cancel"), role: .cancel) {}
-            } message: { _ in
-                Text(t("playlist.form.removeSong.description"))
-            }
+        }
     }
 
     private func remove(_ removal: PlaylistSongRemoval) {
@@ -349,21 +356,23 @@ private struct GlobalSheetView: View {
     let sheet: GlobalSheet
 
     var body: some View {
-        switch sheet {
-        case let .songInfo(song):
-            SongInfoView(song: song)
-        case let .addToPlaylist(songs):
-            AddToPlaylistView(songs: songs)
-        case let .createPlaylist(songs):
-            PlaylistEditorView(mode: .create(songs: songs))
-        case let .editPlaylist(playlist):
-            PlaylistEditorView(mode: .edit(playlist))
-        case let .radioEditor(station):
-            RadioEditorView(station: station)
-        case .devices:
-            DevicesView()
-        case .lyricsSettings:
-            LyricsSettingsView()
+        WithPerceptionTracking {
+            switch sheet {
+            case let .songInfo(song):
+                SongInfoView(song: song)
+            case let .addToPlaylist(songs):
+                AddToPlaylistView(songs: songs)
+            case let .createPlaylist(songs):
+                PlaylistEditorView(mode: .create(songs: songs))
+            case let .editPlaylist(playlist):
+                PlaylistEditorView(mode: .edit(playlist))
+            case let .radioEditor(station):
+                RadioEditorView(station: station)
+            case .devices:
+                DevicesView()
+            case .lyricsSettings:
+                LyricsSettingsView()
+            }
         }
     }
 }

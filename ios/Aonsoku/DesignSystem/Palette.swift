@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 extension Color {
@@ -34,15 +35,17 @@ private struct ArtworkPaletteModifier: ViewModifier {
     @Environment(AppModel.self) private var app
 
     func body(content: Content) -> some View {
-        content.task(id: coverArtId) {
-            guard let coverArtId else {
-                palette = nil
-                return
-            }
-            let extracted = await app.artwork.palette(for: coverArtId)
-            guard !Task.isCancelled, extracted != palette else { return }
-            withAnimation(.smooth(duration: 0.6)) {
-                palette = extracted
+        WithPerceptionTracking {
+            content.task(id: coverArtId) {
+                guard let coverArtId else {
+                    palette = nil
+                    return
+                }
+                let extracted = await app.artwork.palette(for: coverArtId)
+                guard !Task.isCancelled, extracted != palette else { return }
+                withAnimation(.smooth(duration: 0.6)) {
+                    palette = extracted
+                }
             }
         }
     }

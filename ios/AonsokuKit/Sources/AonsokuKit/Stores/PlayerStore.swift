@@ -1,5 +1,5 @@
 import Foundation
-import Observation
+import Perception
 
 /// Playback position sampled at a moment, so views can interpolate it with
 /// `TimelineView` instead of observing every progress event.
@@ -99,7 +99,7 @@ public protocol RemotePlaybackSource: AnyObject {
 /// queues, shuffle and repeat, queue replacement confirmation, radio, sleep
 /// timer, ReplayGain and the system volume.
 @MainActor
-@Observable
+@Perceptible
 public final class PlayerStore {
     // MARK: Local state
 
@@ -128,30 +128,30 @@ public final class PlayerStore {
     /// Queue navigation and resuming do not count.
     public private(set) var playbackStarts = 0
 
-    @ObservationIgnored public weak var remote: (any RemotePlaybackSource)?
+    @PerceptionIgnored public weak var remote: (any RemotePlaybackSource)?
     /// Toggles the current song's favorite (lock screen Like and the player
     /// heart). Set by the app model.
-    @ObservationIgnored public weak var favorites: FavoritesStore?
+    @PerceptionIgnored public weak var favorites: FavoritesStore?
 
-    @ObservationIgnored public let audio: AudioService
-    @ObservationIgnored public let repository: LibraryRepository
-    @ObservationIgnored public let settings: SettingsStore
-    @ObservationIgnored public let authentication: AuthenticationService
-    @ObservationIgnored private let streamURL: @Sendable (String) -> URL?
-    @ObservationIgnored private let playbackSnapshot: @Sendable () -> AudioPlaybackSnapshot
-    @ObservationIgnored private var localPlaybackState: AudioPlaybackSnapshot.State = .idle
-    @ObservationIgnored private var audioSubscription: UUID?
-    @ObservationIgnored private var songCache: [String: Song] = [:]
-    @ObservationIgnored private var lastProgressSample = 0.0
-    @ObservationIgnored private var lastSnapshot: AudioQueueSnapshot?
-    @ObservationIgnored private var refreshGeneration = 0
-    @ObservationIgnored private var selectionGeneration = 0
+    @PerceptionIgnored public let audio: AudioService
+    @PerceptionIgnored public let repository: LibraryRepository
+    @PerceptionIgnored public let settings: SettingsStore
+    @PerceptionIgnored public let authentication: AuthenticationService
+    @PerceptionIgnored private let streamURL: @Sendable (String) -> URL?
+    @PerceptionIgnored private let playbackSnapshot: @Sendable () -> AudioPlaybackSnapshot
+    @PerceptionIgnored private var localPlaybackState: AudioPlaybackSnapshot.State = .idle
+    @PerceptionIgnored private var audioSubscription: UUID?
+    @PerceptionIgnored private var songCache: [String: Song] = [:]
+    @PerceptionIgnored private var lastProgressSample = 0.0
+    @PerceptionIgnored private var lastSnapshot: AudioQueueSnapshot?
+    @PerceptionIgnored private var refreshGeneration = 0
+    @PerceptionIgnored private var selectionGeneration = 0
     /// Song ids whose repository lookup is running, so overlapping queue
     /// refreshes do not look up the same song twice.
-    @ObservationIgnored private var enrichingSongIds = Set<String>()
+    @PerceptionIgnored private var enrichingSongIds = Set<String>()
     /// Bumped only by `clearAll()`: a lookup that started under an earlier
     /// value belongs to the previous account and must not touch the cache.
-    @ObservationIgnored private var enrichmentGeneration = 0
+    @PerceptionIgnored private var enrichmentGeneration = 0
 
     public init(
         audio: AudioService,

@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// Adds a radio station, or edits one, with the web form's checks.
@@ -32,64 +33,74 @@ struct RadioEditorView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ThemedForm {
-                Section {
-                    TextField(t("radios.table.name"), text: $name)
-                        .textInputAutocapitalization(.words)
-                        .focused($focusedField, equals: .name)
-                        .submitLabel(.next)
-                        .onSubmit { focusedField = .stream }
-                } header: {
-                    Text(t("radios.table.name"))
-                } footer: {
-                    problem(.name)
-                }
-                Section {
-                    urlField(t("radios.table.stream"), field: .stream, text: $streamUrl)
-                        .submitLabel(.next)
-                        .onSubmit { focusedField = .homepage }
-                } header: {
-                    Text(t("radios.table.stream"))
-                } footer: {
-                    problem(.stream)
-                }
-                Section {
-                    urlField(t("radios.table.homepage"), field: .homepage, text: $homePageUrl)
-                        .submitLabel(.done)
-                        .onSubmit(save)
-                } header: {
-                    Text(t("radios.table.homepage"))
-                } footer: {
-                    problem(.homepage)
+        WithPerceptionTracking {
+            NavigationStack {
+                WithPerceptionTracking {
+                    ThemedForm {
+                        WithPerceptionTracking {
+                            Section {
+                                TextField(t("radios.table.name"), text: $name)
+                                    .textInputAutocapitalization(.words)
+                                    .focused($focusedField, equals: .name)
+                                    .submitLabel(.next)
+                                    .onSubmit { focusedField = .stream }
+                            } header: {
+                                Text(t("radios.table.name"))
+                            } footer: {
+                                problem(.name)
+                            }
+                            Section {
+                                urlField(t("radios.table.stream"), field: .stream, text: $streamUrl)
+                                    .submitLabel(.next)
+                                    .onSubmit { focusedField = .homepage }
+                            } header: {
+                                Text(t("radios.table.stream"))
+                            } footer: {
+                                problem(.stream)
+                            }
+                            Section {
+                                urlField(t("radios.table.homepage"), field: .homepage, text: $homePageUrl)
+                                    .submitLabel(.done)
+                                    .onSubmit(save)
+                            } header: {
+                                Text(t("radios.table.homepage"))
+                            } footer: {
+                                problem(.homepage)
+                            }
+                        }
+                    }
+                    .disabled(isSaving)
+                    .navigationTitle(t(station == nil ? "radios.form.create.title" : "radios.form.edit.title"))
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            WithPerceptionTracking {
+                                Button(role: .cancel) {
+                                    dismiss()
+                                }
+                            }
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            WithPerceptionTracking {
+                                if isSaving {
+                                    ProgressView()
+                                } else {
+                                    Button(role: .confirm, action: save)
+                                        .accessibilityLabel(
+                                            t(station == nil ? "radios.form.create.button" : "radios.form.edit.button")
+                                        )
+                                        .disabled(!checked.isEmpty && !isValid)
+                                }
+                            }
+                        }
+                    }
+                    .onChange(of: name) { checked.insert(.name) }
+                    .onChange(of: streamUrl) { checked.insert(.stream) }
+                    .onChange(of: homePageUrl) { checked.insert(.homepage) }
                 }
             }
-            .disabled(isSaving)
-            .navigationTitle(t(station == nil ? "radios.form.create.title" : "radios.form.edit.title"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(role: .cancel) {
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    if isSaving {
-                        ProgressView()
-                    } else {
-                        Button(role: .confirm, action: save)
-                            .accessibilityLabel(
-                                t(station == nil ? "radios.form.create.button" : "radios.form.edit.button")
-                            )
-                            .disabled(!checked.isEmpty && !isValid)
-                    }
-                }
-            }
-            .onChange(of: name) { checked.insert(.name) }
-            .onChange(of: streamUrl) { checked.insert(.stream) }
-            .onChange(of: homePageUrl) { checked.insert(.homepage) }
+            .interactiveDismissDisabled(isSaving)
         }
-        .interactiveDismissDisabled(isSaving)
     }
 
     private func urlField(_ title: String, field: Field, text: Binding<String>) -> some View {

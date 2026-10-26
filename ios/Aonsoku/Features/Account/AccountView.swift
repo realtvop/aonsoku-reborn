@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// The account sheet, opened from the avatar: who is signed in to which
@@ -13,60 +14,70 @@ struct AccountView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        @Bindable var router = router
-        NavigationStack(path: $router.accountPath) {
-            ThemedList {
-                Section {
-                    AccountHeader()
-                }
-                Section {
-                    row(.server, t("settings.options.server"), systemImage: "server.rack")
-                    row(.appearance, t("settings.options.appearance"), systemImage: "paintbrush")
-                    row(.language, t("settings.options.language"), systemImage: "globe")
-                }
-                Section {
-                    row(.playback, t("settings.options.audio"), systemImage: "headphones")
-                    row(.lyrics, t("settings.audio.lyrics.group"), systemImage: "quote.bubble")
-                    row(.content, t("settings.options.content"), systemImage: "square.grid.2x2")
-                }
-                Section {
-                    row(.storage, t("settings.options.storage"), systemImage: "internaldrive")
-                    row(.crossDevice, t("settings.options.cross-device"), systemImage: "hifispeaker.and.homepod")
-                    row(.privacy, t("settings.options.privacy"), systemImage: "hand.raised")
-                }
-                Section {
-                    row(.about, t("menu.about"), systemImage: "info.circle")
-                }
-                Section {
-                    Button(t("menu.serverLogout"), role: .destructive) {
-                        isConfirmingSignOut = true
+        WithPerceptionTracking {
+            @Perception.Bindable var router = router
+            NavigationStack(path: $router.accountPath) {
+                WithPerceptionTracking {
+                    ThemedList {
+                        WithPerceptionTracking {
+                            Section {
+                                AccountHeader()
+                            }
+                            Section {
+                                row(.server, t("settings.options.server"), systemImage: "server.rack")
+                                row(.appearance, t("settings.options.appearance"), systemImage: "paintbrush")
+                                row(.language, t("settings.options.language"), systemImage: "globe")
+                            }
+                            Section {
+                                row(.playback, t("settings.options.audio"), systemImage: "headphones")
+                                row(.lyrics, t("settings.audio.lyrics.group"), systemImage: "quote.bubble")
+                                row(.content, t("settings.options.content"), systemImage: "square.grid.2x2")
+                            }
+                            Section {
+                                row(.storage, t("settings.options.storage"), systemImage: "internaldrive")
+                                row(.crossDevice, t("settings.options.cross-device"), systemImage: "hifispeaker.and.homepod")
+                                row(.privacy, t("settings.options.privacy"), systemImage: "hand.raised")
+                            }
+                            Section {
+                                row(.about, t("menu.about"), systemImage: "info.circle")
+                            }
+                            Section {
+                                Button(t("menu.serverLogout"), role: .destructive) {
+                                    isConfirmingSignOut = true
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                        }
                     }
-                    .frame(maxWidth: .infinity)
-                }
-            }
-            .navigationTitle(t("settings.label"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(role: .close) {
-                        dismiss()
+                    .navigationTitle(t("settings.label"))
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            WithPerceptionTracking {
+                                Button(role: .close) {
+                                    dismiss()
+                                }
+                            }
+                        }
+                    }
+                    .navigationDestination(for: SettingsPage.self) { page in
+                        WithPerceptionTracking {
+                            SettingsPageView(page: page)
+                        }
+                    }
+                    .alert(t("logout.dialog.title"), isPresented: $isConfirmingSignOut) {
+                        Button(t("logout.dialog.confirm"), role: .destructive) {
+                            dismiss()
+                            app.signOut()
+                        }
+                        Button(t("logout.dialog.cancel"), role: .cancel) {}
+                    } message: {
+                        Text(t("logout.dialog.description"))
                     }
                 }
             }
-            .navigationDestination(for: SettingsPage.self) { page in
-                SettingsPageView(page: page)
-            }
-            .alert(t("logout.dialog.title"), isPresented: $isConfirmingSignOut) {
-                Button(t("logout.dialog.confirm"), role: .destructive) {
-                    dismiss()
-                    app.signOut()
-                }
-                Button(t("logout.dialog.cancel"), role: .cancel) {}
-            } message: {
-                Text(t("logout.dialog.description"))
-            }
+            .globalPresentations(.account)
         }
-        .globalPresentations(.account)
     }
 
     private func row(_ page: SettingsPage, _ title: String, systemImage: String) -> some View {
@@ -88,21 +99,23 @@ private struct AccountHeader: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        HStack(spacing: 14) {
-            AvatarImage(username: session.account?.username ?? "", size: 60)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(session.account?.username ?? "")
-                    .displayFont(.section)
-                    .lineLimit(1)
-                Text(serverLine)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                status
-                    .font(.footnote.weight(.medium))
+        WithPerceptionTracking {
+            HStack(spacing: 14) {
+                AvatarImage(username: session.account?.username ?? "", size: 60)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(session.account?.username ?? "")
+                        .displayFont(.section)
+                        .lineLimit(1)
+                    Text(serverLine)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    status
+                        .font(.footnote.weight(.medium))
+                }
             }
+            .padding(.vertical, 4)
         }
-        .padding(.vertical, 4)
     }
 
     private var serverLine: String {
@@ -165,18 +178,20 @@ struct SettingsPageView: View {
     let page: SettingsPage
 
     var body: some View {
-        switch page {
-        case .server: ServerSettingsView()
-        case .appearance: AppearanceSettingsView()
-        case .language: LanguageSettingsView()
-        case .playback: PlaybackSettingsView()
-        case .lyrics: LyricsPreferencesView()
-        case .content: ContentSettingsView()
-        case .storage: StorageSettingsView()
-        case .cacheManager: CacheManagerView()
-        case .crossDevice: CrossDeviceSettingsView()
-        case .privacy: PrivacySettingsView()
-        case .about: AboutView()
+        WithPerceptionTracking {
+            switch page {
+            case .server: ServerSettingsView()
+            case .appearance: AppearanceSettingsView()
+            case .language: LanguageSettingsView()
+            case .playback: PlaybackSettingsView()
+            case .lyrics: LyricsPreferencesView()
+            case .content: ContentSettingsView()
+            case .storage: StorageSettingsView()
+            case .cacheManager: CacheManagerView()
+            case .crossDevice: CrossDeviceSettingsView()
+            case .privacy: PrivacySettingsView()
+            case .about: AboutView()
+            }
         }
     }
 }
@@ -194,17 +209,21 @@ extension View {
             .toolbar(removing: .title)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    // At its ideal width: the bar collapses a flexible
-                    // title into its overflow button.
-                    Text(title)
-                        .displayFont(.largeTitle)
-                        .lineLimit(1)
-                        .fixedSize()
-                        .accessibilityAddTraits(.isHeader)
+                    WithPerceptionTracking {
+                        // At its ideal width: the bar collapses a flexible
+                        // title into its overflow button.
+                        Text(title)
+                            .displayFont(.largeTitle)
+                            .lineLimit(1)
+                            .fixedSize()
+                            .accessibilityAddTraits(.isHeader)
+                    }
                 }
                 .sharedBackgroundVisibility(.hidden)
                 ToolbarItem(placement: .topBarTrailing) {
-                    AccountButton()
+                    WithPerceptionTracking {
+                        AccountButton()
+                    }
                 }
                 .sharedBackgroundVisibility(.hidden)
             }
@@ -218,12 +237,14 @@ struct AccountButton: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        Button {
-            router.openSettings()
-        } label: {
-            AvatarImage(username: session.account?.username ?? "", size: 32)
+        WithPerceptionTracking {
+            Button {
+                router.openSettings()
+            } label: {
+                AvatarImage(username: session.account?.username ?? "", size: 32)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(t("settings.label"))
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(t("settings.label"))
     }
 }

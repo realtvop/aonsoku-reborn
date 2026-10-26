@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 import UIKit
 
@@ -46,26 +47,30 @@ private struct AppRoot: View {
     let router: Router
 
     var body: some View {
-        RootView()
-            .themeRoot()
-            .toastHost(app)
-            .shakeToOpenDebugPanel()
-            .background {
-                SystemVolumeHost(
-                    hidesSystemHUD: router.isNowPlayingPresented
-                )
-                .frame(width: 1, height: 1)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-            }
-            .onReceive(
-                NotificationCenter.default.publisher(
-                    for: UIApplication.didReceiveMemoryWarningNotification
-                )
-            ) { _ in
-                app.didReceiveMemoryWarning()
-            }
-            .appEnvironment(app, router: router)
+        WithPerceptionTracking {
+            RootView()
+                .themeRoot()
+                .toastHost(app)
+                .shakeToOpenDebugPanel()
+                .background {
+                    WithPerceptionTracking {
+                        SystemVolumeHost(
+                            hidesSystemHUD: router.isNowPlayingPresented
+                        )
+                        .frame(width: 1, height: 1)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                    }
+                }
+                .onReceive(
+                    NotificationCenter.default.publisher(
+                        for: UIApplication.didReceiveMemoryWarningNotification
+                    )
+                ) { _ in
+                    app.didReceiveMemoryWarning()
+                }
+                .appEnvironment(app, router: router)
+        }
     }
 }
 

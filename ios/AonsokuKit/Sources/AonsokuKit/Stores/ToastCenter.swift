@@ -1,5 +1,5 @@
 import Foundation
-import Observation
+import Perception
 
 /// Text of a toast: a translation key with `{{name}}` arguments, or text
 /// that is already localized (such as a server error message).
@@ -37,11 +37,11 @@ public struct Toast: Identifiable, Hashable, Sendable {
 
 /// Shows one toast at a time. A new toast replaces the current one.
 @MainActor
-@Observable
+@Perceptible
 public final class ToastCenter {
     public private(set) var current: Toast?
 
-    @ObservationIgnored private var dismissTask: Task<Void, Never>?
+    @PerceptionIgnored private var dismissTask: Task<Void, Never>?
 
     public init() {}
 

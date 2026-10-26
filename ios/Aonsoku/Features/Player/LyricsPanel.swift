@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// The playing song's lyrics. Synced lyrics follow the song with the
@@ -15,40 +16,42 @@ struct LyricsPanel: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        Group {
-            switch lyrics.state {
-            case .idle, .loading:
-                message(t("fullscreen.loadingLyrics")) {
-                    ProgressView()
-                        .tint(.white)
-                }
-            case .unavailable:
-                message(t("fullscreen.noLyrics"), systemImage: "quote.bubble") {
-                    settingsButton
-                }
-            case .disabled:
-                message(t("lyrics.customSelect.lyricsDisabled"), systemImage: "eye.slash") {
-                    settingsButton
-                }
-            case let .loaded(songLyrics):
-                if songLyrics.isSynced {
-                    SyncedLyrics(
-                        lyrics: songLyrics, showsTranslation: showsTranslation,
-                        isActive: isActive, onControlsHiddenChange: onControlsHiddenChange
-                    )
-                } else {
-                    PlainLyrics(
-                        lyrics: songLyrics, showsTranslation: showsTranslation,
-                        isActive: isActive, onControlsHiddenChange: onControlsHiddenChange
-                    )
+        WithPerceptionTracking {
+            Group {
+                switch lyrics.state {
+                case .idle, .loading:
+                    message(t("fullscreen.loadingLyrics")) {
+                        ProgressView()
+                            .tint(.white)
+                    }
+                case .unavailable:
+                    message(t("fullscreen.noLyrics"), systemImage: "quote.bubble") {
+                        settingsButton
+                    }
+                case .disabled:
+                    message(t("lyrics.customSelect.lyricsDisabled"), systemImage: "eye.slash") {
+                        settingsButton
+                    }
+                case let .loaded(songLyrics):
+                    if songLyrics.isSynced {
+                        SyncedLyrics(
+                            lyrics: songLyrics, showsTranslation: showsTranslation,
+                            isActive: isActive, onControlsHiddenChange: onControlsHiddenChange
+                        )
+                    } else {
+                        PlainLyrics(
+                            lyrics: songLyrics, showsTranslation: showsTranslation,
+                            isActive: isActive, onControlsHiddenChange: onControlsHiddenChange
+                        )
+                    }
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(.rect)
+            .simultaneousGesture(TapGesture().onEnded {
+                if isActive { onControlsHiddenChange(false) }
+            })
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .contentShape(.rect)
-        .simultaneousGesture(TapGesture().onEnded {
-            if isActive { onControlsHiddenChange(false) }
-        })
     }
 
     private var showsTranslation: Bool {
@@ -100,65 +103,71 @@ private struct SyncedLyrics: View {
     @State private var manualScrollAt = Date.distantPast
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 28) {
-                    ForEach(lyrics.lines) { line in
-                        Button {
-                            play(from: line)
-                        } label: {
-                            LyricLineView(
-                                line: line,
-                                isActive: line.id == activeIndex,
-                                showsTranslation: showsTranslation
-                            )
-                            .multilineTextAlignment(.leading)
-                            .frame(minHeight: 44, alignment: .leading)
-                            .contentShape(.rect)
+        WithPerceptionTracking {
+            ScrollViewReader { proxy in
+                WithPerceptionTracking {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 28) {
+                            ForEach(lyrics.lines) { line in
+                                WithPerceptionTracking {
+                                    Button {
+                                        play(from: line)
+                                    } label: {
+                                        LyricLineView(
+                                            line: line,
+                                            isActive: line.id == activeIndex,
+                                            showsTranslation: showsTranslation
+                                        )
+                                        .multilineTextAlignment(.leading)
+                                        .frame(minHeight: 44, alignment: .leading)
+                                        .contentShape(.rect)
+                                    }
+                                    .buttonStyle(.touchFeedback)
+                                    .id(line.id)
+                                }
+                            }
+                            LyricsCredit(lyrics: lyrics)
                         }
-                        .buttonStyle(.touchFeedback)
-                        .id(line.id)
+                        .padding(.horizontal, 28)
+                        .padding(.top, 40)
+                        .padding(.bottom, 320)
                     }
-                    LyricsCredit(lyrics: lyrics)
-                }
-                .padding(.horizontal, 28)
-                .padding(.top, 40)
-                .padding(.bottom, 320)
-            }
-            .scrollIndicators(.hidden)
-            .modifier(LyricsControlsScrollObserver(
-                isActive: isActive, onControlsHiddenChange: onControlsHiddenChange
-            ))
-            .onScrollPhaseChange { _, phase in
-                if phase == .interacting {
-                    manualScrollAt = .now
-                }
-            }
-            .onChange(of: activeIndex) { _, index in
-                guard let index, Date.now.timeIntervalSince(manualScrollAt) > 3 else { return }
-                withAnimation(.spring(duration: 0.7, bounce: 0.12)) {
-                    proxy.scrollTo(index, anchor: UnitPoint(x: 0.5, y: 0.2))
-                }
-            }
-            .onAppear {
-                activeIndex = store.lineIndex(at: player.clock.position())
-                if let activeIndex {
-                    proxy.scrollTo(activeIndex, anchor: UnitPoint(x: 0.5, y: 0.2))
+                    .scrollIndicators(.hidden)
+                    .modifier(LyricsControlsScrollObserver(
+                        isActive: isActive, onControlsHiddenChange: onControlsHiddenChange
+                    ))
+                    .onScrollPhaseChange { _, phase in
+                        if phase == .interacting {
+                            manualScrollAt = .now
+                        }
+                    }
+                    .onChange(of: activeIndex) { _, index in
+                        guard let index, Date.now.timeIntervalSince(manualScrollAt) > 3 else { return }
+                        withAnimation(.spring(duration: 0.7, bounce: 0.12)) {
+                            proxy.scrollTo(index, anchor: UnitPoint(x: 0.5, y: 0.2))
+                        }
+                    }
+                    .onAppear {
+                        activeIndex = store.lineIndex(at: player.clock.position())
+                        if let activeIndex {
+                            proxy.scrollTo(activeIndex, anchor: UnitPoint(x: 0.5, y: 0.2))
+                        }
+                    }
                 }
             }
-        }
-        .mask(EdgeFade())
-        .haptic(.selection, trigger: seekFeedback)
-        .task(id: LyricsFollowingTask(lyrics: lyrics, isActive: isActive)) {
-            guard isActive else { return }
-            // Checks the line ten times a second but only redraws when it
-            // changes.
-            while !Task.isCancelled {
-                let index = store.lineIndex(at: player.clock.position())
-                if index != activeIndex {
-                    activeIndex = index
+            .mask(EdgeFade())
+            .haptic(.selection, trigger: seekFeedback)
+            .task(id: LyricsFollowingTask(lyrics: lyrics, isActive: isActive)) {
+                guard isActive else { return }
+                // Checks the line ten times a second but only redraws when it
+                // changes.
+                while !Task.isCancelled {
+                    let index = store.lineIndex(at: player.clock.position())
+                    if index != activeIndex {
+                        activeIndex = index
+                    }
+                    try? await Task.sleep(for: .milliseconds(100))
                 }
-                try? await Task.sleep(for: .milliseconds(100))
             }
         }
     }
@@ -187,25 +196,27 @@ private struct LyricLineView: View {
     @ScaledMetric(relativeTo: .title) private var size: CGFloat = 30
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(line.text.isEmpty ? "♪" : line.text)
-                .font(.system(size: size, weight: .bold))
-            if let romanization = line.romanization, !romanization.isEmpty {
-                Text(romanization)
-                    .font(.title3.weight(.semibold))
+        WithPerceptionTracking {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(line.text.isEmpty ? "♪" : line.text)
+                    .font(.system(size: size, weight: .bold))
+                if let romanization = line.romanization, !romanization.isEmpty {
+                    Text(romanization)
+                        .font(.title3.weight(.semibold))
+                }
+                if showsTranslation, let translation = line.translation, !translation.isEmpty {
+                    Text(translation)
+                        .font(.title3.weight(.semibold))
+                        .opacity(0.8)
+                }
             }
-            if showsTranslation, let translation = line.translation, !translation.isEmpty {
-                Text(translation)
-                    .font(.title3.weight(.semibold))
-                    .opacity(0.8)
-            }
+            .foregroundStyle(.white.opacity(isActive ? 1 : 0.3))
+            .scaleEffect(isActive ? 1 : 0.97, anchor: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(.rect)
+            .animation(.smooth(duration: 0.45), value: isActive)
+            .accessibilityAddTraits(isActive ? .isSelected : [])
         }
-        .foregroundStyle(.white.opacity(isActive ? 1 : 0.3))
-        .scaleEffect(isActive ? 1 : 0.97, anchor: .leading)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(.rect)
-        .animation(.smooth(duration: 0.45), value: isActive)
-        .accessibilityAddTraits(isActive ? .isSelected : [])
     }
 }
 
@@ -218,32 +229,36 @@ private struct PlainLyrics: View {
     let onControlsHiddenChange: (Bool) -> Void
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                ForEach(lyrics.lines) { line in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(line.text)
-                            .font(.title3.weight(.semibold))
-                        if showsTranslation, let translation = line.translation, !translation.isEmpty {
-                            Text(translation)
-                                .font(.body.weight(.medium))
-                                .opacity(0.75)
+        WithPerceptionTracking {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    ForEach(lyrics.lines) { line in
+                        WithPerceptionTracking {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(line.text)
+                                    .font(.title3.weight(.semibold))
+                                if showsTranslation, let translation = line.translation, !translation.isEmpty {
+                                    Text(translation)
+                                        .font(.body.weight(.medium))
+                                        .opacity(0.75)
+                                }
+                            }
                         }
                     }
+                    LyricsCredit(lyrics: lyrics)
                 }
-                LyricsCredit(lyrics: lyrics)
+                .foregroundStyle(.white.opacity(0.88))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 40)
             }
-            .foregroundStyle(.white.opacity(0.88))
-            .textSelection(.enabled)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 28)
-            .padding(.vertical, 40)
+            .scrollIndicators(.hidden)
+            .modifier(LyricsControlsScrollObserver(
+                isActive: isActive, onControlsHiddenChange: onControlsHiddenChange
+            ))
+            .mask(EdgeFade())
         }
-        .scrollIndicators(.hidden)
-        .modifier(LyricsControlsScrollObserver(
-            isActive: isActive, onControlsHiddenChange: onControlsHiddenChange
-        ))
-        .mask(EdgeFade())
     }
 }
 
@@ -257,45 +272,47 @@ private struct LyricsControlsScrollObserver: ViewModifier {
     @State private var travel: CGFloat = 0
 
     func body(content: Content) -> some View {
-        content
-            .onScrollPhaseChange { _, phase in
-                isUserScrolling = phase == .interacting || phase == .decelerating
-                if !isUserScrolling { travel = 0 }
-            }
-            .onScrollGeometryChange(for: LyricsScrollMetrics.self) { geometry in
-                let maximum = max(
-                    geometry.contentSize.height + geometry.contentInsets.top
-                        + geometry.contentInsets.bottom - geometry.containerSize.height, 0
-                )
-                return LyricsScrollMetrics(
-                    offset: min(max(geometry.contentOffset.y + geometry.contentInsets.top, 0), maximum),
-                    viewportHeight: geometry.containerSize.height,
-                    contentHeight: geometry.contentSize.height
-                )
-            } action: { old, new in
-                guard isActive, isUserScrolling,
-                      abs(new.viewportHeight - old.viewportHeight) < 0.5,
-                      abs(new.contentHeight - old.contentHeight) < 0.5 else {
-                    travel = 0
-                    return
+        WithPerceptionTracking {
+            content
+                .onScrollPhaseChange { _, phase in
+                    isUserScrolling = phase == .interacting || phase == .decelerating
+                    if !isUserScrolling { travel = 0 }
                 }
-                let delta = new.offset - old.offset
-                guard delta != 0 else { return }
-                if new.offset <= 0 {
-                    onControlsHiddenChange(false)
-                    travel = 0
-                } else {
-                    travel = delta > 0 ? max(travel, 0) + delta : min(travel, 0) + delta
-                    if abs(travel) >= 20 {
-                        onControlsHiddenChange(travel > 0)
+                .onScrollGeometryChange(for: LyricsScrollMetrics.self) { geometry in
+                    let maximum = max(
+                        geometry.contentSize.height + geometry.contentInsets.top
+                            + geometry.contentInsets.bottom - geometry.containerSize.height, 0
+                    )
+                    return LyricsScrollMetrics(
+                        offset: min(max(geometry.contentOffset.y + geometry.contentInsets.top, 0), maximum),
+                        viewportHeight: geometry.containerSize.height,
+                        contentHeight: geometry.contentSize.height
+                    )
+                } action: { old, new in
+                    guard isActive, isUserScrolling,
+                          abs(new.viewportHeight - old.viewportHeight) < 0.5,
+                          abs(new.contentHeight - old.contentHeight) < 0.5 else {
                         travel = 0
+                        return
+                    }
+                    let delta = new.offset - old.offset
+                    guard delta != 0 else { return }
+                    if new.offset <= 0 {
+                        onControlsHiddenChange(false)
+                        travel = 0
+                    } else {
+                        travel = delta > 0 ? max(travel, 0) + delta : min(travel, 0) + delta
+                        if abs(travel) >= 20 {
+                            onControlsHiddenChange(travel > 0)
+                            travel = 0
+                        }
                     }
                 }
-            }
-            .onChange(of: isActive) {
-                isUserScrolling = false
-                travel = 0
-            }
+                .onChange(of: isActive) {
+                    isUserScrolling = false
+                    travel = 0
+                }
+        }
     }
 }
 
@@ -312,12 +329,14 @@ private struct LyricsCredit: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        let source = t("settings.audio.lyrics.source.\(lyrics.source.rawValue)")
-        let parts = [lyrics.credit, source].compactMap { $0 }.filter { !$0.isEmpty }
-        Text(parts.joined(separator: " · "))
-            .font(.footnote.weight(.medium))
-            .foregroundStyle(.white.opacity(0.45))
-            .padding(.top, 12)
+        WithPerceptionTracking {
+            let source = t("settings.audio.lyrics.source.\(lyrics.source.rawValue)")
+            let parts = [lyrics.credit, source].compactMap { $0 }.filter { !$0.isEmpty }
+            Text(parts.joined(separator: " · "))
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(.white.opacity(0.45))
+                .padding(.top, 12)
+        }
     }
 }
 
@@ -337,12 +356,14 @@ struct EdgeFade: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-                .frame(height: top)
-            Color.black
-            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
-                .frame(height: bottom)
+        WithPerceptionTracking {
+            VStack(spacing: 0) {
+                LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                    .frame(height: top)
+                Color.black
+                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                    .frame(height: bottom)
+            }
         }
     }
 }

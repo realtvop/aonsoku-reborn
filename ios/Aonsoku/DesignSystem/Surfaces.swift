@@ -1,3 +1,4 @@
+import Perception
 import SwiftUI
 
 // MARK: - Cards
@@ -16,13 +17,17 @@ private struct CardSurfaceModifier: ViewModifier {
     @Environment(\.themeContext) private var theme
 
     func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        content
-            .background(theme.palette.card.opacity(theme.palette.isDark ? 0.55 : 0.9), in: shape)
-            .overlay {
-                shape.strokeBorder(theme.palette.border, lineWidth: 1)
-            }
-            .contentShape(shape)
+        WithPerceptionTracking {
+            let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            content
+                .background(theme.palette.card.opacity(theme.palette.isDark ? 0.55 : 0.9), in: shape)
+                .overlay {
+                    WithPerceptionTracking {
+                        shape.strokeBorder(theme.palette.border, lineWidth: 1)
+                    }
+                }
+                .contentShape(shape)
+        }
     }
 }
 
@@ -33,12 +38,14 @@ struct IconTile: View {
     var size: CGFloat = 36
 
     var body: some View {
-        Image(systemName: systemImage)
-            .font(.system(size: size * 0.46, weight: .medium))
-            .foregroundStyle(Color.primary)
-            .frame(width: size, height: size)
-            .background(ThemeColor.border, in: .rect(cornerRadius: size * 0.24, style: .continuous))
-            .accessibilityHidden(true)
+        WithPerceptionTracking {
+            Image(systemName: systemImage)
+                .font(.system(size: size * 0.46, weight: .medium))
+                .foregroundStyle(Color.primary)
+                .frame(width: size, height: size)
+                .background(ThemeColor.border, in: .rect(cornerRadius: size * 0.24, style: .continuous))
+                .accessibilityHidden(true)
+        }
     }
 }
 
@@ -57,22 +64,26 @@ struct MetadataLine: View {
     var alignment: HorizontalAlignment = .center
 
     var body: some View {
-        FlowLayout(alignment: alignment, spacing: 0, lineSpacing: 2) {
-            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                HStack(spacing: 0) {
-                    if index > 0 {
-                        Text(verbatim: " · ")
-                    }
-                    if let route = item.route {
-                        NavigationLink(value: route) {
-                            Text(item.text)
+        WithPerceptionTracking {
+            FlowLayout(alignment: alignment, spacing: 0, lineSpacing: 2) {
+                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                    WithPerceptionTracking {
+                        HStack(spacing: 0) {
+                            if index > 0 {
+                                Text(verbatim: " · ")
+                            }
+                            if let route = item.route {
+                                NavigationLink(value: route) {
+                                    Text(item.text)
+                                }
+                                .buttonStyle(.plain)
+                            } else {
+                                Text(item.text)
+                            }
                         }
-                        .buttonStyle(.plain)
-                    } else {
-                        Text(item.text)
+                        .lineLimit(1)
                     }
                 }
-                .lineLimit(1)
             }
         }
     }
@@ -148,26 +159,28 @@ struct CaptionHeader<Trailing: View>: View {
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Label {
-                Text(title)
-                    .textCase(.uppercase)
-                    .tracking(0.6)
-                    .foregroundStyle(ThemeColor.mutedForeground)
-            } icon: {
-                if let systemImage {
-                    Image(systemName: systemImage)
-                        .foregroundStyle(.tint)
+        WithPerceptionTracking {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Label {
+                    Text(title)
+                        .textCase(.uppercase)
+                        .tracking(0.6)
+                        .foregroundStyle(ThemeColor.mutedForeground)
+                } icon: {
+                    if let systemImage {
+                        Image(systemName: systemImage)
+                            .foregroundStyle(.tint)
+                    }
                 }
+                .labelStyle(CaptionLabelStyle(showsIcon: systemImage != nil))
+                .font(.caption.weight(.bold))
+                .lineLimit(1)
+                .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 8)
+                trailing
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tint)
             }
-            .labelStyle(CaptionLabelStyle(showsIcon: systemImage != nil))
-            .font(.caption.weight(.bold))
-            .lineLimit(1)
-            .accessibilityAddTraits(.isHeader)
-            Spacer(minLength: 8)
-            trailing
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.tint)
         }
     }
 }
@@ -184,11 +197,13 @@ private struct CaptionLabelStyle: LabelStyle {
     let showsIcon: Bool
 
     func makeBody(configuration: Configuration) -> some View {
-        HStack(spacing: 6) {
-            if showsIcon {
-                configuration.icon
+        WithPerceptionTracking {
+            HStack(spacing: 6) {
+                if showsIcon {
+                    configuration.icon
+                }
+                configuration.title
             }
-            configuration.title
         }
     }
 }

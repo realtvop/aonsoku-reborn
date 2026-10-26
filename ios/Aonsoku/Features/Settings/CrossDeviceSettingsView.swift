@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 import UIKit
 
@@ -24,98 +25,104 @@ struct CrossDeviceSettingsView: View {
     @Environment(\.locale) private var locale
 
     var body: some View {
-        let state = coordination.state
-        ThemedForm {
-            Section {
-                LabeledContent(t("settings.crossDevice.connectionState.label")) {
-                    ConnectionBadge(state: state.connectionState)
-                }
-                LabeledContent(t("settings.crossDevice.lastSync.label"), value: lastSyncText)
-                LabeledContent(
-                    t("settings.crossDevice.devices"),
-                    value: t("settings.crossDevice.deviceCount", ["count": String(devices.count)])
-                )
-            } footer: {
-                Text(t("settings.crossDevice.description"))
-            }
-
-            if state.isRegistered {
-                status(state)
-            } else {
-                setup
-            }
-
-            if !devices.isEmpty {
-                Section {
-                    ForEach(devices) { device in
-                        deviceRow(device, isCurrent: device.id == state.deviceId)
+        WithPerceptionTracking {
+            let state = coordination.state
+            ThemedForm {
+                WithPerceptionTracking {
+                    Section {
+                        LabeledContent(t("settings.crossDevice.connectionState.label")) {
+                            ConnectionBadge(state: state.connectionState)
+                        }
+                        LabeledContent(t("settings.crossDevice.lastSync.label"), value: lastSyncText)
+                        LabeledContent(
+                            t("settings.crossDevice.devices"),
+                            value: t("settings.crossDevice.deviceCount", ["count": String(devices.count)])
+                        )
+                    } footer: {
+                        Text(t("settings.crossDevice.description"))
                     }
-                } header: {
-                    Text(t("settings.crossDevice.devices"))
-                } footer: {
-                    Text(t("settings.crossDevice.devicesDescription"))
-                }
-            }
 
-            if state.isRegistered {
-                Section {
-                    Button(role: .destructive) {
-                        isConfirmingDelete = true
-                    } label: {
-                        Label(t("settings.crossDevice.deleteData.label"), systemImage: "trash")
+                    if state.isRegistered {
+                        status(state)
+                    } else {
+                        setup
                     }
-                    .disabled(!network.isOnline)
-                } footer: {
-                    Text(t("settings.crossDevice.deleteData.info"))
+
+                    if !devices.isEmpty {
+                        Section {
+                            ForEach(devices) { device in
+                                WithPerceptionTracking {
+                                    deviceRow(device, isCurrent: device.id == state.deviceId)
+                                }
+                            }
+                        } header: {
+                            Text(t("settings.crossDevice.devices"))
+                        } footer: {
+                            Text(t("settings.crossDevice.devicesDescription"))
+                        }
+                    }
+
+                    if state.isRegistered {
+                        Section {
+                            Button(role: .destructive) {
+                                isConfirmingDelete = true
+                            } label: {
+                                Label(t("settings.crossDevice.deleteData.label"), systemImage: "trash")
+                            }
+                            .disabled(!network.isOnline)
+                        } footer: {
+                            Text(t("settings.crossDevice.deleteData.info"))
+                        }
+                    }
                 }
             }
-        }
-        .navigationTitle(t("settings.options.cross-device"))
-        .animation(.smooth, value: state.isRegistered)
-        .onAppear(perform: prefill)
-        .task(id: state.isRegistered) {
-            guard state.isRegistered else { return }
-            try? await coordination.refreshDevices()
-        }
-        .refreshable {
-            guard coordination.state.isRegistered else { return }
-            try? await coordination.refreshDevices()
-        }
-        .alert(t("settings.crossDevice.disconnectConfirm.title"), isPresented: $isConfirmingDisconnect) {
-            Button(t("settings.crossDevice.disconnect"), role: .destructive, action: disconnect)
-            Button(t("generic.cancel"), role: .cancel) {}
-        } message: {
-            Text(t("settings.crossDevice.disconnectConfirm.description"))
-        }
-        .alert(t("settings.crossDevice.deleteConfirm.title"), isPresented: $isConfirmingDelete) {
-            Button(t("settings.crossDevice.delete"), role: .destructive, action: deleteAccount)
-            Button(t("generic.cancel"), role: .cancel) {}
-        } message: {
-            Text(t("settings.crossDevice.deleteConfirm.description"))
-        }
-        .alert(
-            t("settings.crossDevice.device.rename"),
-            isPresented: isPresenting($renaming),
-            presenting: renaming
-        ) { device in
-            TextField(t("settings.crossDevice.deviceName.placeholder"), text: $newName)
-            Button(t("settings.crossDevice.device.save")) {
-                rename(device)
+            .navigationTitle(t("settings.options.cross-device"))
+            .animation(.smooth, value: state.isRegistered)
+            .onAppear(perform: prefill)
+            .task(id: state.isRegistered) {
+                guard state.isRegistered else { return }
+                try? await coordination.refreshDevices()
             }
-            .disabled(!canRename(device))
-            Button(t("settings.crossDevice.device.cancel"), role: .cancel) {}
-        }
-        .alert(
-            t("settings.crossDevice.revokeConfirm.title"),
-            isPresented: isPresenting($revoking),
-            presenting: revoking
-        ) { device in
-            Button(t("settings.crossDevice.device.revoke"), role: .destructive) {
-                revoke(device)
+            .refreshable {
+                guard coordination.state.isRegistered else { return }
+                try? await coordination.refreshDevices()
             }
-            Button(t("generic.cancel"), role: .cancel) {}
-        } message: { device in
-            Text(t("settings.crossDevice.revokeConfirm.description", ["name": device.name]))
+            .alert(t("settings.crossDevice.disconnectConfirm.title"), isPresented: $isConfirmingDisconnect) {
+                Button(t("settings.crossDevice.disconnect"), role: .destructive, action: disconnect)
+                Button(t("generic.cancel"), role: .cancel) {}
+            } message: {
+                Text(t("settings.crossDevice.disconnectConfirm.description"))
+            }
+            .alert(t("settings.crossDevice.deleteConfirm.title"), isPresented: $isConfirmingDelete) {
+                Button(t("settings.crossDevice.delete"), role: .destructive, action: deleteAccount)
+                Button(t("generic.cancel"), role: .cancel) {}
+            } message: {
+                Text(t("settings.crossDevice.deleteConfirm.description"))
+            }
+            .alert(
+                t("settings.crossDevice.device.rename"),
+                isPresented: isPresenting($renaming),
+                presenting: renaming
+            ) { device in
+                TextField(t("settings.crossDevice.deviceName.placeholder"), text: $newName)
+                Button(t("settings.crossDevice.device.save")) {
+                    rename(device)
+                }
+                .disabled(!canRename(device))
+                Button(t("settings.crossDevice.device.cancel"), role: .cancel) {}
+            }
+            .alert(
+                t("settings.crossDevice.revokeConfirm.title"),
+                isPresented: isPresenting($revoking),
+                presenting: revoking
+            ) { device in
+                Button(t("settings.crossDevice.device.revoke"), role: .destructive) {
+                    revoke(device)
+                }
+                Button(t("generic.cancel"), role: .cancel) {}
+            } message: { device in
+                Text(t("settings.crossDevice.revokeConfirm.description", ["name": device.name]))
+            }
         }
     }
 
@@ -371,16 +378,18 @@ private struct ConnectionBadge: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        Label {
-            Text(t("settings.crossDevice.connectionState.\(labelState)"))
-        } icon: {
-            Circle()
-                .fill(color)
-                .frame(width: 8, height: 8)
+        WithPerceptionTracking {
+            Label {
+                Text(t("settings.crossDevice.connectionState.\(labelState)"))
+            } icon: {
+                Circle()
+                    .fill(color)
+                    .frame(width: 8, height: 8)
+            }
+            .labelStyle(.titleAndIcon)
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(.secondary)
         }
-        .labelStyle(.titleAndIcon)
-        .font(.subheadline.weight(.medium))
-        .foregroundStyle(.secondary)
     }
 
     /// The web has no "reconnecting" label; it shows "connecting".

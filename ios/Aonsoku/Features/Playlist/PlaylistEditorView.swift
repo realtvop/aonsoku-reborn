@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// Creates a playlist, with the songs it was started from, or edits a
@@ -44,65 +45,75 @@ struct PlaylistEditorView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ThemedForm {
-                Section {
-                    TextField(t("playlist.form.labels.name"), text: $name)
-                        .focused($focusedField, equals: .name)
-                        .submitLabel(.next)
-                        .onSubmit { focusedField = .comment }
-                } header: {
-                    Text(t("playlist.form.labels.name"))
-                } footer: {
-                    if showsValidation, !isNameValid {
-                        Text(t("playlist.form.validations.nameLength"))
-                            .foregroundStyle(.red)
+        WithPerceptionTracking {
+            NavigationStack {
+                WithPerceptionTracking {
+                    ThemedForm {
+                        WithPerceptionTracking {
+                            Section {
+                                TextField(t("playlist.form.labels.name"), text: $name)
+                                    .focused($focusedField, equals: .name)
+                                    .submitLabel(.next)
+                                    .onSubmit { focusedField = .comment }
+                            } header: {
+                                Text(t("playlist.form.labels.name"))
+                            } footer: {
+                                if showsValidation, !isNameValid {
+                                    Text(t("playlist.form.validations.nameLength"))
+                                        .foregroundStyle(.red)
+                                }
+                            }
+                            Section {
+                                TextField(t("playlist.form.labels.comment"), text: $comment, axis: .vertical)
+                                    .lineLimit(3 ... 8)
+                                    .focused($focusedField, equals: .comment)
+                            } header: {
+                                Text(t("playlist.form.labels.comment"))
+                            } footer: {
+                                Text(t("playlist.form.labels.commentDescription"))
+                            }
+                            Section {
+                                Toggle(t("playlist.form.labels.isPublic"), isOn: $isPublic)
+                            } footer: {
+                                Text(t("playlist.form.labels.isPublicDescription"))
+                            }
+                        }
+                    }
+                    .disabled(isSaving)
+                    .navigationTitle(t(isCreating ? "playlist.form.create.title" : "playlist.form.edit.title"))
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            WithPerceptionTracking {
+                                Button(role: .cancel) {
+                                    dismiss()
+                                }
+                            }
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            WithPerceptionTracking {
+                                if isSaving {
+                                    ProgressView()
+                                } else {
+                                    Button(role: .confirm, action: save)
+                                        .accessibilityLabel(
+                                            t(isCreating ? "playlist.form.create.button" : "playlist.form.edit.button")
+                                        )
+                                        .disabled(showsValidation && !isNameValid)
+                                }
+                            }
+                        }
+                    }
+                    .onChange(of: name) {
+                        showsValidation = true
                     }
                 }
-                Section {
-                    TextField(t("playlist.form.labels.comment"), text: $comment, axis: .vertical)
-                        .lineLimit(3 ... 8)
-                        .focused($focusedField, equals: .comment)
-                } header: {
-                    Text(t("playlist.form.labels.comment"))
-                } footer: {
-                    Text(t("playlist.form.labels.commentDescription"))
-                }
-                Section {
-                    Toggle(t("playlist.form.labels.isPublic"), isOn: $isPublic)
-                } footer: {
-                    Text(t("playlist.form.labels.isPublicDescription"))
-                }
             }
-            .disabled(isSaving)
-            .navigationTitle(t(isCreating ? "playlist.form.create.title" : "playlist.form.edit.title"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(role: .cancel) {
-                        dismiss()
-                    }
+            .interactiveDismissDisabled(isSaving)
+            .onAppear {
+                if isCreating {
+                    focusedField = .name
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    if isSaving {
-                        ProgressView()
-                    } else {
-                        Button(role: .confirm, action: save)
-                            .accessibilityLabel(
-                                t(isCreating ? "playlist.form.create.button" : "playlist.form.edit.button")
-                            )
-                            .disabled(showsValidation && !isNameValid)
-                    }
-                }
-            }
-            .onChange(of: name) {
-                showsValidation = true
-            }
-        }
-        .interactiveDismissDisabled(isSaving)
-        .onAppear {
-            if isCreating {
-                focusedField = .name
             }
         }
     }

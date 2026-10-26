@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 extension Localizer {
@@ -50,8 +51,10 @@ private struct HapticModifier<T: Equatable>: ViewModifier {
     let trigger: T
 
     func body(content: Content) -> some View {
-        content.sensoryFeedback(feedback, trigger: trigger) { _, _ in
-            settings.settings.playback.hapticFeedback
+        WithPerceptionTracking {
+            content.sensoryFeedback(feedback, trigger: trigger) { _, _ in
+                settings.settings.playback.hapticFeedback
+            }
         }
     }
 }

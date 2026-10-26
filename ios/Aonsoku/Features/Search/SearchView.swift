@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// The Search tab. With an empty field it shows the biggest genres to
@@ -16,34 +17,36 @@ struct SearchView: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        Group {
-            if Self.isSearchable(query) {
-                resultsList
-            } else {
-                BrowseGenres()
+        WithPerceptionTracking {
+            Group {
+                if Self.isSearchable(query) {
+                    resultsList
+                } else {
+                    BrowseGenres()
+                }
             }
-        }
-        .offlineBanner()
-        .themedBackground()
-        .navigationTitle(t("sidebar.miniSearch"))
-        .searchable(text: $text, prompt: Text(t("command.inputPlaceholder")))
-        .autocorrectionDisabled()
-        .textInputAutocapitalization(.never)
-        .onSubmit(of: .search) {
-            query = trimmedText
-        }
-        .task(id: trimmedText) {
-            // Waits for typing to pause; clearing the field is immediate.
-            guard !trimmedText.isEmpty else {
-                query = ""
-                return
+            .offlineBanner()
+            .themedBackground()
+            .navigationTitle(t("sidebar.miniSearch"))
+            .searchable(text: $text, prompt: Text(t("command.inputPlaceholder")))
+            .autocorrectionDisabled()
+            .textInputAutocapitalization(.never)
+            .onSubmit(of: .search) {
+                query = trimmedText
             }
-            try? await Task.sleep(for: .milliseconds(500))
-            guard !Task.isCancelled else { return }
-            query = trimmedText
-        }
-        .task(id: query) {
-            await search()
+            .task(id: trimmedText) {
+                // Waits for typing to pause; clearing the field is immediate.
+                guard !trimmedText.isEmpty else {
+                    query = ""
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(500))
+                guard !Task.isCancelled else { return }
+                query = trimmedText
+            }
+            .task(id: query) {
+                await search()
+            }
         }
     }
 
@@ -65,8 +68,10 @@ struct SearchView: View {
                 if !results.artists.isEmpty {
                     Section {
                         ForEach(results.artists) { artist in
-                            ArtistRow(artist: artist)
-                                .themedRow(plain: true)
+                            WithPerceptionTracking {
+                                ArtistRow(artist: artist)
+                                    .themedRow(plain: true)
+                            }
                         }
                     } header: {
                         resultsHeader(t("sidebar.artists"))
@@ -75,8 +80,10 @@ struct SearchView: View {
                 if !results.albums.isEmpty {
                     Section {
                         ForEach(results.albums) { album in
-                            AlbumResultRow(album: album)
-                                .themedRow(plain: true)
+                            WithPerceptionTracking {
+                                AlbumResultRow(album: album)
+                                    .themedRow(plain: true)
+                            }
                         }
                     } header: {
                         resultsHeader(t("sidebar.albums"), route: .albums(.search(query)))
@@ -85,12 +92,14 @@ struct SearchView: View {
                 if !results.songs.isEmpty {
                     Section {
                         ForEach(Array(results.songs.enumerated()), id: \.element.id) { index, song in
-                            SongResultRow(
-                                song: song,
-                                isFirst: index == 0,
-                                isLast: index == results.songs.count - 1
-                            )
-                                .themedRow(plain: true)
+                            WithPerceptionTracking {
+                                SongResultRow(
+                                    song: song,
+                                    isFirst: index == 0,
+                                    isLast: index == results.songs.count - 1
+                                )
+                                    .themedRow(plain: true)
+                            }
                         }
                     } header: {
                         resultsHeader(t("sidebar.songs"), route: .songs(SongListQuery(search: query)))
@@ -160,42 +169,50 @@ private struct BrowseGenres: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        ScrollView {
-            if let genres, !genres.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
-                    SectionHeader(title: t("table.columns.genres"), route: .genres)
-                        .pageMargins()
-                    TileGrid(minimumWidth: 160) {
-                        ForEach(genres) { genre in
-                            GenreLink(genre: genre)
+        WithPerceptionTracking {
+            ScrollView {
+                if let genres, !genres.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        SectionHeader(title: t("table.columns.genres"), route: .genres)
+                            .pageMargins()
+                        TileGrid(minimumWidth: 160) {
+                            WithPerceptionTracking {
+                                ForEach(genres) { genre in
+                                    WithPerceptionTracking {
+                                        GenreLink(genre: genre)
+                                    }
+                                }
+                            }
                         }
                     }
+                    .padding(.top, 8)
+                    .padding(.bottom, 24)
                 }
-                .padding(.top, 8)
-                .padding(.bottom, 24)
             }
-        }
-        .scrollDismissesKeyboard(.immediately)
-        .overlay {
-            if let genres, genres.isEmpty {
-                EmptyStateView(
-                    title: t("sidebar.miniSearch"),
-                    systemImage: "magnifyingglass",
-                    description: t("native.search.description")
+            .scrollDismissesKeyboard(.immediately)
+            .overlay {
+                WithPerceptionTracking {
+                    if let genres, genres.isEmpty {
+                        EmptyStateView(
+                            title: t("sidebar.miniSearch"),
+                            systemImage: "magnifyingglass",
+                            description: t("native.search.description")
+                        )
+                    }
+                }
+            }
+            .task {
+                guard genres == nil else { return }
+                let all = (try? await app.repository.genres()) ?? []
+                genres = Array(
+                    all.sorted {
+                        $0.albumCount != $1.albumCount
+                            ? $0.albumCount > $1.albumCount
+                            : $0.name.localizedStandardCompare($1.name) == .orderedAscending
+                    }
+                    .prefix(12)
                 )
             }
-        }
-        .task {
-            guard genres == nil else { return }
-            let all = (try? await app.repository.genres()) ?? []
-            genres = Array(
-                all.sorted {
-                    $0.albumCount != $1.albumCount
-                        ? $0.albumCount > $1.albumCount
-                        : $0.name.localizedStandardCompare($1.name) == .orderedAscending
-                }
-                .prefix(12)
-            )
         }
     }
 }
@@ -207,33 +224,35 @@ private struct AlbumResultRow: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        NavigationLink(value: AppRoute.album(album)) {
-            HStack(spacing: 12) {
-                ArtworkImage(id: album.coverArt, size: .small, cornerRadius: Layout.rowArtworkRadius)
-                    .frame(width: 44, height: 44)
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 4) {
-                        Text(album.name)
-                            .font(.callout.weight(.medium))
-                            .lineLimit(1)
-                        if album.explicitStatus == .explicit {
-                            ExplicitBadge()
+        WithPerceptionTracking {
+            NavigationLink(value: AppRoute.album(album)) {
+                HStack(spacing: 12) {
+                    ArtworkImage(id: album.coverArt, size: .small, cornerRadius: Layout.rowArtworkRadius)
+                        .frame(width: 44, height: 44)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 4) {
+                            Text(album.name)
+                                .font(.callout.weight(.medium))
+                                .lineLimit(1)
+                            if album.explicitStatus == .explicit {
+                                ExplicitBadge()
+                            }
                         }
+                        HStack(spacing: 4) {
+                            Text("\(t("album.headline")) · \(album.artistLine)")
+                                .lineLimit(1)
+                            AlbumCacheBadge(albumId: album.id)
+                        }
+                        .font(.footnote)
+                        .foregroundStyle(ThemeColor.mutedForeground)
                     }
-                    HStack(spacing: 4) {
-                        Text("\(t("album.headline")) · \(album.artistLine)")
-                            .lineLimit(1)
-                        AlbumCacheBadge(albumId: album.id)
-                    }
-                    .font(.footnote)
-                    .foregroundStyle(ThemeColor.mutedForeground)
                 }
             }
-        }
-        .listRowSeparator(.hidden)
-        .compactRowInsets(vertical: 4)
-        .contextMenu {
-            AlbumMenuItems(album: album)
+            .listRowSeparator(.hidden)
+            .compactRowInsets(vertical: 4)
+            .contextMenu {
+                AlbumMenuItems(album: album)
+            }
         }
     }
 }
@@ -247,8 +266,10 @@ private struct SongResultRow: View {
     @Environment(PlayerStore.self) private var player
 
     var body: some View {
-        SongRow(song: song, isFirst: isFirst, isLast: isLast) {
-            player.play(song: song)
+        WithPerceptionTracking {
+            SongRow(song: song, isFirst: isFirst, isLast: isLast) {
+                player.play(song: song)
+            }
         }
     }
 }

@@ -1,5 +1,5 @@
 import Foundation
-import Observation
+import Perception
 
 /// Library sync progress as shown in Settings and Library.
 public enum LibrarySyncPhase: Hashable, Sendable {
@@ -34,23 +34,23 @@ public enum LibrarySyncPhase: Hashable, Sendable {
 /// minutes), and on demand. Skips automatic syncs offline or on metered
 /// networks.
 @MainActor
-@Observable
+@Perceptible
 public final class LibrarySyncStore {
     public private(set) var phase = LibrarySyncPhase.idle
     public private(set) var lastSyncedAt: Date?
     /// Increments when synced data changes, so lists can reload.
     public private(set) var revision = 0
 
-    @ObservationIgnored public let library: LibraryService
-    @ObservationIgnored public let settings: SettingsStore
-    @ObservationIgnored public let connectivity: any Connectivity
-    @ObservationIgnored private var subscription: UUID?
-    @ObservationIgnored private var started = false
-    @ObservationIgnored private var revisionPending = false
-    @ObservationIgnored private var lastForegroundSyncAt: Date?
-    @ObservationIgnored private var syncCompleted: (@MainActor () -> Void)?
-    @ObservationIgnored private let operations: LibrarySyncOperations
-    @ObservationIgnored private let now: @Sendable () -> Date
+    @PerceptionIgnored public let library: LibraryService
+    @PerceptionIgnored public let settings: SettingsStore
+    @PerceptionIgnored public let connectivity: any Connectivity
+    @PerceptionIgnored private var subscription: UUID?
+    @PerceptionIgnored private var started = false
+    @PerceptionIgnored private var revisionPending = false
+    @PerceptionIgnored private var lastForegroundSyncAt: Date?
+    @PerceptionIgnored private var syncCompleted: (@MainActor () -> Void)?
+    @PerceptionIgnored private let operations: LibrarySyncOperations
+    @PerceptionIgnored private let now: @Sendable () -> Date
 
     public init(library: LibraryService, settings: SettingsStore, connectivity: any Connectivity) {
         self.library = library

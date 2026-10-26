@@ -1,10 +1,11 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 import UIKit
 
 /// Presentation state shared by the full-width player and its drag handle.
 @MainActor
-@Observable
+@Perceptible
 final class PlayerPresentationState {
     static func panelAnimation(reduceMotion: Bool) -> Animation {
         reduceMotion ? .linear(duration: 0.15) : .spring(duration: 0.45, bounce: 0)
@@ -36,7 +37,7 @@ final class PlayerPresentationState {
             width: viewport.width, height: header.height + 16
         ).intersection(viewport)
     }
-    @ObservationIgnored var prepareQueueForPresentation: (() -> Void)?
+    @PerceptionIgnored var prepareQueueForPresentation: (() -> Void)?
     var accessory: PlayerAccessoryLayout?
 }
 
@@ -66,19 +67,23 @@ struct PlayerAccessorySlot: View {
     @Environment(\.tabViewBottomAccessoryPlacement) private var placement
 
     var body: some View {
-        Color.clear
-            .frame(height: 36)
-            .background {
-                PlayerAccessoryLayoutReader(
-                    isInline: placement == .inline, previousLayout: presentation.accessory
-                ) { layout in
-                    presentation.accessory = layout
+        WithPerceptionTracking {
+            Color.clear
+                .frame(height: 36)
+                .background {
+                    WithPerceptionTracking {
+                        PlayerAccessoryLayoutReader(
+                            isInline: placement == .inline, previousLayout: presentation.accessory
+                        ) { layout in
+                            presentation.accessory = layout
+                        }
+                    }
                 }
-            }
-            // Native accessory hosts are recycled while changing placement.
-            // Keep the last destination until a new positive frame replaces it.
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
+                // Native accessory hosts are recycled while changing placement.
+                // Keep the last destination until a new positive frame replaces it.
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
     }
 }
 
@@ -243,17 +248,19 @@ struct PlayerArtworkSlot: View {
     @Environment(PlayerPresentationState.self) private var presentation
 
     var body: some View {
-        Color.clear
-            .aspectRatio(1, contentMode: .fit)
-            .onGeometryChange(for: CGRect.self) { proxy in
-                proxy.frame(in: .named(PlayerArtworkLocation.coordinateSpace))
-            } action: { rect in
-                guard rect.width > 0, rect.height > 0 else { return }
-                presentation.artworkFrames[location] = PlayerArtworkFrame(
-                    rect: rect, cornerRadius: cornerRadius, shadowRadius: shadowRadius
-                )
-            }
-            .accessibilityHidden(true)
+        WithPerceptionTracking {
+            Color.clear
+                .aspectRatio(1, contentMode: .fit)
+                .onGeometryChange(for: CGRect.self) { proxy in
+                    proxy.frame(in: .named(PlayerArtworkLocation.coordinateSpace))
+                } action: { rect in
+                    guard rect.width > 0, rect.height > 0 else { return }
+                    presentation.artworkFrames[location] = PlayerArtworkFrame(
+                        rect: rect, cornerRadius: cornerRadius, shadowRadius: shadowRadius
+                    )
+                }
+                .accessibilityHidden(true)
+        }
     }
 }
 
@@ -280,104 +287,116 @@ private struct NowPlayingPresentation: ViewModifier {
     }
 
     func body(content: Content) -> some View {
-        content
-            .allowsHitTesting(!router.isNowPlayingPresented)
-            .accessibilityHidden(router.isNowPlayingPresented)
-            .overlay {
-                GeometryReader { proxy in
-                    let insets = proxy.safeAreaInsets
-                    let width = proxy.size.width + insets.leading + insets.trailing
-                    let height = proxy.size.height + insets.top + insets.bottom
-                    let full = CGRect(x: 0, y: 0, width: width, height: height)
-                    let accessory = accessoryFrame(in: proxy)
-                    let pill = accessory.insetBy(dx: 0, dy: -6)
-                    let surface = isExpanded
-                        ? full.offsetBy(dx: 0, dy: presentation.dragOffset) : pill
-                    let radius = isExpanded
-                        ? expandedRadius : pill.height / 2
-                    let shape = PlayerSurfaceShape(frame: surface, cornerRadius: radius)
-                    ZStack(alignment: .topLeading) {
-                        ZStack(alignment: .topLeading) {
-                            NowPlayingBackground()
-                                .frame(width: surface.width, height: surface.height)
-                                .position(x: surface.midX, y: surface.midY)
-                            NowPlayingView()
-                                .padding(insets)
-                                .frame(width: width, height: height)
-                                .coordinateSpace(name: PlayerArtworkLocation.coordinateSpace)
-                                // Animate the host, never its layout probes or the
-                                // native List. Otherwise their intermediate frames
-                                // become new artwork destinations mid-transition.
-                                .transaction { $0.animation = nil }
-                                .offset(y: surface.minY)
-                                .allowsHitTesting(router.isNowPlayingPresented)
-                                .accessibilityHidden(!router.isNowPlayingPresented)
-                        }
-                        // Flatten the opaque pinned headers with the page before
-                        // fading toward the glass. Independent alpha exposes a
-                        // solid rectangle where a header overlaps the backdrop.
-                        .compositingGroup()
-                        .opacity(expandedContentOpacity(viewportHeight: height))
-                        sharedArtwork(in: proxy)
-                    }
-                    .environment(\.nowPlayingPalette, palette)
-                    .frame(width: width, height: height, alignment: .topLeading)
-                    .coordinateSpace(name: PlayerArtworkLocation.containerCoordinateSpace)
-                    .clipShape(shape)
-                    .background {
-                        Color.clear
-                            .frame(width: surface.width, height: surface.height)
-                            // Keep the content inside the glass effect so its
-                            // semantic foreground adapts to the backdrop.
-                            .overlay(alignment: .top) {
-                                MiniPlayer(compactProgress: presentation.accessory?.compactProgress ?? 0)
-                                    .frame(width: accessory.width, height: accessory.height)
-                                    .padding(.top, 6)
-                                    .offset(y: isExpanded ? 8 : 0)
-                                    .scaleEffect(isExpanded ? 0.94 : 1.0)
-                                    .opacity(isExpanded ? 0 : 1)
+        WithPerceptionTracking {
+            content
+                .allowsHitTesting(!router.isNowPlayingPresented)
+                .accessibilityHidden(router.isNowPlayingPresented)
+                .overlay {
+                    WithPerceptionTracking {
+                        GeometryReader { proxy in
+                            WithPerceptionTracking {
+                                let insets = proxy.safeAreaInsets
+                                let width = proxy.size.width + insets.leading + insets.trailing
+                                let height = proxy.size.height + insets.top + insets.bottom
+                                let full = CGRect(x: 0, y: 0, width: width, height: height)
+                                let accessory = accessoryFrame(in: proxy)
+                                let pill = accessory.insetBy(dx: 0, dy: -6)
+                                let surface = isExpanded
+                                    ? full.offsetBy(dx: 0, dy: presentation.dragOffset) : pill
+                                let radius = isExpanded
+                                    ? expandedRadius : pill.height / 2
+                                let shape = PlayerSurfaceShape(frame: surface, cornerRadius: radius)
+                                ZStack(alignment: .topLeading) {
+                                    ZStack(alignment: .topLeading) {
+                                        NowPlayingBackground()
+                                            .frame(width: surface.width, height: surface.height)
+                                            .position(x: surface.midX, y: surface.midY)
+                                        NowPlayingView()
+                                            .padding(insets)
+                                            .frame(width: width, height: height)
+                                            .coordinateSpace(name: PlayerArtworkLocation.coordinateSpace)
+                                            // Animate the host, never its layout probes or the
+                                            // native List. Otherwise their intermediate frames
+                                            // become new artwork destinations mid-transition.
+                                            .transaction { $0.animation = nil }
+                                            .offset(y: surface.minY)
+                                            .allowsHitTesting(router.isNowPlayingPresented)
+                                            .accessibilityHidden(!router.isNowPlayingPresented)
+                                    }
+                                    // Flatten the opaque pinned headers with the page before
+                                    // fading toward the glass. Independent alpha exposes a
+                                    // solid rectangle where a header overlaps the backdrop.
+                                    .compositingGroup()
+                                    .opacity(expandedContentOpacity(viewportHeight: height))
+                                    sharedArtwork(in: proxy)
+                                }
+                                .environment(\.nowPlayingPalette, palette)
+                                .frame(width: width, height: height, alignment: .topLeading)
+                                .coordinateSpace(name: PlayerArtworkLocation.containerCoordinateSpace)
+                                .clipShape(shape)
+                                .background {
+                                    WithPerceptionTracking {
+                                        Color.clear
+                                            .frame(width: surface.width, height: surface.height)
+                                            // Keep the content inside the glass effect so its
+                                            // semantic foreground adapts to the backdrop.
+                                            .overlay(alignment: .top) {
+                                                WithPerceptionTracking {
+                                                    MiniPlayer(compactProgress: presentation.accessory?.compactProgress ?? 0)
+                                                        .frame(width: accessory.width, height: accessory.height)
+                                                        .padding(.top, 6)
+                                                        .offset(y: isExpanded ? 8 : 0)
+                                                        .scaleEffect(isExpanded ? 0.94 : 1.0)
+                                                        .opacity(isExpanded ? 0 : 1)
+                                                }
+                                            }
+                                            .glassEffect(.regular.interactive(), in: RoundedRectangle(
+                                                cornerRadius: radius, style: .continuous
+                                            ))
+                                            .position(x: surface.midX, y: surface.midY)
+                                            .allowsHitTesting(!router.isNowPlayingPresented)
+                                            .accessibilityHidden(router.isNowPlayingPresented)
+                                    }
+                                }
+                                .contentShape(shape)
+                                .opacity(router.isNowPlayingPresented || presentation.accessory != nil ? 1 : 0)
+                                .gesture(PlayerDismissGesture(
+                                    presentation: presentation,
+                                    isEnabled: router.isNowPlayingPresented && router.sheet == nil
+                                ) { dismiss in
+                                    if dismiss {
+                                        // Keep the finger's final offset until the source
+                                        // geometry has been captured by transition().
+                                        router.isNowPlayingPresented = false
+                                    } else {
+                                        withAnimation(presentationAnimation) { presentation.dragOffset = 0 }
+                                    }
+                                })
+                                .background(alignment: .topLeading) {
+                                    WithPerceptionTracking {
+                                        PlayerViewportCornerReader { viewportCornerRadius = $0 }
+                                            .frame(width: width, height: height)
+                                            .allowsHitTesting(false)
+                                            .accessibilityHidden(true)
+                                    }
+                                }
+                                .offset(x: -insets.leading, y: -insets.top)
+                                .onChange(of: router.isNowPlayingPresented, initial: true) { _, expanded in
+                                    transition(to: expanded, in: proxy)
+                                }
+                                .onChange(of: presentation.artworkLocation) {
+                                    if artworkTransition != nil {
+                                        transition(to: router.isNowPlayingPresented, in: proxy, force: true)
+                                    }
+                                }
                             }
-                            .glassEffect(.regular.interactive(), in: RoundedRectangle(
-                                cornerRadius: radius, style: .continuous
-                            ))
-                            .position(x: surface.midX, y: surface.midY)
-                            .allowsHitTesting(!router.isNowPlayingPresented)
-                            .accessibilityHidden(router.isNowPlayingPresented)
-                    }
-                    .contentShape(shape)
-                    .opacity(router.isNowPlayingPresented || presentation.accessory != nil ? 1 : 0)
-                    .gesture(PlayerDismissGesture(
-                        presentation: presentation,
-                        isEnabled: router.isNowPlayingPresented && router.sheet == nil
-                    ) { dismiss in
-                        if dismiss {
-                            // Keep the finger's final offset until the source
-                            // geometry has been captured by transition().
-                            router.isNowPlayingPresented = false
-                        } else {
-                            withAnimation(presentationAnimation) { presentation.dragOffset = 0 }
                         }
-                    })
-                    .background(alignment: .topLeading) {
-                        PlayerViewportCornerReader { viewportCornerRadius = $0 }
-                            .frame(width: width, height: height)
-                            .allowsHitTesting(false)
-                            .accessibilityHidden(true)
-                    }
-                    .offset(x: -insets.leading, y: -insets.top)
-                    .onChange(of: router.isNowPlayingPresented, initial: true) { _, expanded in
-                        transition(to: expanded, in: proxy)
-                    }
-                    .onChange(of: presentation.artworkLocation) {
-                        if artworkTransition != nil {
-                            transition(to: router.isNowPlayingPresented, in: proxy, force: true)
-                        }
+                        .ignoresSafeArea(.keyboard)
                     }
                 }
-                .ignoresSafeArea(.keyboard)
-            }
-            .environment(presentation)
-            .artworkPalette(coverArtId, into: $palette)
+                .environment(presentation)
+                .artworkPalette(coverArtId, into: $palette)
+        }
     }
 
     private func transition(to expanded: Bool, in proxy: GeometryProxy, force: Bool = false) {

@@ -360,3 +360,11 @@ Xcode 26 runner, archives `ios/Aonsoku.xcodeproj` with the short commit hash in
 releases call that workflow and attach a versioned unsigned iOS IPA to the
 GitHub release. Release versioning updates `MARKETING_VERSION` in the native
 Xcode project; Capacitor versioning remains Android-only.
+
+### Observation compatibility
+
+`AonsokuKit` supports iOS 16 and uses the pinned Perception package for its
+`@Perceptible` stores and `withPerceptionTracking` subscriptions. SwiftUI view
+bodies and escaping row, reader and presentation builders must establish a
+`WithPerceptionTracking` scope on iOS 16. On newer systems the same stores
+participate in native Observation. Use `Perception.Bindable` for bindings.

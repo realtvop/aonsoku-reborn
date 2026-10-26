@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// An album with a compact cover over the artwork color band, native title and
@@ -43,95 +44,101 @@ struct AlbumDetailView: View {
     }
 
     var body: some View {
-        List {
-            if let album {
-                VStack(alignment: .leading, spacing: 0) {
-                    header(album)
-                        .environment(\.colorScheme, theme.palette.isDark ? .dark : .light)
-                        .onGeometryChange(for: CGFloat.self) { proxy in
-                            proxy.size.height
-                        } action: { height in
-                            headerHeight = height
+        WithPerceptionTracking {
+            List {
+                if let album {
+                    VStack(alignment: .leading, spacing: 0) {
+                        header(album)
+                            .environment(\.colorScheme, theme.palette.isDark ? .dark : .light)
+                            .onGeometryChange(for: CGFloat.self) { proxy in
+                                proxy.size.height
+                            } action: { height in
+                                headerHeight = height
+                            }
+                        playButtons(album)
+                            .pageMargins()
+                            .padding(.top, 16)
+                        if let notes = extras?.notes {
+                            AboutCard(
+                                title: t("album.info.about", ["name": album.name]),
+                                text: notes,
+                                links: extras?.lastFmUrl.map {
+                                    [AboutLink(title: t("album.info.lastfm"), url: $0)]
+                                } ?? []
+                            )
+                            .pageMargins()
+                            .padding(.top, 24)
                         }
-                    playButtons(album)
-                        .pageMargins()
-                        .padding(.top, 16)
-                    if let notes = extras?.notes {
-                        AboutCard(
-                            title: t("album.info.about", ["name": album.name]),
-                            text: notes,
-                            links: extras?.lastFmUrl.map {
-                                [AboutLink(title: t("album.info.lastfm"), url: $0)]
-                            } ?? []
-                        )
-                        .pageMargins()
-                        .padding(.top, 24)
                     }
-                }
-                .padding(.bottom, 20)
-                .listRowInsets(EdgeInsets())
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
+                    .padding(.bottom, 20)
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
 
-                tracks(album)
+                    tracks(album)
 
-                VStack(alignment: .leading, spacing: 0) {
-                    if detail != nil {
-                        footer(album)
-                            .padding(.top, 20)
+                    VStack(alignment: .leading, spacing: 0) {
+                        if detail != nil {
+                            footer(album)
+                                .padding(.top, 20)
+                        }
+                        shelves(album)
+                            .padding(.top, Layout.sectionSpacing)
                     }
-                    shelves(album)
-                        .padding(.top, Layout.sectionSpacing)
-                }
-                .padding(.bottom, 24)
-                .listRowInsets(EdgeInsets())
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
-            }
-        }
-        .listStyle(.plain)
-        .environment(\.defaultMinListRowHeight, 0)
-        .overlay {
-            if album == nil {
-                if case let .failed(message) = phase {
-                    ErrorStateView(message: message) {
-                        Task { await refreshIfNeeded() }
-                    }
-                } else {
-                    LoadingStateView()
+                    .padding(.bottom, 24)
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
                 }
             }
-        }
-        .artworkPalette(album?.coverArt, into: $palette)
-        .detailBand(palette, headerHeight: headerHeight)
-        .themedBackground()
-        .scrollRevealedTitle(
-            album?.name ?? "",
-            threshold: sizeClass == .regular ? 220 : 330,
-            headerIsDark: theme.palette.isDark
-        )
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    if let album {
-                        AlbumMenuItems(album: album)
+            .listStyle(.plain)
+            .environment(\.defaultMinListRowHeight, 0)
+            .overlay {
+                WithPerceptionTracking {
+                    if album == nil {
+                        if case let .failed(message) = phase {
+                            ErrorStateView(message: message) {
+                                Task { await refreshIfNeeded() }
+                            }
+                        } else {
+                            LoadingStateView()
+                        }
                     }
-                } label: {
-                    Label(
-                        t("playlist.buttons.options", ["name": album?.name ?? ""]),
-                        systemImage: "ellipsis"
-                    )
                 }
-                .disabled(album == nil)
             }
-        }
-        .offlineBanner()
-        .task(id: sync.revision) {
-            await refreshIfNeeded()
-        }
-        .refreshable {
-            if await load() {
-                await loadExtras()
+            .artworkPalette(album?.coverArt, into: $palette)
+            .detailBand(palette, headerHeight: headerHeight)
+            .themedBackground()
+            .scrollRevealedTitle(
+                album?.name ?? "",
+                threshold: sizeClass == .regular ? 220 : 330,
+                headerIsDark: theme.palette.isDark
+            )
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    WithPerceptionTracking {
+                        Menu {
+                            if let album {
+                                AlbumMenuItems(album: album)
+                            }
+                        } label: {
+                            Label(
+                                t("playlist.buttons.options", ["name": album?.name ?? ""]),
+                                systemImage: "ellipsis"
+                            )
+                        }
+                        .disabled(album == nil)
+                    }
+                }
+            }
+            .offlineBanner()
+            .task(id: sync.revision) {
+                await refreshIfNeeded()
+            }
+            .refreshable {
+                if await load() {
+                    await loadExtras()
+                }
             }
         }
     }
@@ -195,8 +202,10 @@ struct AlbumDetailView: View {
         if credits.count > 1 {
             Menu {
                 ForEach(credits, id: \.self) { credit in
-                    Button(credit.name) {
-                        router.navigate(to: .artist(id: credit.id ?? "", name: credit.name))
+                    WithPerceptionTracking {
+                        Button(credit.name) {
+                            router.navigate(to: .artist(id: credit.id ?? "", name: credit.name))
+                        }
                     }
                 }
             } label: {
@@ -278,24 +287,28 @@ struct AlbumDetailView: View {
             let discs = Disc.groups(of: songs, titles: album.discTitles)
             let numbersTracks = songs.contains { ($0.track ?? 0) > 0 }
             ForEach(discs) { disc in
-                if discs.count > 1 {
-                    discHeader(disc)
-                        .listRowInsets(EdgeInsets())
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                }
-                ForEach(disc.tracks) { track in
-                    SongRow(
-                        song: track.song,
-                        leading: .number(numbersTracks ? track.song.track : track.index + 1),
-                        subtitle: track.song.artistLine == album.artistLine ? .none : .artist,
-                        context: .album,
-                        isFirst: track.index == 0,
-                        isLast: track.index == songs.count - 1
-                    ) {
-                        play(album, startingAt: track.index, shuffle: false)
+                WithPerceptionTracking {
+                    if discs.count > 1 {
+                        discHeader(disc)
+                            .listRowInsets(EdgeInsets())
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
                     }
-                    .listRowBackground(Color.clear)
+                    ForEach(disc.tracks) { track in
+                        WithPerceptionTracking {
+                            SongRow(
+                                song: track.song,
+                                leading: .number(numbersTracks ? track.song.track : track.index + 1),
+                                subtitle: track.song.artistLine == album.artistLine ? .none : .artist,
+                                context: .album,
+                                isFirst: track.index == 0,
+                                isLast: track.index == songs.count - 1
+                            ) {
+                                play(album, startingAt: track.index, shuffle: false)
+                            }
+                            .listRowBackground(Color.clear)
+                        }
+                    }
                 }
             }
         } else {
@@ -368,7 +381,9 @@ struct AlbumDetailView: View {
             if !labels.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
                     ForEach(labels, id: \.self) { line in
-                        Text(line)
+                        WithPerceptionTracking {
+                            Text(line)
+                        }
                     }
                 }
                 .padding(.top, 10)

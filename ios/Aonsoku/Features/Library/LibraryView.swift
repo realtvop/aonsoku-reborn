@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// The Library tab, like the web's mobile library: the kinds of things in
@@ -17,36 +18,40 @@ struct LibraryView: View {
     private static let playlistLimit = 12
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Layout.sectionSpacing) {
-                VStack(spacing: 2) {
-                    ForEach(categories) { category in
-                        Button {
-                            router.navigate(to: route(for: category))
-                        } label: {
-                            LibraryRow(title: t(category.titleKey)) {
-                                IconTile(systemImage: category.symbol)
+        WithPerceptionTracking {
+            ScrollView {
+                VStack(alignment: .leading, spacing: Layout.sectionSpacing) {
+                    VStack(spacing: 2) {
+                        ForEach(categories) { category in
+                            WithPerceptionTracking {
+                                Button {
+                                    router.navigate(to: route(for: category))
+                                } label: {
+                                    LibraryRow(title: t(category.titleKey)) {
+                                        IconTile(systemImage: category.symbol)
+                                    }
+                                }
+                                .buttonStyle(RowHighlightStyle())
                             }
                         }
-                        .buttonStyle(RowHighlightStyle())
                     }
+                    .padding(.horizontal, rowInset)
+                    playlistsSection
                 }
-                .padding(.horizontal, rowInset)
-                playlistsSection
+                .padding(.top, 4)
+                .padding(.bottom, 24)
             }
-            .padding(.top, 4)
-            .padding(.bottom, 24)
-        }
-        .offlineBanner()
-        .themedBackground()
-        .rootPageHeader(t("sidebar.library"))
-        .refreshable {
-            await playlists.reload()
-            if network.isOnline, !sync.isSyncing {
-                sync.syncIncremental()
+            .offlineBanner()
+            .themedBackground()
+            .rootPageHeader(t("sidebar.library"))
+            .refreshable {
+                await playlists.reload()
+                if network.isOnline, !sync.isSyncing {
+                    sync.syncIncremental()
+                }
             }
+            .task { await playlists.loadIfNeeded() }
         }
-        .task { await playlists.loadIfNeeded() }
     }
 
     /// Rows reach past the margin by their own padding, so their icons line
@@ -83,23 +88,25 @@ struct LibraryView: View {
             } else {
                 VStack(spacing: 2) {
                     ForEach(playlists.playlists.prefix(Self.playlistLimit)) { playlist in
-                        NavigationLink(value: AppRoute.playlist(id: playlist.id)) {
-                            LibraryRow(
-                                title: playlist.name,
-                                subtitle: t("playlist.songCount", count: playlist.songCount)
-                            ) {
-                                ArtworkImage(
-                                    id: playlist.coverArt,
-                                    size: .small,
-                                    cornerRadius: Layout.rowArtworkRadius,
-                                    placeholder: "music.note.list"
-                                )
-                                .frame(width: 44, height: 44)
+                        WithPerceptionTracking {
+                            NavigationLink(value: AppRoute.playlist(id: playlist.id)) {
+                                LibraryRow(
+                                    title: playlist.name,
+                                    subtitle: t("playlist.songCount", count: playlist.songCount)
+                                ) {
+                                    ArtworkImage(
+                                        id: playlist.coverArt,
+                                        size: .small,
+                                        cornerRadius: Layout.rowArtworkRadius,
+                                        placeholder: "music.note.list"
+                                    )
+                                    .frame(width: 44, height: 44)
+                                }
                             }
-                        }
-                        .buttonStyle(RowHighlightStyle())
-                        .contextMenu {
-                            PlaylistMenuItems(playlist: playlist)
+                            .buttonStyle(RowHighlightStyle())
+                            .contextMenu {
+                                PlaylistMenuItems(playlist: playlist)
+                            }
                         }
                     }
                 }
@@ -176,28 +183,30 @@ private struct LibraryRow<Leading: View>: View {
     @ViewBuilder let leading: Leading
 
     var body: some View {
-        HStack(spacing: 12) {
-            leading
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(Color.primary)
-                    .lineLimit(1)
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.footnote)
-                        .foregroundStyle(ThemeColor.mutedForeground)
+        WithPerceptionTracking {
+            HStack(spacing: 12) {
+                leading
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(Color.primary)
                         .lineLimit(1)
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.footnote)
+                            .foregroundStyle(ThemeColor.mutedForeground)
+                            .lineLimit(1)
+                    }
                 }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.forward")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(ThemeColor.mutedForeground.opacity(0.7))
             }
-            Spacer(minLength: 8)
-            Image(systemName: "chevron.forward")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(ThemeColor.mutedForeground.opacity(0.7))
+            .padding(.horizontal, libraryRowPadding)
+            .frame(minHeight: 56)
+            .contentShape(.rect)
         }
-        .padding(.horizontal, libraryRowPadding)
-        .frame(minHeight: 56)
-        .contentShape(.rect)
     }
 }
 
@@ -205,12 +214,16 @@ private struct LibraryRow<Leading: View>: View {
 /// pressed, like the web's `active:bg-accent`.
 struct RowHighlightStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background {
-                if configuration.isPressed {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(ThemeColor.accent.opacity(0.7))
+        WithPerceptionTracking {
+            configuration.label
+                .background {
+                    WithPerceptionTracking {
+                        if configuration.isPressed {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(ThemeColor.accent.opacity(0.7))
+                        }
+                    }
                 }
-            }
+        }
     }
 }

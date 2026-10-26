@@ -1,29 +1,29 @@
 import Foundation
-import Observation
+import Perception
 
 /// Home page albums: the carousel and the section rows (web `useHomeData`).
 /// Pinned items live in `PinnedHomeStore`.
 @MainActor
-@Observable
+@Perceptible
 public final class HomeStore {
     public private(set) var carousel: [Album] = []
     public private(set) var sections: [HomeSection: [Album]] = [:]
     public private(set) var phase: LoadPhase = .idle
 
-    @ObservationIgnored public let repository: LibraryRepository
-    @ObservationIgnored private var loadTask: Task<Void, Never>?
-    @ObservationIgnored private let preferences: PreferencesService?
-    @ObservationIgnored private var accountKey: String?
+    @PerceptionIgnored public let repository: LibraryRepository
+    @PerceptionIgnored private var loadTask: Task<Void, Never>?
+    @PerceptionIgnored private let preferences: PreferencesService?
+    @PerceptionIgnored private var accountKey: String?
     static let cacheKey = "home.snapshot.v1"
     public private(set) var hasCarousel = false
-    @ObservationIgnored private let now: () -> Date
-    @ObservationIgnored private var carouselUpdatedAt: Date?
+    @PerceptionIgnored private let now: () -> Date
+    @PerceptionIgnored private var carouselUpdatedAt: Date?
     private static let randomCacheLifetime: TimeInterval = 24 * 60 * 60
 
-    @ObservationIgnored private var loadRevision: UInt64 = 0
-    @ObservationIgnored private var taskRefreshesRandom = false
-    @ObservationIgnored private var hasLoaded = false
-    @ObservationIgnored private var generation: UInt64 = 0
+    @PerceptionIgnored private var loadRevision: UInt64 = 0
+    @PerceptionIgnored private var taskRefreshesRandom = false
+    @PerceptionIgnored private var hasLoaded = false
+    @PerceptionIgnored private var generation: UInt64 = 0
 
     public init(
         repository: LibraryRepository, preferences: PreferencesService? = nil,

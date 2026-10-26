@@ -1,4 +1,5 @@
 import CoreText
+import Perception
 import SwiftUI
 import UIKit
 
@@ -129,7 +130,9 @@ private struct DisplayFontModifier: ViewModifier {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     func body(content: Content) -> some View {
-        content.font(DisplayFontCache.font(style, dynamicTypeSize))
+        WithPerceptionTracking {
+            content.font(DisplayFontCache.font(style, dynamicTypeSize))
+        }
     }
 }
 

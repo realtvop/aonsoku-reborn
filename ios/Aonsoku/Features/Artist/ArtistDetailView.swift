@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// An artist, laid out like the web's artist page: the portrait and name
@@ -66,49 +67,53 @@ struct ArtistDetailView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                header
-                if albumCount > 0 {
-                    playButtons
-                        .pageMargins()
-                        .padding(.top, 16)
-                        .transition(.opacity)
-                }
-                if detail != nil {
-                    sections
-                        .padding(.vertical, 24)
-                } else {
-                    placeholder
-                }
-            }
-            .animation(.smooth, value: albumCount > 0)
-        }
-        .artworkPalette(artist?.coverArt, into: $palette)
-        .themedBackground()
-        .scrollRevealedTitle(
-            artistName,
-            threshold: sizeClass == .regular ? 200 : 290,
-            headerIsDark: theme.palette.isDark
-        )
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    if let artist {
-                        ArtistMenuItems(artist: artist)
+        WithPerceptionTracking {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    header
+                    if albumCount > 0 {
+                        playButtons
+                            .pageMargins()
+                            .padding(.top, 16)
+                            .transition(.opacity)
                     }
-                } label: {
-                    Label(
-                        t("artist.buttons.options", ["artist": artistName]),
-                        systemImage: "ellipsis"
-                    )
+                    if detail != nil {
+                        sections
+                            .padding(.vertical, 24)
+                    } else {
+                        placeholder
+                    }
                 }
-                .disabled(artist == nil)
+                .animation(.smooth, value: albumCount > 0)
             }
-        }
-        .offlineBanner()
-        .task(id: sync.revision) {
-            await refreshIfNeeded()
+            .artworkPalette(artist?.coverArt, into: $palette)
+            .themedBackground()
+            .scrollRevealedTitle(
+                artistName,
+                threshold: sizeClass == .regular ? 200 : 290,
+                headerIsDark: theme.palette.isDark
+            )
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    WithPerceptionTracking {
+                        Menu {
+                            if let artist {
+                                ArtistMenuItems(artist: artist)
+                            }
+                        } label: {
+                            Label(
+                                t("artist.buttons.options", ["artist": artistName]),
+                                systemImage: "ellipsis"
+                            )
+                        }
+                        .disabled(artist == nil)
+                    }
+                }
+            }
+            .offlineBanner()
+            .task(id: sync.revision) {
+                await refreshIfNeeded()
+            }
         }
     }
 
@@ -194,7 +199,9 @@ struct ArtistDetailView: View {
             if let similar = extras?.similar, !similar.isEmpty {
                 section(t("artist.relatedArtists")) {
                     Shelf(items: similar, compactSpan: 3) { similarArtist in
-                        ArtistTile(artist: similarArtist)
+                        WithPerceptionTracking {
+                            ArtistTile(artist: similarArtist)
+                        }
                     }
                 }
             }
@@ -323,38 +330,40 @@ private struct LatestReleaseCard: View {
     @Environment(\.locale) private var locale
 
     var body: some View {
-        NavigationLink(value: AppRoute.album(album)) {
-            HStack(spacing: 14) {
-                ArtworkImage(id: album.coverArt, cornerRadius: Layout.artworkRadius)
-                    .frame(width: 88)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(t("native.artist.latestRelease"))
-                        .font(.caption.weight(.bold))
-                        .tracking(0.6)
-                        .foregroundStyle(.tint)
-                        .textCase(.uppercase)
-                    HStack(spacing: 4) {
-                        Text(album.name)
-                            .lineLimit(2)
-                        if album.explicitStatus == .explicit {
-                            ExplicitBadge()
+        WithPerceptionTracking {
+            NavigationLink(value: AppRoute.album(album)) {
+                HStack(spacing: 14) {
+                    ArtworkImage(id: album.coverArt, cornerRadius: Layout.artworkRadius)
+                        .frame(width: 88)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(t("native.artist.latestRelease"))
+                            .font(.caption.weight(.bold))
+                            .tracking(0.6)
+                            .foregroundStyle(.tint)
+                            .textCase(.uppercase)
+                        HStack(spacing: 4) {
+                            Text(album.name)
+                                .lineLimit(2)
+                            if album.explicitStatus == .explicit {
+                                ExplicitBadge()
+                            }
                         }
+                        .font(.headline)
+                        .foregroundStyle(Color.primary)
+                        Text(details)
+                            .font(.subheadline)
+                            .foregroundStyle(ThemeColor.mutedForeground)
+                            .lineLimit(1)
                     }
-                    .font(.headline)
-                    .foregroundStyle(Color.primary)
-                    Text(details)
-                        .font(.subheadline)
-                        .foregroundStyle(ThemeColor.mutedForeground)
-                        .lineLimit(1)
+                    .multilineTextAlignment(.leading)
+                    Spacer(minLength: 0)
                 }
-                .multilineTextAlignment(.leading)
-                Spacer(minLength: 0)
+                .contentShape(.rect)
             }
-            .contentShape(.rect)
-        }
-        .buttonStyle(.pressable)
-        .contextMenu {
-            AlbumMenuItems(album: album, showsArtistLink: false)
+            .buttonStyle(.pressable)
+            .contextMenu {
+                AlbumMenuItems(album: album, showsArtistLink: false)
+            }
         }
     }
 
@@ -381,30 +390,34 @@ private struct SongColumns: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
-        let rows = max(1, min(4, songs.count))
-        let isRegular = sizeClass == .regular
-        ScrollView(.horizontal) {
-            LazyHGrid(
-                rows: Array(repeating: GridItem(.fixed(52), spacing: 0), count: rows),
-                spacing: Layout.shelfSpacing
-            ) {
-                ForEach(Array(songs.enumerated()), id: \.offset) { index, song in
-                    SongRow(song: song, subtitle: .album, showsDuration: false) {
-                        play(index)
+        WithPerceptionTracking {
+            let rows = max(1, min(4, songs.count))
+            let isRegular = sizeClass == .regular
+            ScrollView(.horizontal) {
+                LazyHGrid(
+                    rows: Array(repeating: GridItem(.fixed(52), spacing: 0), count: rows),
+                    spacing: Layout.shelfSpacing
+                ) {
+                    ForEach(Array(songs.enumerated()), id: \.offset) { index, song in
+                        WithPerceptionTracking {
+                            SongRow(song: song, subtitle: .album, showsDuration: false) {
+                                play(index)
+                            }
+                            .frame(maxHeight: .infinity)
+                            .containerRelativeFrame(
+                                .horizontal,
+                                count: isRegular ? 7 : 10,
+                                span: isRegular ? 3 : 9,
+                                spacing: Layout.shelfSpacing
+                            )
+                        }
                     }
-                    .frame(maxHeight: .infinity)
-                    .containerRelativeFrame(
-                        .horizontal,
-                        count: isRegular ? 7 : 10,
-                        span: isRegular ? 3 : 9,
-                        spacing: Layout.shelfSpacing
-                    )
                 }
+                .scrollTargetLayout()
             }
-            .scrollTargetLayout()
+            .scrollTargetBehavior(.viewAligned)
+            .scrollIndicators(.hidden)
+            .contentMargins(.horizontal, Layout.margin(sizeClass), for: .scrollContent)
         }
-        .scrollTargetBehavior(.viewAligned)
-        .scrollIndicators(.hidden)
-        .contentMargins(.horizontal, Layout.margin(sizeClass), for: .scrollContent)
     }
 }

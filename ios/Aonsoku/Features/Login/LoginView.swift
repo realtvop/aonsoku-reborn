@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// Connects to a Subsonic server: the web login form, with the same
@@ -27,104 +28,112 @@ struct LoginView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ThemedForm {
-                Section {
-                    header
-                }
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets())
+        WithPerceptionTracking {
+            NavigationStack {
+                WithPerceptionTracking {
+                    ThemedForm {
+                        WithPerceptionTracking {
+                            Section {
+                                header
+                            }
+                            .listRowBackground(Color.clear)
+                            .listRowInsets(EdgeInsets())
 
-                Section {
-                    LabeledContent(t("login.form.url")) {
-                        TextField(t("login.form.url"), text: $url, prompt: Text(verbatim: "https://"))
-                            .keyboardType(.URL)
-                            .textContentType(.URL)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .submitLabel(.next)
-                            .focused($focus, equals: .url)
-                            .onSubmit { focus = .fallbackUrl }
-                    }
-                } footer: {
-                    if showsErrors, let urlError {
-                        ValidationMessage(text: urlError)
-                    } else {
-                        Text(t("login.form.urlDescription"))
-                    }
-                }
-                .themedRow()
+                            Section {
+                                LabeledContent(t("login.form.url")) {
+                                    TextField(t("login.form.url"), text: $url, prompt: Text(verbatim: "https://"))
+                                        .keyboardType(.URL)
+                                        .textContentType(.URL)
+                                        .textInputAutocapitalization(.never)
+                                        .autocorrectionDisabled()
+                                        .submitLabel(.next)
+                                        .focused($focus, equals: .url)
+                                        .onSubmit { focus = .fallbackUrl }
+                                }
+                            } footer: {
+                                if showsErrors, let urlError {
+                                    ValidationMessage(text: urlError)
+                                } else {
+                                    Text(t("login.form.urlDescription"))
+                                }
+                            }
+                            .themedRow()
 
-                Section {
-                    LabeledContent(t("settings.server.fallbackUrl.label")) {
-                        TextField(
-                            t("settings.server.fallbackUrl.label"),
-                            text: $fallbackUrl,
-                            prompt: Text(t("settings.server.fallbackUrl.placeholder"))
-                        )
-                        .keyboardType(.URL)
-                        .textContentType(.URL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .submitLabel(.next)
-                        .focused($focus, equals: .fallbackUrl)
-                        .onSubmit { focus = .username }
-                    }
-                } footer: {
-                    if showsErrors, let fallbackUrlError {
-                        ValidationMessage(text: fallbackUrlError)
-                    } else {
-                        Text(t("settings.server.fallbackUrl.info"))
-                    }
-                }
-                .themedRow()
+                            Section {
+                                LabeledContent(t("settings.server.fallbackUrl.label")) {
+                                    TextField(
+                                        t("settings.server.fallbackUrl.label"),
+                                        text: $fallbackUrl,
+                                        prompt: Text(t("settings.server.fallbackUrl.placeholder"))
+                                    )
+                                    .keyboardType(.URL)
+                                    .textContentType(.URL)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                                    .submitLabel(.next)
+                                    .focused($focus, equals: .fallbackUrl)
+                                    .onSubmit { focus = .username }
+                                }
+                            } footer: {
+                                if showsErrors, let fallbackUrlError {
+                                    ValidationMessage(text: fallbackUrlError)
+                                } else {
+                                    Text(t("settings.server.fallbackUrl.info"))
+                                }
+                            }
+                            .themedRow()
 
-                Section {
-                    LabeledContent(t("login.form.username")) {
-                        TextField(
-                            t("login.form.username"),
-                            text: $username,
-                            prompt: Text(t("login.form.usernamePlaceholder"))
-                        )
-                        .textContentType(.username)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .submitLabel(.next)
-                        .focused($focus, equals: .username)
-                        .onSubmit { focus = .password }
+                            Section {
+                                LabeledContent(t("login.form.username")) {
+                                    TextField(
+                                        t("login.form.username"),
+                                        text: $username,
+                                        prompt: Text(t("login.form.usernamePlaceholder"))
+                                    )
+                                    .textContentType(.username)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                                    .submitLabel(.next)
+                                    .focused($focus, equals: .username)
+                                    .onSubmit { focus = .password }
+                                }
+                                LabeledContent(t("login.form.password")) {
+                                    SecureField(t("login.form.password"), text: $password)
+                                        .textContentType(.password)
+                                        .submitLabel(.go)
+                                        .focused($focus, equals: .password)
+                                        .onSubmit { connect() }
+                                }
+                            } footer: {
+                                if showsErrors, let credentialsError {
+                                    ValidationMessage(text: credentialsError)
+                                }
+                            }
+                            .themedRow()
+                        }
                     }
-                    LabeledContent(t("login.form.password")) {
-                        SecureField(t("login.form.password"), text: $password)
-                            .textContentType(.password)
-                            .submitLabel(.go)
-                            .focused($focus, equals: .password)
-                            .onSubmit { connect() }
+                    .multilineTextAlignment(.trailing)
+                    .disabled(isConnecting)
+                    .scrollDismissesKeyboard(.interactively)
+                    .safeAreaInset(edge: .bottom) {
+                        connectButton
                     }
-                } footer: {
-                    if showsErrors, let credentialsError {
-                        ValidationMessage(text: credentialsError)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            WithPerceptionTracking {
+                                LanguageMenu()
+                            }
+                        }
+                    }
+                    .alert(t("server.incompatible.title"), isPresented: $isAskingToForce) {
+                        Button(t("server.incompatible.skip")) {
+                            connect(force: true)
+                        }
+                        Button(t("generic.cancel"), role: .cancel) {}
+                    } message: {
+                        Text(t("server.incompatible.description"))
                     }
                 }
-                .themedRow()
-            }
-            .multilineTextAlignment(.trailing)
-            .disabled(isConnecting)
-            .scrollDismissesKeyboard(.interactively)
-            .safeAreaInset(edge: .bottom) {
-                connectButton
-            }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    LanguageMenu()
-                }
-            }
-            .alert(t("server.incompatible.title"), isPresented: $isAskingToForce) {
-                Button(t("server.incompatible.skip")) {
-                    connect(force: true)
-                }
-                Button(t("generic.cancel"), role: .cancel) {}
-            } message: {
-                Text(t("server.incompatible.description"))
             }
         }
     }
@@ -276,8 +285,10 @@ private struct ValidationMessage: View {
     let text: String
 
     var body: some View {
-        Label(text, systemImage: "exclamationmark.circle.fill")
-            .foregroundStyle(.red)
+        WithPerceptionTracking {
+            Label(text, systemImage: "exclamationmark.circle.fill")
+                .foregroundStyle(.red)
+        }
     }
 }
 
@@ -287,15 +298,19 @@ struct LanguageMenu: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        Menu {
-            Picker(t("menu.language"), selection: selection) {
-                ForEach(AppLanguage.all) { language in
-                    Text(verbatim: "\(language.flagEmoji)  \(language.nativeName)")
-                        .tag(language.code)
+        WithPerceptionTracking {
+            Menu {
+                Picker(t("menu.language"), selection: selection) {
+                    ForEach(AppLanguage.all) { language in
+                        WithPerceptionTracking {
+                            Text(verbatim: "\(language.flagEmoji)  \(language.nativeName)")
+                                .tag(language.code)
+                        }
+                    }
                 }
+            } label: {
+                Label(t("menu.language"), systemImage: "globe")
             }
-        } label: {
-            Label(t("menu.language"), systemImage: "globe")
         }
     }
 

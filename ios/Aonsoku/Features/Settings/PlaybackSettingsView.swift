@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// Haptics, ReplayGain and the play history size, like the web player and
@@ -8,69 +9,73 @@ struct PlaybackSettingsView: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        let replayGain = settings.settings.replayGain
-        ThemedForm {
-            Section {
-                SettingsToggle(
-                    title: t("native.settings.estimateContentLength.label"),
-                    info: t("native.settings.estimateContentLength.info"),
-                    isOn: settings.binding(\.playback.estimateContentLength)
-                )
-            }
-
-            Section {
-                SettingsToggle(
-                    title: t("settings.audio.hapticFeedback.enabled.label"),
-                    info: t("settings.audio.hapticFeedback.enabled.info"),
-                    isOn: settings.binding(\.playback.hapticFeedback)
-                )
-            } header: {
-                Text(t("settings.audio.hapticFeedback.group"))
-            } footer: {
-                Text(t("settings.audio.hapticFeedback.description"))
-            }
-
-            Section {
-                Toggle(t("settings.audio.replayGain.enabled"), isOn: settings.binding(\.replayGain.enabled))
-                if replayGain.enabled {
-                    Picker(t("settings.audio.replayGain.mode.label"), selection: settings.binding(\.replayGain.mode)) {
-                        Text(t("settings.audio.replayGain.mode.track"))
-                            .tag(ReplayGainMode.track)
-                        Text(t("settings.audio.replayGain.mode.album"))
-                            .tag(ReplayGainMode.album)
+        WithPerceptionTracking {
+            let replayGain = settings.settings.replayGain
+            ThemedForm {
+                WithPerceptionTracking {
+                    Section {
+                        SettingsToggle(
+                            title: t("native.settings.estimateContentLength.label"),
+                            info: t("native.settings.estimateContentLength.info"),
+                            isOn: settings.binding(\.playback.estimateContentLength)
+                        )
                     }
-                    DecibelStepper(
-                        title: t("settings.audio.replayGain.preAmp"),
-                        value: settings.binding(\.replayGain.preAmp),
-                        range: ReplayGainSettings.preAmpRange
-                    )
-                    DecibelStepper(
-                        title: t("settings.audio.replayGain.defaultGain.label"),
-                        value: settings.binding(\.replayGain.defaultGain),
-                        range: ReplayGainSettings.defaultGainRange
-                    )
-                }
-            } header: {
-                Text(t("settings.audio.replayGain.group"))
-            } footer: {
-                Text(t(replayGain.enabled ? "settings.audio.replayGain.defaultGain.info" : "settings.audio.replayGain.description"))
-            }
 
-            Section {
-                Stepper(value: settings.binding(\.history.maxSize), in: HistorySettings.range, step: HistorySettings.step) {
-                    LabeledContent(t("settings.audio.history.maxSize.label")) {
-                        Text(Formatters.number(settings.settings.history.maxSize, locale: t.locale))
-                            .monospacedDigit()
+                    Section {
+                        SettingsToggle(
+                            title: t("settings.audio.hapticFeedback.enabled.label"),
+                            info: t("settings.audio.hapticFeedback.enabled.info"),
+                            isOn: settings.binding(\.playback.hapticFeedback)
+                        )
+                    } header: {
+                        Text(t("settings.audio.hapticFeedback.group"))
+                    } footer: {
+                        Text(t("settings.audio.hapticFeedback.description"))
+                    }
+
+                    Section {
+                        Toggle(t("settings.audio.replayGain.enabled"), isOn: settings.binding(\.replayGain.enabled))
+                        if replayGain.enabled {
+                            Picker(t("settings.audio.replayGain.mode.label"), selection: settings.binding(\.replayGain.mode)) {
+                                Text(t("settings.audio.replayGain.mode.track"))
+                                    .tag(ReplayGainMode.track)
+                                Text(t("settings.audio.replayGain.mode.album"))
+                                    .tag(ReplayGainMode.album)
+                            }
+                            DecibelStepper(
+                                title: t("settings.audio.replayGain.preAmp"),
+                                value: settings.binding(\.replayGain.preAmp),
+                                range: ReplayGainSettings.preAmpRange
+                            )
+                            DecibelStepper(
+                                title: t("settings.audio.replayGain.defaultGain.label"),
+                                value: settings.binding(\.replayGain.defaultGain),
+                                range: ReplayGainSettings.defaultGainRange
+                            )
+                        }
+                    } header: {
+                        Text(t("settings.audio.replayGain.group"))
+                    } footer: {
+                        Text(t(replayGain.enabled ? "settings.audio.replayGain.defaultGain.info" : "settings.audio.replayGain.description"))
+                    }
+
+                    Section {
+                        Stepper(value: settings.binding(\.history.maxSize), in: HistorySettings.range, step: HistorySettings.step) {
+                            LabeledContent(t("settings.audio.history.maxSize.label")) {
+                                Text(Formatters.number(settings.settings.history.maxSize, locale: t.locale))
+                                    .monospacedDigit()
+                            }
+                        }
+                    } header: {
+                        Text(t("settings.audio.history.group"))
+                    } footer: {
+                        Text(t("settings.audio.history.maxSize.info"))
                     }
                 }
-            } header: {
-                Text(t("settings.audio.history.group"))
-            } footer: {
-                Text(t("settings.audio.history.maxSize.info"))
             }
+            .navigationTitle(t("settings.options.audio"))
+            .animation(.smooth, value: replayGain.enabled)
         }
-        .navigationTitle(t("settings.options.audio"))
-        .animation(.smooth, value: replayGain.enabled)
     }
 }
 
@@ -81,10 +86,12 @@ private struct DecibelStepper: View {
     let range: ClosedRange<Double>
 
     var body: some View {
-        Stepper(value: $value, in: range, step: 1) {
-            LabeledContent(title) {
-                Text(Formatters.decibels(value))
-                    .monospacedDigit()
+        WithPerceptionTracking {
+            Stepper(value: $value, in: range, step: 1) {
+                LabeledContent(title) {
+                    Text(Formatters.decibels(value))
+                        .monospacedDigit()
+                }
             }
         }
     }
@@ -102,70 +109,74 @@ struct LyricsPreferencesView: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        let lyrics = settings.settings.lyrics
-        ThemedForm {
-            Section {
-                SettingsToggle(
-                    title: t("settings.audio.lyrics.preferSynced.label"),
-                    info: t("settings.audio.lyrics.preferSynced.info"),
-                    isOn: settings.binding(\.lyrics.preferSyncedLyrics)
-                )
-                SettingsToggle(
-                    title: t("settings.audio.lyrics.showTranslation.label"),
-                    info: t("settings.audio.lyrics.showTranslation.info"),
-                    isOn: settings.binding(\.lyrics.showTranslation)
-                )
-            } footer: {
-                Text(t("settings.audio.lyrics.description"))
-            }
+        WithPerceptionTracking {
+            let lyrics = settings.settings.lyrics
+            ThemedForm {
+                WithPerceptionTracking {
+                    Section {
+                        SettingsToggle(
+                            title: t("settings.audio.lyrics.preferSynced.label"),
+                            info: t("settings.audio.lyrics.preferSynced.info"),
+                            isOn: settings.binding(\.lyrics.preferSyncedLyrics)
+                        )
+                        SettingsToggle(
+                            title: t("settings.audio.lyrics.showTranslation.label"),
+                            info: t("settings.audio.lyrics.showTranslation.info"),
+                            isOn: settings.binding(\.lyrics.showTranslation)
+                        )
+                    } footer: {
+                        Text(t("settings.audio.lyrics.description"))
+                    }
 
-            Section {
-                NavigationLink {
-                    LyricsSourceOrderView()
-                } label: {
-                    LabeledContent(t("settings.audio.lyrics.source.label")) {
-                        Text(lyrics.sourcePriority.map { t("settings.audio.lyrics.source.\($0.rawValue)") }
-                            .joined(separator: ", "))
+                    Section {
+                        NavigationLink {
+                            LyricsSourceOrderView()
+                        } label: {
+                            LabeledContent(t("settings.audio.lyrics.source.label")) {
+                                Text(lyrics.sourcePriority.map { t("settings.audio.lyrics.source.\($0.rawValue)") }
+                                    .joined(separator: ", "))
+                            }
+                        }
+                    } footer: {
+                        Text(t("settings.audio.lyrics.source.info"))
+                    }
+
+                    Section {
+                        SettingsToggle(
+                            title: t("settings.audio.lyrics.customServer.enabled.label"),
+                            info: t("settings.audio.lyrics.customServer.enabled.info"),
+                            isOn: settings.binding(\.lyrics.customServerEnabled)
+                        )
+                        if lyrics.customServerEnabled {
+                            URLField(
+                                title: t("settings.audio.lyrics.customServer.url.label"),
+                                text: $serverUrl,
+                                prompt: t("settings.audio.lyrics.customServer.url.placeholder")
+                            )
+                            SecureField(
+                                t("settings.audio.lyrics.customServer.password.label"),
+                                text: $serverPassword,
+                                prompt: Text(t("settings.audio.lyrics.customServer.password.placeholder"))
+                            )
+                            .textContentType(.password)
+                            Button(t("settings.audio.lyrics.customServer.save"), action: saveServer)
+                                .disabled(!hasServerChanges)
+                        }
+                    } footer: {
+                        if lyrics.customServerEnabled {
+                            Text("\(t("settings.audio.lyrics.customServer.url.info")) \(t("settings.audio.lyrics.customServer.password.info"))")
+                        }
                     }
                 }
-            } footer: {
-                Text(t("settings.audio.lyrics.source.info"))
             }
-
-            Section {
-                SettingsToggle(
-                    title: t("settings.audio.lyrics.customServer.enabled.label"),
-                    info: t("settings.audio.lyrics.customServer.enabled.info"),
-                    isOn: settings.binding(\.lyrics.customServerEnabled)
-                )
-                if lyrics.customServerEnabled {
-                    URLField(
-                        title: t("settings.audio.lyrics.customServer.url.label"),
-                        text: $serverUrl,
-                        prompt: t("settings.audio.lyrics.customServer.url.placeholder")
-                    )
-                    SecureField(
-                        t("settings.audio.lyrics.customServer.password.label"),
-                        text: $serverPassword,
-                        prompt: Text(t("settings.audio.lyrics.customServer.password.placeholder"))
-                    )
-                    .textContentType(.password)
-                    Button(t("settings.audio.lyrics.customServer.save"), action: saveServer)
-                        .disabled(!hasServerChanges)
-                }
-            } footer: {
-                if lyrics.customServerEnabled {
-                    Text("\(t("settings.audio.lyrics.customServer.url.info")) \(t("settings.audio.lyrics.customServer.password.info"))")
-                }
+            .navigationTitle(t("settings.audio.lyrics.group"))
+            .animation(.smooth, value: lyrics.customServerEnabled)
+            .onAppear {
+                guard !didPrefill else { return }
+                didPrefill = true
+                serverUrl = lyrics.customServerUrl
+                serverPassword = lyrics.customServerPassword
             }
-        }
-        .navigationTitle(t("settings.audio.lyrics.group"))
-        .animation(.smooth, value: lyrics.customServerEnabled)
-        .onAppear {
-            guard !didPrefill else { return }
-            didPrefill = true
-            serverUrl = lyrics.customServerUrl
-            serverPassword = lyrics.customServerPassword
         }
     }
 
@@ -196,32 +207,38 @@ private struct LyricsSourceOrderView: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        ThemedList {
-            Section {
-                ForEach(Array(settings.settings.lyrics.sourcePriority.enumerated()), id: \.element) { index, source in
-                    let name = t("settings.audio.lyrics.source.\(source.rawValue)")
-                    HStack(spacing: 12) {
-                        Text(verbatim: "\(index + 1)")
-                            .font(.subheadline.weight(.semibold).monospacedDigit())
-                            .foregroundStyle(.secondary)
-                            .frame(width: 18)
-                        Text(name)
+        WithPerceptionTracking {
+            ThemedList {
+                WithPerceptionTracking {
+                    Section {
+                        ForEach(Array(settings.settings.lyrics.sourcePriority.enumerated()), id: \.element) { index, source in
+                            WithPerceptionTracking {
+                                let name = t("settings.audio.lyrics.source.\(source.rawValue)")
+                                HStack(spacing: 12) {
+                                    Text(verbatim: "\(index + 1)")
+                                        .font(.subheadline.weight(.semibold).monospacedDigit())
+                                        .foregroundStyle(.secondary)
+                                        .frame(width: 18)
+                                    Text(name)
+                                }
+                                .accessibilityLabel(t(
+                                    "settings.audio.lyrics.source.priority",
+                                    ["priority": String(index + 1), "source": name]
+                                ))
+                                .accessibilityHint(t("settings.audio.lyrics.source.dragHandle", ["source": name]))
+                            }
+                        }
+                        .onMove { offsets, destination in
+                            settings.update { $0.lyrics.sourcePriority.move(fromOffsets: offsets, toOffset: destination) }
+                        }
+                    } footer: {
+                        Text("\(t("settings.audio.lyrics.source.info")) \(t("settings.audio.lyrics.source.dragInstruction"))")
                     }
-                    .accessibilityLabel(t(
-                        "settings.audio.lyrics.source.priority",
-                        ["priority": String(index + 1), "source": name]
-                    ))
-                    .accessibilityHint(t("settings.audio.lyrics.source.dragHandle", ["source": name]))
                 }
-                .onMove { offsets, destination in
-                    settings.update { $0.lyrics.sourcePriority.move(fromOffsets: offsets, toOffset: destination) }
-                }
-            } footer: {
-                Text("\(t("settings.audio.lyrics.source.info")) \(t("settings.audio.lyrics.source.dragInstruction"))")
             }
+            .environment(\.editMode, .constant(.active))
+            .navigationTitle(t("settings.audio.lyrics.source.label"))
         }
-        .environment(\.editMode, .constant(.active))
-        .navigationTitle(t("settings.audio.lyrics.source.label"))
     }
 }
 
@@ -231,16 +248,20 @@ struct ContentSettingsView: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        ThemedForm {
-            Section {
-                Toggle(t("settings.content.sidebar.radios.section"), isOn: settings.binding(\.content.hideRadiosSection))
-            } header: {
-                Text(t("settings.content.sidebar.group"))
-            } footer: {
-                Text(t("settings.content.sidebar.description"))
+        WithPerceptionTracking {
+            ThemedForm {
+                WithPerceptionTracking {
+                    Section {
+                        Toggle(t("settings.content.sidebar.radios.section"), isOn: settings.binding(\.content.hideRadiosSection))
+                    } header: {
+                        Text(t("settings.content.sidebar.group"))
+                    } footer: {
+                        Text(t("settings.content.sidebar.description"))
+                    }
+                }
             }
+            .navigationTitle(t("settings.options.content"))
         }
-        .navigationTitle(t("settings.options.content"))
     }
 }
 
@@ -250,19 +271,23 @@ struct PrivacySettingsView: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        ThemedForm {
-            Section {
-                SettingsToggle(
-                    title: t("settings.privacy.services.lrclib.label"),
-                    info: t("settings.privacy.services.lrclib.info"),
-                    isOn: settings.binding(\.privacy.lrcLibEnabled)
-                )
-            } header: {
-                Text(t("settings.privacy.services.group"))
-            } footer: {
-                Text(t("settings.privacy.services.description"))
+        WithPerceptionTracking {
+            ThemedForm {
+                WithPerceptionTracking {
+                    Section {
+                        SettingsToggle(
+                            title: t("settings.privacy.services.lrclib.label"),
+                            info: t("settings.privacy.services.lrclib.info"),
+                            isOn: settings.binding(\.privacy.lrcLibEnabled)
+                        )
+                    } header: {
+                        Text(t("settings.privacy.services.group"))
+                    } footer: {
+                        Text(t("settings.privacy.services.description"))
+                    }
+                }
             }
+            .navigationTitle(t("settings.options.privacy"))
         }
-        .navigationTitle(t("settings.options.privacy"))
     }
 }

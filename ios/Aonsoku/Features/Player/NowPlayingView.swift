@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// Now Playing, modeled on Apple Music: the cover over its own colors,
@@ -22,55 +23,59 @@ struct NowPlayingView: View {
     private var panel: PlayerPanel? { presentation.panel }
 
     var body: some View {
-        GeometryReader { proxy in
-            let isWide = sizeClass == .regular && proxy.size.width > proxy.size.height
-                && proxy.size.width >= 900
-            Group {
-                if isWide {
-                    wideLayout
-                } else {
-                    compactLayout
-                        .frame(maxWidth: 600)
-                        .frame(maxWidth: .infinity)
+        WithPerceptionTracking {
+            GeometryReader { proxy in
+                WithPerceptionTracking {
+                    let isWide = sizeClass == .regular && proxy.size.width > proxy.size.height
+                        && proxy.size.width >= 900
+                    Group {
+                        if isWide {
+                            wideLayout
+                        } else {
+                            compactLayout
+                                .frame(maxWidth: 600)
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                    // Keep layout and native scroll geometry immediate. Individual
+                    // content surfaces opt into their own visual-only animations.
+                    .animation(nil, value: panel)
+                    .onChange(of: isWide, initial: true) { _, isWide in
+                        presentation.usesWideLayout = isWide
+                    }
                 }
             }
-            // Keep layout and native scroll geometry immediate. Individual
-            // content surfaces opt into their own visual-only animations.
-            .animation(nil, value: panel)
-            .onChange(of: isWide, initial: true) { _, isWide in
-                presentation.usesWideLayout = isWide
+            .foregroundStyle(.white)
+            .scrollDisabled(presentation.dragOffset > 0)
+            .environment(\.colorScheme, .dark)
+            .task(id: router.isNowPlayingPresented ? player.currentSong?.id : nil) {
+                guard router.isNowPlayingPresented else { return }
+                await lyrics.load(for: player.currentSong)
             }
-        }
-        .foregroundStyle(.white)
-        .scrollDisabled(presentation.dragOffset > 0)
-        .environment(\.colorScheme, .dark)
-        .task(id: router.isNowPlayingPresented ? player.currentSong?.id : nil) {
-            guard router.isNowPlayingPresented else { return }
-            await lyrics.load(for: player.currentSong)
-        }
-        .onChange(of: player.hasMedia) { _, hasMedia in
-            if !hasMedia {
+            .onChange(of: player.hasMedia) { _, hasMedia in
+                if !hasMedia {
+                    router.isNowPlayingPresented = false
+                }
+            }
+            .onChange(of: player.isRadio) { _, isRadio in
+                if isRadio {
+                    selectPanel(nil)
+                }
+            }
+            .onChange(of: panel) { lyricsControlsHidden = false }
+            .onChange(of: router.isNowPlayingPresented) { lyricsControlsHidden = false }
+            .onChange(of: player.currentSong?.id) { lyricsControlsHidden = false }
+            .onChange(of: bottomControlsHidden, initial: true) {
+                presentation.arePlaybackControlsVisible = !bottomControlsHidden
+            }
+            .onChange(of: panel == .queue && router.isNowPlayingPresented, initial: true) {
+                presentation.queueOwnsScrollGestures = panel == .queue && router.isNowPlayingPresented
+            }
+            .accessibilityAction(.escape) {
                 router.isNowPlayingPresented = false
             }
+            .globalPresentations(.nowPlaying)
         }
-        .onChange(of: player.isRadio) { _, isRadio in
-            if isRadio {
-                selectPanel(nil)
-            }
-        }
-        .onChange(of: panel) { lyricsControlsHidden = false }
-        .onChange(of: router.isNowPlayingPresented) { lyricsControlsHidden = false }
-        .onChange(of: player.currentSong?.id) { lyricsControlsHidden = false }
-        .onChange(of: bottomControlsHidden, initial: true) {
-            presentation.arePlaybackControlsVisible = !bottomControlsHidden
-        }
-        .onChange(of: panel == .queue && router.isNowPlayingPresented, initial: true) {
-            presentation.queueOwnsScrollGestures = panel == .queue && router.isNowPlayingPresented
-        }
-        .accessibilityAction(.escape) {
-            router.isNowPlayingPresented = false
-        }
-        .globalPresentations(.nowPlaying)
     }
 
     // MARK: - Layouts
@@ -80,27 +85,29 @@ struct NowPlayingView: View {
             grabber
             statusCapsules
             GeometryReader { proxy in
-                PlayerContentLayout {
-                    largeArtwork
-                    headerArtwork
-                        .opacity(panel == .lyrics ? 1 : 0)
-                        .allowsHitTesting(panel == .lyrics)
-                        .accessibilityHidden(panel != .lyrics)
-                    Color.clear
-                        .frame(height: 0)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                    measuredTitleRow(isCompact: true)
-                        .modifier(PlayerPageContent(
-                            isVisible: panel == .lyrics,
-                            riseDistance: panel == nil ? 64 : 0,
-                            isMetadata: true,
-                            entranceDelay: panelsEnteringFromCover ? 0.16 : 0
-                        ))
-                    panels(showsQueueHeader: true)
+                WithPerceptionTracking {
+                    PlayerContentLayout {
+                        largeArtwork
+                        headerArtwork
+                            .opacity(panel == .lyrics ? 1 : 0)
+                            .allowsHitTesting(panel == .lyrics)
+                            .accessibilityHidden(panel != .lyrics)
+                        Color.clear
+                            .frame(height: 0)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                        measuredTitleRow(isCompact: true)
+                            .modifier(PlayerPageContent(
+                                isVisible: panel == .lyrics,
+                                riseDistance: panel == nil ? 64 : 0,
+                                isMetadata: true,
+                                entranceDelay: panelsEnteringFromCover ? 0.16 : 0
+                            ))
+                        panels(showsQueueHeader: true)
+                    }
+                    .frame(maxHeight: .infinity)
+                    .clipped()
                 }
-                .frame(maxHeight: .infinity)
-                .clipped()
             }
             bottomControls
         }
@@ -383,17 +390,19 @@ struct PlayerPageContent: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
-        content
-            // Only the reveal interpolates. Native List layout and scroll
-            // preparation must never inherit the page animation transaction.
-            .transaction { $0.animation = nil }
-            .modifier(PlayerPageReveal(
-                progress: isVisible ? 1 : 0,
-                riseDistance: reduceMotion ? 0 : riseDistance
-            ))
-            .animation(animation, value: isVisible)
-            .allowsHitTesting(isVisible)
-            .accessibilityHidden(!isVisible)
+        WithPerceptionTracking {
+            content
+                // Only the reveal interpolates. Native List layout and scroll
+                // preparation must never inherit the page animation transaction.
+                .transaction { $0.animation = nil }
+                .modifier(PlayerPageReveal(
+                    progress: isVisible ? 1 : 0,
+                    riseDistance: reduceMotion ? 0 : riseDistance
+                ))
+                .animation(animation, value: isVisible)
+                .allowsHitTesting(isVisible)
+                .accessibilityHidden(!isVisible)
+        }
     }
 
     private var animation: Animation {
@@ -419,9 +428,11 @@ private struct PlayerPageReveal: AnimatableModifier {
     }
 
     func body(content: Content) -> some View {
-        content
-            .offset(y: (1 - progress) * riseDistance)
-            .opacity(Double(progress))
+        WithPerceptionTracking {
+            content
+                .offset(y: (1 - progress) * riseDistance)
+                .opacity(Double(progress))
+        }
     }
 }
 
@@ -475,31 +486,33 @@ private struct ArtistMenu: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        let subtitle = NowPlayingText.subtitle(player, t) ?? ""
-        if let song = player.currentSong, song.artistId != nil || song.albumId != nil {
-            Menu {
-                if let artistId = song.artistId {
-                    Button {
-                        router.navigate(to: .artist(id: artistId, name: song.artist))
-                    } label: {
-                        Label(t("options.goto.artist"), systemImage: "music.mic")
+        WithPerceptionTracking {
+            let subtitle = NowPlayingText.subtitle(player, t) ?? ""
+            if let song = player.currentSong, song.artistId != nil || song.albumId != nil {
+                Menu {
+                    if let artistId = song.artistId {
+                        Button {
+                            router.navigate(to: .artist(id: artistId, name: song.artist))
+                        } label: {
+                            Label(t("options.goto.artist"), systemImage: "music.mic")
+                        }
                     }
-                }
-                if let albumId = song.albumId {
-                    Button {
-                        router.navigate(to: .album(id: albumId, preview: nil))
-                    } label: {
-                        Label(t("options.goto.album"), systemImage: "square.stack")
+                    if let albumId = song.albumId {
+                        Button {
+                            router.navigate(to: .album(id: albumId, preview: nil))
+                        } label: {
+                            Label(t("options.goto.album"), systemImage: "square.stack")
+                        }
                     }
+                } label: {
+                    MarqueeText(text: subtitle)
+                        .foregroundStyle(.white.opacity(0.65))
                 }
-            } label: {
+                .buttonStyle(.plain)
+            } else {
                 MarqueeText(text: subtitle)
                     .foregroundStyle(.white.opacity(0.65))
             }
-            .buttonStyle(.plain)
-        } else {
-            MarqueeText(text: subtitle)
-                .foregroundStyle(.white.opacity(0.65))
         }
     }
 }
@@ -513,21 +526,23 @@ private struct NowPlayingFavoriteButton: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        let isFavorite = favorites.isFavorite(.song, id: songId)
-        Button {
-            Task { await favorites.toggle(.song, id: songId) }
-        } label: {
-            Image(systemName: isFavorite ? "heart.fill" : "heart")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(isFavorite ? Color.red : Color.white)
-                .frame(width: 44, height: 44)
-                .contentShape(.rect)
-                .contentTransition(.symbolEffect(.replace))
-                .symbolEffect(.bounce, value: isFavorite)
+        WithPerceptionTracking {
+            let isFavorite = favorites.isFavorite(.song, id: songId)
+            Button {
+                Task { await favorites.toggle(.song, id: songId) }
+            } label: {
+                Image(systemName: isFavorite ? "heart.fill" : "heart")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(isFavorite ? Color.red : Color.white)
+                    .frame(width: 44, height: 44)
+                    .contentShape(.rect)
+                    .contentTransition(.symbolEffect(.replace))
+                    .symbolEffect(.bounce, value: isFavorite)
+            }
+            .buttonStyle(.touchFeedback)
+            .accessibilityLabel(t(isFavorite ? "options.unlike" : "options.like"))
+            .haptic(.impact(weight: .light), trigger: isFavorite)
         }
-        .buttonStyle(.touchFeedback)
-        .accessibilityLabel(t(isFavorite ? "options.unlike" : "options.like"))
-        .haptic(.impact(weight: .light), trigger: isFavorite)
     }
 }
 
@@ -540,23 +555,25 @@ private struct RemoteControlCapsule: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        if case let .remote(_, deviceName) = player.target {
-            HStack(spacing: 10) {
-                Label(
-                    t("settings.crossDevice.playback.controllingDevice", ["name": deviceName]),
-                    systemImage: "hifispeaker.fill"
-                )
-                .lineLimit(1)
-                Button(t("settings.crossDevice.playback.exitControl")) {
-                    coordination.stopControlling()
+        WithPerceptionTracking {
+            if case let .remote(_, deviceName) = player.target {
+                HStack(spacing: 10) {
+                    Label(
+                        t("settings.crossDevice.playback.controllingDevice", ["name": deviceName]),
+                        systemImage: "hifispeaker.fill"
+                    )
+                    .lineLimit(1)
+                    Button(t("settings.crossDevice.playback.exitControl")) {
+                        coordination.stopControlling()
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.tint)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.tint)
+                .font(.footnote.weight(.semibold))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .glassEffect(.regular, in: .capsule)
             }
-            .font(.footnote.weight(.semibold))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .glassEffect(.regular, in: .capsule)
         }
     }
 }
@@ -568,18 +585,20 @@ private struct DevicesButton: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        let isRemote = player.target.isRemote
-        Button {
-            router.present(.devices)
-        } label: {
-            Image(systemName: isRemote ? "hifispeaker.and.homepod.fill" : "hifispeaker.and.homepod")
-                .font(.title3.weight(.medium))
-                .foregroundStyle(isRemote ? AnyShapeStyle(.tint) : AnyShapeStyle(.white.opacity(0.7)))
-                .frame(width: 44, height: 44)
-                .contentShape(.rect)
+        WithPerceptionTracking {
+            let isRemote = player.target.isRemote
+            Button {
+                router.present(.devices)
+            } label: {
+                Image(systemName: isRemote ? "hifispeaker.and.homepod.fill" : "hifispeaker.and.homepod")
+                    .font(.title3.weight(.medium))
+                    .foregroundStyle(isRemote ? AnyShapeStyle(.tint) : AnyShapeStyle(.white.opacity(0.7)))
+                    .frame(width: 44, height: 44)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.touchFeedback)
+            .accessibilityLabel(t("settings.crossDevice.title"))
         }
-        .buttonStyle(.touchFeedback)
-        .accessibilityLabel(t("settings.crossDevice.title"))
     }
 }
 
@@ -594,11 +613,13 @@ struct NowPlayingBackground: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let appearance = settings.settings.appearance
-        let base = appearance.darkTheme.palette.background
-        let cover = (palette?.average ?? palette?.colors.first).map(Color.init) ?? base
-        base.mix(with: cover, by: min(max(appearance.nowPlayingColorIntensity, 0), 1), in: .device)
-            .animation(reduceMotion ? .linear(duration: 0.15) : .smooth(duration: 0.6), value: palette)
+        WithPerceptionTracking {
+            let appearance = settings.settings.appearance
+            let base = appearance.darkTheme.palette.background
+            let cover = (palette?.average ?? palette?.colors.first).map(Color.init) ?? base
+            base.mix(with: cover, by: min(max(appearance.nowPlayingColorIntensity, 0), 1), in: .device)
+                .animation(reduceMotion ? .linear(duration: 0.15) : .smooth(duration: 0.6), value: palette)
+        }
     }
 }
 

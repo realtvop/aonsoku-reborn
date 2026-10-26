@@ -1,5 +1,5 @@
 import Foundation
-import Observation
+import Perception
 
 /// Loading state of a screen's data.
 public enum LoadPhase: Equatable, Sendable {
@@ -20,7 +20,7 @@ public enum LoadPhase: Equatable, Sendable {
 /// `loadIfNeeded()` when they appear, `loadMoreIfNeeded(currentItem:)` from
 /// each row, and `refresh()` for pull to refresh.
 @MainActor
-@Observable
+@Perceptible
 public final class PagedCollection<Item: Identifiable & Sendable> {
     public enum Phase: Equatable, Sendable {
         case idle
@@ -40,14 +40,14 @@ public final class PagedCollection<Item: Identifiable & Sendable> {
 
     public let pageSize: Int
 
-    @ObservationIgnored private let fetch: Fetch
-    @ObservationIgnored private var task: Task<Void, Never>?
-    @ObservationIgnored private var generation = 0
+    @PerceptionIgnored private let fetch: Fetch
+    @PerceptionIgnored private var task: Task<Void, Never>?
+    @PerceptionIgnored private var generation = 0
     /// Rows fetched so far, counting duplicates dropped from `items`.
-    @ObservationIgnored private var nextOffset = 0
-    @ObservationIgnored private var seenIds = Set<Item.ID>()
+    @PerceptionIgnored private var nextOffset = 0
+    @PerceptionIgnored private var seenIds = Set<Item.ID>()
     /// Rows from the end at which the next page starts loading.
-    @ObservationIgnored private let prefetchDistance = 20
+    @PerceptionIgnored private let prefetchDistance = 20
 
     public init(pageSize: Int = 100, fetch: @escaping Fetch) {
         self.pageSize = pageSize

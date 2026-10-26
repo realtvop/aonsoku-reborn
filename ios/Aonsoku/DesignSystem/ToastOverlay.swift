@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 import UIKit
 
@@ -15,15 +16,19 @@ private struct ToastHostModifier: ViewModifier {
     @State private var presenter = ToastWindowPresenter()
 
     func body(content: Content) -> some View {
-        content
-            .background {
-                WindowSceneReader { scene in
-                    presenter.attach(to: scene, app: app)
+        WithPerceptionTracking {
+            content
+                .background {
+                    WithPerceptionTracking {
+                        WindowSceneReader { scene in
+                            presenter.attach(to: scene, app: app)
+                        }
+                    }
                 }
-            }
-            .onChange(of: app.toasts.current?.id) { _, id in
-                presenter.setVisible(id != nil)
-            }
+                .onChange(of: app.toasts.current?.id) { _, id in
+                    presenter.setVisible(id != nil)
+                }
+        }
     }
 }
 
@@ -109,36 +114,38 @@ private struct ToastLayer: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
-        let toast = toasts.current
-        VStack {
-            if let toast {
-                ToastCapsule(toast: toast, text: text(of: toast))
-                    .id(toast.id)
-                    .transition(
-                        .asymmetric(
-                            insertion: .move(edge: .top).combined(with: .opacity),
-                            removal: .opacity.combined(with: .scale(scale: 0.9))
+        WithPerceptionTracking {
+            let toast = toasts.current
+            VStack {
+                if let toast {
+                    ToastCapsule(toast: toast, text: text(of: toast))
+                        .id(toast.id)
+                        .transition(
+                            .asymmetric(
+                                insertion: .move(edge: .top).combined(with: .opacity),
+                                removal: .opacity.combined(with: .scale(scale: 0.9))
+                            )
                         )
-                    )
+                }
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
-        }
-        .padding(.top, 8)
-        .frame(maxWidth: .infinity)
-        .animation(.spring(duration: 0.4, bounce: 0.25), value: toast?.id)
-        .sensoryFeedback(trigger: toast?.id) { _, id in
-            guard id != nil, let toast, settings.settings.playback.hapticFeedback else {
-                return nil
+            .padding(.top, 8)
+            .frame(maxWidth: .infinity)
+            .animation(.spring(duration: 0.4, bounce: 0.25), value: toast?.id)
+            .sensoryFeedback(trigger: toast?.id) { _, id in
+                guard id != nil, let toast, settings.settings.playback.hapticFeedback else {
+                    return nil
+                }
+                return switch toast.style {
+                case .success: .success
+                case .error: .error
+                case .info: nil
+                }
             }
-            return switch toast.style {
-            case .success: .success
-            case .error: .error
-            case .info: nil
+            .onChange(of: toast?.id) { _, id in
+                guard id != nil, let toast else { return }
+                UIAccessibility.post(notification: .announcement, argument: text(of: toast))
             }
-        }
-        .onChange(of: toast?.id) { _, id in
-            guard id != nil, let toast else { return }
-            UIAccessibility.post(notification: .announcement, argument: text(of: toast))
         }
     }
 
@@ -155,20 +162,22 @@ private struct ToastCapsule: View {
     let text: String
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: symbol)
-                .font(.body.weight(.semibold))
-                .foregroundStyle(symbolStyle)
-            Text(text)
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(2)
-                .multilineTextAlignment(.leading)
+        WithPerceptionTracking {
+            HStack(spacing: 10) {
+                Image(systemName: symbol)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(symbolStyle)
+                Text(text)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+            .glassEffect(.regular, in: .capsule)
+            .padding(.horizontal, 24)
+            .frame(maxWidth: 520)
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 12)
-        .glassEffect(.regular, in: .capsule)
-        .padding(.horizontal, 24)
-        .frame(maxWidth: 520)
     }
 
     private var symbol: String {

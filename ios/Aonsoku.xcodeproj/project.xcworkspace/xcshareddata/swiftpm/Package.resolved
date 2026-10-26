@@ -1,5 +1,5 @@
 {
-  "originHash" : "48e5fd70f91622b8cb4531acd0f1fc934b18efb298752a1095813ff6655af61c",
+  "originHash" : "4f18cf425775d85e7d66e8ea066782c1d2fd59165625e4adc75070c43c07ad86",
   "pins" : [
     {
       "identity" : "grdb.swift",
@@ -16,6 +16,33 @@
       "location" : "https://github.com/realtvop/slidercontrol",
       "state" : {
         "revision" : "54f8b8bb925b0971bb9b1267b38cccc2addec74f"
+      }
+    },
+    {
+      "identity" : "swift-perception",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/pointfreeco/swift-perception",
+      "state" : {
+        "revision" : "597afd46249f4a71885b95d26b26cc5b893daf32",
+        "version" : "2.0.12"
+      }
+    },
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-syntax",
+      "state" : {
+        "revision" : "4799286537280063c85a32f09884cfbca301b1a1",
+        "version" : "602.0.0"
+      }
+    },
+    {
+      "identity" : "xctest-dynamic-overlay",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/pointfreeco/xctest-dynamic-overlay",
+      "state" : {
+        "revision" : "d9308ad679143c26a30dec52daefe82f54af2b82",
+        "version" : "1.13.1"
       }
     }
   ],

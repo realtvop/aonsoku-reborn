@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 /// All albums in a grid, or one slice of them: a genre, an artist's
@@ -16,48 +17,56 @@ struct AlbumsListView: View {
     }
 
     var body: some View {
-        QueriedCollection(query: query, debounce: isSearching ? .milliseconds(300) : .zero) { repository, filter, offset, limit in
-            try await repository.albums(filter, offset: offset, limit: limit)
-        } content: { collection in
-            ScrollView {
-                AlbumGrid(collection: collection, caption: caption)
-                    .padding(.top, 8)
-                    .padding(.bottom, 24)
-            }
-            .pagedStates(collection) {
-                if isSearching {
-                    EmptyStateView(title: t("command.noResults"), systemImage: "magnifyingglass")
-                } else {
-                    EmptyStateView(
-                        title: t("album.list.empty.title"),
-                        systemImage: "square.stack",
-                        description: t("album.list.empty.info")
-                    )
+        WithPerceptionTracking {
+            QueriedCollection(query: query, debounce: isSearching ? .milliseconds(300) : .zero) { repository, filter, offset, limit in
+                WithPerceptionTracking {
+                    try await repository.albums(filter, offset: offset, limit: limit)
                 }
-            }
-            .refreshable { await collection.refresh() }
-        }
-        .offlineBanner()
-        .themedBackground()
-        .navigationTitle(title)
-        .navigationSubtitle(subtitle)
-        .navigationBarTitleDisplayMode(.large)
-        .searchable(isSortable, text: $searchText, prompt: t("album.list.search.placeholder"))
-        .toolbar {
-            if isSortable {
-                ToolbarItem(placement: .topBarTrailing) {
-                    sortMenu
+            } content: { collection in
+                ScrollView {
+                    AlbumGrid(collection: collection, caption: caption)
+                        .padding(.top, 8)
+                        .padding(.bottom, 24)
                 }
-            } else if case let .byGenre(genre) = filter {
-                ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink(value: AppRoute.songs(SongListQuery(scope: .genre(genre)))) {
-                        Label(t("sidebar.songs"), systemImage: "music.note")
+                .pagedStates(collection) {
+                    if isSearching {
+                        EmptyStateView(title: t("command.noResults"), systemImage: "magnifyingglass")
+                    } else {
+                        EmptyStateView(
+                            title: t("album.list.empty.title"),
+                            systemImage: "square.stack",
+                            description: t("album.list.empty.info")
+                        )
+                    }
+                }
+                .refreshable { await collection.refresh() }
+            }
+            .offlineBanner()
+            .themedBackground()
+            .navigationTitle(title)
+            .navigationSubtitle(subtitle)
+            .navigationBarTitleDisplayMode(.large)
+            .searchable(isSortable, text: $searchText, prompt: t("album.list.search.placeholder"))
+            .toolbar {
+                if isSortable {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        WithPerceptionTracking {
+                            sortMenu
+                        }
+                    }
+                } else if case let .byGenre(genre) = filter {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        WithPerceptionTracking {
+                            NavigationLink(value: AppRoute.songs(SongListQuery(scope: .genre(genre)))) {
+                                Label(t("sidebar.songs"), systemImage: "music.note")
+                            }
+                        }
                     }
                 }
             }
-        }
-        .onChange(of: filter) {
-            AlbumListPreference.save(filter, to: app.services.preferences)
+            .onChange(of: filter) {
+                AlbumListPreference.save(filter, to: app.services.preferences)
+            }
         }
     }
 
@@ -105,8 +114,10 @@ struct AlbumsListView: View {
         Menu {
             Picker(t("album.list.filter.label"), selection: sortOption) {
                 ForEach(AlbumSortOption.allCases) { option in
-                    Label(t(option.labelKey), systemImage: option.symbol)
-                        .tag(option)
+                    WithPerceptionTracking {
+                        Label(t(option.labelKey), systemImage: option.symbol)
+                            .tag(option)
+                    }
                 }
             }
             .pickerStyle(.inline)

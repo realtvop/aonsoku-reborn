@@ -1,4 +1,5 @@
 import AonsokuKit
+import Perception
 import SwiftUI
 
 extension SettingsStore {
@@ -18,7 +19,9 @@ struct SettingsIcon: View {
     let systemImage: String
 
     var body: some View {
-        IconTile(systemImage: systemImage, size: 30)
+        WithPerceptionTracking {
+            IconTile(systemImage: systemImage, size: 30)
+        }
     }
 }
 
@@ -29,10 +32,12 @@ struct SettingsToggle: View {
     @Binding var isOn: Bool
 
     var body: some View {
-        Toggle(isOn: $isOn) {
-            Text(title)
-            if let info {
-                Text(info)
+        WithPerceptionTracking {
+            Toggle(isOn: $isOn) {
+                Text(title)
+                if let info {
+                    Text(info)
+                }
             }
         }
     }
@@ -45,11 +50,13 @@ struct URLField: View {
     var prompt: String = "https://"
 
     var body: some View {
-        TextField(title, text: $text, prompt: Text(prompt))
-            .keyboardType(.URL)
-            .textContentType(.URL)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
+        WithPerceptionTracking {
+            TextField(title, text: $text, prompt: Text(prompt))
+                .keyboardType(.URL)
+                .textContentType(.URL)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+        }
     }
 }
 

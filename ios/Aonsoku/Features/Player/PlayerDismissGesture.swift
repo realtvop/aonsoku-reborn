@@ -1,3 +1,4 @@
+import Perception
 import SwiftUI
 import UIKit
 
@@ -18,13 +19,15 @@ private struct PlayerSliderRegionModifier: ViewModifier {
     @Environment(PlayerPresentationState.self) private var presentation
 
     func body(content: Content) -> some View {
-        content
-            .onGeometryChange(for: CGRect.self, of: {
-                $0.frame(in: .named(PlayerArtworkLocation.containerCoordinateSpace))
-            }) {
-                presentation.sliderFrames[region] = $0
-            }
-            .onDisappear { presentation.sliderFrames.removeValue(forKey: region) }
+        WithPerceptionTracking {
+            content
+                .onGeometryChange(for: CGRect.self, of: {
+                    $0.frame(in: .named(PlayerArtworkLocation.containerCoordinateSpace))
+                }) {
+                    presentation.sliderFrames[region] = $0
+                }
+                .onDisappear { presentation.sliderFrames.removeValue(forKey: region) }
+        }
     }
 }
 
