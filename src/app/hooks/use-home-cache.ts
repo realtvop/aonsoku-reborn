@@ -1,7 +1,34 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { get, set } from "idb-keyval";
+import { type HomeCacheEntry, loadCachedHomeData } from "@/lib/home-cache";
 import { useAppStore } from "@/store/app.store";
 import { offlineLibraryStore } from "@/store/idb";
+
+const forcedRandomQueries = new WeakSet<object>();
+
+/** Manual refresh is the only invalidation that explicitly rerolls random lists. */
+export async function refreshCachedHome(client: QueryClient) {
+  const randomQueries = client.getQueryCache().findAll({
+    type: "active",
+    predicate: (query) => query.meta?.homeRandom === true,
+  });
+  await client.cancelQueries({
+    predicate: (query) => randomQueries.includes(query),
+  });
+  for (const query of randomQueries) forcedRandomQueries.add(query);
+  try {
+    await Promise.all([
+      client.invalidateQueries({ queryKey: ["albums"] }),
+      client.invalidateQueries({ queryKey: ["home"] }),
+    ]);
+  } finally {
+    for (const query of randomQueries) forcedRandomQueries.delete(query);
+  }
+}
 
 /** Restore Home query results across reloads without mixing server/accounts. */
 export function useCachedHomeQuery<T>({
@@ -12,6 +39,7 @@ export function useCachedHomeQuery<T>({
   hasContent,
   enabled = true,
   refetchInterval,
+  keepRandom = false,
 }: {
   key: readonly unknown[];
   isOnline: boolean;
@@ -20,6 +48,7 @@ export function useCachedHomeQuery<T>({
   hasContent: (value: T) => boolean;
   enabled?: boolean;
   refetchInterval?: number | false;
+  keepRandom?: boolean;
 }) {
   const account = useAppStore((state) =>
     JSON.stringify([
@@ -33,34 +62,24 @@ export function useCachedHomeQuery<T>({
 
   return useQuery<T>({
     queryKey,
-    queryFn: async ({ signal }) => {
-      let cached = client.getQueryData<T>(queryKey);
-      if (cached === undefined) {
-        cached = await get<T>(storageKey, offlineLibraryStore).catch(
-          () => undefined,
-        );
-      }
-      if (cached === undefined) {
-        const seed = await local().catch(() => undefined);
-        if (seed !== undefined && hasContent(seed)) cached = seed;
-      }
-      signal.throwIfAborted();
-      if (cached !== undefined) client.setQueryData(queryKey, cached);
-      if (!isOnline) return cached ?? local();
-      try {
-        const value = await fresh();
-        signal.throwIfAborted();
-        // Storage failure must not discard a successful server response.
-        await set(storageKey, value, offlineLibraryStore).catch(
-          () => undefined,
-        );
-        return value;
-      } catch (error) {
-        signal.throwIfAborted();
-        if (cached !== undefined) return cached;
-        throw error;
-      }
+    queryFn: ({ signal }) => {
+      const query = client.getQueryCache().find({ queryKey, exact: true });
+      const force = query !== undefined && forcedRandomQueries.has(query);
+      return loadCachedHomeData<T>({
+        read: () => get<HomeCacheEntry<T> | T>(storageKey, offlineLibraryStore),
+        write: (entry) => set(storageKey, entry, offlineLibraryStore),
+        memory: client.getQueryData<T>(queryKey),
+        publish: (value) => client.setQueryData(queryKey, value),
+        local,
+        fresh,
+        hasContent,
+        online: isOnline,
+        keepRandom,
+        force,
+        signal,
+      });
     },
+    meta: { homeRandom: keepRandom },
     enabled,
     staleTime: 0,
     refetchOnMount: "always",

@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
+import { refreshCachedHome } from "@/app/hooks/use-home-cache";
 import {
   HeaderFallback,
   PreviewListFallback,
@@ -28,10 +29,7 @@ export default function Home() {
   const queryClient = useQueryClient();
 
   const handleRefresh = async () => {
-    const promises = [
-      queryClient.invalidateQueries({ queryKey: ["albums"] }),
-      queryClient.invalidateQueries({ queryKey: ["home"] }),
-    ];
+    const refresh = refreshCachedHome(queryClient);
 
     const state = useCacheStore.getState();
     const network = getNetworkStatus();
@@ -46,7 +44,7 @@ export default function Home() {
       });
     }
 
-    await Promise.all(promises);
+    await refresh;
   };
 
   const { data: carouselAlbums, isLoading } = useGetCarouselAlbums();

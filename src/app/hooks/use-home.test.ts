@@ -1,11 +1,30 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  getPinnedHomeItems,
   getPlaylistPlayedAt,
   sortPinnedHomeItemsByPlayedAt,
   type HomePinnedItemData,
 } from "@/app/hooks/use-home";
 
+import { subsonic } from "@/service/subsonic";
+import { offlineData } from "@/lib/offlineQueryClient";
+
 describe("use-home pinned helpers", () => {
+  it("does not fall back to unowned library rows when a pin refresh fails", async () => {
+    const localAlbums = vi.spyOn(offlineData, "albums");
+    const remoteAlbum = vi
+      .spyOn(subsonic.albums, "getOne")
+      .mockRejectedValue(new Error("unreachable"));
+    try {
+      await expect(
+        getPinnedHomeItems([{ type: "album", id: "shared-id" }], true),
+      ).rejects.toThrow("unreachable");
+      expect(localAlbums).not.toHaveBeenCalled();
+      expect(remoteAlbum).toHaveBeenCalledOnce();
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
   it("uses the newest played song timestamp for playlists", () => {
     const playedAt = getPlaylistPlayedAt(
       {

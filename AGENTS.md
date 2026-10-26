@@ -505,9 +505,14 @@ Two complementary systems:
 
 Web Home queries use `useCachedHomeQuery` to restore per-section results from
 `home.snapshot.v1` entries in the offline IndexedDB store, keyed by primary
-server and username, before refreshing online. Missing snapshots are seeded
-from the local library. Each section keeps its content during refresh/failure;
-the carousel shows its skeleton only when it has no data.
+server and username, before refreshing online. Missing account-scoped snapshots
+use placeholders/empty offline results rather than unowned global IDB rows;
+pinned refreshes also resolve against the signed-in server. Each section keeps
+its content during refresh/failure. Carousel and Explore snapshots keep their
+selection for 24 hours; automatic invalidations/reconnects preserve them while
+manual Home refresh explicitly rerolls them. Their timestamps are not extended
+by cache reads. Untimed snapshots are adopted without an initial reroll. The
+carousel shows its skeleton only when it has no data.
 
 Persistent browser-side library/cache data uses Dexie in `src/store/library-db.ts`
 and IndexedDB helpers in `src/store/idb.ts`. Offline-capable UI paths generally
