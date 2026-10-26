@@ -93,7 +93,7 @@ function debouncedNativeWrite(key: string, value: string) {
   );
 }
 
-export function flushNativeWrites(): void {
+export async function flushNativeWrites(): Promise<void> {
   if (writeTimers.size === 0 || !pluginRef) return;
   const batch: Record<string, string> = {};
   for (const [key, timer] of writeTimers) {
@@ -105,7 +105,7 @@ export function flushNativeWrites(): void {
   }
   writeTimers.clear();
   if (Object.keys(batch).length > 0) {
-    pluginRef.setPreferences({ preferences: batch });
+    await pluginRef.setPreferences({ preferences: batch });
   }
 }
 

@@ -1,4 +1,5 @@
 import merge from "lodash/merge";
+import { markAccountReset } from "@/lib/account-reset";
 import omit from "lodash/omit";
 import { devtools, persist, subscribeWithSelector } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
@@ -378,6 +379,7 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
                     state.data.serverType = result.serverType || "subsonic";
                     state.data.isServerConfigured = true;
                   });
+                  await markAccountReset();
                   return true;
                 }
 
@@ -421,6 +423,7 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
                     state.data.serverType = serverInfo.serverType;
                     state.data.isServerConfigured = true;
                   });
+                  await markAccountReset();
                   return true;
                 }
               }
@@ -560,6 +563,7 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
                 state.pages.hideRadiosSection = HIDE_RADIOS_SECTION ?? true;
                 state.pages.artistsPageViewType = "table";
               });
+              await markAccountReset();
             },
             setLogoutDialogState: (value) => {
               set((state) => {

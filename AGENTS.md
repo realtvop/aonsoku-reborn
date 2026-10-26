@@ -529,6 +529,14 @@ the same account scope. Legacy unowned metadata needs a successful sync before
 local sampling, while existing Home snapshots remain reusable.
 Every other Home section, including Explore and pinned items, publishes a
 successful network response immediately, before its snapshot write completes.
+Explicit Web/Electron login and logout set a durable account-reset marker and
+reload the renderer after flushing native preference writes. Before importing
+stores, workers or the router, bootstrap removes the old resource databases,
+media CacheStorage, pins, history, queue and per-song lyrics choices; device
+appearance/playback preferences survive. Other open tabs reload on the marker.
+Failed cleanup retains the marker and prevents mounting the new account.
+Electron also clears native library/artwork/audio/queue/history before explicit
+login or logout, fencing old sync, image and audio download completions.
 Failures retain cached content, missing scoped data uses placeholders/empty
 offline results, and only carousel timestamps govern the 24-hour retention.
 

@@ -42,6 +42,7 @@ export class DesktopAudioDownloadManager {
   readonly #onCompleted: DesktopAudioDownloadManagerOptions["onCompleted"];
   readonly #onFailed: DesktopAudioDownloadManagerOptions["onFailed"];
   readonly #activeDownloads = new Map<string, ActiveDownload>();
+  readonly #pending = new Set<Promise<void>>();
 
   constructor(options: DesktopAudioDownloadManagerOptions) {
     this.#audioFiles = options.audioFiles;
@@ -58,13 +59,15 @@ export class DesktopAudioDownloadManager {
     };
     this.#activeDownloads.set(request.songId, activeDownload);
 
-    this.#runDownload(request, activeDownload)
+    const pending = this.#runDownload(request, activeDownload)
       .finally(() => {
         if (this.#activeDownloads.get(request.songId) === activeDownload) {
           this.#activeDownloads.delete(request.songId);
         }
       })
       .catch(() => undefined);
+    this.#pending.add(pending);
+    pending.finally(() => this.#pending.delete(pending));
   }
 
   cancel(songId: string): void {
@@ -76,6 +79,11 @@ export class DesktopAudioDownloadManager {
     for (const songId of this.#activeDownloads.keys()) {
       this.cancel(songId);
     }
+  }
+
+  async cancelAndWait(): Promise<void> {
+    this.cancelAll();
+    await Promise.allSettled([...this.#pending]);
   }
 
   async #runDownload(

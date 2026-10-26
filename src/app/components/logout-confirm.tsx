@@ -1,7 +1,7 @@
 import { type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
 import { ConfirmationDialog } from "@/app/components/ui/confirmation-dialog";
+import { restartAccountSession } from "@/lib/account-reset";
 import { ROUTES } from "@/routes/routesList";
 import { useAppActions, useAppStore } from "@/store/app.store";
 import { usePlayerActions } from "@/store/player.store";
@@ -19,7 +19,6 @@ export function LogoutConfirmDialog({
   const setLogoutDialogState = useAppStore(
     (state) => state.actions.setLogoutDialogState,
   );
-  const navigate = useNavigate();
   const { clearPlayerState, resetConfig } = usePlayerActions();
   const { t } = useTranslation();
 
@@ -29,7 +28,7 @@ export function LogoutConfirmDialog({
     clearPlayerState();
     resetConfig();
     setLogoutDialogState(false);
-    navigate(ROUTES.SERVER_CONFIG, { replace: true });
+    await restartAccountSession(ROUTES.SERVER_CONFIG);
   }
 
   return (

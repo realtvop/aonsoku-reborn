@@ -112,6 +112,7 @@ export class NativeAudioService implements AonsokuAudioApi {
   readonly #engine: DesktopAudioEngine;
   readonly #audioFiles: DesktopAudioFileStore;
   readonly #downloadManager: DesktopAudioDownloadManager;
+  #downloadGeneration = 0;
   readonly #downloadUrlResolver: DesktopAudioDownloadUrlResolver | null;
   readonly #streamUrlResolver: (url: string) => string;
   readonly #artworkUrlResolver: (
@@ -438,6 +439,15 @@ export class NativeAudioService implements AonsokuAudioApi {
 
   clear(): Promise<void> {
     return this.#enqueuePlaybackCommand(() => this.#clear());
+  }
+
+  async resetAccount(): Promise<void> {
+    this.#downloadGeneration++;
+    this.#scrobbleSubmitter.invalidate();
+    await this.clear();
+    await this.#downloadManager.cancelAndWait();
+    this.#scrobbleBuffer.clear();
+    await this.clearAudioFiles();
   }
 
   async #clear(): Promise<void> {
@@ -1189,6 +1199,7 @@ export class NativeAudioService implements AonsokuAudioApi {
   }
 
   async #startDownload(options: StartDownloadOptions): Promise<void> {
+    const generation = this.#downloadGeneration;
     if (!options.songId) {
       throw new Error("Missing songId for desktop audio download.");
     }
@@ -1201,6 +1212,7 @@ export class NativeAudioService implements AonsokuAudioApi {
         );
       }
 
+      if (generation !== this.#downloadGeneration) return;
       this.#downloadManager.download({
         songId: options.songId,
         url,

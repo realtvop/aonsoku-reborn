@@ -19,6 +19,11 @@ export class DesktopScrobbleSubmitter {
   readonly #request: DesktopScrobbleRequest | null;
   readonly #now: () => number;
   #pendingSubmission: Promise<void> | null = null;
+  #generation = 0;
+
+  invalidate(): void {
+    this.#generation++;
+  }
 
   constructor(options: DesktopScrobbleSubmitterOptions) {
     this.#buffer = options.buffer;
@@ -50,8 +55,10 @@ export class DesktopScrobbleSubmitter {
 
   async #drainPending(): Promise<void> {
     if (!this.#request) return;
+    const generation = this.#generation;
 
     for (const entry of this.#buffer.getEntries()) {
+      if (generation !== this.#generation) return;
       const threshold = Math.min(
         entry.songDurationSeconds * SCROBBLE_THRESHOLD_PERCENT,
         SCROBBLE_THRESHOLD_MAX_SECONDS,
@@ -75,6 +82,7 @@ export class DesktopScrobbleSubmitter {
         // ready lifecycle opportunity will retry without affecting playback.
         return;
       }
+      if (generation !== this.#generation) return;
       this.#buffer.removeEntry(entry.entryId);
     }
   }

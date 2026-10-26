@@ -1,11 +1,10 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useQueryClient } from "@tanstack/react-query";
+import { restartAccountSession } from "@/lib/account-reset";
 import clsx from "clsx";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
 
 import { toast } from "react-toastify";
 import { z } from "zod";
@@ -69,9 +68,7 @@ export function LoginForm() {
   const [serverIsIncompatible, setServerIsIncompatible] = useState(false);
   const { saveConfig } = useAppActions();
   const { hideServer } = useAppData();
-  const navigate = useNavigate();
   const { t } = useTranslation();
-  const queryClient = useQueryClient();
 
   const shouldHideUrlInput = urlIsValid && hideServer;
 
@@ -105,16 +102,8 @@ export function LoginForm() {
     });
 
     if (status) {
-      await queryClient.invalidateQueries({ queryKey: ["albums"] });
-      await queryClient.invalidateQueries({ queryKey: ["artists"] });
-      await queryClient.invalidateQueries({ queryKey: ["songs"] });
-      await queryClient.invalidateQueries({ queryKey: ["playlists"] });
-      await queryClient.invalidateQueries({ queryKey: ["favorites"] });
-      await queryClient.invalidateQueries({ queryKey: ["genres"] });
-      await queryClient.invalidateQueries({ queryKey: ["radios"] });
-      await queryClient.invalidateQueries({ queryKey: ["search"] });
       toast.success(t("toast.server.success"));
-      navigate(ROUTES.LIBRARY.HOME, { replace: true });
+      await restartAccountSession(ROUTES.LIBRARY.HOME);
     } else {
       setLoading(false);
       toast.error(t("toast.server.error"));

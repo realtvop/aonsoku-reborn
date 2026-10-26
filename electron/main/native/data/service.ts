@@ -115,6 +115,7 @@ export class DesktopNativeDataService {
     totalItems: 0,
   };
   private cancelled = false;
+  private accountGeneration = 0;
   private readonly coverDownloads = new Map<string, CoverDownloadTask>();
   private readonly coverGenerations = new Map<string, number>();
   private coverPublicationTail = Promise.resolve();
@@ -137,6 +138,21 @@ export class DesktopNativeDataService {
 
   cancelSync(): void {
     this.cancelled = true;
+  }
+
+  async resetAccount(): Promise<void> {
+    this.accountGeneration++;
+    this.cancelSync();
+    this.coverDownloads.clear();
+    await this.clearCoverImages();
+    this.store.set(
+      structuredClone({
+        ...defaults,
+        albumOwner: undefined,
+        lastSyncedAt: undefined,
+      }),
+    );
+    this.updateSyncState({ phase: "idle", isSyncing: false, progress: 0 });
   }
 
   async syncAll(options?: {
@@ -172,6 +188,7 @@ export class DesktopNativeDataService {
     },
   ): Promise<void> {
     if (this.syncState.isSyncing) return;
+    const generation = this.accountGeneration;
     const owner = this.currentAlbumOwner();
     this.cancelled = false;
     this.updateSyncState({ isSyncing: true, phase: "genres", progress: 0 });
@@ -187,7 +204,12 @@ export class DesktopNativeDataService {
         this.bridge.request({ path: "/getStarred2.view" }),
         this.bridge.request({ path: "/getArtists.view" }),
       ]);
-      if (this.cancelled || owner !== this.currentAlbumOwner()) return;
+      if (
+        generation !== this.accountGeneration ||
+        this.cancelled ||
+        owner !== this.currentAlbumOwner()
+      )
+        return;
 
       const genres = ((genresResponse.data.genres as { genre?: NativeGenre[] })
         ?.genre ?? []) as NativeGenre[];
@@ -211,8 +233,16 @@ export class DesktopNativeDataService {
       this.updateSyncState({ phase: "albums", progress: 0.3 });
 
       const albums: NativeAlbum[] = [];
-      for (let offset = 0; !this.cancelled; offset += 500) {
-        if (owner !== this.currentAlbumOwner()) return;
+      for (
+        let offset = 0;
+        generation === this.accountGeneration && !this.cancelled;
+        offset += 500
+      ) {
+        if (
+          generation !== this.accountGeneration ||
+          owner !== this.currentAlbumOwner()
+        )
+          return;
         const response = await this.bridge.request({
           path: "/getAlbumList2.view",
           query: { type: "alphabeticalByName", size: 500, offset },
@@ -226,7 +256,12 @@ export class DesktopNativeDataService {
         this.updateSyncState({ processedItems: albums.length });
         if (page.length < 500) break;
       }
-      if (this.cancelled || owner !== this.currentAlbumOwner()) return;
+      if (
+        generation !== this.accountGeneration ||
+        this.cancelled ||
+        owner !== this.currentAlbumOwner()
+      )
+        return;
 
       if (!includeFullSongs) {
         this.store.set({
@@ -257,7 +292,12 @@ export class DesktopNativeDataService {
             concurrency: options.coverArtConcurrency,
             useAlbumCoverForSongs: options.useAlbumCoverForSongs,
           });
-          if (this.cancelled || owner !== this.currentAlbumOwner()) return;
+          if (
+            generation !== this.accountGeneration ||
+            this.cancelled ||
+            owner !== this.currentAlbumOwner()
+          )
+            return;
         }
         this.updateSyncState({ phase: "done", progress: 1 });
         return;
@@ -265,7 +305,11 @@ export class DesktopNativeDataService {
 
       const songs: NativeSong[] = [];
       this.updateSyncState({ phase: "songs", progress: 0.6 });
-      for (let offset = 0; !this.cancelled; offset += 500) {
+      for (
+        let offset = 0;
+        generation === this.accountGeneration && !this.cancelled;
+        offset += 500
+      ) {
         const response = await this.bridge.request({
           path: "/search3.view",
           query: {
@@ -289,6 +333,12 @@ export class DesktopNativeDataService {
         if (page.length < 500) break;
       }
       const mergedSongs = this.mergeStarredSongs(songs, starred.song ?? []);
+      if (
+        generation !== this.accountGeneration ||
+        this.cancelled ||
+        owner !== this.currentAlbumOwner()
+      )
+        return;
       this.store.set({
         albums,
         albumOwner: owner,
@@ -314,14 +364,21 @@ export class DesktopNativeDataService {
           concurrency: options.coverArtConcurrency,
           useAlbumCoverForSongs: options.useAlbumCoverForSongs,
         });
-        if (this.cancelled || owner !== this.currentAlbumOwner()) return;
+        if (
+          generation !== this.accountGeneration ||
+          this.cancelled ||
+          owner !== this.currentAlbumOwner()
+        )
+          return;
       }
       this.updateSyncState({ phase: "done", progress: 1 });
     } catch (error) {
+      if (generation !== this.accountGeneration) return;
       this.updateSyncState({ phase: "error" });
       throw error;
     } finally {
-      this.updateSyncState({ isSyncing: false });
+      if (generation === this.accountGeneration)
+        this.updateSyncState({ isSyncing: false });
     }
   }
 
@@ -534,6 +591,7 @@ export class DesktopNativeDataService {
   }
 
   async getPlaylist({ id }: { id: string }) {
+    const generation = this.accountGeneration;
     const cached = this.store.get("playlistDetails")[id];
     if (cached) return cached;
     const response = await this.bridge.request({
@@ -543,7 +601,7 @@ export class DesktopNativeDataService {
     const playlist = response.data.playlist as
       | NativePlaylistWithEntries
       | undefined;
-    if (!playlist) return null;
+    if (!playlist || generation !== this.accountGeneration) return null;
     this.store.set(`playlistDetails.${id}`, playlist);
     return playlist;
   }

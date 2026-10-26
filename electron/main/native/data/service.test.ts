@@ -112,6 +112,32 @@ describe("DesktopNativeDataService", () => {
     });
   });
 
+  it("drops cached data and rejects an old playlist completion after account reset", async () => {
+    let complete!: (value: ReturnType<typeof response>) => void;
+    mocks.request.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    );
+    const service = new DesktopNativeDataService(
+      { request: mocks.request } as never,
+      () => {},
+    );
+    const store = mocks.stores.get("native-library")!;
+    store.songs = [{ id: "same-id", title: "A's private song" }];
+    store.lyrics = { "same-id": { content: "A's lyrics" } };
+    const oldRequest = service.getPlaylist({ id: "private-playlist" });
+    await service.resetAccount();
+    complete(
+      response({ playlist: { id: "private-playlist", name: "A's playlist" } }),
+    );
+    expect(await oldRequest).toBeNull();
+    expect(service.getSongs({ limit: 10, offset: 0 }).items).toEqual([]);
+    expect(service.getLyrics({ songId: "same-id" })).toBeNull();
+    expect(store.playlistDetails).toEqual({});
+  });
+
   it("resolves stored covers to local file URIs", async () => {
     const events: Array<{ event: string; payload: unknown }> = [];
     const service = new DesktopNativeDataService(
