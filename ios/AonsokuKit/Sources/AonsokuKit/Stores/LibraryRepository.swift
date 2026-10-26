@@ -269,8 +269,12 @@ public final class LibraryRepository: @unchecked Sendable {
         return try localHomeAlbums(section, size: size)
     }
 
-    /// Random albums for the Home carousel.
+    /// Prefer the account's local library for the Home carousel; the server
+    /// is needed only before local album metadata is available.
     public func carouselAlbums(size: Int = HomeSection.carouselSize, fallbackToLocal: Bool = true) async throws -> [Album] {
+        if let albums = try? cachedHomeAlbums(.explore, size: size), !albums.isEmpty {
+            return albums
+        }
         if connectivity.isOnline {
             do {
                 return try await api.albumList(
@@ -564,8 +568,11 @@ private extension LibraryRepository {
     }
 
     func localHomeAlbums(_ section: HomeSection, size: Int) throws -> [Album] {
+        if section == .explore {
+            return try library.albums(limit: size, filter: LibraryAlbumFilter(sortBy: "random"))
+                .items.map(\.mediaValue)
+        }
         var albums = try library.albums(limit: Int.max).items.map(\.mediaValue)
-        if section == .explore { return Array(albums.shuffled().prefix(size)) }
 
         let songs = try library.songs(limit: Int.max).items.map(\.mediaValue)
         var playCounts: [String: Int] = [:]

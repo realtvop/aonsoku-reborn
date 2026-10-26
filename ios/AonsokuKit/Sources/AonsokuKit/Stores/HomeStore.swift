@@ -18,7 +18,6 @@ public final class HomeStore {
     public private(set) var hasCarousel = false
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private var carouselUpdatedAt: Date?
-    @ObservationIgnored private var exploreUpdatedAt: Date?
     private static let randomCacheLifetime: TimeInterval = 24 * 60 * 60
 
     @ObservationIgnored private var loadRevision: UInt64 = 0
@@ -44,7 +43,6 @@ public final class HomeStore {
             carousel = snapshot.carousel ?? []
             hasCarousel = snapshot.carousel != nil
             carouselUpdatedAt = snapshot.carouselUpdatedAt ?? now()
-            exploreUpdatedAt = snapshot.exploreUpdatedAt ?? now()
             for section in HomeSection.allCases {
                 sections[section] = snapshot.sections[section.rawValue]
             }
@@ -59,7 +57,6 @@ public final class HomeStore {
         for section in HomeSection.allCases where sections[section] == nil {
             if let albums = try? repository.cachedHomeAlbums(section, size: HomeSection.size), !albums.isEmpty {
                 sections[section] = albums
-                if section == .explore { exploreUpdatedAt = now() }
             }
         }
         persist()
@@ -70,7 +67,7 @@ public final class HomeStore {
         let values = Dictionary(uniqueKeysWithValues: sections.map { ($0.key.rawValue, $0.value) })
         try? preferences?.setJSON(HomeSnapshot(
             accountKey: accountKey, carousel: hasCarousel ? carousel : nil, sections: values,
-            carouselUpdatedAt: carouselUpdatedAt, exploreUpdatedAt: exploreUpdatedAt
+            carouselUpdatedAt: carouselUpdatedAt
         ), for: Self.cacheKey)
     }
 
@@ -120,7 +117,6 @@ public final class HomeStore {
         accountKey = nil
         hasCarousel = false
         carouselUpdatedAt = nil
-        exploreUpdatedAt = nil
         carousel = []
         sections = [:]
         phase = .idle
@@ -163,7 +159,6 @@ public final class HomeStore {
         let missingSections = Set(HomeSection.allCases.filter { sections[$0] == nil })
 
         let refreshCarousel = refreshRandom || carousel.isEmpty || isExpired(carouselUpdatedAt)
-        let refreshExplore = refreshRandom || albums(in: .explore).isEmpty || isExpired(exploreUpdatedAt)
 
         await withTaskGroup(of: HomeRefreshResult.self) { group in
             if refreshCarousel {
@@ -176,7 +171,6 @@ public final class HomeStore {
                 }
             }
             for section in HomeSection.allCases {
-                if section == .explore, !refreshExplore { continue }
                 group.addTask { [repository] in
                     do {
                         return .section(
@@ -199,7 +193,6 @@ public final class HomeStore {
                     successes += 1
                 case let .section(section, albums):
                     sections[section] = albums
-                    if section == .explore { exploreUpdatedAt = now() }
                     successes += 1
                 case let .failure(message):
                     if firstError == nil { firstError = message }
@@ -229,5 +222,4 @@ private struct HomeSnapshot: Codable {
     let carousel: [Album]?
     let sections: [String: [Album]]
     var carouselUpdatedAt: Date?
-    var exploreUpdatedAt: Date?
 }

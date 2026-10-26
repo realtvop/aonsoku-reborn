@@ -53,6 +53,25 @@ final class LibraryRepositoryTests: XCTestCase {
         XCTAssertTrue(emptySearch.items.isEmpty)
     }
 
+    func testCarouselUsesLocalAlbumsEvenOnlineAndExploreStillUsesServer() async throws {
+        let fixture = try LibraryFixture()
+        let api = FakeSubsonicAPI()
+        let calls = LockedTestBox(0)
+        api.albumListHandler = { _, _, _, _, _, _ in
+            calls.update { $0 += 1 }
+            return [Album(id: "server", name: "Server")]
+        }
+        let repository = fixture.repository(api: api)
+        let carousel = try await repository.carouselAlbums(size: 2, fallbackToLocal: false)
+        XCTAssertEqual(carousel.count, 2)
+        XCTAssertEqual(Set(carousel.map(\.id)).count, 2)
+        XCTAssertTrue(carousel.allSatisfy { ["a1", "a2", "a3"].contains($0.id) })
+        XCTAssertEqual(calls.read { $0 }, 0)
+        let explore = try await repository.homeAlbums(.explore, size: 16)
+        XCTAssertEqual(explore.map(\.id), ["server"])
+        XCTAssertEqual(calls.read { $0 }, 1)
+    }
+
     func testLocalSongScopesSortsMappingAndSearch() async throws {
         let fixture = try LibraryFixture()
         let repository = fixture.repository()
@@ -246,7 +265,7 @@ final class HomeStoreTests: XCTestCase {
         XCTAssertEqual(state.read(\.calls), calls)
     }
 
-    func testRandomSnapshotsSurviveStartupAndDynamicRefreshUntilExpiry() async throws {
+    func testCarouselStaysStableWhileExploreRefreshesImmediately() async throws {
         let database = try TemporaryDatabase()
         let preferences = PreferencesService(db: database.manager.dbPool)
         let api = FakeSubsonicAPI()
@@ -274,22 +293,22 @@ final class HomeStoreTests: XCTestCase {
         clock.update { $0 += 12 * 60 * 60 }
         let restarted = restoredStore()
         await restarted.loadIfNeeded()
-        XCTAssertEqual(calls.read { $0 }, 8)
+        XCTAssertEqual(calls.read { $0 }, 9)
         XCTAssertEqual(restarted.carousel, carousel)
-        XCTAssertEqual(restarted.albums(in: .explore), explore)
+        XCTAssertNotEqual(restarted.albums(in: .explore), explore)
         await restarted.refreshAutomatically()
-        XCTAssertEqual(calls.read { $0 }, 11)
+        XCTAssertEqual(calls.read { $0 }, 13)
         XCTAssertEqual(restarted.carousel, carousel)
 
         // Dynamic refreshes must not extend the random lists' original lifetime.
         clock.update { $0 += 13 * 60 * 60 }
         let expired = restoredStore()
         await expired.loadIfNeeded()
-        XCTAssertEqual(calls.read { $0 }, 16)
+        XCTAssertEqual(calls.read { $0 }, 18)
         XCTAssertNotEqual(expired.carousel, carousel)
         let beforeManual = expired.carousel
         await expired.refresh()
-        XCTAssertEqual(calls.read { $0 }, 21)
+        XCTAssertEqual(calls.read { $0 }, 23)
         XCTAssertNotEqual(expired.carousel, beforeManual)
     }
 

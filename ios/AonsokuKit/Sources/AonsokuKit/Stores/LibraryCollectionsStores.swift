@@ -52,6 +52,8 @@ public final class PinnedHomeStore {
     @ObservationIgnored public let preferences: PreferencesService
     @ObservationIgnored public let repository: LibraryRepository
     @ObservationIgnored private var resolveGeneration = 0
+    @ObservationIgnored private var refreshTask: Task<Void, Never>?
+    @ObservationIgnored private var refreshRevision: UInt64 = 0
 
     public init(preferences: PreferencesService, repository: LibraryRepository) {
         self.preferences = preferences
@@ -66,6 +68,9 @@ public final class PinnedHomeStore {
     }
 
     public func reset() {
+        refreshRevision &+= 1
+        refreshTask?.cancel()
+        refreshTask = nil
         resolveGeneration += 1
         items = []
         resolved = []
@@ -99,7 +104,22 @@ public final class PinnedHomeStore {
     }
 
     /// Refreshes `resolved` from the library.
-    public func resolve() async {
+    public func refresh() async {
+        if let refreshTask { await refreshTask.value; return }
+        refreshRevision &+= 1
+        let revision = refreshRevision
+        let task = Task { [weak self] in
+            guard let self else { return }
+            await resolve()
+            guard !Task.isCancelled else { return }
+            if repository.connectivity.isOnline { await resolve(refreshFromServer: true) }
+        }
+        refreshTask = task
+        await task.value
+        if refreshRevision == revision { refreshTask = nil }
+    }
+
+    public func resolve(refreshFromServer: Bool = false) async {
         resolveGeneration += 1
         let generation = resolveGeneration
         let requestedItems = items
@@ -109,8 +129,8 @@ public final class PinnedHomeStore {
             switch item.kind {
             case .album:
                 var detail = await repository.cachedAlbum(id: item.itemId)
-                if detail == nil, repository.connectivity.isOnline {
-                    detail = try? await repository.album(id: item.itemId)
+                if repository.connectivity.isOnline, refreshFromServer || detail == nil {
+                    detail = (try? await repository.album(id: item.itemId)) ?? detail
                 }
                 if let detail {
                     let activity = ([detail.album.played] + detail.songs.map(\.played))
@@ -120,8 +140,8 @@ public final class PinnedHomeStore {
                 }
             case .playlist:
                 var detail = await repository.cachedPlaylist(id: item.itemId)
-                if detail == nil, repository.connectivity.isOnline {
-                    detail = try? await repository.playlist(id: item.itemId)
+                if repository.connectivity.isOnline, refreshFromServer || detail == nil {
+                    detail = (try? await repository.playlist(id: item.itemId)) ?? detail
                 }
                 if let detail {
                     let activity = detail.songs.compactMap(\.played).max()

@@ -60,19 +60,22 @@ struct HomeView: View {
         .themedBackground()
         .rootPageHeader(t("sidebar.home"))
         .refreshable {
-            await home.refresh()
-            await pinned.resolve()
+            async let albums: Void = home.refresh()
+            async let pins: Void = pinned.refresh()
+            _ = await (albums, pins)
             if network.isOnline, !sync.isSyncing {
                 sync.syncIncremental()
             }
         }
         .task { await home.loadIfNeeded() }
-        .task(id: pinned.items) { await pinned.resolve() }
+        .task(id: pinned.items) { await pinned.refresh() }
         .task(id: network.isOnline) {
             // Keeps Recently Played current while Home is on screen, as the
             // web does every two minutes.
             guard network.isOnline else { return }
-            await home.refreshAutomatically()
+            async let albums: Void = home.refreshAutomatically()
+            async let pins: Void = pinned.refresh()
+            _ = await (albums, pins)
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(120))
                 guard !Task.isCancelled else { return }

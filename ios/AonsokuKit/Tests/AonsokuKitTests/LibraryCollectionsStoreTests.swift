@@ -128,6 +128,25 @@ final class PinnedHomeStoreTests: XCTestCase {
         let saved = preferences.getJSON("pinned.v1", as: [PinnedItem].self)
         XCTAssertEqual(saved, store.items)
     }
+    func testPinnedRefreshReplacesLocalMetadataWithTheServerVersion() async throws {
+        let database = try TemporaryDatabase()
+        let preferences = PreferencesService(db: database.manager.dbPool)
+        try preferences.setJSON([PinnedItem(itemId: "album", kind: .album)], for: "pinned.v1")
+        try AlbumRepository(db: database.manager.dbPool).upsert(makeCollectionAlbumRecord("album", name: "Cached"))
+        let api = FakeSubsonicAPI()
+        api.albumHandler = { id in AlbumDetail(album: Album(id: id, name: "Fresh"), songs: []) }
+        let store = PinnedHomeStore(preferences: preferences, repository: LibraryRepository(
+            api: api, library: LibraryService(dbManager: database.manager), connectivity: FixedConnectivity()
+        ))
+        store.load()
+        await store.resolve()
+        if case let .album(album) = store.resolved.first { XCTAssertEqual(album.name, "Cached") }
+        else { XCTFail("Expected cached pin") }
+        await store.refresh()
+        if case let .album(album) = store.resolved.first { XCTAssertEqual(album.name, "Fresh") }
+        else { XCTFail("Expected refreshed pin") }
+    }
+
 }
 
 @MainActor
