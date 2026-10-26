@@ -423,6 +423,9 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   GRDB repository access, metadata sync/scheduling, typed library queries, and
   cover/avatar caching through `AppServices.library`; native UI must not open
   `DatabaseManager` or construct repository types directly.
+  User avatars load through `ArtworkProvider`: decoded memory first, then a
+  sufficiently sized, decodable file in the shared image cache, then an
+  authenticated avatar download. Existing files with unknown sizes are reusable.
 - `AppModel` persists an iOS library-owner identity (primary server URL plus
   username). Sign-out resets observable account stores while retaining
   same-account offline data; activating a different account first clears

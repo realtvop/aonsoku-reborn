@@ -143,6 +143,12 @@ public final class ArtworkProvider: @unchecked Sendable {
         }
         let key = cacheKey(prefix: "avatar", id: username, size: size)
         let request = state.imageRequest(key: key) { [library] in
+            if let stored = library.coverSize(id: username),
+               stored.coverSize.flatMap(Int.init).map({ $0 >= size.rawValue }) ?? true,
+               let cached = library.resolveCover(id: username, requestedSize: size.requestValue),
+               let image = Self.downsample(cached.uri, pixelSize: size.rawValue) {
+                return image
+            }
             guard let image = try? await library.downloadAvatar(
                 username: username,
                 size: size.requestValue
