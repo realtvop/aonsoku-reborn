@@ -4,6 +4,8 @@
  * This file is kept for environments where Web Workers are unavailable.
  */
 
+import { libraryAccountKey } from "@/lib/library-owner";
+import { replaceOwnedAlbums } from "@/service/cache/owned-albums";
 import { httpClient } from "@/api/httpClient";
 import { queryClient } from "@/lib/queryClient";
 import { subsonic } from "@/service/subsonic";
@@ -395,7 +397,14 @@ class MetadataSyncService {
    * offline. Does not fetch per-song detail.
    */
   private async runT2(signal: AbortSignal): Promise<void> {
-    this.checkAborted(signal);
+    const owner = libraryAccountKey(useAppStore.getState().data);
+    const checkOwner = () => {
+      this.checkAborted(signal);
+      if (owner !== libraryAccountKey(useAppStore.getState().data)) {
+        throw new DOMException("Account changed", "AbortError");
+      }
+    };
+    checkOwner();
     this.updateSyncState("artists", "t2");
     const artists = await subsonic.artists.getAll();
     this.checkAborted(signal);
@@ -413,7 +422,7 @@ class MetadataSyncService {
     let hasMoreAlbums = true;
 
     while (hasMoreAlbums) {
-      this.checkAborted(signal);
+      checkOwner();
 
       const result = await subsonic.albums.getAlbumList({
         type: "alphabeticalByName",
@@ -454,11 +463,8 @@ class MetadataSyncService {
       }
     }
 
-    await clearAndBulkPutInChunks(
-      libraryDb.albums,
-      allAlbums.map(withStarredAt),
-      signal,
-    );
+    checkOwner();
+    await replaceOwnedAlbums(libraryDb, allAlbums, owner, signal);
 
     await this.recordTierCheckpoint("t2");
     queryClient.invalidateQueries({ queryKey: queryKeys.artist.all });

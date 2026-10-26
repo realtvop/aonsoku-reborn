@@ -1,3 +1,4 @@
+import { libraryAccountKey } from "../../../../src/lib/library-owner";
 import { randomUUID } from "node:crypto";
 import { realpathSync, statSync } from "node:fs";
 import {
@@ -31,6 +32,7 @@ import { AonsokuStore } from "../../core/store";
 import type { DesktopNativeBridgeService } from "../bridge/service";
 
 interface DataState {
+  albumOwner?: string;
   artists: NativeArtist[];
   albums: NativeAlbum[];
   songs: NativeSong[];
@@ -170,6 +172,7 @@ export class DesktopNativeDataService {
     },
   ): Promise<void> {
     if (this.syncState.isSyncing) return;
+    const owner = this.currentAlbumOwner();
     this.cancelled = false;
     this.updateSyncState({ isSyncing: true, phase: "genres", progress: 0 });
     try {
@@ -184,7 +187,7 @@ export class DesktopNativeDataService {
         this.bridge.request({ path: "/getStarred2.view" }),
         this.bridge.request({ path: "/getArtists.view" }),
       ]);
-      if (this.cancelled) return;
+      if (this.cancelled || owner !== this.currentAlbumOwner()) return;
 
       const genres = ((genresResponse.data.genres as { genre?: NativeGenre[] })
         ?.genre ?? []) as NativeGenre[];
@@ -209,6 +212,7 @@ export class DesktopNativeDataService {
 
       const albums: NativeAlbum[] = [];
       for (let offset = 0; !this.cancelled; offset += 500) {
+        if (owner !== this.currentAlbumOwner()) return;
         const response = await this.bridge.request({
           path: "/getAlbumList2.view",
           query: { type: "alphabeticalByName", size: 500, offset },
@@ -222,11 +226,12 @@ export class DesktopNativeDataService {
         this.updateSyncState({ processedItems: albums.length });
         if (page.length < 500) break;
       }
-      if (this.cancelled) return;
+      if (this.cancelled || owner !== this.currentAlbumOwner()) return;
 
       if (!includeFullSongs) {
         this.store.set({
           albums,
+          albumOwner: owner,
           songs: this.mergeStarredSongs(
             this.store.get("songs"),
             starred.song ?? [],
@@ -252,7 +257,7 @@ export class DesktopNativeDataService {
             concurrency: options.coverArtConcurrency,
             useAlbumCoverForSongs: options.useAlbumCoverForSongs,
           });
-          if (this.cancelled) return;
+          if (this.cancelled || owner !== this.currentAlbumOwner()) return;
         }
         this.updateSyncState({ phase: "done", progress: 1 });
         return;
@@ -284,7 +289,12 @@ export class DesktopNativeDataService {
         if (page.length < 500) break;
       }
       const mergedSongs = this.mergeStarredSongs(songs, starred.song ?? []);
-      this.store.set({ albums, songs: mergedSongs, lastSyncedAt: Date.now() });
+      this.store.set({
+        albums,
+        albumOwner: owner,
+        songs: mergedSongs,
+        lastSyncedAt: Date.now(),
+      });
       this.emit("dataChanged", {
         tables: [
           "genres",
@@ -304,7 +314,7 @@ export class DesktopNativeDataService {
           concurrency: options.coverArtConcurrency,
           useAlbumCoverForSongs: options.useAlbumCoverForSongs,
         });
-        if (this.cancelled) return;
+        if (this.cancelled || owner !== this.currentAlbumOwner()) return;
       }
       this.updateSyncState({ phase: "done", progress: 1 });
     } catch (error) {
@@ -435,6 +445,16 @@ export class DesktopNativeDataService {
     return this.store.get("artists").find((item) => item.id === id) ?? null;
   }
 
+  private currentAlbumOwner(): string | undefined {
+    const credentials = this.bridge.getCredentials();
+    return credentials?.serverUrl && credentials.username
+      ? libraryAccountKey({
+          url: credentials.serverUrl,
+          username: credentials.username,
+        })
+      : undefined;
+  }
+
   getAlbums(options: PaginatedQuery & AlbumFilter) {
     let items = [...this.store.get("albums")];
     if (options.search)
@@ -453,8 +473,12 @@ export class DesktopNativeDataService {
       items = items.filter((item) => (item.year ?? 0) <= options.toYear!);
     if (options.starredOnly)
       items = items.filter((item) => Boolean(item.starred));
-    if (options.sortBy === "random") items.sort(() => Math.random() - 0.5);
-    else {
+    if (options.sortBy === "random") {
+      for (let i = items.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [items[i], items[j]] = [items[j], items[i]];
+      }
+    } else {
       const field = options.sortBy ?? "name";
       items.sort(
         (a, b) =>
@@ -463,7 +487,10 @@ export class DesktopNativeDataService {
           ) * (options.sortOrder === "desc" ? -1 : 1),
       );
     }
-    return paginate(items, options);
+    return {
+      ...paginate(items, options),
+      libraryOwner: this.store.get("albumOwner"),
+    };
   }
 
   getAlbum({ id }: { id: string }) {

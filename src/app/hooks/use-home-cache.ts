@@ -5,6 +5,7 @@ import {
 } from "@tanstack/react-query";
 import { get, set } from "idb-keyval";
 import { type HomeCacheEntry, loadCachedHomeData } from "@/lib/home-cache";
+import { libraryAccountKey } from "@/lib/library-owner";
 import { useAppStore } from "@/store/app.store";
 import { offlineLibraryStore } from "@/store/idb";
 
@@ -40,22 +41,19 @@ export function useCachedHomeQuery<T>({
   enabled = true,
   refetchInterval,
   keepRandom = false,
+  localFirst = false,
 }: {
   key: readonly unknown[];
   isOnline: boolean;
-  local: () => Promise<T>;
+  local: (account: string) => Promise<T>;
   fresh: () => Promise<T>;
   hasContent: (value: T) => boolean;
   enabled?: boolean;
   refetchInterval?: number | false;
   keepRandom?: boolean;
+  localFirst?: boolean;
 }) {
-  const account = useAppStore((state) =>
-    JSON.stringify([
-      (state.data.primaryUrl || state.data.url).replace(/\/+$/, ""),
-      state.data.username,
-    ]),
-  );
+  const account = useAppStore((state) => libraryAccountKey(state.data));
   const client = useQueryClient();
   const queryKey = [...key, account, isOnline ? "online" : "offline"];
   const storageKey = JSON.stringify(["home.snapshot.v1", account, key]);
@@ -70,11 +68,12 @@ export function useCachedHomeQuery<T>({
         write: (entry) => set(storageKey, entry, offlineLibraryStore),
         memory: client.getQueryData<T>(queryKey),
         publish: (value) => client.setQueryData(queryKey, value),
-        local,
+        local: () => local(account),
         fresh,
         hasContent,
         online: isOnline,
         keepRandom,
+        localFirst,
         force,
         signal,
       });

@@ -15,7 +15,12 @@ describe("Home random selection persistence", () => {
     });
     const publish = vi.fn();
     const load = (
-      options: { force?: boolean; online?: boolean; keepRandom?: boolean } = {},
+      options: {
+        force?: boolean;
+        online?: boolean;
+        keepRandom?: boolean;
+        localFirst?: boolean;
+      } = {},
     ) =>
       loadCachedHomeData<string[]>({
         read: async () => stored,
@@ -55,6 +60,49 @@ describe("Home random selection persistence", () => {
     f.advance(HOME_RANDOM_CACHE_MAX_AGE / 2);
     expect(await f.load()).toEqual(["server-new"]);
     expect(f.fresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("regenerates an expired or manually refreshed carousel locally, even offline", async () => {
+    const f = fixture({
+      version: 2,
+      savedAt: 1_800_000_000_000,
+      value: ["cached"],
+    });
+    f.advance(HOME_RANDOM_CACHE_MAX_AGE);
+    expect(await f.load({ localFirst: true, online: false })).toEqual([
+      "local-seed",
+    ]);
+    expect(await f.load({ localFirst: true, force: true })).toEqual([
+      "local-seed",
+    ]);
+    expect(f.fresh).not.toHaveBeenCalled();
+  });
+
+  it("publishes a fresh dynamic section before waiting for its cache write", async () => {
+    let finishWrite!: () => void;
+    const pendingWrite = new Promise<void>((resolve) => {
+      finishWrite = resolve;
+    });
+    const publish = vi.fn();
+    const result = loadCachedHomeData({
+      read: async () => ({
+        version: 2 as const,
+        savedAt: Date.now(),
+        value: ["cached"],
+      }),
+      write: () => pendingWrite,
+      local: async () => [],
+      fresh: async () => ["new-explore"],
+      publish,
+      hasContent: (value) => value.length > 0,
+      online: true,
+      signal: new AbortController().signal,
+    });
+    await vi.waitFor(() =>
+      expect(publish).toHaveBeenCalledWith(["new-explore"]),
+    );
+    finishWrite();
+    expect(await result).toEqual(["new-explore"]);
   });
 
   it("migrates old untimed snapshots without rerolling them on the first startup", async () => {

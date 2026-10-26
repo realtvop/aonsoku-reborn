@@ -47,6 +47,8 @@ export interface PaginatedQuery {
 }
 
 export interface PaginatedResult<T> {
+  /** Optional proof of the account that supplied a native album snapshot. */
+  libraryOwner?: string;
   items: T[];
   total: number;
   hasMore: boolean;

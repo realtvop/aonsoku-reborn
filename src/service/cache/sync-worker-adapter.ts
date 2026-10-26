@@ -10,6 +10,7 @@ import type { SyncState } from "@/types/cache";
 import type { AuthType } from "@/types/serverConfig";
 
 interface WorkerAuthConfig {
+  primaryUrl?: string;
   url: string;
   username: string;
   password: string;
@@ -102,11 +103,12 @@ class SyncWorkerAdapter {
   }
 
   private buildAuthConfig(
-    data?: Parameters<typeof useAppStore.getState>[0]["data"],
+    data?: ReturnType<typeof useAppStore.getState>["data"],
   ): WorkerAuthConfig {
     const d = data ?? useAppStore.getState().data;
     return {
       url: d.url,
+      primaryUrl: d.primaryUrl,
       username: d.username,
       password: d.password,
       authType: d.authType,

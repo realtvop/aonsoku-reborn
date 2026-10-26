@@ -1,5 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCachedHomeQuery } from "@/app/hooks/use-home-cache";
+import { localCarousel } from "@/lib/home-carousel";
+import { libraryAccountKey } from "@/lib/library-owner";
+import { useAppStore } from "@/store/app.store";
 import { subsonic } from "@/service/subsonic";
 import { useIsOnline } from "@/store/cache.store";
 import { usePinnedHomeItems } from "@/store/pinned-home.store";
@@ -131,7 +134,6 @@ function useHomeAlbumQuery(
   return useCachedHomeQuery<AlbumsListData>({
     key: queryKey,
     isOnline,
-    keepRandom: type === "random",
     local: async () => buildAlbumsListData([]),
     fresh: () =>
       subsonic.albums.getAlbumList({ size: HOME_SECTION_SIZE, type }),
@@ -174,7 +176,26 @@ export const useGetCarouselAlbums = () => {
     key: ["albums", "carousel"],
     isOnline,
     keepRandom: true,
-    local: async () => buildAlbumsListData([]),
+    localFirst: true,
+    local: async (account) => {
+      const data = useAppStore.getState().data;
+      if (libraryAccountKey(data) !== account)
+        throw new DOMException("Account changed", "AbortError");
+      const result = await localCarousel(
+        account,
+        libraryAccountKey({ ...data, primaryUrl: undefined }),
+        10,
+        data.fallbackUrl
+          ? libraryAccountKey({
+              url: data.fallbackUrl,
+              username: data.username,
+            })
+          : undefined,
+      );
+      if (libraryAccountKey(useAppStore.getState().data) !== account)
+        throw new DOMException("Account changed", "AbortError");
+      return result;
+    },
     fresh: () => subsonic.albums.getAlbumList({ size: 10, type: "random" }),
     hasContent: (value) => value.list.length > 0,
   });

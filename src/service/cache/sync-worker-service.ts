@@ -1,3 +1,5 @@
+import { libraryAccountKey } from "@/lib/library-owner";
+import { replaceOwnedAlbums } from "@/service/cache/owned-albums";
 import { buildCoverArtUrl, type ServerAuthConfig } from "@/api/urlBuilder";
 import {
   ensureAuth as workerEnsureAuth,
@@ -22,6 +24,7 @@ import type { ISearchResponse } from "@/types/responses/search";
 import type { FavoritesResponse } from "@/types/responses/song";
 
 export interface WorkerAuthConfig extends ServerAuthConfig {
+  primaryUrl?: string;
   serverType?: string | null;
 }
 
@@ -159,6 +162,7 @@ interface ISong {
 export class SyncWorkerService {
   #abortController: AbortController | null = null;
   #syncGeneration = 0;
+  #albumOwner: string | undefined;
   #authReady: Promise<void>;
   #resolveAuthReady: () => void;
 
@@ -178,10 +182,14 @@ export class SyncWorkerService {
 
   initAuth(config: WorkerAuthConfig): void {
     workerInitAuth(config);
+    this.#albumOwner = libraryAccountKey(config);
     this.#resolveAuthReady();
   }
 
   updateAuth(config: WorkerAuthConfig): void {
+    const owner = libraryAccountKey(config);
+    if (this.#albumOwner !== owner) this.cancel();
+    this.#albumOwner = owner;
     workerUpdateAuth(config);
   }
 
@@ -483,6 +491,7 @@ export class SyncWorkerService {
   }
 
   async #runT2(signal: AbortSignal): Promise<void> {
+    const owner = this.#albumOwner ?? libraryAccountKey(workerEnsureAuth());
     this.#checkAborted(signal);
     this.#updateSyncState("artists", "t2");
     const artistsResult =
@@ -560,14 +569,7 @@ export class SyncWorkerService {
       }
     }
 
-    await this.db.transaction("rw", this.db.albums, async () => {
-      await this.db.albums.clear();
-      await bulkPutInChunks(
-        this.db.albums,
-        allAlbums.map(withStarredAt),
-        signal,
-      );
-    });
+    await replaceOwnedAlbums(this.db, allAlbums, owner, signal);
 
     await this.#recordTierCheckpoint("t2");
     this.#forceFlushSyncState();

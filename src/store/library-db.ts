@@ -18,6 +18,8 @@ export interface ArtistRow extends ISimilarArtist {
 }
 
 export interface AlbumRow extends Albums {
+  /** Account/server that supplied this row in a completed metadata sync. */
+  libraryOwner?: string;
   starredAt?: number;
 }
 

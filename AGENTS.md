@@ -507,16 +507,23 @@ Two complementary systems:
   caching, and invalidation. Query client configuration lives in
   `src/lib/queryClient.ts` with refetch-on-window-focus disabled.
 
-Web Home queries use `useCachedHomeQuery` to restore per-section results from
-`home.snapshot.v1` entries in the offline IndexedDB store, keyed by primary
-server and username, before refreshing online. Missing account-scoped snapshots
-use placeholders/empty offline results rather than unowned global IDB rows;
-pinned refreshes also resolve against the signed-in server. Each section keeps
-its content during refresh/failure. Carousel and Explore snapshots keep their
-selection for 24 hours; automatic invalidations/reconnects preserve them while
-manual Home refresh explicitly rerolls them. Their timestamps are not extended
-by cache reads. Untimed snapshots are adopted without an initial reroll. The
-carousel shows its skeleton only when it has no data.
+Web/Electron Home queries use `useCachedHomeQuery` to restore per-section
+`home.snapshot.v1` entries from IndexedDB, keyed by primary server and username.
+Only the carousel keeps its selection for 24 hours; manual refresh/expiry
+samples up to ten local albums (also offline), falling back to the server when
+no owned metadata exists. The Web sync worker and main-thread fallback tag T2
+album rows with `libraryOwner` in the same transaction as replacing the table;
+reservoir sampling excludes foreign and unowned rows. Auth changes cancel an
+in-flight worker sync. Electron records the album snapshot's owner at sync and
+returns it through optional `PaginatedResult.libraryOwner`; its local random
+query uses Fisher-Yates shuffling. Configured primary/fallback addresses share
+the same account scope. Legacy unowned metadata needs a successful sync before
+local sampling, while existing Home snapshots remain reusable.
+Every other Home section, including Explore and pinned items, publishes a
+successful network response immediately, before its snapshot write completes.
+Failures retain cached content, missing scoped data uses placeholders/empty
+offline results, and only carousel timestamps govern the 24-hour retention.
+
 
 Persistent browser-side library/cache data uses Dexie in `src/store/library-db.ts`
 and IndexedDB helpers in `src/store/idb.ts`. Offline-capable UI paths generally

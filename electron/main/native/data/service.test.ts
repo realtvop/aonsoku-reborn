@@ -85,7 +85,11 @@ describe("DesktopNativeDataService", () => {
     const service = new DesktopNativeDataService(
       {
         request: mocks.request,
-        getCredentials: () => ({ serverType: "navidrome" }),
+        getCredentials: () => ({
+          serverType: "navidrome",
+          serverUrl: "https://server.test",
+          username: "alice",
+        }),
       } as never,
       (event) => events.push(event),
     );
@@ -94,6 +98,10 @@ describe("DesktopNativeDataService", () => {
 
     expect(service.getArtists({ limit: 10, offset: 0 }).items).toHaveLength(1);
     expect(service.getAlbums({ limit: 10, offset: 0 }).items).toHaveLength(1);
+    expect(
+      service.getAlbums({ limit: 10, offset: 0, sortBy: "random" })
+        .libraryOwner,
+    ).toBe(JSON.stringify(["https://server.test", "alice"]));
     expect(service.getSongs({ limit: 10, offset: 0 }).items).toHaveLength(1);
     expect(service.getAlbum({ id: "al1" })?.song).toHaveLength(1);
     expect(events).toContain("dataChanged");
@@ -273,7 +281,11 @@ describe("DesktopNativeDataService", () => {
       {
         request: mocks.request,
         downloadBinary: mocks.downloadBinary,
-        getCredentials: () => ({ serverType: "navidrome" }),
+        getCredentials: () => ({
+          serverType: "navidrome",
+          serverUrl: "https://server.test",
+          username: "alice",
+        }),
       } as never,
       () => {},
     );

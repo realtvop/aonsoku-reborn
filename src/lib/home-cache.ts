@@ -16,6 +16,7 @@ export async function loadCachedHomeData<T>({
   hasContent,
   online,
   keepRandom = false,
+  localFirst = false,
   force = false,
   memory,
   signal,
@@ -29,6 +30,7 @@ export async function loadCachedHomeData<T>({
   hasContent: (value: T) => boolean;
   online: boolean;
   keepRandom?: boolean;
+  localFirst?: boolean;
   force?: boolean;
   memory?: T;
   signal: AbortSignal;
@@ -68,7 +70,6 @@ export async function loadCachedHomeData<T>({
     if (adopted) await write(entry).catch(() => undefined);
   }
   signal.throwIfAborted();
-  if (!online) return entry?.value ?? local();
   if (
     keepRandom &&
     !force &&
@@ -78,9 +79,20 @@ export async function loadCachedHomeData<T>({
   ) {
     return entry.value;
   }
+  if (localFirst) {
+    const value = await local().catch(() => undefined);
+    signal.throwIfAborted();
+    if (value !== undefined && hasContent(value)) {
+      publish(value);
+      await write({ version: 2, savedAt: now(), value }).catch(() => undefined);
+      return value;
+    }
+  }
+  if (!online) return entry?.value ?? local();
   try {
     const value = await fresh();
     signal.throwIfAborted();
+    publish(value);
     await write({ version: 2, savedAt: now(), value }).catch(() => undefined);
     return value;
   } catch (error) {
