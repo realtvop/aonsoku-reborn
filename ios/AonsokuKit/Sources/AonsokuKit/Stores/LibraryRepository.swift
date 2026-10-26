@@ -235,6 +235,11 @@ public final class LibraryRepository: @unchecked Sendable {
 
     // MARK: - Home and search
 
+    /// Local-only results for seeding Home before its online refresh.
+    func cachedHomeAlbums(_ section: HomeSection, size: Int) throws -> [Album] {
+        try localHomeAlbums(section, size: size)
+    }
+
     /// Albums for a Home section (web `useHomeData`): the server lists when
     /// online, else the local library (newest by created, frequent by summed
     /// play count, recent by last played, random shuffled).

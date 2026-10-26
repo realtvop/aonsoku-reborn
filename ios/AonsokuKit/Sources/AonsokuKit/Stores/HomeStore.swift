@@ -38,13 +38,13 @@ public final class HomeStore {
             }
         }
         // An existing synced library can seed a first launch without a snapshot.
-        if !hasCarousel, let albums = try? repository.localHomeAlbums(.explore, size: HomeSection.carouselSize),
+        if !hasCarousel, let albums = try? repository.cachedHomeAlbums(.explore, size: HomeSection.carouselSize),
            !albums.isEmpty {
             carousel = albums
             hasCarousel = true
         }
         for section in HomeSection.allCases where sections[section] == nil {
-            if let albums = try? repository.localHomeAlbums(section, size: HomeSection.size), !albums.isEmpty {
+            if let albums = try? repository.cachedHomeAlbums(section, size: HomeSection.size), !albums.isEmpty {
                 sections[section] = albums
             }
         }
