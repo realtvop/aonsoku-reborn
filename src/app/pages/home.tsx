@@ -49,11 +49,7 @@ export default function Home() {
     await Promise.all(promises);
   };
 
-  const {
-    data: carouselAlbums,
-    isLoading,
-    isFetching,
-  } = useGetCarouselAlbums();
+  const { data: carouselAlbums, isLoading } = useGetCarouselAlbums();
   const pinnedItems = useGetPinnedHomeItems();
 
   const recentlyPlayed = useGetRecentlyPlayed();
@@ -99,7 +95,7 @@ export default function Home() {
 
         <HomeDevicePlaybackOverview />
 
-        {isFetching || isLoading ? (
+        {isLoading ? (
           <HeaderFallback />
         ) : (
           <HomeHeader albums={carouselAlbums?.list || []} />

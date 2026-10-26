@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useCachedHomeQuery } from "@/app/hooks/use-home-cache";
 import {
   getOfflinePlaylistDetail,
   offlineData,
@@ -296,27 +297,13 @@ function useHomeAlbumQuery(
 ) {
   const isOnline = useIsOnline();
 
-  return useQuery<AlbumsListData>({
-    queryKey: [...queryKey, isOnline ? "online" : "offline"],
-    queryFn: async () => {
-      if (isOnline) {
-        try {
-          return await subsonic.albums.getAlbumList({
-            size: HOME_SECTION_SIZE,
-            type,
-          });
-        } catch (err) {
-          console.warn(
-            `[home] Failed to load ${type} albums, falling back to IDB:`,
-            err,
-          );
-        }
-      }
-
-      return getOfflineHomeAlbums(type);
-    },
-    networkMode: "always",
-    refetchOnReconnect: true,
+  return useCachedHomeQuery<AlbumsListData>({
+    key: queryKey,
+    isOnline,
+    local: () => getOfflineHomeAlbums(type),
+    fresh: () =>
+      subsonic.albums.getAlbumList({ size: HOME_SECTION_SIZE, type }),
+    hasContent: (value) => value.list.length > 0,
     ...options,
   });
 }
@@ -351,31 +338,15 @@ export const useGetRandomAlbums = () =>
 export const useGetCarouselAlbums = () => {
   const isOnline = useIsOnline();
 
-  return useQuery<AlbumsListData>({
-    queryKey: ["albums", "carousel", isOnline ? "online" : "offline"],
-    queryFn: async () => {
-      if (isOnline) {
-        try {
-          return await subsonic.albums.getAlbumList({
-            size: 10,
-            type: "random",
-          });
-        } catch (err) {
-          console.warn(
-            "[home] Failed to load carousel albums, falling back to IDB:",
-            err,
-          );
-        }
-      }
-
-      const offlineResult = await getOfflineHomeAlbums("random");
-      return {
-        ...offlineResult,
-        list: offlineResult.list.slice(0, 10),
-      };
+  return useCachedHomeQuery<AlbumsListData>({
+    key: ["albums", "carousel"],
+    isOnline,
+    local: async () => {
+      const result = await getOfflineHomeAlbums("random");
+      return { ...result, list: result.list.slice(0, 10) };
     },
-    networkMode: "always",
-    refetchOnReconnect: true,
+    fresh: () => subsonic.albums.getAlbumList({ size: 10, type: "random" }),
+    hasContent: (value) => value.list.length > 0,
   });
 };
 
@@ -383,16 +354,16 @@ export const useGetPinnedHomeItems = () => {
   const isOnline = useIsOnline();
   const pinnedItems = usePinnedHomeItems();
 
-  return useQuery<HomePinnedItemData[]>({
-    queryKey: [
+  return useCachedHomeQuery<HomePinnedItemData[]>({
+    key: [
       "home",
       "pinned",
-      isOnline ? "online" : "offline",
       pinnedItems.map((item) => `${item.type}:${item.id}`).join("|"),
     ],
-    queryFn: () => getPinnedHomeItems(pinnedItems, isOnline),
+    isOnline,
+    local: () => getPinnedHomeItems(pinnedItems, false),
+    fresh: () => getPinnedHomeItems(pinnedItems, true),
+    hasContent: (value) => value.length > 0,
     enabled: pinnedItems.length > 0,
-    networkMode: "always",
-    refetchOnReconnect: true,
   });
 };

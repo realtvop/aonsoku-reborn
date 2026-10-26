@@ -489,6 +489,12 @@ Two complementary systems:
   caching, and invalidation. Query client configuration lives in
   `src/lib/queryClient.ts` with refetch-on-window-focus disabled.
 
+Web Home queries use `useCachedHomeQuery` to restore per-section results from
+`home.snapshot.v1` entries in the offline IndexedDB store, keyed by primary
+server and username, before refreshing online. Missing snapshots are seeded
+from the local library. Each section keeps its content during refresh/failure;
+the carousel shows its skeleton only when it has no data.
+
 Persistent browser-side library/cache data uses Dexie in `src/store/library-db.ts`
 and IndexedDB helpers in `src/store/idb.ts`. Offline-capable UI paths generally
 go through `src/lib/offlineQueryClient.ts`, which tries IDB/native data before
