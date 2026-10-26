@@ -103,6 +103,18 @@ describe("handoff UI subscriptions", () => {
     expect(events).toEqual(["finish-ui", "playback"]);
   });
 
+  it("forgets tokens and pending history locally when the music session ends", async () => {
+    const { clearTokens } = await import("./tokenStore");
+    const outbox = (
+      manager as unknown as { outbox: { clear(): Promise<void> } }
+    ).outbox;
+    const clear = vi.spyOn(outbox, "clear");
+    await manager.forgetCurrentDevice();
+    expect(clearTokens).toHaveBeenCalled();
+    expect(clear).toHaveBeenCalled();
+    expect(manager.getDeviceId()).toBeNull();
+  });
+
   it("delivers failures to both surfaces and preserves unhandled errors", () => {
     const failure = vi.fn();
     const inactive = vi.fn(() => false);

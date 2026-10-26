@@ -121,6 +121,11 @@ class AppGraph(
         runtime = CoordinationRuntime.getInstance(application),
         client = httpClient,
         credentials = { session.credentials },
+        accountKey = {
+            session.credentials?.let {
+                "${settings.current.server.primaryUrl.ifEmpty { it.serverUrl }.trimEnd('/')}\u001f${it.username}"
+            }
+        },
         player = player,
         network = network,
         toaster = toaster,

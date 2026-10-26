@@ -377,6 +377,18 @@ class CoordinationManagerTest {
     }
 
     @Test
+    fun anotherMusicAccountCannotReuseThePreviousRegistration() {
+        connect()
+        world.await { world.graph.signOut() }
+        world.graph.application.getSharedPreferences("coordination_account_owner", 0)
+            .edit().putString("owner", "another-server\u001fanother-user").commit()
+        world.signIn()
+        world.waitUntil("the session to start") { world.graph.session.credentials != null }
+        assertFalse(state.isRegistered)
+        assertEquals(null, github.realtvop.aonsoku.plugins.coordination.CoordinationRuntime.getInstance(world.graph.application).loadTokens())
+    }
+
+    @Test
     fun aRegisteredDeviceConnectsAgainAtTheNextSession() {
         connect()
         world.await { world.graph.signOut() }

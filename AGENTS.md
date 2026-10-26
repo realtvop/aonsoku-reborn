@@ -636,6 +636,10 @@ Electron follows the same renderer/native ownership boundary as Capacitor:
   persisted through `ProtectedValue` with Electron `safeStorage`. Legacy
   plaintext values migrate on read. Without secure OS encryption (including
   Linux `basic_text`), new secrets stay in memory for the current process.
+  Web/Electron sign-out disconnects coordination locally and erases its tokens
+  and history outbox before changing credentials. Android keeps registration
+  only for its recorded primary-server/user identity; missing or mismatched
+  ownership drops tokens before reconnecting.
 - `electron/main/native/media-protocol.ts` resolves renderer-facing
   `aonsoku-media://` cover/avatar/stream identifiers and injects credentials in
   the main process. Renderer code must not construct authenticated server URLs.

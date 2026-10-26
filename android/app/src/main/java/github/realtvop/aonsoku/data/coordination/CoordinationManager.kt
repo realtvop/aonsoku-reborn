@@ -87,6 +87,9 @@ class CoordinationManager(
     private val toaster: Toaster,
     private val strings: () -> Translations,
     private val scope: CoroutineScope,
+    private val accountKey: () -> String? = {
+        credentials()?.let { "${it.serverUrl.trimEnd('/')}\u001f${it.username}" }
+    },
 ) {
     private val _state = MutableStateFlow(CoordinationState())
     private val _handoff = MutableStateFlow(HandoffState())
@@ -96,6 +99,7 @@ class CoordinationManager(
 
     private var api: CoordinationApi? = null
     private var started = false
+    private var sessionGeneration = 0L
     private var observing = false
     private var connectJob: Job? = null
     private var retryJob: Job? = null
@@ -112,8 +116,14 @@ class CoordinationManager(
     fun start() {
         if (started) return
         started = true
+        sessionGeneration++
         observe()
         val config = runtime.loadConfig()?.takeIf { it.first.isNotBlank() }
+        val owner = context.getSharedPreferences("coordination_account_owner", 0)
+        if (owner.getString("owner", null) != accountKey() || accountKey() == null) {
+            runtime.clearTokens()
+            owner.edit().clear().apply()
+        }
         val tokens = runtime.loadTokens()
         _state.value = CoordinationState(
             serverUrl = config?.first.orEmpty(),
@@ -128,6 +138,7 @@ class CoordinationManager(
     fun end() {
         if (!started) return
         started = false
+        sessionGeneration++
         exitRemoteControl(notify = false)
         cancelHandoff()
         connectJob?.cancel()
@@ -168,6 +179,8 @@ class CoordinationManager(
      * connects. Throws when that fails.
      */
     suspend fun connect(serverUrl: String, identityUrl: String, deviceName: String) {
+        val generation = sessionGeneration
+        val owner = accountKey()
         val server = serverUrl.trim().trimEnd('/')
         val identity = identityUrl.trim().trimEnd('/')
         runtime.storeConfig(server, identity)
@@ -177,6 +190,9 @@ class CoordinationManager(
             ?: throw IllegalStateException("No valid authentication type")
         val api = newApi(server, tokens = null)
         val tokens = api.register(proof, deviceName.trim(), PLATFORM, BuildConfig.APP_VERSION)
+        check(started && generation == sessionGeneration && owner == accountKey()) { "Music account changed" }
+        context.getSharedPreferences("coordination_account_owner", 0).edit()
+            .putString("owner", accountKey()).apply()
         this.api = api
         retryAttempt = 0
         _state.update { it.copy(deviceId = tokens.deviceId) }
@@ -227,6 +243,7 @@ class CoordinationManager(
 
     /** Drops the registration here; the server and its URL are remembered. */
     private fun forget() {
+        context.getSharedPreferences("coordination_account_owner", 0).edit().clear().apply()
         exitRemoteControl(notify = false)
         cancelHandoff()
         connectJob?.cancel()
@@ -237,13 +254,18 @@ class CoordinationManager(
         _state.update { CoordinationState(serverUrl = it.serverUrl, identityUrl = it.identityUrl) }
     }
 
-    private fun newApi(serverUrl: String, tokens: CoordinationTokenBundle?) = CoordinationApi(
+    private fun newApi(serverUrl: String, tokens: CoordinationTokenBundle?): CoordinationApi {
+        val generation = sessionGeneration
+        return CoordinationApi(
         serverUrl = serverUrl,
         client = client,
         tokens = tokens,
-        onTokensChanged = ::onTokensChanged,
+        onTokensChanged = { next ->
+            if (started && generation == sessionGeneration) onTokensChanged(next)
+        },
         recovery = { credentials()?.let { SubsonicProof.from(it, _state.value.identityUrl) } },
     )
+    }
 
     private fun onTokensChanged(tokens: CoordinationTokenBundle?) {
         if (tokens != null) {

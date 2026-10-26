@@ -44,6 +44,7 @@ interface CoordinationState {
     clientVersion: string,
   ) => Promise<void>;
   disconnectCurrentDevice: () => Promise<void>;
+  endSession: () => Promise<void>;
   deleteAccount: () => Promise<void>;
   renameDevice: (id: DeviceId, name: string) => Promise<void>;
   revokeDevice: (id: DeviceId) => Promise<void>;
@@ -199,6 +200,21 @@ export const useCoordinationStore = create<CoordinationState>()(
         await manager.forgetCurrentDevice();
         set((s) => {
           s.isConnected = false;
+          s.deviceId = null;
+          s.devices = [];
+          s.deviceSnapshots = {};
+          s.controlledDeviceId = null;
+        });
+      },
+
+      endSession: async () => {
+        // Local sign-out must work offline and never revoke another device.
+        await loadStatePromise?.catch(() => {});
+        await manager.loadState();
+        await manager.forgetCurrentDevice();
+        set((s) => {
+          s.isConnected = false;
+          s.connectionState = "disconnected";
           s.deviceId = null;
           s.devices = [];
           s.deviceSnapshots = {};

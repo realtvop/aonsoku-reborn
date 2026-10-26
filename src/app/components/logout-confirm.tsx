@@ -23,9 +23,9 @@ export function LogoutConfirmDialog({
   const { clearPlayerState, resetConfig } = usePlayerActions();
   const { t } = useTranslation();
 
-  function handleRemoveConfig(e: MouseEvent<HTMLButtonElement>) {
+  async function handleRemoveConfig(e: MouseEvent<HTMLButtonElement>) {
     e.preventDefault();
-    removeConfig();
+    await removeConfig();
     clearPlayerState();
     resetConfig();
     setLogoutDialogState(false);

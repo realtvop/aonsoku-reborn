@@ -54,7 +54,7 @@ export interface IAppActions {
   saveConfig: (data: IServerConfig) => Promise<boolean>;
   saveServerUrls: (data: IServerUrlConfig) => Promise<boolean>;
   selectConfiguredServer: () => Promise<boolean>;
-  removeConfig: () => void;
+  removeConfig: () => Promise<void>;
   setLogoutDialogState: (value: boolean) => void;
 }
 

@@ -348,6 +348,10 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
               }
 
               if (isNativeBridgeAvailable()) {
+                const { useCoordinationStore } = await import(
+                  "@/coordination/store"
+                );
+                await useCoordinationStore.getState().endSession();
                 const result = await getNativeBridge().login({
                   url: primaryUrl,
                   fallbackUrl: normalizedFallbackUrl || undefined,
@@ -398,6 +402,10 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
                 );
 
                 if (canConnect) {
+                  const { useCoordinationStore } = await import(
+                    "@/coordination/store"
+                  );
+                  await useCoordinationStore.getState().endSession();
                   const serverInfo =
                     await getServerInfoWithOverride(primaryUrl);
 
@@ -525,9 +533,13 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
 
               return true;
             },
-            removeConfig: () => {
+            removeConfig: async () => {
+              const { useCoordinationStore } = await import(
+                "@/coordination/store"
+              );
+              await useCoordinationStore.getState().endSession();
               if (isNativeBridgeAvailable()) {
-                getNativeBridge().clearCredentials();
+                await getNativeBridge().clearCredentials();
               }
 
               set((state) => {

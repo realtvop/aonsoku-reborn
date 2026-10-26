@@ -133,6 +133,7 @@ export class CoordinationManager {
     CoordinationCapability.HANDOFF;
   private outboxTimer: ReturnType<typeof setInterval> | null = null;
   private flushPromise: Promise<void> | null = null;
+  private sessionGeneration = 0;
   /// Per-device latest generation cache, fed by `onDeviceSnapshot`. Used
   /// by the stale-epoch retry path to refresh `expectedGeneration` without
   /// a round-trip to the server when a recent snapshot is available.
@@ -198,10 +199,12 @@ export class CoordinationManager {
     this.config = await this.tokenStore.loadConfig();
     this.tokens = await this.tokenStore.loadTokens();
     if (this.config && this.tokens) {
+      const generation = this.sessionGeneration;
       this.httpClient = new CoordinationHttpClient(
         this.config.serverUrl,
         this.fetchImpl,
         async (tokens) => {
+          if (generation !== this.sessionGeneration) return;
           this.tokens = tokens;
           await this.tokenStore.saveTokens(tokens);
         },
@@ -243,12 +246,14 @@ export class CoordinationManager {
     platform: string,
     clientVersion: string,
   ): Promise<void> {
+    const generation = ++this.sessionGeneration;
     if (!this.config)
       throw new Error("coordination: server URL not configured");
     this.httpClient = new CoordinationHttpClient(
       this.config.serverUrl,
       this.fetchImpl,
       async (tokens) => {
+        if (generation !== this.sessionGeneration) return;
         this.tokens = tokens;
         await this.tokenStore.saveTokens(tokens);
       },
@@ -260,6 +265,8 @@ export class CoordinationManager {
       identityUrl: this.config.identityUrl,
       username: creds.username,
     });
+    if (generation !== this.sessionGeneration)
+      throw new Error("coordination: session changed");
 
     // 2. Build the Subsonic proof from current credentials.
     const proof = buildSubsonicProof(creds);
@@ -278,6 +285,8 @@ export class CoordinationManager {
       clientVersion,
       capabilities: this.capabilities,
     });
+    if (generation !== this.sessionGeneration)
+      throw new Error("coordination: session changed");
     this.deviceId = reg.deviceId;
     this.tokens = {
       deviceId: reg.deviceId,
@@ -296,6 +305,7 @@ export class CoordinationManager {
 
   private async openWebSocket(): Promise<void> {
     if (!this.httpClient || !this.deviceId) return;
+    const generation = this.sessionGeneration;
     const wsUrl =
       this.config!.serverUrl.replace(/^http/, "ws") + "/v1/realtime";
     const cb: ConnectionCallbacks = {
@@ -402,7 +412,7 @@ export class CoordinationManager {
       if (!this.httpClient) return null;
       try {
         const resp = await this.httpClient.getWsTicket();
-        return resp.ticket;
+        return generation === this.sessionGeneration ? resp.ticket : null;
       } catch {
         return null;
       }
@@ -559,8 +569,10 @@ export class CoordinationManager {
   }
 
   async forgetCurrentDevice(): Promise<void> {
-    await this.tokenStore.clearTokens();
     await this.disconnect();
+    this.deviceId = null;
+    await this.tokenStore.clearTokens();
+    await this.outbox.clear();
   }
 
   async deleteAccount(): Promise<void> {
@@ -745,6 +757,7 @@ export class CoordinationManager {
   }
 
   async disconnect(): Promise<void> {
+    this.sessionGeneration++;
     this.coordClient?.disconnect();
     this.coordClient = null;
     if (this.outboxTimer) {
