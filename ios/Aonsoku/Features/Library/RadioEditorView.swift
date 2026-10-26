@@ -75,7 +75,7 @@ struct RadioEditorView: View {
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
                             WithPerceptionTracking {
-                                Button(role: .cancel) {
+                                AppCancelButton {
                                     dismiss()
                                 }
                             }
@@ -85,7 +85,7 @@ struct RadioEditorView: View {
                                 if isSaving {
                                     ProgressView()
                                 } else {
-                                    Button(role: .confirm, action: save)
+                                    AppSaveButton(action: save)
                                         .accessibilityLabel(
                                             t(station == nil ? "radios.form.create.button" : "radios.form.edit.button")
                                         )
@@ -94,9 +94,9 @@ struct RadioEditorView: View {
                             }
                         }
                     }
-                    .onChange(of: name) { checked.insert(.name) }
-                    .onChange(of: streamUrl) { checked.insert(.stream) }
-                    .onChange(of: homePageUrl) { checked.insert(.homepage) }
+                    .appOnChange(of: name) { checked.insert(.name) }
+                    .appOnChange(of: streamUrl) { checked.insert(.stream) }
+                    .appOnChange(of: homePageUrl) { checked.insert(.homepage) }
                 }
             }
             .interactiveDismissDisabled(isSaving)

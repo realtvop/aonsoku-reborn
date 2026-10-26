@@ -298,7 +298,7 @@ struct Shelf<Item: Identifiable, Tile: View>: View {
                     ForEach(items) { item in
                         WithPerceptionTracking {
                             tile(item)
-                                .containerRelativeFrame(
+                                .appContainerRelativeFrame(
                                     .horizontal,
                                     count: isRegular ? 11 : 10,
                                     span: isRegular ? 2 : compactSpan,
@@ -307,12 +307,12 @@ struct Shelf<Item: Identifiable, Tile: View>: View {
                         }
                     }
                 }
-                .scrollTargetLayout()
+                .appScrollTargetLayout()
             }
-            .scrollTargetBehavior(.viewAligned)
+            .appViewAlignedScrolling()
             .scrollIndicators(.hidden)
-            .scrollClipDisabled()
-            .contentMargins(.horizontal, Layout.margin(sizeClass), for: .scrollContent)
+            .appScrollClipDisabled()
+            .appHorizontalScrollMargins(Layout.margin(sizeClass))
         }
     }
 }
@@ -830,7 +830,7 @@ struct ErrorStateView: View {
 
     var body: some View {
         WithPerceptionTracking {
-            ContentUnavailableView {
+            AppUnavailableView {
                 if network.isOnline {
                     Label(t("native.error.title"), systemImage: "exclamationmark.triangle")
                 } else {
@@ -842,7 +842,7 @@ struct ErrorStateView: View {
                 }
             } actions: {
                 Button(t("native.generic.retry"), action: retry)
-                    .buttonStyle(.glass)
+                    .appGlassButtonStyle()
             }
         }
     }
@@ -857,7 +857,7 @@ struct EmptyStateView<Actions: View>: View {
 
     var body: some View {
         WithPerceptionTracking {
-            ContentUnavailableView {
+            AppUnavailableView {
                 Label(title, systemImage: systemImage)
             } description: {
                 if let description {
@@ -961,7 +961,7 @@ struct OfflineBanner: View {
                     .font(.footnote.weight(.semibold))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .glassEffect(.regular, in: .capsule)
+                    .appGlass(in: .capsule)
                     .padding(.bottom, 6)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
@@ -1080,7 +1080,7 @@ struct PlayButton: View {
                     .lineLimit(1)
                     .frame(minWidth: 112, minHeight: 30)
             }
-            .buttonStyle(.glassProminent)
+            .appGlassButtonStyle(prominent: true)
             .buttonBorderShape(.capsule)
             .controlSize(.large)
         }
@@ -1105,7 +1105,7 @@ struct ActionIconButton: View {
                     .foregroundStyle(foreground)
                     .frame(width: 48, height: 48)
                     .contentShape(.rect)
-                    .contentTransition(.symbolEffect(.replace))
+                    .appSymbolTransition()
             }
             .buttonStyle(.touchFeedback)
             .opacity(isEnabled ? 1 : 0.4)

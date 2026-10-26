@@ -55,7 +55,7 @@ struct QueueHeaderTrackingReader: UIViewRepresentable {
         var onSnap: (() -> Void)?
 
         private weak var scrollView: UIScrollView?
-        private var updateLink: UIUpdateLink?
+        private var updateLink: ViewUpdateLink?
         private var lastFrame: CGRect?
         private var lastVisible = false
         private var lastPinned = false
@@ -105,7 +105,7 @@ struct QueueHeaderTrackingReader: UIViewRepresentable {
             guard let scrollView, updateLink == nil else { return }
             // Track the stationary viewport: a link associated with the row
             // can stop updating just before that row leaves the visible area.
-            let link = UIUpdateLink(view: scrollView) { [weak self] _, _ in
+            let link = ViewUpdateLink(view: scrollView) { [weak self] in
                 self?.sampleLayout()
             }
             link.requiresContinuousUpdates = awaitingSettlement && isActive
@@ -231,7 +231,7 @@ struct QueueHeaderTrackingReader: UIViewRepresentable {
 /// keeping the sole artwork on the same curve as the metadata.
 @MainActor
 final class QueueScrollSnapAnimation {
-    private var updateLink: UIUpdateLink?
+    private var updateLink: ViewUpdateLink?
     var isAnimating: Bool { updateLink != nil }
 
     func start(_ scroll: UIScrollView, target: CGFloat, reduceMotion: Bool) {
@@ -244,7 +244,7 @@ final class QueueScrollSnapAnimation {
             return
         }
         let startedAt = CACurrentMediaTime()
-        let link = UIUpdateLink(view: scroll) { [weak self, weak scroll] _, _ in
+        let link = ViewUpdateLink(view: scroll) { [weak self, weak scroll] in
             guard let self, let scroll else { self?.cancel(); return }
             guard !scroll.isTracking, !scroll.isDragging else { self.cancel(); return }
             let progress = CGFloat((CACurrentMediaTime() - startedAt) / 0.38)

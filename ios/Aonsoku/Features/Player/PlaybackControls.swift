@@ -181,7 +181,7 @@ private struct TransportButton: View {
             } label: {
                 Image(systemName: symbol)
                     .font(.system(size: size))
-                    .contentTransition(.symbolEffect(.replace))
+                    .appSymbolTransition()
                     .frame(width: max(size * 1.9, 44), height: max(size * 1.9, 44))
                     .contentShape(.rect)
             }

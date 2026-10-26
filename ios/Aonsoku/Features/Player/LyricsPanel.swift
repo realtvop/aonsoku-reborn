@@ -62,7 +62,7 @@ struct LyricsPanel: View {
         Button(t("fullscreen.selectLyrics")) {
             router.present(.lyricsSettings)
         }
-        .buttonStyle(.glass)
+        .appGlassButtonStyle()
     }
 
     private func message<Accessory: View>(
@@ -136,12 +136,12 @@ private struct SyncedLyrics: View {
                     .modifier(LyricsControlsScrollObserver(
                         isActive: isActive, onControlsHiddenChange: onControlsHiddenChange
                     ))
-                    .onScrollPhaseChange { _, phase in
+                    .appOnScrollPhaseChange { _, phase in
                         if phase == .interacting {
                             manualScrollAt = .now
                         }
                     }
-                    .onChange(of: activeIndex) { _, index in
+                    .appOnChange(of: activeIndex) { _, index in
                         guard let index, Date.now.timeIntervalSince(manualScrollAt) > 3 else { return }
                         withAnimation(.spring(duration: 0.7, bounce: 0.12)) {
                             proxy.scrollTo(index, anchor: UnitPoint(x: 0.5, y: 0.2))
@@ -274,11 +274,11 @@ private struct LyricsControlsScrollObserver: ViewModifier {
     func body(content: Content) -> some View {
         WithPerceptionTracking {
             content
-                .onScrollPhaseChange { _, phase in
+                .appOnScrollPhaseChange { _, phase in
                     isUserScrolling = phase == .interacting || phase == .decelerating
                     if !isUserScrolling { travel = 0 }
                 }
-                .onScrollGeometryChange(for: LyricsScrollMetrics.self) { geometry in
+                .appOnScrollGeometryChange(for: LyricsScrollMetrics.self) { geometry in
                     let maximum = max(
                         geometry.contentSize.height + geometry.contentInsets.top
                             + geometry.contentInsets.bottom - geometry.containerSize.height, 0
@@ -308,7 +308,7 @@ private struct LyricsControlsScrollObserver: ViewModifier {
                         }
                     }
                 }
-                .onChange(of: isActive) {
+                .appOnChange(of: isActive) {
                     isUserScrolling = false
                     travel = 0
                 }

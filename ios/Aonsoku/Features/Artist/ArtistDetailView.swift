@@ -94,7 +94,7 @@ struct ArtistDetailView: View {
                 headerIsDark: theme.palette.isDark
             )
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     WithPerceptionTracking {
                         Menu {
                             if let artist {
@@ -404,7 +404,7 @@ private struct SongColumns: View {
                                 play(index)
                             }
                             .frame(maxHeight: .infinity)
-                            .containerRelativeFrame(
+                            .appContainerRelativeFrame(
                                 .horizontal,
                                 count: isRegular ? 7 : 10,
                                 span: isRegular ? 3 : 9,
@@ -413,11 +413,11 @@ private struct SongColumns: View {
                         }
                     }
                 }
-                .scrollTargetLayout()
+                .appScrollTargetLayout()
             }
-            .scrollTargetBehavior(.viewAligned)
+            .appViewAlignedScrolling()
             .scrollIndicators(.hidden)
-            .contentMargins(.horizontal, Layout.margin(sizeClass), for: .scrollContent)
+            .appHorizontalScrollMargins(Layout.margin(sizeClass))
         }
     }
 }

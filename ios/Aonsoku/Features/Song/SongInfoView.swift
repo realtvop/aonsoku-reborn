@@ -44,9 +44,9 @@ struct SongInfoView: View {
                     .navigationTitle(t("songInfo.title"))
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
+                        ToolbarItem(placement: .navigationBarTrailing) {
                             WithPerceptionTracking {
-                                Button(role: .close) {
+                                AppCloseButton {
                                     dismiss()
                                 }
                             }

@@ -26,7 +26,7 @@ struct RootView: View {
             }
             .animation(.smooth, value: screen)
             .accountSwitchAlert()
-            .onChange(of: session.isSignedIn) { _, isSignedIn in
+            .appOnChange(of: session.isSignedIn) { _, isSignedIn in
                 if !isSignedIn {
                     router.reset()
                 }

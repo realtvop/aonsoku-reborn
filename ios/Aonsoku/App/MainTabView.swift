@@ -51,7 +51,7 @@ struct MainTabView: View {
                     AccountView()
                 }
             }
-            .onChange(of: player.playbackStarts) {
+            .appOnChange(of: player.playbackStarts) {
                 if settings.settings.playback.autoOpenNowPlaying, router.topLayer == .root {
                     router.presentNowPlaying()
                 }

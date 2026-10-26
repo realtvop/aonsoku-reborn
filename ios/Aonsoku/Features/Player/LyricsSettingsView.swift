@@ -41,16 +41,16 @@ struct LyricsSettingsView: View {
                                     }
                                 }
                             } else {
-                                ContentUnavailableView(t("lyrics.customSelect.noSong"), systemImage: "quote.bubble")
+                                EmptyStateView(title: t("lyrics.customSelect.noSong"), systemImage: "quote.bubble")
                             }
                         }
                     }
                     .navigationTitle(t("lyrics.customSelect.title"))
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
+                        ToolbarItem(placement: .navigationBarTrailing) {
                             WithPerceptionTracking {
-                                Button(role: .close) {
+                                AppCloseButton {
                                     dismiss()
                                 }
                             }

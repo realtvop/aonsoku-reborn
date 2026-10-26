@@ -40,7 +40,7 @@ private struct AccountSwitchAlert: ViewModifier {
                 } message: { request in
                     Text(message(for: request))
                 }
-                .onChange(of: app.pendingAccountSwitch, initial: true) { _, pending in
+                .appOnChange(of: app.pendingAccountSwitch, initial: true) { _, pending in
                     if let pending { request = pending }
                     isShowing = pending != nil
                 }

@@ -31,7 +31,7 @@ struct QueriedCollection<Query: Hashable & Sendable, Item: Identifiable & Sendab
                 }
             }
             .task(id: query) { await load() }
-            .onChange(of: sync.revision) {
+            .appOnChange(of: sync.revision) {
                 guard let collection, collection.items.count <= pageSize else { return }
                 collection.reload()
             }

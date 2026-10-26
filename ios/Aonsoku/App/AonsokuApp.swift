@@ -22,7 +22,7 @@ struct AonsokuApp: App {
         WindowGroup {
             AppRoot(app: app, router: router)
         }
-        .onChange(of: scenePhase) { _, phase in
+        .onChange(of: scenePhase) { phase in
             let lifecycle = app.services.lifecycle
             switch phase {
             case .background:

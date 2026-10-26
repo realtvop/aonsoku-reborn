@@ -350,7 +350,7 @@ private struct NowPlayingPresentation: ViewModifier {
                                                         .opacity(isExpanded ? 0 : 1)
                                                 }
                                             }
-                                            .glassEffect(.regular.interactive(), in: RoundedRectangle(
+                                            .appInteractiveGlass(in: RoundedRectangle(
                                                 cornerRadius: radius, style: .continuous
                                             ))
                                             .position(x: surface.midX, y: surface.midY)
@@ -381,10 +381,10 @@ private struct NowPlayingPresentation: ViewModifier {
                                     }
                                 }
                                 .offset(x: -insets.leading, y: -insets.top)
-                                .onChange(of: router.isNowPlayingPresented, initial: true) { _, expanded in
+                                .appOnChange(of: router.isNowPlayingPresented, initial: true) { _, expanded in
                                     transition(to: expanded, in: proxy)
                                 }
-                                .onChange(of: presentation.artworkLocation) {
+                                .appOnChange(of: presentation.artworkLocation) {
                                     if artworkTransition != nil {
                                         transition(to: router.isNowPlayingPresented, in: proxy, force: true)
                                     }

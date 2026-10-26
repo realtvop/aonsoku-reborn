@@ -25,7 +25,7 @@ private struct ToastHostModifier: ViewModifier {
                         }
                     }
                 }
-                .onChange(of: app.toasts.current?.id) { _, id in
+                .appOnChange(of: app.toasts.current?.id) { _, id in
                     presenter.setVisible(id != nil)
                 }
         }
@@ -132,7 +132,7 @@ private struct ToastLayer: View {
             .padding(.top, 8)
             .frame(maxWidth: .infinity)
             .animation(.spring(duration: 0.4, bounce: 0.25), value: toast?.id)
-            .sensoryFeedback(trigger: toast?.id) { _, id in
+            .appFeedback(trigger: toast?.id) { _, id in
                 guard id != nil, let toast, settings.settings.playback.hapticFeedback else {
                     return nil
                 }
@@ -142,7 +142,7 @@ private struct ToastLayer: View {
                 case .info: nil
                 }
             }
-            .onChange(of: toast?.id) { _, id in
+            .appOnChange(of: toast?.id) { _, id in
                 guard id != nil, let toast else { return }
                 UIAccessibility.post(notification: .announcement, argument: text(of: toast))
             }
@@ -174,7 +174,7 @@ private struct ToastCapsule: View {
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 12)
-            .glassEffect(.regular, in: .capsule)
+            .appGlass(in: .capsule)
             .padding(.horizontal, 24)
             .frame(maxWidth: 520)
         }

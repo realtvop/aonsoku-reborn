@@ -62,7 +62,7 @@ struct RadiosView: View {
                     Button(t("radios.addRadio")) {
                         router.present(.radioEditor(nil))
                     }
-                    .buttonStyle(.glassProminent)
+                    .appGlassButtonStyle(prominent: true)
                 }
             }
             .offlineBanner()
@@ -70,7 +70,7 @@ struct RadiosView: View {
             .navigationTitle(t("sidebar.radios"))
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     WithPerceptionTracking {
                         Button(t("radios.addRadio"), systemImage: "plus") {
                             router.present(.radioEditor(nil))

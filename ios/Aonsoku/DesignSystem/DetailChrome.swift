@@ -181,7 +181,7 @@ private struct ListDetailBand: ViewModifier {
     func body(content: Content) -> some View {
         WithPerceptionTracking {
             content
-                .onScrollGeometryChange(for: Scroll.self) { geometry in
+                .appOnScrollGeometryChange(for: Scroll.self) { geometry in
                     // Past the band, the value stops changing, so scrolling the
                     // rest of the list does not redraw it.
                     let limit = headerHeight + DetailBand.fadeHeight + 1
@@ -229,7 +229,7 @@ private struct ScrollRevealedTitle: ViewModifier {
                 .navigationTitle(title)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbarColorScheme(barColorScheme, for: .navigationBar)
-                .onScrollGeometryChange(for: Bool.self) { geometry in
+                .appOnScrollGeometryChange(for: Bool.self) { geometry in
                     geometry.contentOffset.y + geometry.contentInsets.top > threshold
                 } action: { _, revealed in
                     withAnimation(.easeInOut(duration: 0.2)) {
@@ -246,7 +246,7 @@ private struct ScrollRevealedTitle: ViewModifier {
                                 .accessibilityHidden(!isRevealed)
                         }
                     }
-                    .sharedBackgroundVisibility(.hidden)
+                    .appHideSharedBackground()
                 }
         }
     }
@@ -274,11 +274,11 @@ struct FavoriteToolbarButton: View {
                 Task { await favorites.toggle(kind, id: id) }
             } label: {
                 Image(systemName: isFavorite ? "heart.fill" : "heart")
-                    .contentTransition(.symbolEffect(.replace))
-                    .symbolEffect(.bounce, value: isFavorite)
+                    .appSymbolTransition()
+                    .appSymbolBounce(value: isFavorite)
             }
             .accessibilityLabel(t(isFavorite ? "options.unlike" : "options.like"))
-            .haptic(.impact(weight: .light), trigger: isFavorite)
+            .haptic(.lightImpact, trigger: isFavorite)
         }
     }
 }
@@ -302,8 +302,8 @@ struct FavoriteActionButton: View {
             ) {
                 Task { await favorites.toggle(kind, id: id) }
             }
-            .symbolEffect(.bounce, value: isFavorite)
-            .haptic(.impact(weight: .light), trigger: isFavorite)
+            .appSymbolBounce(value: isFavorite)
+            .haptic(.lightImpact, trigger: isFavorite)
         }
     }
 }
@@ -428,7 +428,7 @@ private struct AboutSheet: View {
                                                 Label(link.title, systemImage: "arrow.up.forward.app")
                                                     .frame(maxWidth: .infinity)
                                             }
-                                            .buttonStyle(.glass)
+                                            .appGlassButtonStyle()
                                             .controlSize(.large)
                                         }
                                     }
@@ -440,9 +440,9 @@ private struct AboutSheet: View {
                     .navigationTitle(title)
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
+                        ToolbarItem(placement: .navigationBarTrailing) {
                             WithPerceptionTracking {
-                                Button(role: .close) {
+                                AppCloseButton {
                                     dismiss()
                                 }
                             }

@@ -218,14 +218,14 @@ struct QueuePanel<CurrentMetadata: View>: View {
                     // The leading history spacer must also support zero height.
                     // queueRow retains the ordinary 44pt minimum including insets.
                     .environment(\.defaultMinListRowHeight, 0)
-                    .listSectionSpacing(0)
-                    .contentMargins(.vertical, 0, for: .scrollContent)
+                    .appListSectionSpacing(0)
+                    .appZeroVerticalScrollMargins()
                     .scrollContentBackground(.hidden)
                     // iOS 26 adds its own material at scroll edges, independently
                     // of the List background and our opaque section headers.
-                    .scrollEdgeEffectHidden()
+                    .appHideScrollEdgeEffects()
                     .scrollIndicators(.hidden)
-                    .scrollBounceBehavior(.always)
+                    .appAlwaysBounceVertically()
                     .onGeometryChange(for: CGRect.self) {
                         $0.frame(in: .named(PlayerArtworkLocation.containerCoordinateSpace))
                     } action: { frame in
@@ -239,15 +239,15 @@ struct QueuePanel<CurrentMetadata: View>: View {
                     }
                     .haptic(.selection, trigger: snapFeedback)
                     .onAppear { registerPreparation(proxy) }
-                    .onChange(of: currentHeaderHeight) { registerPreparation(proxy) }
-                    .onChange(of: historyTopPadding) {
+                    .appOnChange(of: currentHeaderHeight) { registerPreparation(proxy) }
+                    .appOnChange(of: historyTopPadding) {
                         if presentation.isQueueHeaderPinned { presentation.prepareQueueForPresentation?() }
                     }
                     .onDisappear {
                         snapAnimation.cancel()
                         presentation.prepareQueueForPresentation = nil
                     }
-                    .onChange(of: isActive) { _, active in
+                    .appOnChange(of: isActive) { _, active in
                         // Also handles reopening fullscreen while Queue is selected.
                         if active { presentation.prepareQueueForPresentation?() }
                         else { snapAnimation.cancel() }
@@ -449,7 +449,7 @@ private struct QueueModeToggle: View {
             } label: {
                 Label(title, systemImage: systemImage)
                     .font(.subheadline.weight(.semibold))
-                    .contentTransition(.symbolEffect(.replace))
+                    .appSymbolTransition()
                     .foregroundStyle(isOn ? .black : .white)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)

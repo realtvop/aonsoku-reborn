@@ -40,7 +40,7 @@ struct NowPlayingView: View {
                     // Keep layout and native scroll geometry immediate. Individual
                     // content surfaces opt into their own visual-only animations.
                     .animation(nil, value: panel)
-                    .onChange(of: isWide, initial: true) { _, isWide in
+                    .appOnChange(of: isWide, initial: true) { _, isWide in
                         presentation.usesWideLayout = isWide
                     }
                 }
@@ -52,23 +52,23 @@ struct NowPlayingView: View {
                 guard router.isNowPlayingPresented else { return }
                 await lyrics.load(for: player.currentSong)
             }
-            .onChange(of: player.hasMedia) { _, hasMedia in
+            .appOnChange(of: player.hasMedia) { _, hasMedia in
                 if !hasMedia {
                     router.isNowPlayingPresented = false
                 }
             }
-            .onChange(of: player.isRadio) { _, isRadio in
+            .appOnChange(of: player.isRadio) { _, isRadio in
                 if isRadio {
                     selectPanel(nil)
                 }
             }
-            .onChange(of: panel) { lyricsControlsHidden = false }
-            .onChange(of: router.isNowPlayingPresented) { lyricsControlsHidden = false }
-            .onChange(of: player.currentSong?.id) { lyricsControlsHidden = false }
-            .onChange(of: bottomControlsHidden, initial: true) {
+            .appOnChange(of: panel) { lyricsControlsHidden = false }
+            .appOnChange(of: router.isNowPlayingPresented) { lyricsControlsHidden = false }
+            .appOnChange(of: player.currentSong?.id) { lyricsControlsHidden = false }
+            .appOnChange(of: bottomControlsHidden, initial: true) {
                 presentation.arePlaybackControlsVisible = !bottomControlsHidden
             }
-            .onChange(of: panel == .queue && router.isNowPlayingPresented, initial: true) {
+            .appOnChange(of: panel == .queue && router.isNowPlayingPresented, initial: true) {
                 presentation.queueOwnsScrollGestures = panel == .queue && router.isNowPlayingPresented
             }
             .accessibilityAction(.escape) {
@@ -184,7 +184,7 @@ struct NowPlayingView: View {
                         .font(.footnote.weight(.semibold))
                         .padding(.horizontal, 12)
                         .padding(.vertical, 7)
-                        .glassEffect(.regular, in: .capsule)
+                        .appGlass(in: .capsule)
                     }
                 }
             }
@@ -536,12 +536,12 @@ private struct NowPlayingFavoriteButton: View {
                     .foregroundStyle(isFavorite ? Color.red : Color.white)
                     .frame(width: 44, height: 44)
                     .contentShape(.rect)
-                    .contentTransition(.symbolEffect(.replace))
-                    .symbolEffect(.bounce, value: isFavorite)
+                    .appSymbolTransition()
+                    .appSymbolBounce(value: isFavorite)
             }
             .buttonStyle(.touchFeedback)
             .accessibilityLabel(t(isFavorite ? "options.unlike" : "options.like"))
-            .haptic(.impact(weight: .light), trigger: isFavorite)
+            .haptic(.lightImpact, trigger: isFavorite)
         }
     }
 }
@@ -572,7 +572,7 @@ private struct RemoteControlCapsule: View {
                 .font(.footnote.weight(.semibold))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
-                .glassEffect(.regular, in: .capsule)
+                .appGlass(in: .capsule)
             }
         }
     }

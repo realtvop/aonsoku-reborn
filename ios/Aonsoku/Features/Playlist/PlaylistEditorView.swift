@@ -85,7 +85,7 @@ struct PlaylistEditorView: View {
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
                             WithPerceptionTracking {
-                                Button(role: .cancel) {
+                                AppCancelButton {
                                     dismiss()
                                 }
                             }
@@ -95,7 +95,7 @@ struct PlaylistEditorView: View {
                                 if isSaving {
                                     ProgressView()
                                 } else {
-                                    Button(role: .confirm, action: save)
+                                    AppSaveButton(action: save)
                                         .accessibilityLabel(
                                             t(isCreating ? "playlist.form.create.button" : "playlist.form.edit.button")
                                         )
@@ -104,7 +104,7 @@ struct PlaylistEditorView: View {
                             }
                         }
                     }
-                    .onChange(of: name) {
+                    .appOnChange(of: name) {
                         showsValidation = true
                     }
                 }

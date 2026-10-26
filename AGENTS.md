@@ -148,6 +148,12 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   cached pin metadata is shown before its server refresh. Other refreshes do not
   extend carousel expiry. Untimed snapshots/local seeds are adopted and persisted
   without an initial reroll. Erasing account data removes the Home snapshot too.
+  `ios/Aonsoku/Compatibility` owns shared fallbacks for older-system materials,
+  buttons, haptics and scroll observation. On iOS 16/17, scroll observation uses
+  the existing UIScrollView's KVO and pan targets without replacing its delegate;
+  frame sampling uses CADisplayLink before iOS 18 and UIUpdateLink thereafter.
+  iOS 16 Home pages its featured carousel with native page tabs; shelves retain
+  ordinary horizontal scrolling before the iOS 17 aligned-scroll APIs.
   Screens keep native interaction but follow the web's visual language:
   every theme paints the `src/themes.css` palette (pages on
   `--background-foreground`), and bundled Poppins sets headings only.

@@ -168,7 +168,7 @@ private struct HomeSkeleton: View {
                                 }
                             }
                             .scrollIndicators(.hidden)
-                            .contentMargins(.horizontal, Layout.margin(sizeClass), for: .scrollContent)
+                            .appHorizontalScrollMargins(Layout.margin(sizeClass))
                         }
                     }
                 }
@@ -204,8 +204,8 @@ private struct HomeShelf<Item: Identifiable, Tile: View>: View {
                 }
             }
             .scrollIndicators(.hidden)
-            .scrollClipDisabled()
-            .contentMargins(.horizontal, Layout.margin(sizeClass), for: .scrollContent)
+            .appScrollClipDisabled()
+            .appHorizontalScrollMargins(Layout.margin(sizeClass))
         }
     }
 }
@@ -290,30 +290,56 @@ private struct FeaturedCarousel: View {
     var body: some View {
         WithPerceptionTracking {
             let margin = Layout.margin(sizeClass)
-            ScrollView(.horizontal) {
-                LazyHStack(spacing: margin) {
-                    // The end copies let both swipes and autoplay cross the seam.
-                    ForEach(0..<pageCount, id: \.self) { page in
-                        WithPerceptionTracking {
-                            FeaturedCard(album: albums[albumIndex(for: page)])
-                                .containerRelativeFrame(.horizontal)
+            Group {
+                if #available(iOS 17, *) {
+                    ScrollView(.horizontal) {
+                        LazyHStack(spacing: margin) {
+                            // The end copies let both swipes and autoplay cross the seam.
+                            ForEach(0..<pageCount, id: \.self) { page in
+                                WithPerceptionTracking {
+                                    FeaturedCard(album: albums[albumIndex(for: page)])
+                                        .appContainerRelativeFrame(.horizontal)
+                                }
+                            }
+                        }
+                        .appScrollTargetLayout()
+                    }
+                    .appViewAlignedScrolling()
+                    .scrollPosition(id: $selection)
+                    .scrollIndicators(.hidden)
+                    .appScrollClipDisabled()
+                    .appHorizontalScrollMargins(margin)
+                    .appOnScrollPhaseChange { _, phase in
+                        isScrolling = phase != .idle
+                        if phase == .idle {
+                            recenterSelection()
                         }
                     }
+                } else {
+                    TabView(selection: $selection) {
+                        ForEach(0..<pageCount, id: \.self) { page in
+                            WithPerceptionTracking {
+                                FeaturedCard(album: albums[albumIndex(for: page)])
+                                    .padding(.horizontal, margin)
+                                    .tag(Optional(page))
+                            }
+                        }
+                    }
+                    .tabViewStyle(.page(indexDisplayMode: .never))
+                    .frame(height: sizeClass == .regular ? 250 : 150)
+                    .appOnScrollPhaseChange { _, phase in
+                        isScrolling = phase != .idle
+                        if phase == .idle { recenterSelection() }
+                    }
+                    .task(id: selection) {
+                        // A programmatic page change has no drag/deceleration callback.
+                        try? await Task.sleep(for: .milliseconds(650))
+                        guard !Task.isCancelled, !isScrolling else { return }
+                        recenterSelection()
+                    }
                 }
-                .scrollTargetLayout()
             }
-            .scrollTargetBehavior(.viewAligned)
-            .scrollPosition(id: $selection)
-            .scrollIndicators(.hidden)
-            .scrollClipDisabled()
-            .contentMargins(.horizontal, margin, for: .scrollContent)
-            .onScrollPhaseChange { _, phase in
-                isScrolling = phase != .idle
-                if phase == .idle {
-                    recenterSelection()
-                }
-            }
-            .onChange(of: albums.map(\.id), initial: true) { _, _ in
+            .appOnChange(of: albums.map(\.id), initial: true) { _, _ in
                 setSelectionWithoutAnimation(albums.count > 1 ? 1 : 0)
             }
             .task(id: canAutoAdvance ? albums.map(\.id) : []) {
@@ -428,8 +454,8 @@ private struct FeaturedCard: View {
                             .font(.body)
                             .frame(width: 24, height: 24)
                     }
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.circle)
+                    .appGlassButtonStyle()
+                    .appCircularButtonBorder()
                     .padding(padding - 4)
                     .accessibilityLabel(t("options.play"))
                 }

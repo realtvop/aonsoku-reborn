@@ -49,13 +49,13 @@ struct AlbumsListView: View {
             .searchable(isSortable, text: $searchText, prompt: t("album.list.search.placeholder"))
             .toolbar {
                 if isSortable {
-                    ToolbarItem(placement: .topBarTrailing) {
+                    ToolbarItem(placement: .navigationBarTrailing) {
                         WithPerceptionTracking {
                             sortMenu
                         }
                     }
                 } else if case let .byGenre(genre) = filter {
-                    ToolbarItem(placement: .topBarTrailing) {
+                    ToolbarItem(placement: .navigationBarTrailing) {
                         WithPerceptionTracking {
                             NavigationLink(value: AppRoute.songs(SongListQuery(scope: .genre(genre)))) {
                                 Label(t("sidebar.songs"), systemImage: "music.note")
@@ -64,7 +64,7 @@ struct AlbumsListView: View {
                     }
                 }
             }
-            .onChange(of: filter) {
+            .appOnChange(of: filter) {
                 AlbumListPreference.save(filter, to: app.services.preferences)
             }
         }

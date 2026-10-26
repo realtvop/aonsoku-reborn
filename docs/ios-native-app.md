@@ -368,3 +368,11 @@ Xcode project; Capacitor versioning remains Android-only.
 bodies and escaping row, reader and presentation builders must establish a
 `WithPerceptionTracking` scope on iOS 16. On newer systems the same stores
 participate in native Observation. Use `Perception.Bindable` for bindings.
+
+`Compatibility/` centralizes availability checks for glass/material, button
+roles, symbol effects, haptics, change callbacks and scrolling. iOS 18+ keeps
+native scroll geometry/phase observation; earlier systems observe the existing
+UIScrollView through KVO and its pan without taking over its delegate. Queue
+frame sampling and snapping use UIUpdateLink on iOS 18+ and CADisplayLink on
+older systems. iOS 16 uses native page tabs for the featured carousel and
+ordinary horizontal scrolling for shelves; newer systems retain aligned snaps.

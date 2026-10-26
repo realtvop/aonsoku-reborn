@@ -119,7 +119,7 @@ struct LoginView: View {
                         connectButton
                     }
                     .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
+                        ToolbarItem(placement: .navigationBarTrailing) {
                             WithPerceptionTracking {
                                 LanguageMenu()
                             }
@@ -143,7 +143,7 @@ struct LoginView: View {
             AonsokuMark()
                 .frame(width: 88, height: 88)
                 .padding(18)
-                .glassEffect(.regular, in: .rect(cornerRadius: 30))
+                .appGlass(in: RoundedRectangle(cornerRadius: 30))
             VStack(spacing: 6) {
                 Text(t("login.form.server"))
                     .displayFont(.largeTitle)
@@ -172,7 +172,7 @@ struct LoginView: View {
             .font(.body.weight(.semibold))
             .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.glassProminent)
+        .appGlassButtonStyle(prominent: true)
         .controlSize(.large)
         .disabled(isConnecting)
         .padding(.horizontal, 20)

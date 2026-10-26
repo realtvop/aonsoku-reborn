@@ -56,7 +56,7 @@ struct MiniPlayer: View {
                 settleTask?.cancel()
                 settleTask = nil
             }
-            .onChange(of: player.currentSong?.id) {
+            .appOnChange(of: player.currentSong?.id) {
                 guard settleTask == nil, swipeContext != nil else { return }
                 resetSwipe(animated: false)
             }
@@ -293,7 +293,7 @@ struct MiniPlayer: View {
             } label: {
                 Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                     .font(.system(size: mix(expandedControlSize, compactControlSize)))
-                    .contentTransition(.symbolEffect(.replace))
+                    .appSymbolTransition()
                     .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
@@ -447,7 +447,7 @@ private struct MiniPlayerPreviewContainer: View {
                 }
                 .frame(height: 36)
                 .padding(.vertical, 6)
-                .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .appInteractiveGlass(in: RoundedRectangle(cornerRadius: 24, style: .continuous))
                 .padding(.horizontal, 16)
                 .padding(.bottom, 12)
             }

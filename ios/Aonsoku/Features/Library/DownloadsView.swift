@@ -81,17 +81,17 @@ private struct ActiveDownloadsBar: View {
                     .foregroundStyle(.tint)
                 Text(t("settings.storage.sync.downloading", count: summary.activeCount))
                     .font(.subheadline.weight(.medium))
-                    .contentTransition(.numericText())
+                    .appNumericTransition()
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 Button(t("generic.cancel"), action: cancel)
-                    .buttonStyle(.glass)
+                    .appGlassButtonStyle()
                     .controlSize(.small)
             }
             .padding(.leading, 14)
             .padding(.trailing, 8)
             .padding(.vertical, 8)
-            .glassEffect(.regular, in: .capsule)
+            .appGlass(in: .capsule)
             .animation(.smooth, value: summary.activeCount)
         }
     }

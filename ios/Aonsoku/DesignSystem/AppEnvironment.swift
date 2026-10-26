@@ -40,20 +40,20 @@ extension View {
 
 extension View {
     /// Plays `feedback` when `trigger` changes, if haptics are enabled.
-    func haptic<T: Equatable>(_ feedback: SensoryFeedback, trigger: T) -> some View {
+    func haptic<T: Equatable>(_ feedback: AppFeedback, trigger: T) -> some View {
         modifier(HapticModifier(feedback: feedback, trigger: trigger))
     }
 }
 
 private struct HapticModifier<T: Equatable>: ViewModifier {
     @Environment(SettingsStore.self) private var settings
-    let feedback: SensoryFeedback
+    let feedback: AppFeedback
     let trigger: T
 
     func body(content: Content) -> some View {
         WithPerceptionTracking {
-            content.sensoryFeedback(feedback, trigger: trigger) { _, _ in
-                settings.settings.playback.hapticFeedback
+            content.appFeedback(trigger: trigger) { _, _ in
+                settings.settings.playback.hapticFeedback ? feedback : nil
             }
         }
     }

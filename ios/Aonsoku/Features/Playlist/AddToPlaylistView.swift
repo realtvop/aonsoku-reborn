@@ -72,7 +72,7 @@ struct AddToPlaylistView: View {
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
                             WithPerceptionTracking {
-                                Button(role: .close) {
+                                AppCloseButton {
                                     dismiss()
                                 }
                             }

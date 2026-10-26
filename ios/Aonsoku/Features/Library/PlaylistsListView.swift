@@ -53,7 +53,7 @@ struct PlaylistsListView: View {
                     Button(t("options.playlist.create")) {
                         router.present(.createPlaylist(songs: []))
                     }
-                    .buttonStyle(.glassProminent)
+                    .appGlassButtonStyle(prominent: true)
                 }
             }
             .overlay {

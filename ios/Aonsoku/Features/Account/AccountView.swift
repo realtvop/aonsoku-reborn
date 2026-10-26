@@ -52,9 +52,9 @@ struct AccountView: View {
                     .navigationTitle(t("settings.label"))
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
+                        ToolbarItem(placement: .navigationBarTrailing) {
                             WithPerceptionTracking {
-                                Button(role: .close) {
+                                AppCloseButton {
                                     dismiss()
                                 }
                             }
@@ -208,7 +208,7 @@ extension View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(removing: .title)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .navigationBarLeading) {
                     WithPerceptionTracking {
                         // At its ideal width: the bar collapses a flexible
                         // title into its overflow button.
@@ -219,13 +219,13 @@ extension View {
                             .accessibilityAddTraits(.isHeader)
                     }
                 }
-                .sharedBackgroundVisibility(.hidden)
-                ToolbarItem(placement: .topBarTrailing) {
+                .appHideSharedBackground()
+                ToolbarItem(placement: .navigationBarTrailing) {
                     WithPerceptionTracking {
                         AccountButton()
                     }
                 }
-                .sharedBackgroundVisibility(.hidden)
+                .appHideSharedBackground()
             }
     }
 }

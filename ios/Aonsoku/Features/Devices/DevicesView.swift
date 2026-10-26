@@ -50,14 +50,14 @@ struct DevicesView: View {
                     .navigationTitle(t("settings.crossDevice.title"))
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
-                        ToolbarItem(placement: .topBarLeading) {
+                        ToolbarItem(placement: .navigationBarLeading) {
                             WithPerceptionTracking {
-                                Button(role: .close) {
+                                AppCloseButton {
                                     dismiss()
                                 }
                             }
                         }
-                        ToolbarItem(placement: .topBarTrailing) {
+                        ToolbarItem(placement: .navigationBarTrailing) {
                             WithPerceptionTracking {
                                 Button(t("settings.label"), systemImage: "gearshape") {
                                     router.openSettings(.crossDevice)
@@ -269,7 +269,7 @@ private struct ThisDeviceRow: View {
                     Button(t("settings.crossDevice.playback.exitControl")) {
                         coordination.stopControlling()
                     }
-                    .buttonStyle(.glass)
+                    .appGlassButtonStyle()
                     .controlSize(.small)
                 } else if player.localSong != nil || player.radio != nil {
                     NowPlayingIndicator(isPlaying: player.localIsPlaying)

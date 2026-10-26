@@ -105,7 +105,7 @@ struct PlaylistDetailView: View {
                 headerIsDark: theme.palette.isDark
             )
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     WithPerceptionTracking {
                         Menu {
                             if let playlist {
