@@ -352,7 +352,7 @@ private struct LatestReleaseCard: View {
                         .foregroundStyle(Color.primary)
                         Text(details)
                             .font(.subheadline)
-                            .foregroundStyle(ThemeColor.mutedForeground)
+                            .themeForeground(.mutedForeground)
                             .lineLimit(1)
                     }
                     .multilineTextAlignment(.leading)

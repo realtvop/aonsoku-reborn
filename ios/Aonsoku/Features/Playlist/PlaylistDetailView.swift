@@ -284,7 +284,7 @@ struct PlaylistDetailView: View {
             let duration = songs.reduce(0) { $0 + $1.duration }
             Text("\(t("playlist.songCount", count: songs.count)), \(Formatters.totalDuration(duration, locale: locale))")
                 .font(.footnote)
-                .foregroundStyle(ThemeColor.mutedForeground)
+                .themeForeground(.mutedForeground)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 8)
                 .padding(.bottom, 24)

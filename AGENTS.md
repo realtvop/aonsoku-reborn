@@ -7,7 +7,7 @@ repository.
 
 Aonsoku is a multi-runtime music streaming client for Navidrome/Subsonic
 servers. It targets the web, Electron desktop, native Android (Kotlin +
-Jetpack Compose), and a native SwiftUI app for iOS 26. It supports synchronized
+Jetpack Compose), and a native SwiftUI app for iOS 16 and later. It supports synchronized
 lyrics, radio streaming, Discord RPC, offline library/cache features, and
 cross-device coordination with remote control and handoff.
 
@@ -128,7 +128,7 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
     playback, downloads, scrobbling, and the coordination socket runtime.
   - `android/app` (`:app`, namespace `github.realtvop.aonsoku`) is the Jetpack
     Compose / Material 3 Expressive UI.
-- **Native iOS**: `ios/Aonsoku.xcodeproj` builds the iOS 26 SwiftUI app and
+- **Native iOS**: `ios/Aonsoku.xcodeproj` builds the iOS 16+ SwiftUI app and
   links the local `ios/AonsokuKit` Swift package. The app does not load the
   shared `src/` SPA or Capacitor. SwiftUI owns presentation; `AonsokuKit` owns
   networking, persistence, playback, sync, downloads, coordination, settings,
@@ -167,6 +167,8 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   regular 20pt tinted artist links, and genre/year badges. Artist and genre
   navigation use plain buttons without disclosure arrows. The shared capsule
   Liquid Glass playback row and its Shuffle/Favorite actions stay below.
+  ThemeColor tokens resolve through environment-reading foreground/fill/background
+  modifiers on all systems; custom ShapeStyle conformance is limited to iOS 17+.
   Keep new screens on the `ThemeColor`, `displayFont` and `ThemedForm`
   tokens rather than system grays and fonts.
   Album and playlist tracks use native plain `List` rows so `SongRow`'s
@@ -174,11 +176,17 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   theme-colored separators aligned with their titles and full-width lines at
   each song list's start and end; album headers,
   disc labels, loading states and recommendations hide their separators.
-  `MainTabView` uses the system tab bar, a fixed search-role tab and the
+  On iOS 26, `MainTabView` uses the system tab bar, a fixed search-role tab and the
   native bottom accessory for a layout-only `PlayerAccessorySlot`. Search stays separate from the
   other tabs; minimization and transitions are system-owned. `SearchView`
   owns its text/query state and native `searchable` field, using the system's
-  default placement and activation behavior. Typing debounces and submitting
+  default placement and activation behavior. On iOS 26 the system owns the
+  search-role tab, bottom accessory and tab-bar minimization. Earlier systems
+  use classic tabs on phones and NavigationSplitView on iPad, with a layout-only
+  mini-player inset inside each navigation stack. Only the selected stack
+  publishes its compact artwork destination; the presentation host and single
+  artwork remain shared. Search uses the older system's native field placement.
+  Typing debounces and submitting
   searches immediately. Keep `searchable` scoped to `SearchView` so other
   tabs do not gain a search field. iPad keeps the adaptable sidebar.
   `NowPlayingPresentation` keeps the full-screen player in the same view
@@ -231,7 +239,10 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   While the finger is down, artwork keeps its expanded size and moves only
   with the container. Only a committed release retargets it to the mini player.
   A stationary full-viewport UIKit probe resolves the screen/window corner
-  radius through iOS 26's public concentric corner APIs. Rounded viewports
+  radius through iOS 26's public concentric corner APIs. Earlier systems grow
+  the mask from 0 to 32pt during dismissal. iOS 16 observes an animatable progress
+  endpoint for transition completion, retaining revision checks when interrupted;
+  iOS 17+ retains native withAnimation completion callbacks. Rounded viewports
   keep that radius throughout the Y slide; square viewports grow from 0 to
   32pt over the first 96pt of downward movement. After release into a
   committed dismissal, one animatable surface mask morphs into the pill's
@@ -1226,7 +1237,7 @@ interface) supporting multiple playback stacks:
 |---|---|---|
 | Web Audio (HTMLAudioElement) | web, electron | `src/player/playback/web-backend.ts` |
 | Android native app (no TS) | android | `android/core` `PlaybackService` / `AudioService` |
-| Native SwiftUI audio | iOS 26 | `ios/AonsokuKit/Sources/AonsokuKit/Audio/AudioService.swift` |
+| Native SwiftUI audio | iOS 16+ | `ios/AonsokuKit/Sources/AonsokuKit/Audio/AudioService.swift` |
 | Desktop native audio bridge | electron | `electron/preload/native-audio.ts` + `electron/main/native/audio/` |
 
 Key files:

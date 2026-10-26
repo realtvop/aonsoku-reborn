@@ -36,7 +36,7 @@ struct DownloadsView: View {
                 case .songs: DownloadedSongs()
                 }
             }
-            .safeAreaBar(edge: .top) {
+            .appSafeAreaBar(edge: .top) {
                 VStack(spacing: 10) {
                     Picker(t("offline.badge.downloaded"), selection: $kind) {
                         ForEach(Kind.allCases) { kind in

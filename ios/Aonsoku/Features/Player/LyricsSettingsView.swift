@@ -278,7 +278,7 @@ private struct CandidateRow: View {
                                 .font(.caption2.weight(.semibold))
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(.fill.tertiary, in: .capsule)
+                                .background(AppStyle.tertiaryFill, in: .capsule)
                         }
                     }
                     Text([candidate.artist, candidate.album ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))

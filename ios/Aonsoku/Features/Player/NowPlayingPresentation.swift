@@ -62,6 +62,7 @@ nonisolated struct PlayerAccessoryLayout: Equatable {
 
 /// The system accessory supplies layout only. The presentation container
 /// owns the sole glass surface, both control layouts, and the artwork.
+@available(iOS 26, *)
 struct PlayerAccessorySlot: View {
     @Environment(PlayerPresentationState.self) private var presentation
     @Environment(\.tabViewBottomAccessoryPlacement) private var placement
@@ -90,6 +91,7 @@ struct PlayerAccessorySlot: View {
 /// Keep native accessory placement/minimization without leaving a second
 /// glass pill underneath the moving player. Scope this to the public
 /// bottomAccessory.contentView's immediate host, never the tab bar itself.
+@available(iOS 26, *)
 private struct PlayerAccessoryLayoutReader: UIViewRepresentable {
     var isInline: Bool
     var previousLayout: PlayerAccessoryLayout?
@@ -276,6 +278,7 @@ private struct NowPlayingPresentation: ViewModifier {
     @State private var palette: ArtworkPalette?
     @State private var isExpanded = false
     @State private var artworkTransition: ArtworkTransition?
+    @State private var transitionProgress: CGFloat = 0
 
     private struct ArtworkTransition {
         let id = UUID()
@@ -358,9 +361,13 @@ private struct NowPlayingPresentation: ViewModifier {
                                             .accessibilityHidden(router.isNowPlayingPresented)
                                     }
                                 }
+                                .modifier(LegacyPlayerTransitionCompletion(
+                                    progress: transitionProgress, revision: artworkTransition?.id,
+                                    completion: finishTransition
+                                ))
                                 .contentShape(shape)
                                 .opacity(router.isNowPlayingPresented || presentation.accessory != nil ? 1 : 0)
-                                .gesture(PlayerDismissGesture(
+                                .playerDismissGesture(
                                     presentation: presentation,
                                     isEnabled: router.isNowPlayingPresented && router.sheet == nil
                                 ) { dismiss in
@@ -371,7 +378,7 @@ private struct NowPlayingPresentation: ViewModifier {
                                     } else {
                                         withAnimation(presentationAnimation) { presentation.dragOffset = 0 }
                                     }
-                                })
+                                }
                                 .background(alignment: .topLeading) {
                                     WithPerceptionTracking {
                                         PlayerViewportCornerReader { viewportCornerRadius = $0 }
@@ -413,18 +420,28 @@ private struct NowPlayingPresentation: ViewModifier {
                 && (!presentation.isQueueHeaderVisible
                     || frame.map { !$0.rect.intersects(viewport) } == true)
         )
-        withAnimation(presentationAnimation, completionCriteria: .logicallyComplete) {
+        let changes = {
             artworkTransition = snapshot
             isExpanded = expanded
             presentation.isExpanded = expanded
             presentation.dragOffset = 0
-        } completion: {
-            // An interrupted opening/closing owns a newer pair of endpoints.
-            guard artworkTransition?.id == snapshot.id else { return }
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) { artworkTransition = nil }
+            transitionProgress += 1
         }
+        if #available(iOS 17, *) {
+            withAnimation(presentationAnimation, completionCriteria: .logicallyComplete, changes) {
+                finishTransition(snapshot.id)
+            }
+        } else {
+            withAnimation(presentationAnimation, changes)
+        }
+    }
+
+    private func finishTransition(_ revision: UUID) {
+        // An interrupted opening/closing owns a newer pair of endpoints.
+        guard artworkTransition?.id == revision else { return }
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { artworkTransition = nil }
     }
 
     private var coverArtId: String? {
@@ -610,7 +627,9 @@ private struct PlayerViewportCornerReader: UIViewRepresentable {
             self.onChange = onChange
             super.init(frame: .zero)
             isUserInteractionEnabled = false
-            cornerConfiguration = .uniformCorners(radius: .containerConcentric())
+            if #available(iOS 26, *) {
+                cornerConfiguration = .uniformCorners(radius: .containerConcentric())
+            }
         }
 
         required init?(coder: NSCoder) { nil }
@@ -618,7 +637,9 @@ private struct PlayerViewportCornerReader: UIViewRepresentable {
         override func layoutSubviews() {
             super.layoutSubviews()
             guard window != nil, !bounds.isEmpty else { return }
-            let radius = effectiveRadius(corner: .allCorners)
+            let radius: CGFloat
+            if #available(iOS 26, *) { radius = effectiveRadius(corner: .allCorners) }
+            else { radius = 0 } // Older systems use the existing 0...32pt dismissal mask.
             guard radius != lastRadius else { return }
             lastRadius = radius
             // Do not mutate SwiftUI state from UIKit's layout pass.
@@ -639,4 +660,29 @@ extension View {
     func nowPlayingPresentation() -> some View {
         modifier(NowPlayingPresentation())
     }
+}
+
+/// iOS 16 has no withAnimation completion callback. Observe the actual animation
+/// endpoint instead of guessing a delay, preserving interruption/revision guards.
+nonisolated private struct LegacyPlayerTransitionCompletion: AnimatableModifier {
+    let target: CGFloat
+    let revision: UUID?
+    let completion: @MainActor (UUID) -> Void
+    var animatableData: CGFloat {
+        didSet {
+            guard animatableData == target, let revision else { return }
+            if #available(iOS 17, *) { return }
+            let completion = completion
+            DispatchQueue.main.async { completion(revision) }
+        }
+    }
+
+    init(progress: CGFloat, revision: UUID?, completion: @escaping @MainActor (UUID) -> Void) {
+        target = progress
+        animatableData = progress
+        self.revision = revision
+        self.completion = completion
+    }
+
+    func body(content: Content) -> some View { content }
 }

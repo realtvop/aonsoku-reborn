@@ -167,7 +167,7 @@ private struct RadioRow: View {
                             .lineLimit(1)
                         Text(station.homepage?.host() ?? station.streamUrl)
                             .font(.footnote)
-                            .foregroundStyle(ThemeColor.mutedForeground)
+                            .themeForeground(.mutedForeground)
                             .lineLimit(1)
                     }
                     Spacer(minLength: 0)

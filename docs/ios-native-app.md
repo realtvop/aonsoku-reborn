@@ -1,6 +1,7 @@
 # Native iOS app
 
-The iOS app is a SwiftUI application built for iOS 26 and Liquid Glass. It
+The iOS app is a SwiftUI application built for iOS 16 and later, with
+Liquid Glass on iOS 26. It
 replaces the Capacitor/WebView host that previously wrapped the web UI. Android
 and Electron keep using the shared TypeScript app; iOS shares no runtime code
 with them, only the server protocols (Subsonic/OpenSubsonic, coordination
@@ -55,7 +56,7 @@ the same on every platform (see [Design language](#design-language)).
 
 | Item | Value |
 | --- | --- |
-| Minimum OS | iOS 26.0 (iPhone and iPad) |
+| Minimum OS | iOS 16.0 (iPhone and iPad) |
 | Toolchain | Xcode 26, Swift 6.2 compiler, Swift 5 language mode |
 | Player sliders | [SliderControl](https://github.com/realtvop/slidercontrol), pinned to a revision in the app target |
 | Bundle identifier | `github.realtvop.aonsoku` (unchanged, so upgrades keep data) |
@@ -93,7 +94,7 @@ every key the Swift sources use exists in English.
 
 `AonsokuKit` owns every piece of logic and state: networking, persistence,
 playback, sync, caching, lyrics, coordination, settings, and the
-`@MainActor @Observable` stores the UI binds to. It has no UIKit views except
+`@MainActor @Perceptible` stores the UI binds to. It has no UIKit views except
 the shake-to-open native debug controller, and it never imports Capacitor.
 
 The app target owns presentation only: views, navigation, animation,
@@ -144,7 +145,7 @@ Identity comparison preserves the URL scheme and username case.
 
 ## Stores and UI contracts
 
-Stateful stores are `@MainActor @Observable public final class` types. Views
+Stateful stores are `@MainActor @Perceptible public final class` types. Views
 read their properties and call their async methods; stores translate service
 callbacks into main-actor state. `LibraryRepository` and `ArtworkProvider` are
 thread-safe helper classes shared by those stores and the presentation layer;
@@ -376,3 +377,16 @@ UIScrollView through KVO and its pan without taking over its delegate. Queue
 frame sampling and snapping use UIUpdateLink on iOS 18+ and CADisplayLink on
 older systems. iOS 16 uses native page tabs for the featured carousel and
 ordinary horizontal scrolling for shelves; newer systems retain aligned snaps.
+
+On iOS 26, navigation retains the search-role tab, system bottom accessory and
+automatic tab-bar minimization. Earlier iPhones use classic tabs; iPad uses
+NavigationSplitView. Each legacy navigation stack reserves a mini-player inset
+above the tab bar and only the selected stack publishes its geometry. The same
+NowPlayingPresentation and single PlayerArtwork are used on every version.
+iOS 16 transition cleanup follows animatable progress instead of a timer, with
+the same interrupted-transition revision guards. Native concentric corners are
+used on iOS 26; earlier systems use the 0...32pt dismissal mask.
+
+ThemeColor tokens resolve through environment-reading foreground, fill and
+background modifiers, so iOS 16 follows every selected palette and theme change
+without relying on iOS 17's custom ShapeStyle resolver.

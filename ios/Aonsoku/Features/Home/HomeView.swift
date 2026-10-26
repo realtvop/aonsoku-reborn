@@ -142,7 +142,7 @@ private struct HomeSkeleton: View {
                     }
                     .padding(sizeClass == .regular ? 22 : 14)
                     .frame(height: sizeClass == .regular ? 250 : 150)
-                    .background(ThemeColor.card, in: .rect(cornerRadius: 14))
+                    .themeBackground(.card, in: .rect(cornerRadius: 14))
                     .pageMargins()
 
                 }
@@ -180,7 +180,7 @@ private struct HomeSkeleton: View {
 
     private func block() -> some View {
         RoundedRectangle(cornerRadius: Layout.artworkRadius, style: .continuous)
-            .fill(ThemeColor.muted)
+            .themeFill(.muted)
     }
 }
 
@@ -233,7 +233,7 @@ private struct OtherDevicesSection: View {
                                 Text(t("settings.crossDevice.playback.otherDevices"))
                                     .textCase(.uppercase)
                                     .tracking(0.6)
-                                    .foregroundStyle(ThemeColor.mutedForeground)
+                                    .themeForeground(.mutedForeground)
                             } icon: {
                                 Image(systemName: "hifispeaker.2.fill")
                                     .foregroundStyle(.tint)
@@ -255,7 +255,7 @@ private struct OtherDevicesSection: View {
                                         DevicePlaybackRow(summary: summary)
                                         Image(systemName: "chevron.forward")
                                             .font(.footnote.weight(.semibold))
-                                            .foregroundStyle(ThemeColor.mutedForeground.opacity(0.6))
+                                            .themeForeground(.mutedForeground, opacity: 0.6)
                                     }
                                     .padding(12)
                                     .cardSurface(cornerRadius: 14)

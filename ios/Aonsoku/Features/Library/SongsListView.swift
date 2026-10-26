@@ -21,27 +21,27 @@ struct SongsListView: View {
     var body: some View {
         WithPerceptionTracking {
             QueriedCollection(query: effectiveQuery, debounce: isSearching ? .milliseconds(300) : .zero) { repository, query, offset, limit in
-                WithPerceptionTracking {
-                    try await repository.songs(query, offset: offset, limit: limit)
-                }
+                try await repository.songs(query, offset: offset, limit: limit)
             } content: { collection in
-                PagedSongList(collection: collection) { index in
-                    player.play(collection.items, startingAt: index, source: source, sourceName: title)
-                } header: {
-                    PlayShuffleButtons {
-                        player.play(collection.items, source: source, sourceName: title)
-                    } shuffle: {
-                        shuffle(collection)
+                WithPerceptionTracking {
+                    PagedSongList(collection: collection) { index in
+                        player.play(collection.items, startingAt: index, source: source, sourceName: title)
+                    } header: {
+                        PlayShuffleButtons {
+                            player.play(collection.items, source: source, sourceName: title)
+                        } shuffle: {
+                            shuffle(collection)
+                        }
+                        .padding(.vertical, 8)
+                    } empty: {
+                        if isSearching {
+                            EmptyStateView(title: t("command.noResults"), systemImage: "magnifyingglass")
+                        } else {
+                            EmptyStateView(title: t("native.songs.empty"), systemImage: "music.note")
+                        }
                     }
-                    .padding(.vertical, 8)
-                } empty: {
-                    if isSearching {
-                        EmptyStateView(title: t("command.noResults"), systemImage: "magnifyingglass")
-                    } else {
-                        EmptyStateView(title: t("native.songs.empty"), systemImage: "music.note")
-                    }
+                    .appNavigationSubtitle(collection.isEmpty ? "" : t("playlist.songCount", count: collection.total))
                 }
-                .navigationSubtitle(collection.isEmpty ? "" : t("playlist.songCount", count: collection.total))
             }
             .offlineBanner()
             .themedBackground()

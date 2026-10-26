@@ -39,13 +39,13 @@ private struct ScrollGeometryObserver<Value: Equatable>: ViewModifier {
                 ))
             } action: { action($0, $1) }
         } else {
-            content.background(LegacyScrollObserver { geometry, _ in
+            content.background(LegacyScrollObserver(onUpdate: { geometry, _ in
                 let next = transform(geometry)
                 guard next != previous else { return }
                 let old = previous ?? next
                 previous = next
                 action(old, next)
-            })
+            }))
         }
     }
 }
@@ -60,12 +60,12 @@ private struct ScrollPhaseObserver: ViewModifier {
                 action(phase(old), phase(new))
             }
         } else {
-            content.background(LegacyScrollObserver { _, phase in
+            content.background(LegacyScrollObserver(onUpdate: { _, phase in
                 guard phase != previous else { return }
                 let old = previous
                 previous = phase
                 action(old, phase)
-            })
+            }))
         }
     }
 
@@ -150,16 +150,10 @@ struct LegacyScrollObserver: UIViewRepresentable {
             guard scroll == nil else { return }
             var ancestor = superview
             while let view = ancestor {
-                if let found = view as? UIScrollView {
-                    attach(found)
-                    return
-                }
-                ancestor = view.superview
-            }
-            // A background marker can be beside the scroll view instead of inside it.
-            ancestor = superview
-            while let view = ancestor {
-                if let found = descendantScrollView(in: view) {
+                if let found = view as? UIScrollView { attach(found); return }
+                // Prefer a nested shelf/carousel to the outer page's scroll view.
+                let candidates = descendantScrollViews(in: view)
+                if let found = candidates.min(by: { distance(to: $0) < distance(to: $1) }) {
                     attach(found)
                     return
                 }
@@ -167,12 +161,18 @@ struct LegacyScrollObserver: UIViewRepresentable {
             }
         }
 
-        private func descendantScrollView(in view: UIView) -> UIScrollView? {
-            for child in view.subviews where child !== self {
-                if let scroll = child as? UIScrollView { return scroll }
-                if let scroll = descendantScrollView(in: child) { return scroll }
+        private func descendantScrollViews(in view: UIView) -> [UIScrollView] {
+            view.subviews.filter { $0 !== self }.flatMap { child in
+                if let scroll = child as? UIScrollView { return [scroll] }
+                return descendantScrollViews(in: child)
             }
-            return nil
+        }
+
+        private func distance(to scroll: UIScrollView) -> CGFloat {
+            let marker = convert(bounds, to: window)
+            let viewport = scroll.convert(scroll.bounds, to: window)
+            return abs(marker.minX - viewport.minX) + abs(marker.minY - viewport.minY)
+                + abs(marker.width - viewport.width) + abs(marker.height - viewport.height)
         }
 
         private func attach(_ scroll: UIScrollView) {

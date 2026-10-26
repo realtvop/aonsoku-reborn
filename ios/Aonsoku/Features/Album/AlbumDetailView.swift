@@ -353,7 +353,7 @@ struct AlbumDetailView: View {
             }
         }
         .font(.subheadline.weight(.medium))
-        .foregroundStyle(ThemeColor.mutedForeground)
+        .themeForeground(.mutedForeground)
         .padding(.top, disc.id == 0 ? 0 : 22)
         .padding(.bottom, 4)
         .pageMargins()
@@ -390,7 +390,7 @@ struct AlbumDetailView: View {
             }
         }
         .font(.footnote)
-        .foregroundStyle(ThemeColor.mutedForeground)
+        .themeForeground(.mutedForeground)
         .frame(maxWidth: .infinity, alignment: .leading)
         .pageMargins()
     }

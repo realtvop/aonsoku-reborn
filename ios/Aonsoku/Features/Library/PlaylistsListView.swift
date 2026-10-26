@@ -98,7 +98,7 @@ struct NewPlaylistRow: View {
             Button(action: action) {
                 HStack(spacing: 12) {
                     RoundedRectangle(cornerRadius: Layout.rowArtworkRadius, style: .continuous)
-                        .fill(ThemeColor.border)
+                        .themeFill(.border)
                         .frame(width: 48, height: 48)
                         .overlay {
                             WithPerceptionTracking {
@@ -150,7 +150,7 @@ struct PlaylistRow: View {
                             PlaylistCacheBadge(playlistId: playlist.id)
                         }
                         .font(.footnote)
-                        .foregroundStyle(ThemeColor.mutedForeground)
+                        .themeForeground(.mutedForeground)
                     }
                 }
             }

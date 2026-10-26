@@ -17,7 +17,7 @@ struct ArtworkImage: View {
             ArtworkReader(id: id, size: size) { image in
                 WithPerceptionTracking {
                     Rectangle()
-                        .fill(.fill.tertiary)
+                        .fill(AppStyle.tertiaryFill)
                         .overlay {
                             WithPerceptionTracking {
                                 if let image {

@@ -149,7 +149,7 @@ struct LoginView: View {
                     .displayFont(.largeTitle)
                 Text(t("login.form.description"))
                     .font(.body)
-                    .foregroundStyle(ThemeColor.mutedForeground)
+                    .themeForeground(.mutedForeground)
             }
             .multilineTextAlignment(.center)
         }

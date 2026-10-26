@@ -25,7 +25,10 @@ let package = Package(
         ),
         .testTarget(
             name: "AonsokuKitTests",
-            dependencies: ["AonsokuKit"],
+            dependencies: [
+                "AonsokuKit",
+                .product(name: "Perception", package: "swift-perception"),
+            ],
             path: "Tests/AonsokuKitTests"),
     ],
     swiftLanguageModes: [.v5]

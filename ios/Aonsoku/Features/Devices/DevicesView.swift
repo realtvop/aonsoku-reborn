@@ -364,7 +364,7 @@ private struct DeviceArtwork: View {
                     SongArtwork(song: song, size: .small, cornerRadius: 6)
                 } else {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(.fill.tertiary)
+                        .fill(AppStyle.tertiaryFill)
                         .overlay {
                             WithPerceptionTracking {
                                 Image(systemName: isRadio ? "dot.radiowaves.left.and.right" : "music.note")

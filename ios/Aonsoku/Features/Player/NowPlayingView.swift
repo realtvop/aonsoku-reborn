@@ -617,7 +617,7 @@ struct NowPlayingBackground: View {
             let appearance = settings.settings.appearance
             let base = appearance.darkTheme.palette.background
             let cover = (palette?.average ?? palette?.colors.first).map(Color.init) ?? base
-            base.mix(with: cover, by: min(max(appearance.nowPlayingColorIntensity, 0), 1), in: .device)
+            base.appMix(with: cover, by: min(max(appearance.nowPlayingColorIntensity, 0), 1))
                 .animation(reduceMotion ? .linear(duration: 0.15) : .smooth(duration: 0.6), value: palette)
         }
     }

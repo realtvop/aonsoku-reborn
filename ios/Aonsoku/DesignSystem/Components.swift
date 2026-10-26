@@ -100,7 +100,7 @@ struct TitleDisclosureLabel<Title: View>: View {
                 title
                 Image(systemName: "chevron.forward")
                     .imageScale(.small)
-                    .foregroundStyle(ThemeColor.mutedForeground)
+                    .themeForeground(.mutedForeground)
                     .fixedSize()
                     .accessibilityHidden(true)
             }
@@ -182,7 +182,7 @@ struct AlbumTile: View {
                             AlbumCacheBadge(albumId: album.id)
                         }
                         .font(.caption)
-                        .foregroundStyle(ThemeColor.mutedForeground)
+                        .themeForeground(.mutedForeground)
                     }
                 }
                 .contentShape(.rect)
@@ -224,7 +224,7 @@ struct PlaylistTile: View {
                             PlaylistCacheBadge(playlistId: playlist.id)
                         }
                         .font(.caption)
-                        .foregroundStyle(ThemeColor.mutedForeground)
+                        .themeForeground(.mutedForeground)
                     }
                 }
                 .contentShape(.rect)
@@ -412,7 +412,7 @@ struct SongRow: View {
                             Text(Formatters.clock(TimeInterval(song.duration)))
                                 .font(.footnote)
                                 .monospacedDigit()
-                                .foregroundStyle(ThemeColor.mutedForeground)
+                                .themeForeground(.mutedForeground)
                         }
                     }
                     .frame(minHeight: 44)
@@ -425,7 +425,7 @@ struct SongRow: View {
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(ThemeColor.mutedForeground)
+                        .themeForeground(.mutedForeground)
                         .frame(width: 44, height: 44)
                         .contentShape(.rect)
                 }
@@ -509,7 +509,7 @@ struct SongRow: View {
                     Text(number.map(String.init) ?? "")
                         .font(.subheadline.weight(.medium))
                         .monospacedDigit()
-                        .foregroundStyle(ThemeColor.mutedForeground)
+                        .themeForeground(.mutedForeground)
                 }
             }
             .frame(minWidth: 26)
@@ -532,7 +532,7 @@ struct SongRow: View {
             if let subtitleText {
                 Text(subtitleText)
                     .font(.footnote)
-                    .foregroundStyle(ThemeColor.mutedForeground)
+                    .themeForeground(.mutedForeground)
                     .lineLimit(1)
             }
         }

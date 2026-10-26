@@ -12,15 +12,15 @@ struct ArtistsListView: View {
     var body: some View {
         WithPerceptionTracking {
             QueriedCollection(query: trimmedSearch, debounce: isSearching ? .milliseconds(300) : .zero) { repository, search, offset, limit in
-                WithPerceptionTracking {
-                    try await repository.artists(search: search, offset: offset, limit: limit)
-                }
+                try await repository.artists(search: search, offset: offset, limit: limit)
             } content: { collection in
-                PagedArtistList(collection: collection) {
-                    if isSearching {
-                        EmptyStateView(title: t("command.noResults"), systemImage: "magnifyingglass")
-                    } else {
-                        EmptyStateView(title: t("native.artists.empty"), systemImage: "music.mic")
+                WithPerceptionTracking {
+                    PagedArtistList(collection: collection) {
+                        if isSearching {
+                            EmptyStateView(title: t("command.noResults"), systemImage: "magnifyingglass")
+                        } else {
+                            EmptyStateView(title: t("native.artists.empty"), systemImage: "music.mic")
+                        }
                     }
                 }
             }
@@ -90,7 +90,7 @@ struct ArtistRow: View {
                         if artist.albumCount > 0 {
                             Text(t("artist.info.albumsCount", count: artist.albumCount))
                                 .font(.footnote)
-                                .foregroundStyle(ThemeColor.mutedForeground)
+                                .themeForeground(.mutedForeground)
                                 .lineLimit(1)
                         }
                     }

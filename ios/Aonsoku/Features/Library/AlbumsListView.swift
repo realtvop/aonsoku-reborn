@@ -19,32 +19,32 @@ struct AlbumsListView: View {
     var body: some View {
         WithPerceptionTracking {
             QueriedCollection(query: query, debounce: isSearching ? .milliseconds(300) : .zero) { repository, filter, offset, limit in
-                WithPerceptionTracking {
-                    try await repository.albums(filter, offset: offset, limit: limit)
-                }
+                try await repository.albums(filter, offset: offset, limit: limit)
             } content: { collection in
-                ScrollView {
-                    AlbumGrid(collection: collection, caption: caption)
-                        .padding(.top, 8)
-                        .padding(.bottom, 24)
-                }
-                .pagedStates(collection) {
-                    if isSearching {
-                        EmptyStateView(title: t("command.noResults"), systemImage: "magnifyingglass")
-                    } else {
-                        EmptyStateView(
-                            title: t("album.list.empty.title"),
-                            systemImage: "square.stack",
-                            description: t("album.list.empty.info")
-                        )
+                WithPerceptionTracking {
+                    ScrollView {
+                        AlbumGrid(collection: collection, caption: caption)
+                            .padding(.top, 8)
+                            .padding(.bottom, 24)
                     }
+                    .pagedStates(collection) {
+                        if isSearching {
+                            EmptyStateView(title: t("command.noResults"), systemImage: "magnifyingglass")
+                        } else {
+                            EmptyStateView(
+                                title: t("album.list.empty.title"),
+                                systemImage: "square.stack",
+                                description: t("album.list.empty.info")
+                            )
+                        }
+                    }
+                    .refreshable { await collection.refresh() }
                 }
-                .refreshable { await collection.refresh() }
             }
             .offlineBanner()
             .themedBackground()
             .navigationTitle(title)
-            .navigationSubtitle(subtitle)
+            .appNavigationSubtitle(subtitle)
             .navigationBarTitleDisplayMode(.large)
             .searchable(isSortable, text: $searchText, prompt: t("album.list.search.placeholder"))
             .toolbar {

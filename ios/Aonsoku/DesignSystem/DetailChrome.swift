@@ -383,7 +383,7 @@ struct AboutCard: View {
                     .displayFont(.inline)
                     Text(text.plainText)
                         .font(.subheadline)
-                        .foregroundStyle(ThemeColor.mutedForeground)
+                        .themeForeground(.mutedForeground)
                         .lineLimit(3)
                         .multilineTextAlignment(.leading)
                 }

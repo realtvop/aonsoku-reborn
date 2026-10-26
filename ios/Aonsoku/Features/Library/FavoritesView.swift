@@ -34,7 +34,7 @@ struct FavoritesView: View {
                 case .artists: FavoriteArtists()
                 }
             }
-            .safeAreaBar(edge: .top) {
+            .appSafeAreaBar(edge: .top) {
                 Picker(t("favorites.headline"), selection: $kind) {
                     ForEach(Kind.allCases) { kind in
                         WithPerceptionTracking {
@@ -67,24 +67,24 @@ private struct FavoriteSongs: View {
     var body: some View {
         WithPerceptionTracking {
             QueriedCollection(query: SongListQuery(scope: .favorites)) { repository, query, offset, limit in
-                WithPerceptionTracking {
-                    try await repository.songs(query, offset: offset, limit: limit)
-                }
+                try await repository.songs(query, offset: offset, limit: limit)
             } content: { collection in
-                PagedSongList(collection: collection) { index in
-                    player.play(collection.items, startingAt: index, sourceName: t("favorites.headline"))
-                } header: {
-                    PlayShuffleButtons {
-                        playAll(collection, shuffle: false)
-                    } shuffle: {
-                        playAll(collection, shuffle: true)
+                WithPerceptionTracking {
+                    PagedSongList(collection: collection) { index in
+                        player.play(collection.items, startingAt: index, sourceName: t("favorites.headline"))
+                    } header: {
+                        PlayShuffleButtons {
+                            playAll(collection, shuffle: false)
+                        } shuffle: {
+                            playAll(collection, shuffle: true)
+                        }
+                        .padding(.vertical, 8)
+                    } empty: {
+                        EmptyStateView(title: t("favorites.noSongs"), systemImage: "heart")
                     }
-                    .padding(.vertical, 8)
-                } empty: {
-                    EmptyStateView(title: t("favorites.noSongs"), systemImage: "heart")
+                    .appNavigationSubtitle(collection.isEmpty ? "" : t("favorites.songCount", count: collection.total))
+                    .reloadsOnChange(of: favorites.revision, collection)
                 }
-                .navigationSubtitle(collection.isEmpty ? "" : t("favorites.songCount", count: collection.total))
-                .reloadsOnChange(of: favorites.revision, collection)
             }
         }
     }
@@ -116,21 +116,21 @@ private struct FavoriteAlbums: View {
     var body: some View {
         WithPerceptionTracking {
             QueriedCollection(query: AlbumListFilter.favorites) { repository, filter, offset, limit in
-                WithPerceptionTracking {
-                    try await repository.albums(filter, offset: offset, limit: limit)
-                }
+                try await repository.albums(filter, offset: offset, limit: limit)
             } content: { collection in
-                ScrollView {
-                    AlbumGrid(collection: collection)
-                        .padding(.top, 8)
-                        .padding(.bottom, 24)
+                WithPerceptionTracking {
+                    ScrollView {
+                        AlbumGrid(collection: collection)
+                            .padding(.top, 8)
+                            .padding(.bottom, 24)
+                    }
+                    .pagedStates(collection) {
+                        EmptyStateView(title: t("native.favorites.noAlbums"), systemImage: "heart")
+                    }
+                    .refreshable { await collection.refresh() }
+                    .appNavigationSubtitle(collection.isEmpty ? "" : t("artist.info.albumsCount", count: collection.total))
+                    .reloadsOnChange(of: favorites.revision, collection)
                 }
-                .pagedStates(collection) {
-                    EmptyStateView(title: t("native.favorites.noAlbums"), systemImage: "heart")
-                }
-                .refreshable { await collection.refresh() }
-                .navigationSubtitle(collection.isEmpty ? "" : t("artist.info.albumsCount", count: collection.total))
-                .reloadsOnChange(of: favorites.revision, collection)
             }
         }
     }
@@ -143,15 +143,15 @@ private struct FavoriteArtists: View {
     var body: some View {
         WithPerceptionTracking {
             QueriedCollection(query: "starred") { repository, _, offset, limit in
-                WithPerceptionTracking {
-                    try await repository.artists(starredOnly: true, offset: offset, limit: limit)
-                }
+                try await repository.artists(starredOnly: true, offset: offset, limit: limit)
             } content: { collection in
-                PagedArtistList(collection: collection) {
-                    EmptyStateView(title: t("native.favorites.noArtists"), systemImage: "heart")
+                WithPerceptionTracking {
+                    PagedArtistList(collection: collection) {
+                        EmptyStateView(title: t("native.favorites.noArtists"), systemImage: "heart")
+                    }
+                    .appNavigationSubtitle("")
+                    .reloadsOnChange(of: favorites.revision, collection)
                 }
-                .navigationSubtitle("")
-                .reloadsOnChange(of: favorites.revision, collection)
             }
         }
     }
@@ -165,7 +165,7 @@ extension View {
         of value: Value,
         _ collection: PagedCollection<Item>
     ) -> some View {
-        onChange(of: value) {
+        appOnChange(of: value) {
             guard collection.items.count <= collection.pageSize else { return }
             collection.reload()
         }

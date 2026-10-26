@@ -190,7 +190,7 @@ struct AppUnavailableView<Label: View, Description: View, Actions: View>: View {
                     label.labelStyle(UnavailableLabelStyle())
                     description
                         .font(.subheadline)
-                        .foregroundStyle(ThemeColor.mutedForeground)
+                        .themeForeground(.mutedForeground)
                     actions
                 }
                 .multilineTextAlignment(.center)
@@ -204,7 +204,7 @@ struct AppUnavailableView<Label: View, Description: View, Actions: View>: View {
 private struct UnavailableLabelStyle: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
         VStack(spacing: 16) {
-            configuration.icon.font(.system(size: 44)).foregroundStyle(ThemeColor.mutedForeground)
+            configuration.icon.font(.system(size: 44)).themeForeground(.mutedForeground)
             configuration.title.font(.headline)
         }
     }
@@ -311,5 +311,74 @@ extension View {
     func appCircularButtonBorder() -> some View {
         if #available(iOS 17, *) { buttonBorderShape(.circle) }
         else { buttonBorderShape(.capsule) }
+    }
+}
+
+enum AppStyle {
+    static var tertiaryFill: AnyShapeStyle {
+        if #available(iOS 17, *) { AnyShapeStyle(.fill.tertiary) }
+        else { AnyShapeStyle(Color(uiColor: .tertiarySystemFill)) }
+    }
+}
+
+extension View {
+    @ViewBuilder
+    func appHideNavigationTitle() -> some View {
+        if #available(iOS 18, *) { toolbar(removing: .title) }
+        else { navigationTitle("") }
+    }
+}
+
+extension Color {
+    func appMix(with other: Color, by fraction: Double) -> Color {
+        if #available(iOS 18, *) { return mix(with: other, by: fraction, in: .device) }
+        let base = UIColor(self)
+        let cover = UIColor(other)
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        var coverRed: CGFloat = 0, coverGreen: CGFloat = 0, coverBlue: CGFloat = 0, coverAlpha: CGFloat = 0
+        guard base.getRed(&red, green: &green, blue: &blue, alpha: &alpha),
+              cover.getRed(&coverRed, green: &coverGreen, blue: &coverBlue, alpha: &coverAlpha) else { return self }
+        let amount = CGFloat(min(max(fraction, 0), 1))
+        return Color(.sRGB,
+            red: Double(red + (coverRed - red) * amount),
+            green: Double(green + (coverGreen - green) * amount),
+            blue: Double(blue + (coverBlue - blue) * amount),
+            opacity: Double(alpha + (coverAlpha - alpha) * amount)
+        )
+    }
+}
+
+extension View {
+    @ViewBuilder
+    func appNavigationSubtitle(_ subtitle: String) -> some View {
+        if #available(iOS 26, *) { navigationSubtitle(subtitle) }
+        else {
+            safeAreaInset(edge: .top, spacing: 0) {
+                if !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption)
+                        .themeForeground(.mutedForeground)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 4)
+                        .themeBackground(.page, in: Rectangle())
+                }
+            }
+        }
+    }
+}
+
+extension View {
+    @ViewBuilder
+    func appSafeAreaBar<Bar: View>(
+        edge: VerticalEdge, @ViewBuilder content: @escaping () -> Bar
+    ) -> some View {
+        if #available(iOS 26, *) {
+            safeAreaBar(edge: edge) { WithPerceptionTracking { content() } }
+        } else {
+            safeAreaInset(edge: edge, spacing: 0) {
+                WithPerceptionTracking { content().background(.regularMaterial) }
+            }
+        }
     }
 }

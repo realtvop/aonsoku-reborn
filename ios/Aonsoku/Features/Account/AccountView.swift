@@ -206,7 +206,7 @@ extension View {
     func rootPageHeader(_ title: String) -> some View {
         navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar(removing: .title)
+            .appHideNavigationTitle()
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     WithPerceptionTracking {

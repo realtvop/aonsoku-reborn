@@ -43,7 +43,7 @@ struct IconTile: View {
                 .font(.system(size: size * 0.46, weight: .medium))
                 .foregroundStyle(Color.primary)
                 .frame(width: size, height: size)
-                .background(ThemeColor.border, in: .rect(cornerRadius: size * 0.24, style: .continuous))
+                .themeBackground(.border, in: .rect(cornerRadius: size * 0.24, style: .continuous))
                 .accessibilityHidden(true)
         }
     }
@@ -165,7 +165,7 @@ struct CaptionHeader<Trailing: View>: View {
                     Text(title)
                         .textCase(.uppercase)
                         .tracking(0.6)
-                        .foregroundStyle(ThemeColor.mutedForeground)
+                        .themeForeground(.mutedForeground)
                 } icon: {
                     if let systemImage {
                         Image(systemName: systemImage)

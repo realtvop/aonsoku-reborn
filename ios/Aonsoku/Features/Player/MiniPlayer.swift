@@ -392,7 +392,7 @@ struct PlayerArtwork: View {
                     .aspectRatio(1, contentMode: .fit)
             } else {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(.fill.tertiary)
+                    .fill(AppStyle.tertiaryFill)
                     .overlay {
                         WithPerceptionTracking {
                             Image(systemName: "music.note")

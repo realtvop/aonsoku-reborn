@@ -1,8 +1,26 @@
+import Perception
 import XCTest
 @testable import AonsokuKit
 
 @MainActor
 final class SettingsStoreTests: XCTestCase {
+    func testPerceptionInvalidatesAndCanSubscribeAgainAfterSettingsChange() throws {
+        let database = try TemporaryDatabase()
+        let store = SettingsStore(preferences: PreferencesService(db: database.manager.dbPool))
+        store.load()
+
+        for mode in [ThemeMode.dark, .light] {
+            let changed = expectation(description: "Observed theme changed")
+            withPerceptionTracking {
+                _ = store.settings.appearance.themeMode
+            } onChange: {
+                changed.fulfill()
+            }
+            store.update { $0.appearance.themeMode = mode }
+            wait(for: [changed], timeout: 1)
+        }
+    }
+
     func testLoadUsesDefaultsForMissingOrCorruptSettings() throws {
         let database = try TemporaryDatabase()
         let preferences = PreferencesService(db: database.manager.dbPool)

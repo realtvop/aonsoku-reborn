@@ -157,7 +157,7 @@ private struct PlaylistChoiceRow: View {
                         .lineLimit(1)
                     Text(t("playlist.songCount", count: playlist.songCount))
                         .font(.footnote)
-                        .foregroundStyle(ThemeColor.mutedForeground)
+                        .themeForeground(.mutedForeground)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)

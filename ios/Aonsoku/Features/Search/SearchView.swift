@@ -126,7 +126,7 @@ struct SearchView: View {
                             .tracking(0.6)
                     }
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(ThemeColor.mutedForeground)
+                    .themeForeground(.mutedForeground)
                     .lineLimit(1)
                 }
                 .buttonStyle(.touchFeedback)
@@ -244,7 +244,7 @@ private struct AlbumResultRow: View {
                             AlbumCacheBadge(albumId: album.id)
                         }
                         .font(.footnote)
-                        .foregroundStyle(ThemeColor.mutedForeground)
+                        .themeForeground(.mutedForeground)
                     }
                 }
             }

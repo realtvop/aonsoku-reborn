@@ -145,9 +145,9 @@ struct ThemePalette: Hashable {
     }
 }
 
-/// A theme color as a shape style, resolved from the environment, so views
-/// can write `.foregroundStyle(ThemeColor.mutedForeground)`.
-enum ThemeColor: ShapeStyle {
+/// Palette tokens shared by all systems. Environment-reading modifiers keep
+/// iOS 16 on the selected theme, before custom ShapeStyle resolution existed.
+enum ThemeColor {
     case page
     case background
     case foreground
@@ -161,7 +161,10 @@ enum ThemeColor: ShapeStyle {
     case elevated
 
     func resolve(in environment: EnvironmentValues) -> Color {
-        let palette = environment.themeContext.palette
+        color(in: environment.themeContext.palette)
+    }
+
+    func color(in palette: ThemePalette) -> Color {
         return switch self {
         case .page: palette.page
         case .background: palette.background
@@ -175,6 +178,56 @@ enum ThemeColor: ShapeStyle {
         case .border: palette.border
         case .elevated: palette.elevated
         }
+    }
+}
+
+@available(iOS 17, *)
+extension ThemeColor: ShapeStyle {}
+
+extension View {
+    func themeForeground(_ color: ThemeColor, opacity: Double = 1) -> some View {
+        modifier(ThemeForegroundModifier(color: color, opacity: opacity))
+    }
+
+    func themeBackground<S: Shape>(_ color: ThemeColor, in shape: S) -> some View {
+        modifier(ThemeShapeBackground(color: color, shape: shape))
+    }
+}
+
+extension Shape {
+    func themeFill(_ color: ThemeColor, opacity: Double = 1) -> some View {
+        ThemeFilledShape(shape: self, color: color, opacity: opacity)
+    }
+}
+
+private struct ThemeForegroundModifier: ViewModifier {
+    let color: ThemeColor
+    let opacity: Double
+    @Environment(\.themeContext) private var theme
+
+    func body(content: Content) -> some View {
+        content.foregroundStyle(color.color(in: theme.palette).opacity(opacity))
+    }
+}
+
+private struct ThemeShapeBackground<S: Shape>: ViewModifier {
+    let color: ThemeColor
+    let shape: S
+    @Environment(\.themeContext) private var theme
+
+    func body(content: Content) -> some View {
+        content.background(color.color(in: theme.palette), in: shape)
+    }
+}
+
+private struct ThemeFilledShape<S: Shape>: View {
+    let shape: S
+    let color: ThemeColor
+    let opacity: Double
+    @Environment(\.themeContext) private var theme
+
+    var body: some View {
+        shape.fill(color.color(in: theme.palette).opacity(opacity))
     }
 }
 

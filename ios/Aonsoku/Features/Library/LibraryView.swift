@@ -82,7 +82,7 @@ struct LibraryView: View {
                 if playlists.phase == .loaded {
                     Text(t("sidebar.emptyPlaylist"))
                         .font(.subheadline)
-                        .foregroundStyle(ThemeColor.mutedForeground)
+                        .themeForeground(.mutedForeground)
                         .pageMargins()
                 }
             } else {
@@ -194,14 +194,14 @@ private struct LibraryRow<Leading: View>: View {
                     if let subtitle {
                         Text(subtitle)
                             .font(.footnote)
-                            .foregroundStyle(ThemeColor.mutedForeground)
+                            .themeForeground(.mutedForeground)
                             .lineLimit(1)
                     }
                 }
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.forward")
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(ThemeColor.mutedForeground.opacity(0.7))
+                    .themeForeground(.mutedForeground, opacity: 0.7)
             }
             .padding(.horizontal, libraryRowPadding)
             .frame(minHeight: 56)
@@ -220,7 +220,7 @@ struct RowHighlightStyle: ButtonStyle {
                     WithPerceptionTracking {
                         if configuration.isPressed {
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(ThemeColor.accent.opacity(0.7))
+                                .themeFill(.accent, opacity: 0.7)
                         }
                     }
                 }

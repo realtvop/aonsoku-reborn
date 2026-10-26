@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import Perception
 import XCTest
 
 @testable import AonsokuKit
@@ -725,6 +726,12 @@ final class PlayerStoreTests: XCTestCase {
         let store = fixture.store()
         store.start()
 
+        let changed = expectation(description: "Current-song observation invalidated")
+        withPerceptionTracking {
+            _ = store.currentSong?.id
+        } onChange: {
+            changed.fulfill()
+        }
         store.play(song: mediaSong("new-song"))
 
         let adopted = await waitForPlayerStoreTest {
@@ -732,6 +739,7 @@ final class PlayerStoreTests: XCTestCase {
                 && store.localQueue.current?.song.id == "new-song"
         }
         XCTAssertTrue(adopted)
+        await fulfillment(of: [changed], timeout: 1)
         fixture.audio.shutdown()
     }
 
