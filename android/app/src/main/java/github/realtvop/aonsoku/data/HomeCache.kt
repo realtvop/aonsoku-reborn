@@ -11,6 +11,8 @@ data class HomeSnapshot(
     val accountKey: String,
     val carousel: List<Album>? = null,
     val sections: Map<String, List<Album>> = emptyMap(),
+    val carouselUpdatedAt: Long? = null,
+    val exploreUpdatedAt: Long? = null,
 )
 
 class HomeCache(private val preferences: PreferencesService) {

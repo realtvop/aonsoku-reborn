@@ -316,6 +316,10 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   refreshes each section independently online. Missing sections use individual
   placeholders; failed refreshes keep prior content. Sign-out clears the
   snapshot; offline launches keep the saved carousel and section order.
+  Carousel and Explore retain their selection for 24 hours across startup,
+  reconnect and library-sync refreshes. Pull-to-refresh forces a reroll;
+  successful random fetches alone advance their independent timestamps.
+  Untimed snapshots and initial Room selections are adopted and persisted.
 - Android `LibraryService`
   (`github.realtvop.aonsoku.plugins.data.LibraryService`) is application
   scoped and owns Room queries, metadata sync, lyrics, and the image cache. It

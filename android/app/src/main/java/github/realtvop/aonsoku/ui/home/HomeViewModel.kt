@@ -36,12 +36,17 @@ data class HomeState(
         get() = carousel.isEmpty() && pinned.isEmpty() && sections.values.all { it.isEmpty() }
 }
 
-class HomeViewModel(private val graph: AppGraph) : ViewModel() {
+class HomeViewModel(
+    private val graph: AppGraph,
+    private val now: () -> Long = System::currentTimeMillis,
+) : ViewModel() {
     private val _state = MutableStateFlow(HomeState())
     private var loadJob: Job? = null
     private var cacheOwner: String? = null
     private var restoredCache = false
     private var hasCarousel = false
+    private var carouselUpdatedAt: Long? = null
+    private var exploreUpdatedAt: Long? = null
 
     val state: StateFlow<HomeState> = _state.asStateFlow()
 
@@ -51,7 +56,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             graph.library.changes.collect { change ->
                 when (change) {
                     // A finished sync can fill a home page that was still empty.
-                    LibraryChange.Library -> reloadSections(keepCarousel = !_state.value.isEmpty)
+                    LibraryChange.Library -> if (!_state.value.refreshing) reloadSections()
                     LibraryChange.Playlists -> reloadPinned()
                     else -> Unit
                 }
@@ -65,7 +70,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         viewModelScope.launch {
             // Coming back online fills in what could not be loaded before.
             graph.network.isOnline.drop(1).collect { online ->
-                if (online) load()
+                if (online && !_state.value.refreshing) load()
             }
         }
     }
@@ -73,15 +78,15 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
     private fun load() {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
-            fetch(includeCarousel = true)
+            fetch(refreshRandom = false)
             _state.update { it.copy(loading = false, refreshing = false) }
         }
     }
 
-    private fun reloadSections(keepCarousel: Boolean) {
+    private fun reloadSections() {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
-            fetch(includeCarousel = !keepCarousel)
+            fetch(refreshRandom = false)
             _state.update { it.copy(loading = false, refreshing = false) }
         }
     }
@@ -101,7 +106,7 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
             val started = System.currentTimeMillis()
-            fetch(includeCarousel = true)
+            fetch(refreshRandom = true)
             // Keep the indicator visible long enough to be noticed.
             delay((MIN_REFRESH_MS - (System.currentTimeMillis() - started)).coerceAtLeast(0))
             _state.update { it.copy(loading = false, refreshing = false) }
@@ -130,6 +135,8 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         }.getOrDefault(emptyList())
         if (accountKey() != owner) return
         hasCarousel = carousel != null
+        carouselUpdatedAt = snapshot?.carouselUpdatedAt ?: now().takeIf { hasCarousel }
+        exploreUpdatedAt = snapshot?.exploreUpdatedAt ?: now().takeIf { HomeSection.Explore in sections }
         _state.update {
             it.copy(
                 loading = false,
@@ -141,14 +148,17 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             )
         }
         restoredCache = true
+        persistCache(owner)
     }
 
-    private suspend fun fetch(includeCarousel: Boolean) = coroutineScope {
+    private suspend fun fetch(refreshRandom: Boolean) = coroutineScope {
         val owner = accountKey() ?: return@coroutineScope
         if (cacheOwner != owner) {
             cacheOwner = owner
             restoredCache = false
             hasCarousel = false
+            carouselUpdatedAt = null
+            exploreUpdatedAt = null
             _state.value = HomeState()
         }
         if (!restoredCache) restoreCache(owner)
@@ -157,23 +167,27 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
             _state.update { it.copy(carouselLoading = false, loadingSections = emptySet()) }
             return@coroutineScope
         }
-        val refreshCarousel = includeCarousel || !hasCarousel
+        val refreshCarousel = refreshRandom || _state.value.carousel.isEmpty() || expired(carouselUpdatedAt)
+        val refreshExplore = refreshRandom || _state.value.sections[HomeSection.Explore].isNullOrEmpty() || expired(exploreUpdatedAt)
         _state.update {
             it.copy(
                 carouselLoading = refreshCarousel && !hasCarousel,
                 loadingSections = HomeSection.entries.filter { section -> section !in it.sections }.toSet(),
             )
         }
-        val tasks = HomeSection.entries.map { section ->
+        val tasks = HomeSection.entries.filter { it != HomeSection.Explore || refreshExplore }.map { section ->
             async {
                 val albums = runSuspendCatching {
                     graph.library.homeAlbums(section, fallbackToLocal = false)
                 }.getOrNull()
-                if (accountKey() == owner) _state.update {
-                    it.copy(
-                        sections = if (albums != null) it.sections + (section to albums) else it.sections,
-                        loadingSections = it.loadingSections - section,
-                    )
+                if (accountKey() == owner) {
+                    if (section == HomeSection.Explore && albums != null) exploreUpdatedAt = now()
+                    _state.update {
+                        it.copy(
+                            sections = if (albums != null) it.sections + (section to albums) else it.sections,
+                            loadingSections = it.loadingSections - section,
+                        )
+                    }
                 }
             }
         } + listOf(
@@ -183,7 +197,10 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
                         graph.library.carouselAlbums(fallbackToLocal = false)
                     }.getOrNull()
                     if (accountKey() == owner) {
-                        if (albums != null) hasCarousel = true
+                        if (albums != null) {
+                            hasCarousel = true
+                            carouselUpdatedAt = now()
+                        }
                         _state.update {
                             it.copy(carousel = albums ?: it.carousel, carouselLoading = false)
                         }
@@ -194,12 +211,22 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
         )
         tasks.awaitAll()
         if (accountKey() != owner) return@coroutineScope
+        persistCache(owner)
+    }
+
+    private fun expired(updatedAt: Long?): Boolean =
+        updatedAt == null || now() - updatedAt >= RANDOM_CACHE_LIFETIME_MS
+
+    private suspend fun persistCache(owner: String) {
+        if (accountKey() != owner) return
         val current = _state.value
         runSuspendCatching {
             graph.homeCache.write(HomeSnapshot(
                 accountKey = owner,
                 carousel = current.carousel.takeIf { hasCarousel },
                 sections = current.sections.mapKeys { it.key.name },
+                carouselUpdatedAt = carouselUpdatedAt,
+                exploreUpdatedAt = exploreUpdatedAt,
             ))
         }
     }
@@ -213,5 +240,6 @@ class HomeViewModel(private val graph: AppGraph) : ViewModel() {
 
     private companion object {
         const val MIN_REFRESH_MS = 600L
+        const val RANDOM_CACHE_LIFETIME_MS = 24 * 60 * 60 * 1000L
     }
 }
