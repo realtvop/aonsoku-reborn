@@ -229,12 +229,21 @@ class OfflineManagerTest {
         val file = audioCache.file(harbor.id)!!
         world.await { world.graph.services.preferences.addToPlayHistory("{\"id\":\"old-user-song\"}", 100) }
         world.graph.player.remember(listOf(harbor))
+        val choices = java.io.File(world.graph.application.filesDir, "lyrics").apply { mkdirs() }
+        java.io.File(choices, "old-selection.lrc").writeText("old account lyrics")
+        world.graph.settings.update {
+            it.copy(lyrics = it.lyrics.copy(selected = mapOf(
+                "old-song" to github.realtvop.aonsoku.settings.SelectedCustomLyrics(disabled = true, offset = 3.0),
+            )))
+        }
 
         world.await { world.graph.signOut() }
 
         assertTrue(cached.isEmpty())
         assertFalse(file.exists())
         assertTrue(world.await { world.graph.services.preferences.getPlayHistory(100) }.isEmpty())
+        assertTrue(world.graph.settings.current.lyrics.selected.isEmpty())
+        assertFalse(choices.exists())
         assertEquals(0, world.await { library.getCoverCacheStats() }.count)
     }
 

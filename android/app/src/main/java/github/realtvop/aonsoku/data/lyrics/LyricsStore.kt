@@ -62,6 +62,11 @@ class LyricsStore(private val choices: File, private val cache: File) {
         withContext(Dispatchers.IO) { cache.deleteRecursively() }
     }
 
+    suspend fun clearAccount() = withContext(Dispatchers.IO) {
+        check(!choices.exists() || choices.deleteRecursively()) { "Could not clear selected lyrics" }
+        check(!cache.exists() || cache.deleteRecursively()) { "Could not clear cached lyrics" }
+    }
+
     private fun choiceFile(songKey: String, kind: String): File = File(choices, "${digest(songKey)}.$kind")
 
     private fun cacheDirectory(song: LyricsSong): File =

@@ -235,6 +235,13 @@ class LyricsRepository(
         misses.evictAll()
     }
 
+    suspend fun clearAccount() {
+        store.clearAccount()
+        settings.update { it.copy(lyrics = it.lyrics.copy(selected = emptyMap())) }
+        misses.evictAll()
+        _revision.update { it + 1 }
+    }
+
     /** Applies [change] and drops the lyrics of the choices it pushed out. */
     private suspend fun changeChoices(
         change: (Map<String, SelectedCustomLyrics>) -> Map<String, SelectedCustomLyrics>,

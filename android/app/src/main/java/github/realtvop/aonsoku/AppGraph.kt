@@ -180,7 +180,7 @@ class AppGraph(
         session.logout()
         homeCache.clear()
         services.library.clearLibraryData()
-        lyrics.clearCache()
+        lyrics.clearAccount()
         settings.update {
             it.copy(pinnedHome = emptyList(), cache = it.cache.copy(lastSyncedAt = null))
         }

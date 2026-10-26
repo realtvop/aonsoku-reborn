@@ -393,6 +393,8 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   Android sign-out awaits playback clearing, invalidates scrobble submissions,
   drops pending scrobbles and listening history, and clears remembered song
   metadata before credentials can change.
+  Sign-out also removes selected lyrics bodies and their per-song choice,
+  disabled and offset metadata, in addition to ordinary lyrics caches.
 - The iOS app owns long-lived native services through
   `AonsokuKit.AppServices`. `AudioService` owns a long-lived `AVQueuePlayer`,
   the queue, downloads, scrobbling, playback persistence, system media
