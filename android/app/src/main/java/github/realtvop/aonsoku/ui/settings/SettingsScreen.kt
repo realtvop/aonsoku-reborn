@@ -143,7 +143,7 @@ private fun ServerSettings() {
                 scope.launch {
                     if (graph.session.saveServerUrls(primaryUrl, fallbackUrl)) {
                         // Another address may be another view of the library.
-                        if (graph.session.credentials?.serverUrl != activeUrl) graph.onServerChanged()
+                        graph.onServerChanged()
                         graph.toaster.success(saved)
                     } else {
                         graph.toaster.error(unreachable)

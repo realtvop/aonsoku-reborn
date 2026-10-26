@@ -44,7 +44,12 @@ class AppGraph(
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val services: AppServices = AppServices.getInstance(application)
     val settings = SettingsRepository(services.preferences, scope)
-    val session = SessionManager(services.authentication, settings)
+    private var needsServerRestart = false
+    val session: SessionManager = SessionManager(services.authentication, settings) {
+        clearAccountData()
+        coordination.forgetRegistration()
+        needsServerRestart = true
+    }
     val toaster = Toaster()
 
     val httpClient: OkHttpClient = OkHttpClient.Builder()
@@ -150,6 +155,7 @@ class AppGraph(
 
     /** Starts everything that only runs while signed in. */
     fun startSession() {
+        needsServerRestart = false
         network.start()
         network.scheduleCheck(0)
         sync.onSessionStarted()
@@ -160,6 +166,7 @@ class AppGraph(
 
     /** The session moved to another address of the server: look at it afresh. */
     fun onServerChanged() {
+        if (needsServerRestart) startSession()
         network.scheduleCheck(0)
         library.notifyChanged(LibraryChange.Library)
     }
@@ -178,12 +185,16 @@ class AppGraph(
 
     /** Ends the session and drops everything tied to the signed-in account. */
     suspend fun signOut() {
+        clearAccountData()
+        session.logout()
+    }
+
+    private suspend fun clearAccountData() {
         coordination.end()
         player.shutdown()
         sync.onSessionEnded()
         artwork.reset()
         offline.end()
-        session.logout()
         homeCache.clear()
         services.library.clearLibraryData()
         lyrics.clearAccount()

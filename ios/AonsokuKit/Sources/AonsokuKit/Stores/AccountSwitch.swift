@@ -73,7 +73,7 @@ struct LibraryAccountIdentity: Codable, Equatable, Sendable {
     }
 
     /// The address without the parts that do not change which server
-    /// answers: the scheme, the case of the host, a default port (80 for
+    /// answers: the case of the host, a default port (80 for
     /// http, 443 for https), trailing slashes, the query and the fragment.
     /// The path keeps its case. Text that is not a URL with a host compares
     /// lowercased, without surrounding blanks and trailing slashes.
@@ -85,16 +85,16 @@ struct LibraryAccountIdentity: Codable, Equatable, Sendable {
               !host.isEmpty else {
             return Self.droppingTrailingSlashes(trimmed.lowercased())
         }
-        var result = host
+        var result = "\(scheme)://\(host)"
         if let port = components.port, port != Self.defaultPort(scheme: scheme) {
             result += ":\(port)"
         }
         return result + Self.droppingTrailingSlashes(components.percentEncodedPath)
     }
 
-    /// The user name without surrounding blanks, in lowercase.
+    /// Preserve case: servers may distinguish user names by case.
     var normalizedUsername: String {
-        username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        username.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     func isSameServer(as other: Self) -> Bool {

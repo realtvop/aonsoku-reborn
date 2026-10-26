@@ -154,6 +154,11 @@ class CoordinationManager(
         if (_state.value.isConnected) runtime.requestSnapshots() else reconnect()
     }
 
+    fun forgetRegistration() {
+        end()
+        forget()
+    }
+
     private fun observe() {
         if (observing) return
         observing = true

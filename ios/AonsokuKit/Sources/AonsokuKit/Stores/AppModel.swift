@@ -247,14 +247,9 @@ public final class AppModel {
         signOut()
     }
 
-    /// Saves new server addresses for the signed-in account (see
-    /// `SessionStore.updateServerUrls`). The credentials stay the same, so
-    /// it is still the same account: when the library's recorded owner
-    /// matched the account before the change, the new address is recorded
-    /// as the owner and the library survives the next launch. A failed
-    /// change is rethrown and leaves the owner alone. Throws
-    /// `AccountSwitchError.decisionPending` while a sign-in waits for the
-    /// user's decision.
+    /// A different primary server must pass the same library ownership gate
+    /// as sign-in. Matching credentials alone do not establish server identity.
+    /// The library stays untouched until the user keeps or erases it.
     public func updateServerUrls(primaryUrl: String, fallbackUrl: String?) async throws {
         guard !isAwaitingAccountDecision else {
             throw AccountSwitchError.decisionPending
@@ -262,13 +257,17 @@ public final class AppModel {
         let before = session.account.map(LibraryAccountIdentity.init(account:))
         let owner = libraryOwner()
         try await session.updateServerUrls(primaryUrl: primaryUrl, fallbackUrl: fallbackUrl)
-        guard let before, let owner, owner.isSameAccount(as: before),
-              let account = session.account else { return }
+        guard let account = session.account else { return }
         let updated = LibraryAccountIdentity(account: account)
-        guard updated.isSameUsername(as: before) else { return }
-        // If this write fails the address change still stands; the next
-        // launch then asks whether to keep the library instead of erasing it.
-        try? recordLibraryOwner(updated)
+        if let before, before.isSameAccount(as: updated) {
+            if owner?.isSameAccount(as: before) == true {
+                try recordLibraryOwner(updated)
+            }
+            return
+        }
+        deactivateAccountStores()
+        services.coordination.resetRegistration()
+        try admit(account, explicitLogin: true)
     }
 
     /// Stops playback and coordination and removes the credentials. The
@@ -276,6 +275,11 @@ public final class AppModel {
     /// pending account switch.
     public func signOut() {
         clearPendingAccountSwitch()
+        deactivateAccountStores()
+        session.signOut()
+    }
+
+    private func deactivateAccountStores() {
         activation?.cancel()
         activation = nil
         isActive = false
@@ -289,7 +293,6 @@ public final class AppModel {
         sync.stop()
         coordination.stop()
         resetAccountStores()
-        session.signOut()
     }
 
     /// The scene became active.
@@ -344,6 +347,9 @@ public final class AppModel {
     private func admit(_ account: ServerAccount, explicitLogin: Bool) throws {
         let identity = LibraryAccountIdentity(account: account)
         let owner = libraryOwner()
+        if let owner, !owner.isSameAccount(as: identity) {
+            services.coordination.resetRegistration()
+        }
         resetAccountStores()
         if !explicitLogin,
            let restored = restoredPendingRequest(for: identity, owner: owner) {

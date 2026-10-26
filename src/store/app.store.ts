@@ -470,11 +470,27 @@ export const useAppStore = createWithEqualityFn<IAppContext>()(
                 return false;
               }
 
+              const previousPrimary = normalizeServerUrl(
+                get().data.primaryUrl || get().data.url,
+              );
+              const changedAccountServer =
+                normalizedPrimaryUrl !== previousPrimary;
+              if (changedAccountServer) {
+                const { useCoordinationStore } = await import(
+                  "@/coordination/store"
+                );
+                await useCoordinationStore.getState().endSession();
+                if (isNativeBridgeAvailable())
+                  await getNativeBridge().clearCredentials();
+              }
+
               set((state) => {
                 applyConfiguredServerState(state.data, resolvedServer);
               });
 
               await syncCredentialsToKeychain(get().data);
+
+              if (changedAccountServer) await markAccountReset();
 
               return true;
             },

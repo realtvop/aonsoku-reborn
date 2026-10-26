@@ -38,7 +38,13 @@ class SyncEngine(
     fun updateCredentials(c: ServerCredentials) { credentials = c }
     fun syncAll(mode: String = "full") { val g = ++generation; currentJob?.cancel(); currentJob = scope.launch { performSync(g, mode) } }
     fun syncIncremental() { syncAll("incremental") }
-    fun cancel() { currentJob?.cancel(); currentJob = null }
+    fun cancel() { generation++; currentJob?.cancel() }
+    suspend fun cancelAndJoin() {
+        val previous = currentJob
+        cancel()
+        previous?.join()
+        if (currentJob === previous) currentJob = null
+    }
     fun cleanup() { scope.cancel() }
 
     private fun creds(): ServerCredentials = credentials ?: throw Exception("No credentials")
@@ -54,7 +60,7 @@ class SyncEngine(
             if (!coroutineContext.isActive) return
             syncStateDao.upsert(SyncStateEntity("full-sync", System.currentTimeMillis()))
             emitState("done", null, 0, 0)
-        } catch (_: CancellationException) { emitState("cancelled", null, 0, 0) } catch (e: Exception) { NativeLogger.error("sync failed: ${e.message ?: "unknown"}", "sync-engine"); emitState("error", null, 0, 0) }
+        } catch (_: CancellationException) { if (generation == gen) emitState("cancelled", null, 0, 0) } catch (e: Exception) { NativeLogger.error("sync failed: ${e.message ?: "unknown"}", "sync-engine"); if (generation == gen) emitState("error", null, 0, 0) }
         if (generation == gen) currentJob = null
     }
 

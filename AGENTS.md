@@ -471,8 +471,10 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   account's library without the user confirming: `AppModel` holds a
   `pendingAccountSwitch` request (stored under
   `session.pending-account-switch.v1`, so it survives a relaunch) until the
-  user erases or keeps the library or cancels, and changing the server address
-  in Settings keeps the library. Restarting the same account resumes its
+  user erases or keeps the library or cancels. Changing the primary server
+  in Settings goes through this same decision before the library is reused;
+  matching credentials do not prove two servers are identical. Server identity
+  preserves the URL scheme and user-name case. Restarting the same account resumes its
   preserved coordination registration after sign-out.
 - `AppLifecycleService` is the App/Scene lifecycle boundary shared by the iOS
   host and `AppServices`. It starts/restores audio once, flushes playback state
@@ -537,6 +539,10 @@ appearance/playback preferences survive. Other open tabs reload on the marker.
 Failed cleanup retains the marker and prevents mounting the new account.
 Electron also clears native library/artwork/audio/queue/history before explicit
 login or logout, fencing old sync, image and audio download completions.
+Changing the primary server uses the same reset boundary on Web/Electron and
+Android, including coordination registration; fallback-only edits retain the
+declared account. Android waits for canceled metadata sync to finish before
+deleting its old library and restarts services after a successful address edit.
 Failures retain cached content, missing scoped data uses placeholders/empty
 offline results, and only carousel timestamps govern the 24-hour retention.
 

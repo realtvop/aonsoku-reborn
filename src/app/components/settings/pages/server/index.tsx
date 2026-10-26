@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { queryClient } from "@/lib/queryClient";
+import { restartAccountSession } from "@/lib/account-reset";
 import { useAppActions, useAppData, useAppStore } from "@/store/app.store";
 import { isValidServerUrl, normalizeServerUrl } from "@/utils/serverUrl";
 import {
@@ -61,6 +62,11 @@ export function ServerSettings() {
 
       if (!saved) {
         toast.error(t("settings.server.toast.error"));
+        return;
+      }
+
+      if (normalizedPrimaryUrl !== normalizeServerUrl(primaryUrl || url)) {
+        await restartAccountSession("/");
         return;
       }
 

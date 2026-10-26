@@ -366,7 +366,7 @@ final class NativeIntegrationTests: XCTestCase {
                         previous: alice,
                         next: LibraryAccountIdentity(
                             serverUrl: "https://two.test",
-                            username: " ALICE "
+                            username: " alice "
                         ),
                         hasLibraryData: hasLibraryData,
                         explicitLogin: explicitLogin
@@ -403,12 +403,10 @@ final class NativeIntegrationTests: XCTestCase {
 
         for server in [
             "https://music.example.com",
-            "http://music.example.com",
-            "http://MUSIC.example.com:80/",
             "https://music.example.com:443",
             " https://music.example.com// ",
         ] {
-            for username in ["alice", " ALICE ", "Alice\n"] {
+            for username in ["Alice", " Alice ", "Alice\n"] {
                 XCTAssertEqual(
                     AppModel.accountSwitchDecision(
                         previous: owner,
@@ -432,14 +430,14 @@ final class NativeIntegrationTests: XCTestCase {
         }
         let base = identity("https://music.example.com")
 
-        XCTAssertEqual(base.normalizedServer, "music.example.com")
+        XCTAssertEqual(base.normalizedServer, "https://music.example.com")
         XCTAssertEqual(
             identity("http://Music.Example.COM:80//").normalizedServer,
-            "music.example.com"
+            "http://music.example.com"
         )
         XCTAssertEqual(
             identity("https://music.example.com:4533/Navidrome/").normalizedServer,
-            "music.example.com:4533/Navidrome"
+            "https://music.example.com:4533/Navidrome"
         )
         // A port that is the default for the other scheme still counts.
         XCTAssertFalse(base.isSameServer(as: identity("https://music.example.com:80")))
@@ -452,11 +450,11 @@ final class NativeIntegrationTests: XCTestCase {
             identity("https://music.example.com/Navidrome")
                 .isSameServer(as: identity("https://music.example.com/navidrome"))
         )
-        XCTAssertTrue(
+        XCTAssertFalse(
             identity("https://music.example.com/navidrome")
                 .isSameServer(as: identity("http://MUSIC.example.com/navidrome/"))
         )
-        XCTAssertTrue(
+        XCTAssertFalse(
             identity("a", " Alice ").isSameUsername(as: identity("b", "aLICE"))
         )
         XCTAssertFalse(
@@ -467,7 +465,7 @@ final class NativeIntegrationTests: XCTestCase {
             identity("https://music.example.com/", "Alice"),
             identity("https://music.example.com", "alice")
         )
-        XCTAssertTrue(
+        XCTAssertFalse(
             identity("https://music.example.com/", "Alice")
                 .isSameAccount(as: identity("https://music.example.com", "alice"))
         )

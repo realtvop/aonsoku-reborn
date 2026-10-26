@@ -41,6 +41,28 @@ class OfflineManagerTest {
     }
 
     @Test
+    fun changingPrimaryServerClearsThePreviousLibraryEvenWithTheSameCredentials() {
+        signIn()
+        val oldSong = song("al-2", "Harbor")
+        offline.download(listOf(oldSong))
+        world.waitUntil("the old server download") { oldSong.id in cached }
+        val oldFile = audioCache.file(oldSong.id)!!
+        val other = FakeSubsonicServer()
+        other.start()
+        try {
+            assertTrue(world.await { world.graph.session.saveServerUrls(other.url, "") })
+            assertEquals(other.url, world.graph.session.credentials?.serverUrl)
+            assertNull(world.await { library.getSong(oldSong.id) })
+            assertFalse(oldFile.exists())
+            assertTrue(cached.isEmpty())
+            world.graph.onServerChanged()
+            world.waitUntil("the new library sync") { world.await { library.getSong(oldSong.id) } != null }
+        } finally {
+            other.shutdown()
+        }
+    }
+
+    @Test
     fun anOldArtworkResponseCannotRepopulateTheCacheAfterSignOut() {
         signIn()
         world.server.holdArtwork = true

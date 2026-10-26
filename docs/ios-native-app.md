@@ -125,7 +125,11 @@ the sign-in screen up and `AccountSwitchAlert` asks the user to erase the old
 library, keep it (offered only when it may be the same account, as after a
 server address change), or cancel the sign-in. The request survives a
 relaunch, and changing the server address in Settings → Server goes through
-`AppModel.updateServerUrls`, which moves the recorded owner with it.
+`AppModel.updateServerUrls`, which now asks the same keep/erase question before
+recording a different primary server as the owner. Identical credentials are
+not proof of server identity. Changing only the fallback keeps the declared
+account; changing the primary also drops its old coordination registration.
+Identity comparison preserves the URL scheme and username case.
 
 ## Services (AonsokuKit)
 

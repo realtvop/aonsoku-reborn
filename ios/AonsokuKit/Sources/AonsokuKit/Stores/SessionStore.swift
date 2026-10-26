@@ -307,6 +307,7 @@ public final class SessionStore {
         } catch {
             throw SubsonicAPIError.invalidResponse(error.localizedDescription)
         }
+        if previous.primaryUrl != updated.primaryUrl { user = nil }
         state = .signedIn(updated)
     }
 

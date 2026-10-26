@@ -455,7 +455,7 @@ class LibraryService private constructor(context: Context) {
 
     /** Drops the synced library (not the audio or cover files) and its sync markers. */
     suspend fun clearLibraryData() = withContext(Dispatchers.IO) {
-        syncEngine.cancel()
+        syncEngine.cancelAndJoin()
         database.songDao().deleteAll()
         database.albumDao().deleteAll()
         database.artistDao().deleteAll()

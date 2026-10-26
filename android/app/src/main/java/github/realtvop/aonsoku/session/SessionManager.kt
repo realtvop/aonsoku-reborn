@@ -35,6 +35,7 @@ sealed interface LoginResult {
 class SessionManager(
     private val authentication: AuthenticationService,
     private val settings: SettingsRepository,
+    private val beforePrimaryServerChange: suspend () -> Unit = {},
 ) {
     private val _state = MutableStateFlow<SessionState>(SessionState.SignedOut)
 
@@ -142,6 +143,8 @@ class SessionManager(
             if (url.isEmpty()) continue
             val ping = authentication.ping(url, current.username, current.password, current.authType)
             if (!ping.reachable) continue
+            val previousPrimary = settings.current.server.primaryUrl.ifEmpty { current.serverUrl }
+            if (primary != normalizeServerUrl(previousPrimary)) beforePrimaryServerChange()
             settings.update {
                 it.copy(server = ServerUrlSettings(primary, fallback, type))
             }

@@ -166,7 +166,7 @@ final class AppModelTests: XCTestCase {
         try await fixture.model.signIn(
             serverUrl: "https://new.test",
             fallbackUrl: nil,
-            username: "Alice",
+            username: "alice",
             password: "secret"
         )
 
@@ -179,7 +179,7 @@ final class AppModelTests: XCTestCase {
 
         try fixture.model.keepLibraryData()
 
-        let moved = LibraryAccountIdentity(serverUrl: "https://new.test", username: "Alice")
+        let moved = LibraryAccountIdentity(serverUrl: "https://new.test", username: "alice")
         XCTAssertEqual(fixture.libraryOwner, moved)
         XCTAssertTrue(fixture.model.isActive)
         XCTAssertTrue(fixture.hasLibraryData)
@@ -367,7 +367,7 @@ final class AppModelTests: XCTestCase {
 
     // MARK: Changing the server address
 
-    func testChangingTheServerAddressKeepsTheLibraryAcrossARelaunch() async throws {
+    func testChangingTheServerAddressRequiresARecordedDecisionBeforeUsingTheLibrary() async throws {
         let download = try makeDownload()
         let fixture = try AppModelFixture(owner: alice, libraryData: true)
         fixture.reachableServers.update { $0 = ["https://new.test"] }
@@ -381,6 +381,14 @@ final class AppModelTests: XCTestCase {
 
         let moved = LibraryAccountIdentity(serverUrl: "https://new.test", username: "alice")
         XCTAssertEqual(fixture.model.session.account?.primaryUrl, "https://new.test")
+        XCTAssertEqual(fixture.libraryOwner, alice)
+        XCTAssertFalse(fixture.model.isActive)
+        XCTAssertEqual(fixture.model.pendingAccountSwitch?.reason, .differentServer(previousServer: "https://old.test"))
+        let waiting = fixture.relaunch()
+        waiting.start()
+        XCTAssertTrue(waiting.isAwaitingAccountDecision)
+        XCTAssertFalse(waiting.isActive)
+        try waiting.keepLibraryData()
         XCTAssertEqual(fixture.libraryOwner, moved)
 
         let relaunched = fixture.relaunch()
