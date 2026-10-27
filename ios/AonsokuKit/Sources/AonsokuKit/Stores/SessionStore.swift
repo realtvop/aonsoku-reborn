@@ -45,6 +45,10 @@ public enum SessionState: Hashable, Sendable {
     case signedIn(ServerAccount)
 }
 
+public enum ServerConnectionState: Equatable, Sendable {
+    case unchecked, checking, available, failed(String)
+}
+
 public enum ServerCompatibility: Hashable, Sendable {
     case compatible
     case incompatible
@@ -78,7 +82,15 @@ public enum ServerCompatibility: Hashable, Sendable {
 public final class SessionStore {
     public nonisolated static let accountStorageKey = "session.account.v1"
 
-    public private(set) var state: SessionState = .restoring
+    public private(set) var state: SessionState = .restoring {
+        didSet {
+            if oldValue != state {
+                connectionRevision &+= 1
+                serverConnection = .unchecked
+            }
+        }
+    }
+    public private(set) var serverConnection = ServerConnectionState.unchecked
     /// The signed-in user's roles, loaded with `getUser` when online.
     public private(set) var user: SubsonicUser?
 
@@ -86,6 +98,7 @@ public final class SessionStore {
     @PerceptionIgnored public let preferences: PreferencesService
     @PerceptionIgnored public let api: any SubsonicAPI
     @PerceptionIgnored private let authenticationClient: SessionAuthenticationClient
+    @PerceptionIgnored private var connectionRevision: UInt64 = 0
     @PerceptionIgnored private var serverURLObserver: NSObjectProtocol?
 
     public init(
@@ -337,6 +350,28 @@ public final class SessionStore {
     /// Pings the active server for its type and versions; nil when it does
     /// not answer.
     public func serverInfo() async -> ServerInfo? { try? await api.ping() }
+
+    /// The avatar sheet checks the active server through the same authenticated
+    /// transport as browsing. A network path alone is never a successful check.
+    public func checkServerConnection() async {
+        guard let account else { return }
+        connectionRevision &+= 1
+        let revision = connectionRevision
+        serverConnection = .checking
+        do {
+            _ = try await api.ping()
+            try Task.checkCancellation()
+            guard revision == connectionRevision, self.account == account else { return }
+            serverConnection = .available
+        } catch {
+            guard revision == connectionRevision, self.account == account else { return }
+            if Task.isCancelled || error is CancellationError || (error as? SubsonicAPIError) == .cancelled {
+                serverConnection = .unchecked
+            } else {
+                serverConnection = .failed(error.localizedDescription)
+            }
+        }
+    }
 
     /// Removes credentials and the account record.
     public func signOut() {

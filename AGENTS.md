@@ -73,6 +73,8 @@ node scripts/android/generate-theme-palettes.mjs     # Regenerate ThemePalettes.
 cd android && ./gradlew assembleRelease
 
 # Native iOS AonsokuKit. Selects the first available iPhone Simulator;
+# Executes the pinned swift-perception macros with -skipMacroValidation,
+# matching the iOS archive step and avoiding interactive CI trust prompts.
 # override with IOS_SIMULATOR_ID=<uuid>. Fails when no simulator is available,
 # when no XCTest executes, or when any test fails. The optional result path
 # must not already exist.
@@ -80,6 +82,7 @@ cd android && ./gradlew assembleRelease
 IOS_TEST_RESULT_BUNDLE=/tmp/AonsokuNativeTests.xcresult ./scripts/test-ios-native.sh
 
 # iOS SwiftUI app
+bash scripts/build-ios-tailscale.sh # Once before Xcode/SPM; Go 1.27.1, cached device + Simulator runtime
 xcodebuild -project ios/Aonsoku.xcodeproj -scheme Aonsoku \
   -destination 'generic/platform=iOS Simulator' build
 node scripts/check-ios-strings.mjs # Every translation key the app uses exists
@@ -230,6 +233,10 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   updates and an exact trailing value.
   `PlayerPresentationState` owns the interactive dismissal offset, while
   `Router.isNowPlayingPresented` remains the presentation authority.
+  `MainTabView` retains that one state and passes it to the presentation host
+  and explicitly into the native bottom accessory. The system accessory's
+  separate hosting tree must not rely on environment injection from inside
+  the presentation modifier.
   The presentation host captures the expanded artwork frame and clipping
   viewport before animating its rendered expansion state. Layout/scroll
   probes do not inherit the host animation or retarget those endpoints in
@@ -423,6 +430,66 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   standard, Subsonic and artwork session policies. Transport selection belongs
   here, rather than in views or individual API clients. AVPlayer, background
   downloads and coordination WebSockets retain their dedicated lifecycles.
+  Embedded Tailscale is available only on iOS 18.1 and later; the host app
+  retains iOS 16 support. `scripts/build-ios-tailscale.sh` pins the official
+  `tailscale/libtailscale` C runtime and builds the ignored `CTailscale`
+  XCFramework for device arm64 and Simulator arm64/x86_64. Prepare it before
+  Xcode/SPM resolution; the iOS CI workflow installs Go and caches this artifact.
+  `AppServices.tailscale` exposes the iOS 18.1+ actor. Login and server settings
+  offer its web authentication and optional user-supplied auth key. Authentication
+  uses the system Safari controller and observes node status; auth keys are not
+  persisted. Node state lives in protected, backup-excluded Application Support.
+  Disabling Tailscale retains this identity; forgetting it removes local keys.
+  Tailscale identity is separate from the Subsonic account. Enabled routing sends
+  tailnet IPs, .ts.net names, discovered peers and explicitly configured hosts
+  through authenticated SOCKS sessions; public targets keep their normal route.
+  Accept Subnet Routes defaults on and persists independently of the enabled
+  switch, including migration from older configuration. It applies the runtime's
+  `RouteAll` preference and matches IPv4/IPv6 destinations against peers'
+  control-plane-selected `PrimaryRoutes`. Default routes are excluded; this
+  does not select an exit node. Route metadata is not persisted: foreground
+  startup, request preparation and a node-owned five-second monitor refresh it,
+  including after settings is closed. Disabling acceptance excludes subnet
+  prefixes without changing direct tailnet or explicit-host selection.
+  In subnet mode, private IPv4/IPv6 targets require Tailscale even before the
+  first route map arrives. `ensureReady(for:)` gates requests on a running node,
+  an approved target prefix (for literal subnet IPs), and a verified loopback
+  proxy. Same-host waits coalesce with independent cancellation and a 20-second
+  readiness deadline; absent routes fail explicitly without direct fallback.
+  Public requests stay direct. Audio, downloads and WebSockets use the same
+  destination gate, including cached HTTP sessions and cold-launch playback.
+  Proxy sessions disable failover for matching hosts. Foreground validation
+  recreates a reclaimed loopback listener while keeping node state.
+  Tailnet audio uses `StreamingResourceLoader` over a proxied foreground
+  URLSession, including Range probes and seeking; the AVPlayer item retains
+  the loader until disposal. Native downloads to tailnet hosts use foreground
+  sessions with persisted request descriptors, including active transfers, so
+  a relaunch can retry them. They cannot continue while the app process is
+  suspended. Ordinary downloads retain their background URLSession. Download
+  bookkeeping uses manager-wide task identities because IDs can collide across
+  sessions. Tailnet coordination sockets prepare their proxy configuration
+  asynchronously and retain the existing main-thread lifecycle/delegates.
+  Library sync wraps HTTP failures with the endpoint name and underlying
+  localized error, excluding authenticated request URLs/query parameters.
+  Storage settings shows that detail and allows a manual retry; the account
+  summary shows sync independently of server reachability. Opening the avatar
+  sheet performs an authenticated ping through the normal request boundary;
+  only success shows Server Reachable. It never infers server/Tailscale health
+  from the system network path. Account/address changes invalidate the result,
+  and late or canceled checks cannot publish a status for another session.
+  Canceled HTTP requests follow sync's
+  cancellation path rather than becoming a network failure.
+  Sync publishes a cancellable Waiting for Server Connection phase before its
+  first HTTP request. Progress retains the concrete genres/playlists/favorites/
+  artists/albums/songs operation rather than only the tier label. Playlist
+  detail progress starts at 0/total and advances after each item; transport,
+  authentication and server-unavailable failures abort promptly instead of
+  being swallowed across every playlist. Sync-scoped network diagnostics log
+  endpoint, actual direct/Tailscale route, elapsed time and error domain/code,
+  excluding authenticated URLs and queries; no automatic timeout retries occur.
+  The readiness deadline expires independently of a still-pending probe. Literal
+  tailnet IPs also require a known peer map entry before proxy dispatch, avoiding
+  tsnet's system-dial fallback for an unknown peer during startup.
   Ordinary signed Subsonic HTTP requests use `ServerURLFallback` to retry the
   other configured address once on connection failures (and read-only requests
   on timeouts or HTTP 502/503/504). Read attempts with a backup use a 10-second
@@ -431,6 +498,14 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   executed writes are not replayed. Successful switches update Keychain, the
   saved account and SessionStore without changing library ownership. New stream
   resolutions read current credentials without a 30-second address cache.
+  Fallback wraps per-address transport selection: both the active and alternate
+  URL independently pass through Tailscale readiness. A pre-dispatch connection
+  readiness failure may try the configured alternate, but must never retry the
+  same private URL directly. Exact-address login/edit probes bypass fallback.
+  Sync observes preparation within each actual HTTP attempt, restoring its
+  current operation/progress afterward; it does not pre-gate an obsolete primary
+  URL before fallback can select the active or alternate address. SessionStore
+  retains both active-URL notifications and generation-checked server probes.
   `AudioService` owns a long-lived `AVQueuePlayer`,
   the queue, downloads, scrobbling, playback persistence, system media
   controls, direct-stream background caching, and staged

@@ -4,6 +4,7 @@ import SwiftUI
 
 /// Each tab retains its own navigation path on every supported system.
 struct MainTabView: View {
+    @State private var presentation = PlayerPresentationState()
     @Environment(Router.self) private var router
     @Environment(PlayerStore.self) private var player
     @Environment(SettingsStore.self) private var settings
@@ -17,7 +18,8 @@ struct MainTabView: View {
                 if #available(iOS 26, *) { modernTabs }
                 else { legacyNavigation }
             }
-            .nowPlayingPresentation()
+            .environment(presentation)
+            .nowPlayingPresentation(presentation)
             .sheet(isPresented: $router.isAccountPresented) {
                 WithPerceptionTracking { AccountView() }
             }
@@ -40,7 +42,9 @@ struct MainTabView: View {
             }
             .tabViewStyle(.sidebarAdaptable)
             .tabBarMinimizeBehavior(.onScrollDown)
-            .tabViewBottomAccessory { PlayerAccessorySlot() }
+            .tabViewBottomAccessory {
+                PlayerAccessorySlot().environment(presentation)
+            }
         }
     }
 

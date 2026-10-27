@@ -28,6 +28,21 @@ jobs:
         with:
           node-version: 22
 
+      - name: Setup Go for embedded Tailscale
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.1"
+          cache: false
+
+      - name: Cache embedded Tailscale runtime
+        uses: actions/cache@v4
+        with:
+          path: ios/AonsokuKit/Vendor/CTailscale.xcframework
+          key: ios-tailscale-${{ hashFiles('scripts/build-ios-tailscale.sh') }}
+
+      - name: Prepare embedded Tailscale runtime
+        run: bash scripts/build-ios-tailscale.sh
+
       - name: Test AonsokuKit
         env:
           IOS_TEST_RESULT_BUNDLE: ${{ runner.temp }}/AonsokuNativeTests.xcresult

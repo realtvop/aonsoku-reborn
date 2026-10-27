@@ -15,6 +15,10 @@ final class StreamingResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
 
     private let queue = DispatchQueue(label: "com.aonsoku.StreamingResourceLoader", qos: .userInitiated)
     private var session: URLSession!
+    private var preparation: Task<Void, Never>?
+    private var preparationError: Error?
+    private var waitingRequests: [AVAssetResourceLoadingRequest] = []
+    private var supportsByteRanges = false
     private var pendingRequests: [Int: RequestState] = [:]
     private var rangeTracker = ByteRangeTracker()
     private var totalContentLength: Int64 = -1
@@ -25,14 +29,31 @@ final class StreamingResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
     private var cacheCompleted = false
     private var nextRequestId = 0
 
-    init(songId: String, originalURL: URL) {
+    init(songId: String, originalURL: URL, cacheAudio: Bool = true) {
         self.songId = songId
         self.originalURL = originalURL
         super.init()
-        let config = URLSessionConfiguration.default
-        config.requestCachePolicy = .reloadIgnoringLocalCacheData
-        self.session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
-        setupTempFile()
+        if cacheAudio { setupTempFile() }
+        preparation = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let session = try await NetworkService.streamingSession(for: originalURL, delegate: self)
+                queue.async {
+                    guard !self.isCancelled else { session.invalidateAndCancel(); return }
+                    self.session = session
+                    let requests = self.waitingRequests
+                    self.waitingRequests.removeAll()
+                    for request in requests { self.handleLoadingRequest(request) }
+                }
+            } catch {
+                queue.async {
+                    self.preparationError = error
+                    let requests = self.waitingRequests
+                    self.waitingRequests.removeAll()
+                    for request in requests { request.finishLoading(with: error) }
+                }
+            }
+        }
     }
 
     // MARK: - Public
@@ -75,7 +96,10 @@ final class StreamingResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
     func cancel() {
         queue.async { [self] in
             isCancelled = true
-            session.invalidateAndCancel()
+            preparation?.cancel()
+            session?.invalidateAndCancel()
+            for request in waitingRequests { request.finishLoading(with: URLError(.cancelled)) }
+            waitingRequests.removeAll()
             for (_, state) in pendingRequests {
                 state.task?.cancel()
             }
@@ -98,7 +122,6 @@ final class StreamingResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
 
     func resourceLoader(_ resourceLoader: AVAssetResourceLoader,
                         shouldWaitForLoadingOfRequestedResource loadingRequest: AVAssetResourceLoadingRequest) -> Bool {
-        NativeLogger.shared.info("ResourceLoader: shouldWaitForLoading called, url=\(loadingRequest.request.url?.absoluteString.prefix(60) ?? "nil")", source: "Audio")
         queue.async { [self] in
             guard !isCancelled else {
                 loadingRequest.finishLoading(with: URLError(.cancelled))
@@ -112,6 +135,7 @@ final class StreamingResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
     func resourceLoader(_ resourceLoader: AVAssetResourceLoader,
                         didCancel loadingRequest: AVAssetResourceLoadingRequest) {
         queue.async { [self] in
+            waitingRequests.removeAll { $0 === loadingRequest }
             if let entry = pendingRequests.first(where: { $0.value.loadingRequest === loadingRequest }) {
                 entry.value.task?.cancel()
                 pendingRequests.removeValue(forKey: entry.key)
@@ -122,6 +146,8 @@ final class StreamingResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
     // MARK: - Private
 
     private func handleLoadingRequest(_ loadingRequest: AVAssetResourceLoadingRequest) {
+        if let preparationError { loadingRequest.finishLoading(with: preparationError); return }
+        guard session != nil else { waitingRequests.append(loadingRequest); return }
         let hasContentReq = loadingRequest.contentInformationRequest != nil
         let hasDataReq = loadingRequest.dataRequest != nil
         let offset = loadingRequest.dataRequest.map { Int64($0.requestedOffset) } ?? -1
@@ -156,7 +182,7 @@ final class StreamingResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
 
         if offset > 0 && requestsToEnd {
             request.setValue("bytes=\(offset)-", forHTTPHeaderField: "Range")
-        } else if offset > 0, let length {
+        } else if !requestsToEnd, let length, length > 0 {
             let end = offset + length - 1
             request.setValue("bytes=\(offset)-\(end)", forHTTPHeaderField: "Range")
         }
@@ -215,7 +241,7 @@ final class StreamingResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
         let uti = contentTypeToUTType(contentType)
         request.contentType = uti
         request.contentLength = contentLength
-        request.isByteRangeAccessSupported = false
+        request.isByteRangeAccessSupported = supportsByteRanges
     }
 
     private func contentTypeToUTType(_ mimeType: String) -> String {
@@ -283,6 +309,8 @@ extension StreamingResourceLoader: URLSessionDataDelegate {
             }
 
             let statusCode = httpResponse.statusCode
+            supportsByteRanges = statusCode == 206 || httpResponse
+                .value(forHTTPHeaderField: "Accept-Ranges")?.lowercased().contains("bytes") == true
             NativeLogger.shared.info("ResourceLoader: HTTP \(statusCode), Content-Type=\(httpResponse.value(forHTTPHeaderField: "Content-Type") ?? "nil"), Content-Length=\(httpResponse.value(forHTTPHeaderField: "Content-Length") ?? "nil")", source: "Audio")
             guard (200..<300).contains(statusCode) else {
                 NativeLogger.shared.warn("StreamingResourceLoader: HTTP \(statusCode) for \(songId)", source: "Audio")
@@ -323,6 +351,12 @@ extension StreamingResourceLoader: URLSessionDataDelegate {
                         contentInfo.contentType = contentTypeToUTType(contentType)
                         contentInfo.isByteRangeAccessSupported = false
                     }
+                    if entry.value.loadingRequest.dataRequest == nil {
+                        entry.value.loadingRequest.finishLoading()
+                        pendingRequests.removeValue(forKey: entry.key)
+                        completionHandler(.cancel)
+                        return
+                    }
                 }
             }
 
@@ -340,8 +374,16 @@ extension StreamingResourceLoader: URLSessionDataDelegate {
             let offset = state.currentOffset
             let hasDataRequest = state.loadingRequest.dataRequest != nil
 
-            if hasDataRequest {
-                state.loadingRequest.dataRequest?.respond(with: data)
+            if let request = state.loadingRequest.dataRequest {
+                // A server may ignore Range and return the whole file. Skip
+                // bytes before the requested offset and never overfill a probe.
+                let target = max(request.requestedOffset, request.currentOffset)
+                let lower = min(Int64(data.count), max(0, target - offset))
+                let remaining = request.requestsAllDataToEndOfResource
+                    ? Int64(data.count)
+                    : max(0, request.requestedOffset + Int64(request.requestedLength) - target)
+                let upper = min(Int64(data.count), lower + remaining)
+                if upper > lower { request.respond(with: data[Int(lower)..<Int(upper)]) }
             }
             state.currentOffset += Int64(data.count)
 

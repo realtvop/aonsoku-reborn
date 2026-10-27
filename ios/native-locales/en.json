@@ -1,5 +1,12 @@
 {
   "native": {
+    "sync": { "waitingForConnection": "Waiting for server connection…" },
+    "serverConnection": {
+      "unchecked": "Server not checked",
+      "checking": "Checking server…",
+      "available": "Server reachable",
+      "failed": "Server connection failed"
+    },
     "generic": {
       "retry": "Try Again"
     },
@@ -78,6 +85,30 @@
       },
       "erase": "Erase and Continue",
       "keep": "Keep Library"
+    },
+    "tailscale": {
+      "enabled": "Use Tailscale",
+      "acceptSubnetRoutes": "Accept Subnet Routes",
+      "subnetRoutesDescription": "Connect to server IPs through subnet routes approved in your tailnet. Routes refresh automatically. This does not enable an exit node.",
+      "status": "Connection",
+      "signIn": "Sign in to Tailscale",
+      "description": "Connect directly to your private music server without enabling the system Tailscale VPN. Your music server still requires its own sign-in.",
+      "hosts": "Additional Server Hosts",
+      "hostsDescription": "Tailnet IPs, .ts.net addresses and discovered device names connect automatically. Accepted subnet routes also match server IPs automatically. Add custom hostnames here, separated by commas.",
+      "authKey": "Auth Key (Advanced)",
+      "useKey": "Connect with Auth Key",
+      "authKeyDescription": "Use a key from your own tailnet. One-time keys are recommended. Only the resulting device identity is saved.",
+      "forget": "Forget Tailscale Identity",
+      "forgetTitle": "Forget this Tailscale identity?",
+      "forgetDescription": "Local node keys will be removed and you will need to sign in again. This does not delete the device from the Tailscale admin console.",
+      "disconnected": "Disconnected",
+      "connecting": "Connecting…",
+      "needsLogin": "Sign-in required",
+      "needsApproval": "Waiting for device approval",
+      "connected": "Connected",
+      "failed": "Connection failed",
+      "error": "Could not connect to Tailscale. Check your connection or sign in again.",
+      "downloadsDescription": "Tailscale downloads require Aonsoku to keep running. If iOS suspends the app, reopen it to continue downloading."
     }
   }
 }

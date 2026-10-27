@@ -2,6 +2,50 @@ import XCTest
 @testable import AonsokuKit
 
 final class HTTPClientTests: XCTestCase {
+    func testCancelledSyncHTTPRequestsDoNotBecomeNetworkFailures() async {
+        for failure: Error in [CancellationError(), URLError(.cancelled)] {
+            let base = SubsonicHTTPClient(client: HTTPClient { _ in throw failure })
+            let client = DiagnosticSyncHTTPClient(base: base)
+            do {
+                _ = try await client.request(baseUrl: credentials.serverUrl, path: "getGenres.view",
+                                             credentials: credentials, extraQuery: [:], method: "GET")
+                XCTFail("Expected cancellation")
+            } catch is CancellationError {
+                // SyncEngine must receive this type to publish cancelled.
+            } catch {
+                XCTFail("Cancellation became a sync failure: \(error)")
+            }
+        }
+    }
+
+    func testSyncFailureIncludesOperationAndHTTPStatusWithoutAuthenticatedURL() async {
+        let base = SubsonicHTTPClient(client: HTTPClient { request in
+            (Data(), HTTPURLResponse(url: request.url!, statusCode: 503, httpVersion: nil, headerFields: nil)!)
+        })
+        let client = DiagnosticSyncHTTPClient(base: base)
+        do {
+            _ = try await client.request(baseUrl: credentials.serverUrl, path: "getGenres.view?private=secret",
+                                         credentials: credentials, extraQuery: [:], method: "GET")
+            XCTFail("Expected failure")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, "getGenres.view: HTTP 503")
+            XCTAssertFalse(error.localizedDescription.contains("alice"))
+            XCTAssertFalse(error.localizedDescription.contains("secret"))
+        }
+    }
+
+    func testSyncFailurePreservesTransportReason() async {
+        let base = SubsonicHTTPClient(client: HTTPClient { _ in throw URLError(.timedOut) })
+        let client = DiagnosticSyncHTTPClient(base: base)
+        do {
+            _ = try await client.request(baseUrl: credentials.serverUrl, path: "search3.view",
+                                         credentials: credentials, extraQuery: [:], method: "GET")
+            XCTFail("Expected timeout")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, "search3.view: \(URLError(.timedOut).localizedDescription)")
+        }
+    }
+
     override func tearDown() {
         URLProtocolStub.handler = nil
         super.tearDown()

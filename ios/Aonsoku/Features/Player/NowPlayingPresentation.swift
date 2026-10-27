@@ -273,7 +273,7 @@ private struct NowPlayingPresentation: ViewModifier {
     @Environment(PlayerStore.self) private var player
     @Environment(SettingsStore.self) private var settings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var presentation = PlayerPresentationState()
+    let presentation: PlayerPresentationState
     @State private var viewportCornerRadius: CGFloat = 0
     @State private var palette: ArtworkPalette?
     @State private var isExpanded = false
@@ -657,8 +657,8 @@ private struct PlayerViewportCornerReader: UIViewRepresentable {
 }
 
 extension View {
-    func nowPlayingPresentation() -> some View {
-        modifier(NowPlayingPresentation())
+    func nowPlayingPresentation(_ presentation: PlayerPresentationState) -> some View {
+        modifier(NowPlayingPresentation(presentation: presentation))
     }
 }
 

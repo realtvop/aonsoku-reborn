@@ -135,7 +135,7 @@ describe("Aonsoku native audio packages", () => {
     const packageSwift = readText(path.join(kitRoot, "Package.swift"));
 
     expect(packageSwift).toContain('name: "AonsokuKit"');
-    expect(packageSwift).toContain("platforms: [.iOS(.v26)]");
+    expect(packageSwift).toMatch(/platforms:\s*\[\.iOS\(\.v16\)\]/);
     expect(packageSwift).toContain('path: "Sources/AonsokuKit"');
     expect(packageSwift).not.toContain("Android");
   });

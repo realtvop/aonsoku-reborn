@@ -39,6 +39,8 @@
 	</dict>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Aonsoku uses your local network to reach music servers and establish direct Tailscale connections.</string>
 	<!-- Poppins, the web app's typeface, for headings. -->
 	<key>UIAppFonts</key>
 	<array>

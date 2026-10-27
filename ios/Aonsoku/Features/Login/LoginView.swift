@@ -59,6 +59,10 @@ struct LoginView: View {
                             }
                             .themedRow()
 
+                            if #available(iOS 18.1, *) {
+                                Section { TailscaleSettingsLink() }
+                            }
+
                             Section {
                                 LabeledContent(t("settings.server.fallbackUrl.label")) {
                                     TextField(

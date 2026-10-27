@@ -115,6 +115,9 @@ private struct AccountHeader: View {
                 }
             }
             .padding(.vertical, 4)
+            .task(id: ConnectionCheckIdentity(account: session.account, online: network.isOnline)) {
+                if network.isOnline { await session.checkServerConnection() }
+            }
         }
     }
 
@@ -129,7 +132,27 @@ private struct AccountHeader: View {
         if !network.isOnline {
             Label(t("offline.mode"), systemImage: "wifi.slash")
                 .foregroundStyle(.orange)
-        } else if let text = SyncPhaseText.text(sync.phase, t) {
+        } else {
+            switch session.serverConnection {
+            case .unchecked:
+                Label(t("native.serverConnection.unchecked"), systemImage: "questionmark.circle")
+                    .foregroundStyle(.secondary)
+            case .checking:
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.mini)
+                    Text(t("native.serverConnection.checking")).foregroundStyle(.secondary)
+                }
+            case .available:
+                Label(t("native.serverConnection.available"), systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            case let .failed(message):
+                Label(t("native.serverConnection.failed"), systemImage: "exclamationmark.circle")
+                    .foregroundStyle(.red)
+                    .accessibilityHint(message)
+                Text(message).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        if let text = SyncPhaseText.text(sync.phase, t, operation: sync.operation) {
             HStack(spacing: 6) {
                 if sync.isSyncing {
                     ProgressView()
@@ -139,25 +162,39 @@ private struct AccountHeader: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-        } else {
-            Label(t("settings.crossDevice.connectionState.connected"), systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
         }
+    }
+
+    private struct ConnectionCheckIdentity: Hashable {
+        let account: ServerAccount?
+        let online: Bool
     }
 }
 
 /// The library sync phase as the web describes it; nil while idle.
 enum SyncPhaseText {
-    static func text(_ phase: LibrarySyncPhase, _ t: Localizer) -> String? {
+    static func text(_ phase: LibrarySyncPhase, _ t: Localizer, operation: String? = nil) -> String? {
         switch phase {
         case .idle:
             return nil
+        case .waitingForConnection:
+            return t("native.sync.waitingForConnection")
         case let .syncing(tier, processed, total):
-            let label = switch tier {
-            case "t1": t("settings.storage.sync.tier.t1.label")
-            case "t2": t("settings.storage.sync.tier.t2.label")
-            case "t3": t("settings.storage.sync.tier.t3.label")
-            default: t("settings.storage.sync.phases.idle")
+            let label: String
+            switch operation {
+            case "genres": label = t("settings.storage.sync.phases.genres")
+            case "playlists": label = t("settings.storage.sync.phases.playlists")
+            case "favorites": label = t("settings.storage.sync.phases.favorites")
+            case "artists": label = t("settings.storage.sync.phases.artists")
+            case "albums": label = t("settings.storage.sync.phases.albums")
+            case "songs": label = t("settings.storage.sync.phases.songs")
+            default:
+                label = switch tier {
+                case "t1": t("settings.storage.sync.tier.t1.label")
+                case "t2": t("settings.storage.sync.tier.t2.label")
+                case "t3": t("settings.storage.sync.tier.t3.label")
+                default: t("settings.storage.sync.phases.idle")
+                }
             }
             return total > 0 ? "\(label) \(processed)/\(total)" : label
         case let .coverArt(processed, total):

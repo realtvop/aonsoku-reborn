@@ -107,7 +107,7 @@ struct StorageSettingsView: View {
             }
             if sync.isSyncing {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(SyncPhaseText.text(sync.phase, t) ?? "")
+                    Text(SyncPhaseText.text(sync.phase, t, operation: sync.operation) ?? "")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     if let fraction = sync.phase.fraction {
@@ -121,6 +121,18 @@ struct StorageSettingsView: View {
                     sync.cancel()
                 }
             } else {
+                if case let .failed(message) = sync.phase {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(t("settings.storage.sync.phases.error"))
+                            .font(.subheadline)
+                            .foregroundStyle(.red)
+                        Text(message)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                    .accessibilityIdentifier("sync.failureDetails")
+                }
                 Button(t("settings.storage.sync.syncNow")) {
                     sync.syncNow()
                 }

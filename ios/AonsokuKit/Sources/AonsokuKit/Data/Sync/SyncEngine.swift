@@ -44,6 +44,32 @@ extension LibrarySyncHTTPClient {
 
 extension SubsonicHTTPClient: LibrarySyncHTTPClient {}
 
+/// Keep the failed operation visible without exposing authenticated URLs or
+/// query parameters. Cancellation must retain the sync engine's cancelled path.
+struct DiagnosticSyncHTTPClient: LibrarySyncHTTPClient {
+    let base: any LibrarySyncHTTPClient
+
+    func request(baseUrl: String, path: String, credentials: ServerCredentials,
+                 extraQuery: [String: String], method: String) async throws -> SubsonicResponse {
+        do {
+            return try await NetworkService.$diagnosticSource.withValue("Sync") {
+                try await base.request(baseUrl: baseUrl, path: path, credentials: credentials,
+                                       extraQuery: extraQuery, method: method)
+            }
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw RequestFailure(operation: String(path.split(separator: "?").first ?? ""), underlying: error)
+        }
+    }
+
+    fileprivate struct RequestFailure: LocalizedError {
+        let operation: String
+        let underlying: Error
+        var errorDescription: String? { "\(operation): \(underlying.localizedDescription)" }
+    }
+}
+
 final class SyncEngine {
     @TaskLocal private static var executingGeneration: Int?
 
@@ -59,11 +85,20 @@ final class SyncEngine {
     private let credentialsProvider: @Sendable () -> ServerCredentials?
     private let cachedCoverSize: @Sendable (String) -> String?
     private let downloadCover: @Sendable (String, String) async throws -> Void
+    private let prepareConnection: (@Sendable (URL) async throws -> Void)?
 
     private let taskLock = NSLock()
     private var currentTask: Task<Bool, Never>?
     private var generation: Int = 0
     private var activeGeneration: Int?
+    private struct Operation {
+        let generation: Int
+        let phase: String
+        let tier: String?
+        let processed: Int
+        let total: Int
+    }
+    private var currentOperation: Operation?
 
     private var syncStateTimer: Timer?
     private var pendingSyncState: (generation: Int?, state: [String: Any])?
@@ -78,10 +113,12 @@ final class SyncEngine {
             KeychainManager.retrieve()
         },
         cachedCoverSize: @escaping @Sendable (String) -> String? = { _ in nil },
-        downloadCover: @escaping @Sendable (String, String) async throws -> Void = { _, _ in }
+        downloadCover: @escaping @Sendable (String, String) async throws -> Void = { _, _ in },
+        prepareConnection: (@Sendable (URL) async throws -> Void)? = nil
     ) {
         self.db = db
-        self.httpClient = httpClient
+        self.httpClient = DiagnosticSyncHTTPClient(base: httpClient)
+        self.prepareConnection = prepareConnection
         self.syncStateRepo = SyncStateRepository(db: db)
         self.artistRepo = ArtistRepository(db: db)
         self.albumRepo = AlbumRepository(db: db)
@@ -143,12 +180,16 @@ final class SyncEngine {
         let task = Task { [weak self] in
             guard let self else { return false }
             return await Self.$executingGeneration.withValue(gen) {
-                await self.performSync(
-                    generation: gen,
-                    includeFullSongs: includeFullSongs,
-                    mode: mode,
-                    coverArt: coverArt
-                )
+                await NetworkService.$connectionPreparationChanged.withValue({ [weak self] waiting in
+                    self?.publishConnectionPreparation(waiting)
+                }) {
+                    await self.performSync(
+                        generation: gen,
+                        includeFullSongs: includeFullSongs,
+                        mode: mode,
+                        coverArt: coverArt
+                    )
+                }
             }
         }
         let accepted = taskLock.withLock {
@@ -216,6 +257,16 @@ final class SyncEngine {
         emitState(phase: "idle", tier: nil, processed: 0, total: 0)
 
         do {
+            if let prepareConnection,
+               !shouldSkipTier(.t1, mode: mode) || !shouldSkipTier(.t2, mode: mode)
+                || (includeFullSongs && !shouldSkipTier(.t3, mode: mode)) || coverArt != nil {
+                guard let url = URL(string: credentials.serverUrl) else { throw URLError(.badURL) }
+                emitState(phase: "connecting", tier: nil, processed: 0, total: 0)
+                forceFlushSyncState()
+                try await prepareConnection(url)
+                try Task.checkCancellation()
+                guard isCurrentGeneration(generation) else { throw CancellationError() }
+            }
             if !shouldSkipTier(.t1, mode: mode) {
                 try await runT1(credentials: credentials)
             }
@@ -663,6 +714,9 @@ final class SyncEngine {
         }
 
         let batchSize = 25
+        var processed = 0
+        emitState(phase: "playlists", tier: "t1", processed: 0, total: playlists.count)
+        forceFlushSyncState()
         for offset in stride(from: 0, to: playlists.count, by: batchSize) {
             try Task.checkCancellation()
 
@@ -670,6 +724,7 @@ final class SyncEngine {
             var details: [PlaylistDetailRecord] = []
 
             for playlist in batch {
+                try Task.checkCancellation()
                 do {
                     let response = try await httpClient.request(
                         baseUrl: credentials.serverUrl,
@@ -680,9 +735,23 @@ final class SyncEngine {
                     if let detail = parsePlaylistDetail(from: response.data) {
                         details.append(detail)
                     }
+                } catch is CancellationError {
+                    throw CancellationError()
                 } catch {
+                    // A broken connection must not incur a full timeout for
+                    // every playlist before the UI can leave Essentials.
+                    let cause = (error as? DiagnosticSyncHTTPClient.RequestFailure)?.underlying ?? error
+                    if let failure = cause as? SubsonicHTTPError {
+                        switch failure {
+                        case .networkUnreachable, .authFailed, .protocolIncompatible: throw error
+                        case let .httpError(code, _) where code >= 500 || code == 401 || code == 403: throw error
+                        default: break
+                        }
+                    }
                     NativeLogger.shared.error("failed to load playlist detail \(playlist.id): \(error)", source: "Sync")
                 }
+                processed += 1
+                emitState(phase: "playlists", tier: "t1", processed: processed, total: playlists.count)
             }
 
             if !details.isEmpty {
@@ -690,9 +759,6 @@ final class SyncEngine {
                 try playlistRepo.bulkUpsertDetails(details)
             }
 
-            emitState(phase: "playlists", tier: "t1",
-                      processed: min(offset + batch.count, playlists.count),
-                      total: playlists.count)
         }
     }
 
@@ -714,6 +780,13 @@ final class SyncEngine {
         total: Int,
         message: String? = nil
     ) {
+        if let gen = Self.executingGeneration, phase != "connecting" {
+            taskLock.withLock {
+                if generation == gen {
+                    currentOperation = Operation(generation: gen, phase: phase, tier: tier, processed: processed, total: total)
+                }
+            }
+        }
         enqueueState(
             phase: phase,
             tier: tier,
@@ -722,6 +795,20 @@ final class SyncEngine {
             message: message,
             generation: Self.executingGeneration
         )
+    }
+
+    private func publishConnectionPreparation(_ waiting: Bool) {
+        guard let gen = Self.executingGeneration else { return }
+        let operation = taskLock.withLock {
+            activeGeneration == gen && currentOperation?.generation == gen ? currentOperation : nil
+        }
+        guard let operation else { return }
+        enqueueState(phase: waiting ? "connecting" : operation.phase,
+                     tier: waiting ? nil : operation.tier,
+                     processed: waiting ? 0 : operation.processed,
+                     total: waiting ? 0 : operation.total,
+                     message: nil, generation: gen)
+        forceFlushSyncState()
     }
 
     private func enqueueState(

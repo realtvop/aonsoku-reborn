@@ -2,7 +2,7 @@ import Foundation
 
 /// The HTTP policies used by existing callers. Routing belongs to the network
 /// service and can be selected per request without changing these callers.
-public enum HTTPRequestProfile: Sendable {
+public enum HTTPRequestProfile: Sendable, Hashable {
     case standard
     case subsonic
     case artwork
@@ -37,6 +37,8 @@ public struct HTTPClient: Sendable {
 /// Shared entry point for ordinary HTTP requests. Background downloads,
 /// WebSockets and AVPlayer retain their dedicated transport lifecycles.
 public final class NetworkService: Sendable {
+    @TaskLocal static var diagnosticSource: String?
+    @TaskLocal static var connectionPreparationChanged: (@Sendable (Bool) -> Void)?
     public typealias Transport = @Sendable (
         URLRequest, HTTPRequestProfile
     ) async throws -> (Data, URLResponse)
@@ -45,33 +47,73 @@ public final class NetworkService: Sendable {
     private let transport: Transport
 
     public convenience init() {
-        let subsonic = URLSessionConfiguration.default
-        subsonic.timeoutIntervalForRequest = 30
-        subsonic.timeoutIntervalForResource = 300
-        let subsonicSession = URLSession(configuration: subsonic)
+        let subsonicSession = URLSession(configuration: Self.configuration(for: .subsonic))
+        let artworkSession = URLSession(configuration: Self.configuration(for: .artwork))
 
-        let artwork = URLSessionConfiguration.default
-        artwork.timeoutIntervalForRequest = 30
-        artwork.timeoutIntervalForResource = 120
-        let artworkSession = URLSession(configuration: artwork)
-
-        let fallback = ServerURLFallback.live
-        self.init { request, profile in
+        self.init(prepareRoute: { url in try await Self.prepareConnection(for: url) }, direct: { request, profile in
             let session: URLSession
             switch profile {
             case .standard: session = .shared
             case .subsonic: session = subsonicSession
             case .artwork: session = artworkSession
             }
-            // Login/address-edit probes must test the exact address entered.
-            let endpoint = request.url?.deletingPathExtension().lastPathComponent
-            if case .subsonic = profile, endpoint == "ping" {
-                return try await session.data(for: request)
-            }
-            return try await fallback.data(for: request) { request in
-                try await session.data(for: request)
+            return try await session.data(for: request)
+        }, tailnet: { request, profile in
+            if #available(iOS 18.1, *) { return try await TailscaleService.shared.data(for: request, profile: profile) }
+            throw URLError(.unsupportedURL)
+        }, fallback: .live)
+    }
+
+    init(prepareRoute: @escaping @Sendable (URL) async throws -> Bool,
+         direct: @escaping Transport, tailnet: @escaping Transport,
+         fallback: ServerURLFallback? = nil) {
+        let attempt: Transport = { request, profile in
+            guard let url = request.url else { throw URLError(.badURL) }
+            let start = ContinuousClock.now
+            var route = "not-sent"
+            do {
+                let observer = Self.diagnosticSource == nil ? nil : Self.connectionPreparationChanged
+                observer?(true)
+                let useTailnet: Bool
+                do { useTailnet = try await prepareRoute(url) }
+                catch { observer?(false); throw error }
+                observer?(false)
+                try Task.checkCancellation()
+                route = useTailnet ? "tailscale" : "direct"
+                if let source = Self.diagnosticSource {
+                    NativeLogger.shared.info("\(url.lastPathComponent) route=\(route) started", source: source)
+                }
+                let result = try await (useTailnet ? tailnet : direct)(request, profile)
+                Self.logRequest(url: url, route: route, start: start,
+                                result: "HTTP \((result.1 as? HTTPURLResponse)?.statusCode ?? 0)")
+                return result
+            } catch {
+                let failure = error as NSError
+                Self.logRequest(url: url, route: route, start: start,
+                                result: "\(failure.domain) code=\(failure.code): \(error.localizedDescription)")
+                throw error
             }
         }
+        self.transport = { request, profile in
+            let endpoint = request.url?.deletingPathExtension().lastPathComponent
+            // Login and address-edit probes must test exactly the entered URL.
+            if case .subsonic = profile, endpoint == "ping" {
+                return try await attempt(request, profile)
+            }
+            guard let fallback else { return try await attempt(request, profile) }
+            // Resolve the address first; each actual attempt independently gates
+            // Tailscale and chooses its transport, including the backup attempt.
+            return try await fallback.data(for: request) { actualRequest in
+                try await attempt(actualRequest, profile)
+            }
+        }
+    }
+
+    private static func logRequest(url: URL, route: String, start: ContinuousClock.Instant, result: String) {
+        guard let source = diagnosticSource else { return }
+        let duration = start.duration(to: .now).components
+        let milliseconds = duration.seconds * 1_000 + duration.attoseconds / 1_000_000_000_000_000
+        NativeLogger.shared.info("\(url.lastPathComponent) route=\(route) elapsed=\(milliseconds)ms \(result)", source: source)
     }
 
     public init(transport: @escaping Transport) {
@@ -80,5 +122,39 @@ public final class NetworkService: Sendable {
 
     public func client(for profile: HTTPRequestProfile = .standard) -> HTTPClient {
         HTTPClient { request in try await self.transport(request, profile) }
+    }
+
+    static func configuration(for profile: HTTPRequestProfile) -> URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.default
+        switch profile {
+        case .standard: break
+        case .subsonic:
+            configuration.timeoutIntervalForRequest = 30
+            configuration.timeoutIntervalForResource = 300
+        case .artwork:
+            configuration.timeoutIntervalForRequest = 30
+            configuration.timeoutIntervalForResource = 120
+        }
+        return configuration
+    }
+
+    static func streamingSession(
+        for url: URL, delegate: URLSessionDelegate, configuration: URLSessionConfiguration = .default
+    ) async throws -> URLSession {
+        let useTailnet = try await prepareConnection(for: url)
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        if #available(iOS 18.1, *), useTailnet {
+            return try await TailscaleService.shared.makeSession(for: url, configuration: configuration, delegate: delegate)
+        }
+        return URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+    }
+
+    /// Public requests do not wait for Tailscale. Selected private destinations
+    /// either obtain a ready transport or fail explicitly; never fall back.
+    @discardableResult
+    public static func prepareConnection(for url: URL) async throws -> Bool {
+        guard #available(iOS 18.1, *), TailscaleRouting.shared.requiresTailscale(url) else { return false }
+        try await TailscaleService.shared.ensureReady(for: url)
+        return true
     }
 }

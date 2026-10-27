@@ -79,8 +79,17 @@ struct ServerURLFallback: Sendable {
             result = try await transport(active)
         } catch {
             try Task.checkCancellation()
-            guard let error = error as? URLError,
-                  shouldRetry(error.code, canReplay: canReplay) else { throw error }
+            if let readiness = error as? TailscaleReadinessError {
+                // No HTTP request was dispatched. Only connection readiness
+                // failures may try the separately configured backup address.
+                switch readiness {
+                case .connectionTimedOut, .missingSubnetRoute, .peerUnavailable, .proxyUnavailable: break
+                default: throw error
+                }
+            } else {
+                guard let error = error as? URLError,
+                      shouldRetry(error.code, canReplay: canReplay) else { throw error }
+            }
             return try await retry(request, at: alternateURL, address: alternate, config: config, transport: transport)
         }
         try Task.checkCancellation()

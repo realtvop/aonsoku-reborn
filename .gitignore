@@ -40,6 +40,7 @@ dist/
 coverage/
 .build/
 .swiftpm/
+ios/AonsokuKit/Vendor/CTailscale.xcframework/
 electron/main/native/audio/libmpv/build/
 resources/native-audio/*/
 

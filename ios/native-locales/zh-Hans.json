@@ -1,5 +1,12 @@
 {
   "native": {
+    "sync": { "waitingForConnection": "正在等待服务器连接…" },
+    "serverConnection": {
+      "unchecked": "尚未检查服务器",
+      "checking": "正在检查服务器…",
+      "available": "服务器连接正常",
+      "failed": "服务器连接失败"
+    },
     "generic": {
       "retry": "重试"
     },
@@ -78,6 +85,30 @@
       },
       "erase": "抹掉并继续",
       "keep": "保留资料库"
+    },
+    "tailscale": {
+      "enabled": "使用 Tailscale",
+      "acceptSubnetRoutes": "接受子网路由",
+      "subnetRoutesDescription": "通过 Tailnet 中已批准的子网路由连接服务器 IP。路由会自动刷新，不会启用出口节点。",
+      "status": "连接状态",
+      "signIn": "登录 Tailscale",
+      "description": "无需开启系统 Tailscale VPN，即可连接私有音乐服务器。音乐服务器仍需单独登录。",
+      "hosts": "其他服务器地址",
+      "hostsDescription": "自动连接 Tailnet IP、.ts.net 地址及发现的设备名称。接受的子网路由也会自动匹配服务器 IP。自定义域名可填写在这里，用逗号分隔。",
+      "authKey": "认证密钥（高级）",
+      "useKey": "使用认证密钥连接",
+      "authKeyDescription": "使用你自己网络的认证密钥，建议使用一次性密钥。仅保存连接后生成的设备身份。",
+      "forget": "清除 Tailscale 身份",
+      "forgetTitle": "清除这个 Tailscale 身份？",
+      "forgetDescription": "将删除本机节点密钥，之后需要重新登录。这不会从 Tailscale 管理后台删除设备。",
+      "disconnected": "未连接",
+      "connecting": "正在连接…",
+      "needsLogin": "需要登录",
+      "needsApproval": "等待设备批准",
+      "connected": "已连接",
+      "failed": "连接失败",
+      "error": "无法连接 Tailscale，请检查网络或重新登录。",
+      "downloadsDescription": "通过 Tailscale 下载时需要保持 Aonsoku 运行。如果 iOS 挂起了 App，请重新打开以继续下载。"
     }
   }
 }

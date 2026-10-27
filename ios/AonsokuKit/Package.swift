@@ -18,11 +18,14 @@ let package = Package(
         .target(
             name: "AonsokuKit",
             dependencies: [
+                "CTailscale",
                 .product(name: "GRDB", package: "GRDB.swift"),
                 .product(name: "Perception", package: "swift-perception"),
             ],
-            path: "Sources/AonsokuKit"
+            path: "Sources/AonsokuKit",
+            linkerSettings: [.linkedFramework("Security"), .linkedFramework("SystemConfiguration"), .linkedLibrary("resolv")]
         ),
+        .binaryTarget(name: "CTailscale", path: "Vendor/CTailscale.xcframework"),
         .testTarget(
             name: "AonsokuKitTests",
             dependencies: [
