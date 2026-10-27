@@ -44,6 +44,30 @@ extension LibrarySyncHTTPClient {
 
 extension SubsonicHTTPClient: LibrarySyncHTTPClient {}
 
+/// Keep the failed operation visible without exposing authenticated URLs or
+/// query parameters. Cancellation must retain the sync engine's cancelled path.
+struct DiagnosticSyncHTTPClient: LibrarySyncHTTPClient {
+    let base: any LibrarySyncHTTPClient
+
+    func request(baseUrl: String, path: String, credentials: ServerCredentials,
+                 extraQuery: [String: String], method: String) async throws -> SubsonicResponse {
+        do {
+            return try await base.request(baseUrl: baseUrl, path: path, credentials: credentials,
+                                          extraQuery: extraQuery, method: method)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw RequestFailure(operation: String(path.split(separator: "?").first ?? ""), underlying: error)
+        }
+    }
+
+    private struct RequestFailure: LocalizedError {
+        let operation: String
+        let underlying: Error
+        var errorDescription: String? { "\(operation): \(underlying.localizedDescription)" }
+    }
+}
+
 final class SyncEngine {
     @TaskLocal private static var executingGeneration: Int?
 
@@ -81,7 +105,7 @@ final class SyncEngine {
         downloadCover: @escaping @Sendable (String, String) async throws -> Void = { _, _ in }
     ) {
         self.db = db
-        self.httpClient = httpClient
+        self.httpClient = DiagnosticSyncHTTPClient(base: httpClient)
         self.syncStateRepo = SyncStateRepository(db: db)
         self.artistRepo = ArtistRepository(db: db)
         self.albumRepo = AlbumRepository(db: db)

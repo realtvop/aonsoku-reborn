@@ -1,12 +1,24 @@
 import Foundation
 
-public enum SubsonicHTTPError: Error {
+public enum SubsonicHTTPError: LocalizedError {
     case networkUnreachable(String)
     case httpError(Int, String)
     case parseError(String)
     case protocolIncompatible(version: String?, message: String)
     case serverError(String)
     case authFailed(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case let .networkUnreachable(message), let .parseError(message),
+             let .serverError(message), let .authFailed(message):
+            return message
+        case let .httpError(code, message):
+            return message.isEmpty ? "HTTP \(code)" : message
+        case let .protocolIncompatible(_, message):
+            return message
+        }
+    }
 }
 
 public struct SubsonicResponse {
@@ -46,6 +58,9 @@ public final class SubsonicHTTPClient {
         do {
             (data, response) = try await client.data(for: request)
         } catch {
+            if error is CancellationError || Task.isCancelled || (error as? URLError)?.code == .cancelled {
+                throw CancellationError()
+            }
             throw SubsonicHTTPError.networkUnreachable(error.localizedDescription)
         }
 
