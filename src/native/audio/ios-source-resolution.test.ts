@@ -10,6 +10,10 @@ const nativeSourceResolverPath = path.join(
   process.cwd(),
   "ios/AonsokuKit/Sources/AonsokuKit/Audio/NativeSourceResolver.swift",
 );
+const libraryMediaReferencePath = path.join(
+  process.cwd(),
+  "ios/AonsokuKit/Sources/AonsokuKit/Audio/LibraryMediaReference.swift",
+);
 
 function readNativeAudioService() {
   return readFileSync(nativeAudioServicePath, "utf-8");
@@ -20,16 +24,20 @@ function readNativeSourceResolver() {
 }
 
 describe("iOS native audio source resolution", () => {
-  it("resolves WebView media stream URLs through the native source resolver", () => {
+  it("resolves library media identities through the native source resolver", () => {
     const resolver = readNativeSourceResolver();
+    const reference = readFileSync(libraryMediaReferencePath, "utf-8");
 
     expect(resolver).toContain("func resolveSource(for song: QueueSong)");
     expect(resolver).toContain(
-      'song.streamUrl.hasPrefix("aonsoku-media://stream")',
+      "LibraryMediaReference(streamURL: song.streamUrl, fallbackSongID: song.id)",
     );
     expect(resolver).toContain(
-      'values["id"].flatMap { $0.isEmpty ? nil : $0 } ?? song.id',
+      "buildAuthenticatedStreamUrl(songId: reference.songID, extra: reference.options)",
     );
+    expect(reference).toContain('components.scheme?.lowercased() == "aonsoku-media"');
+    expect(reference).toContain('components.host?.lowercased() == "stream"');
+    expect(reference).toContain('values["id"].flatMap { $0.isEmpty ? nil : $0 }');
     expect(resolver).toContain('params["id"] = songId');
     expect(resolver).toContain(
       'params["estimateContentLength"] = String(estimateContentLengthProvider())',
@@ -38,11 +46,16 @@ describe("iOS native audio source resolution", () => {
 
   it("preserves optional stream transcoding parameters for native playback", () => {
     const resolver = readNativeSourceResolver();
+    const reference = readFileSync(libraryMediaReferencePath, "utf-8");
 
-    expect(resolver).toContain('values["maxBitRate"]');
-    expect(resolver).toContain('extra["maxBitRate"] = maxBitRate');
-    expect(resolver).toContain('values["format"]');
-    expect(resolver).toContain('extra["format"] = format');
+    for (const option of ["maxBitRate", "format", "timeOffset", "size"]) {
+      expect(reference).toContain(`"${option}"`);
+    }
+    expect(reference).toContain("self.init(songID: songID, options: values)");
+    expect(reference).toContain("options.filter { Self.streamOptions.contains($0.key) }");
+    expect(resolver).toContain("extra: reference.options");
+    expect(resolver).toContain("for (key, value) in extra");
+    expect(resolver).toContain("params[key] = value");
   });
 
   it("publishes duration changes observed from the current AVPlayerItem", () => {
