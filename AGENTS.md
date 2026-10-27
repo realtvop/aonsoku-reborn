@@ -490,6 +490,22 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   The readiness deadline expires independently of a still-pending probe. Literal
   tailnet IPs also require a known peer map entry before proxy dispatch, avoiding
   tsnet's system-dial fallback for an unknown peer during startup.
+  Ordinary signed Subsonic HTTP requests use `ServerURLFallback` to retry the
+  other configured address once on connection failures (and read-only requests
+  on timeouts or HTTP 502/503/504). Read attempts with a backup use a 10-second
+  primary timeout. Login/address-edit probes keep testing their exact address.
+  Cancellation and authentication failures do not switch servers; potentially
+  executed writes are not replayed. Successful switches update Keychain, the
+  saved account and SessionStore without changing library ownership. New stream
+  resolutions read current credentials without a 30-second address cache.
+  Fallback wraps per-address transport selection: both the active and alternate
+  URL independently pass through Tailscale readiness. A pre-dispatch connection
+  readiness failure may try the configured alternate, but must never retry the
+  same private URL directly. Exact-address login/edit probes bypass fallback.
+  Sync observes preparation within each actual HTTP attempt, restoring its
+  current operation/progress afterward; it does not pre-gate an obsolete primary
+  URL before fallback can select the active or alternate address. SessionStore
+  retains both active-URL notifications and generation-checked server probes.
   `AudioService` owns a long-lived `AVQueuePlayer`,
   the queue, downloads, scrobbling, playback persistence, system media
   controls, direct-stream background caching, and staged

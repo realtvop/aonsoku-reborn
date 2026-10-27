@@ -2,6 +2,60 @@ import XCTest
 @testable import AonsokuKit
 
 final class SyncConnectionProgressTests: XCTestCase {
+    func testActualSyncWaitsWithinFallbackAttemptThenContinuesOnBackup() async throws {
+        let database = try TemporaryDatabase()
+        let primary = "http://192.168.50.123/music"
+        let backup = "https://backup.test/proxy"
+        @Sendable func config(_ address: String) -> ServerURLFallback.Configuration {
+            .init(credentials: ServerCredentials(serverUrl: address, username: "user", password: "secret",
+                                                 authType: "password", protocolVersion: "1.16.1", serverType: "navidrome",
+                                                 fallbackUrl: backup), primaryURL: primary)
+        }
+        let state = LockedTestBox(config(primary))
+        let sent = LockedTestBox<[String]>([])
+        let waiting = expectation(description: "Sync waits for actual request preparation")
+        let entered = expectation(description: "Primary route preparation entered")
+        let release = LockedTestBox<CheckedContinuation<Void, Never>?>(nil)
+        let network = NetworkService(prepareRoute: { url in
+            if url.host == "192.168.50.123" {
+                await withCheckedContinuation { continuation in
+                    release.update { $0 = continuation }; entered.fulfill()
+                }
+                throw TailscaleReadinessError.missingSubnetRoute(url.host!)
+            }
+            return false
+        }, direct: { request, _ in
+            sent.update { $0.append(request.url!.host!) }
+            XCTAssertEqual(request.url?.host, "backup.test")
+            return (Data(#"{"subsonic-response":{"status":"ok"}}"#.utf8),
+                    HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }, tailnet: { _, _ in
+            XCTFail("Unready private URL must not be dispatched"); throw URLError(.cannotConnectToHost)
+        }, fallback: ServerURLFallback(configuration: { state.read { $0 } }, activate: { address, _ in
+            state.update { $0 = config(address) }
+        }))
+        let engine = SyncEngine(db: database.manager.dbPool,
+                                httpClient: SubsonicHTTPClient(client: network.client(for: .subsonic)),
+                                credentialsProvider: { state.read { $0.credentials } })
+        let didPublish = LockedTestBox(false)
+        engine.onSyncStateChanged = { value in
+            if value["phase"] as? String == "connecting" {
+                let first = didPublish.read { !$0 }
+                didPublish.update { $0 = true }
+                if first { waiting.fulfill() }
+            }
+        }
+        let sync = Task { await engine.syncAllAndWait(includeFullSongs: false, mode: "full") }
+        await fulfillment(of: [entered, waiting], timeout: 2)
+        XCTAssertTrue(sent.read { $0.isEmpty })
+        release.read { $0 }?.resume()
+        let result = await sync.value
+        XCTAssertTrue(result)
+        XCTAssertEqual(state.read { $0.credentials.serverUrl }, backup)
+        XCTAssertFalse(sent.read { $0.isEmpty })
+        XCTAssertTrue(sent.read { $0.allSatisfy { $0 == "backup.test" } })
+    }
+
     func testSyncWaitsForConnectionBeforeStartingEssentials() async throws {
         let database = try TemporaryDatabase()
         let requests = LockedTestBox<[String]>([])

@@ -85,12 +85,20 @@ final class SyncEngine {
     private let credentialsProvider: @Sendable () -> ServerCredentials?
     private let cachedCoverSize: @Sendable (String) -> String?
     private let downloadCover: @Sendable (String, String) async throws -> Void
-    private let prepareConnection: @Sendable (URL) async throws -> Void
+    private let prepareConnection: (@Sendable (URL) async throws -> Void)?
 
     private let taskLock = NSLock()
     private var currentTask: Task<Bool, Never>?
     private var generation: Int = 0
     private var activeGeneration: Int?
+    private struct Operation {
+        let generation: Int
+        let phase: String
+        let tier: String?
+        let processed: Int
+        let total: Int
+    }
+    private var currentOperation: Operation?
 
     private var syncStateTimer: Timer?
     private var pendingSyncState: (generation: Int?, state: [String: Any])?
@@ -106,9 +114,7 @@ final class SyncEngine {
         },
         cachedCoverSize: @escaping @Sendable (String) -> String? = { _ in nil },
         downloadCover: @escaping @Sendable (String, String) async throws -> Void = { _, _ in },
-        prepareConnection: @escaping @Sendable (URL) async throws -> Void = { url in
-            _ = try await NetworkService.prepareConnection(for: url)
-        }
+        prepareConnection: (@Sendable (URL) async throws -> Void)? = nil
     ) {
         self.db = db
         self.httpClient = DiagnosticSyncHTTPClient(base: httpClient)
@@ -174,12 +180,16 @@ final class SyncEngine {
         let task = Task { [weak self] in
             guard let self else { return false }
             return await Self.$executingGeneration.withValue(gen) {
-                await self.performSync(
-                    generation: gen,
-                    includeFullSongs: includeFullSongs,
-                    mode: mode,
-                    coverArt: coverArt
-                )
+                await NetworkService.$connectionPreparationChanged.withValue({ [weak self] waiting in
+                    self?.publishConnectionPreparation(waiting)
+                }) {
+                    await self.performSync(
+                        generation: gen,
+                        includeFullSongs: includeFullSongs,
+                        mode: mode,
+                        coverArt: coverArt
+                    )
+                }
             }
         }
         let accepted = taskLock.withLock {
@@ -247,7 +257,8 @@ final class SyncEngine {
         emitState(phase: "idle", tier: nil, processed: 0, total: 0)
 
         do {
-            if !shouldSkipTier(.t1, mode: mode) || !shouldSkipTier(.t2, mode: mode)
+            if let prepareConnection,
+               !shouldSkipTier(.t1, mode: mode) || !shouldSkipTier(.t2, mode: mode)
                 || (includeFullSongs && !shouldSkipTier(.t3, mode: mode)) || coverArt != nil {
                 guard let url = URL(string: credentials.serverUrl) else { throw URLError(.badURL) }
                 emitState(phase: "connecting", tier: nil, processed: 0, total: 0)
@@ -769,6 +780,13 @@ final class SyncEngine {
         total: Int,
         message: String? = nil
     ) {
+        if let gen = Self.executingGeneration, phase != "connecting" {
+            taskLock.withLock {
+                if generation == gen {
+                    currentOperation = Operation(generation: gen, phase: phase, tier: tier, processed: processed, total: total)
+                }
+            }
+        }
         enqueueState(
             phase: phase,
             tier: tier,
@@ -777,6 +795,20 @@ final class SyncEngine {
             message: message,
             generation: Self.executingGeneration
         )
+    }
+
+    private func publishConnectionPreparation(_ waiting: Bool) {
+        guard let gen = Self.executingGeneration else { return }
+        let operation = taskLock.withLock {
+            activeGeneration == gen && currentOperation?.generation == gen ? currentOperation : nil
+        }
+        guard let operation else { return }
+        enqueueState(phase: waiting ? "connecting" : operation.phase,
+                     tier: waiting ? nil : operation.tier,
+                     processed: waiting ? 0 : operation.processed,
+                     total: waiting ? 0 : operation.total,
+                     message: nil, generation: gen)
+        forceFlushSyncState()
     }
 
     private func enqueueState(

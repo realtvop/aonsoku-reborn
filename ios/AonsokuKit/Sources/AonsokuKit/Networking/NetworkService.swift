@@ -38,6 +38,7 @@ public struct HTTPClient: Sendable {
 /// WebSockets and AVPlayer retain their dedicated transport lifecycles.
 public final class NetworkService: Sendable {
     @TaskLocal static var diagnosticSource: String?
+    @TaskLocal static var connectionPreparationChanged: (@Sendable (Bool) -> Void)?
     public typealias Transport = @Sendable (
         URLRequest, HTTPRequestProfile
     ) async throws -> (Data, URLResponse)
@@ -60,17 +61,23 @@ public final class NetworkService: Sendable {
         }, tailnet: { request, profile in
             if #available(iOS 18.1, *) { return try await TailscaleService.shared.data(for: request, profile: profile) }
             throw URLError(.unsupportedURL)
-        })
+        }, fallback: .live)
     }
 
     init(prepareRoute: @escaping @Sendable (URL) async throws -> Bool,
-         direct: @escaping Transport, tailnet: @escaping Transport) {
-        self.transport = { request, profile in
+         direct: @escaping Transport, tailnet: @escaping Transport,
+         fallback: ServerURLFallback? = nil) {
+        let attempt: Transport = { request, profile in
             guard let url = request.url else { throw URLError(.badURL) }
             let start = ContinuousClock.now
             var route = "not-sent"
             do {
-                let useTailnet = try await prepareRoute(url)
+                let observer = Self.diagnosticSource == nil ? nil : Self.connectionPreparationChanged
+                observer?(true)
+                let useTailnet: Bool
+                do { useTailnet = try await prepareRoute(url) }
+                catch { observer?(false); throw error }
+                observer?(false)
                 try Task.checkCancellation()
                 route = useTailnet ? "tailscale" : "direct"
                 if let source = Self.diagnosticSource {
@@ -85,6 +92,19 @@ public final class NetworkService: Sendable {
                 Self.logRequest(url: url, route: route, start: start,
                                 result: "\(failure.domain) code=\(failure.code): \(error.localizedDescription)")
                 throw error
+            }
+        }
+        self.transport = { request, profile in
+            let endpoint = request.url?.deletingPathExtension().lastPathComponent
+            // Login and address-edit probes must test exactly the entered URL.
+            if case .subsonic = profile, endpoint == "ping" {
+                return try await attempt(request, profile)
+            }
+            guard let fallback else { return try await attempt(request, profile) }
+            // Resolve the address first; each actual attempt independently gates
+            // Tailscale and chooses its transport, including the backup attempt.
+            return try await fallback.data(for: request) { actualRequest in
+                try await attempt(actualRequest, profile)
             }
         }
     }

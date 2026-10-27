@@ -3,6 +3,47 @@ import XCTest
 
 @MainActor
 final class SessionStoreTests: XCTestCase {
+    func testFallbackNotificationInvalidatesOldPingAndAllowsNewServerCheck() async throws {
+        let database = try TemporaryDatabase()
+        let preferences = PreferencesService(db: database.manager.dbPool)
+        let account = makeAccount()
+        try preferences.setJSON(account, for: SessionStore.accountStorageKey)
+        let credentials = LockedTestBox(makeCredentials())
+        let api = FakeSubsonicAPI()
+        let store = makeStore(preferences: preferences, api: api,
+                              client: makeClient(getCredentials: { credentials.read { $0 } }))
+        store.restore()
+        let started = expectation(description: "Original server ping started")
+        let release = LockedTestBox<CheckedContinuation<ServerInfo, Error>?>(nil)
+        api.pingHandler = {
+            try await withCheckedThrowingContinuation { continuation in
+                release.update { $0 = continuation }; started.fulfill()
+            }
+        }
+        let oldCheck = Task { await store.checkServerConnection() }
+        await fulfillment(of: [started], timeout: 1)
+        credentials.update { old in
+            old = ServerCredentials(serverUrl: account.fallbackUrl!, username: old.username, password: old.password,
+                                    authType: old.authType, protocolVersion: old.protocolVersion,
+                                    serverType: old.serverType, fallbackUrl: old.fallbackUrl)
+        }
+        NotificationCenter.default.post(name: .serverURLDidChange, object: nil)
+        let deadline = ContinuousClock.now.advanced(by: .seconds(1))
+        while store.account?.activeUrl != account.fallbackUrl, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(1))
+        }
+        XCTAssertEqual(store.account?.activeUrl, account.fallbackUrl)
+        XCTAssertEqual(store.account?.primaryUrl, account.primaryUrl)
+        XCTAssertEqual(store.account?.username, account.username)
+        XCTAssertTrue(store.isUsingFallback)
+        release.read { $0 }?.resume(returning: ServerInfo(type: "navidrome", protocolVersion: "1.16.1"))
+        await oldCheck.value
+        XCTAssertEqual(store.serverConnection, .unchecked)
+        api.pingHandler = { ServerInfo(type: "navidrome", protocolVersion: "1.16.1") }
+        await store.checkServerConnection()
+        XCTAssertEqual(store.serverConnection, .available)
+    }
+
     func testAvatarConnectionRequiresAuthenticatedPingAndRecoversFromFailure() async throws {
         let database = try TemporaryDatabase()
         let api = FakeSubsonicAPI()

@@ -22,7 +22,8 @@ class NativeSourceResolver {
             PreferencesService.shared.estimateStreamContentLength
         },
         now: @escaping () -> Date = Date.init,
-        credentialsTTL: TimeInterval = 30
+        // Server fallback must affect the next stream resolution immediately.
+        credentialsTTL: TimeInterval = 0
     ) {
         self.fileManager = fileManager
         self.credentialsProvider = credentialsProvider
