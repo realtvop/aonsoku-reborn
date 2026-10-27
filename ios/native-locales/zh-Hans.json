@@ -1,5 +1,6 @@
 {
   "native": {
+    "sync": { "waitingForConnection": "正在等待服务器连接…" },
     "serverConnection": {
       "unchecked": "尚未检查服务器",
       "checking": "正在检查服务器…",

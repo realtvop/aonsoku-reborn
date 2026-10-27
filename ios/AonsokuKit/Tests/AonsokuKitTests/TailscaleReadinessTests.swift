@@ -2,6 +2,21 @@ import XCTest
 @testable import AonsokuKit
 
 final class TailscaleReadinessTests: XCTestCase {
+    func testReadinessDeadlineCanExpireWhileAProbeIsStillPending() async throws {
+        let gate = TailscaleReadinessGate()
+        let start = ContinuousClock.now
+        do {
+            try await gate.wait(for: "server", timeout: .milliseconds(30)) {
+                try await Task.sleep(for: .seconds(10))
+                return .ready
+            }
+            XCTFail("Expected readiness timeout")
+        } catch let error as TailscaleReadinessError {
+            XCTAssertEqual(error, .connectionTimedOut)
+            XCTAssertLessThan(start.duration(to: .now), .seconds(1))
+        }
+    }
+
     func testMissingSubnetRouteFailsWithoutOpeningEitherTransport() async throws {
         let gate = TailscaleReadinessGate()
         let calls = LockedTestBox<[String]>([])
@@ -82,7 +97,10 @@ final class TailscaleReadinessTests: XCTestCase {
             XCTAssertTrue(routing.requiresTailscale(URL(string: "http://192.168.50.123")!))
             XCTAssertFalse(routing.hasAcceptedSubnetRoute(URL(string: "http://192.168.50.123")!))
             XCTAssertFalse(routing.requiresTailscale(URL(string: "https://example.com")!))
-            routing.updatePeers([], subnetRoutes: ["192.168.50.0/24"])
+            XCTAssertFalse(routing.hasKnownPeer(URL(string: "http://100.64.0.2")!))
+            routing.updatePeers(["100.64.0.2", "fd7a:115c:a1e0::2"], subnetRoutes: ["192.168.50.0/24"])
+            XCTAssertTrue(routing.hasKnownPeer(URL(string: "http://100.64.0.2")!))
+            XCTAssertTrue(routing.hasKnownPeer(URL(string: "http://[fd7a:115c:a1e0::2]")!))
             XCTAssertTrue(routing.hasAcceptedSubnetRoute(URL(string: "http://192.168.50.123")!))
             routing.configure(enabled: false, additionalHosts: [])
             XCTAssertFalse(routing.requiresTailscale(URL(string: "http://192.168.50.123")!))

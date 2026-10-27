@@ -477,6 +477,17 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   and late or canceled checks cannot publish a status for another session.
   Canceled HTTP requests follow sync's
   cancellation path rather than becoming a network failure.
+  Sync publishes a cancellable Waiting for Server Connection phase before its
+  first HTTP request. Progress retains the concrete genres/playlists/favorites/
+  artists/albums/songs operation rather than only the tier label. Playlist
+  detail progress starts at 0/total and advances after each item; transport,
+  authentication and server-unavailable failures abort promptly instead of
+  being swallowed across every playlist. Sync-scoped network diagnostics log
+  endpoint, actual direct/Tailscale route, elapsed time and error domain/code,
+  excluding authenticated URLs and queries; no automatic timeout retries occur.
+  The readiness deadline expires independently of a still-pending probe. Literal
+  tailnet IPs also require a known peer map entry before proxy dispatch, avoiding
+  tsnet's system-dial fallback for an unknown peer during startup.
   `AudioService` owns a long-lived `AVQueuePlayer`,
   the queue, downloads, scrobbling, playback persistence, system media
   controls, direct-stream background caching, and staged

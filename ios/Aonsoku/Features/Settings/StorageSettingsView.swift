@@ -107,7 +107,7 @@ struct StorageSettingsView: View {
             }
             if sync.isSyncing {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(SyncPhaseText.text(sync.phase, t) ?? "")
+                    Text(SyncPhaseText.text(sync.phase, t, operation: sync.operation) ?? "")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     if let fraction = sync.phase.fraction {

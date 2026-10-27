@@ -152,7 +152,7 @@ private struct AccountHeader: View {
                 Text(message).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }
-        if let text = SyncPhaseText.text(sync.phase, t) {
+        if let text = SyncPhaseText.text(sync.phase, t, operation: sync.operation) {
             HStack(spacing: 6) {
                 if sync.isSyncing {
                     ProgressView()
@@ -173,16 +173,28 @@ private struct AccountHeader: View {
 
 /// The library sync phase as the web describes it; nil while idle.
 enum SyncPhaseText {
-    static func text(_ phase: LibrarySyncPhase, _ t: Localizer) -> String? {
+    static func text(_ phase: LibrarySyncPhase, _ t: Localizer, operation: String? = nil) -> String? {
         switch phase {
         case .idle:
             return nil
+        case .waitingForConnection:
+            return t("native.sync.waitingForConnection")
         case let .syncing(tier, processed, total):
-            let label = switch tier {
-            case "t1": t("settings.storage.sync.tier.t1.label")
-            case "t2": t("settings.storage.sync.tier.t2.label")
-            case "t3": t("settings.storage.sync.tier.t3.label")
-            default: t("settings.storage.sync.phases.idle")
+            let label: String
+            switch operation {
+            case "genres": label = t("settings.storage.sync.phases.genres")
+            case "playlists": label = t("settings.storage.sync.phases.playlists")
+            case "favorites": label = t("settings.storage.sync.phases.favorites")
+            case "artists": label = t("settings.storage.sync.phases.artists")
+            case "albums": label = t("settings.storage.sync.phases.albums")
+            case "songs": label = t("settings.storage.sync.phases.songs")
+            default:
+                label = switch tier {
+                case "t1": t("settings.storage.sync.tier.t1.label")
+                case "t2": t("settings.storage.sync.tier.t2.label")
+                case "t3": t("settings.storage.sync.tier.t3.label")
+                default: t("settings.storage.sync.phases.idle")
+                }
             }
             return total > 0 ? "\(label) \(processed)/\(total)" : label
         case let .coverArt(processed, total):

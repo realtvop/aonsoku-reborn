@@ -4,6 +4,7 @@ import Perception
 /// Library sync progress as shown in Settings and Library.
 public enum LibrarySyncPhase: Hashable, Sendable {
     case idle
+    case waitingForConnection
     /// Metadata tier `t1`, `t2` or `t3`.
     case syncing(tier: String?, processed: Int, total: Int)
     case coverArt(processed: Int, total: Int)
@@ -13,7 +14,7 @@ public enum LibrarySyncPhase: Hashable, Sendable {
 
     public var isActive: Bool {
         switch self {
-        case .syncing, .coverArt: true
+        case .waitingForConnection, .syncing, .coverArt: true
         default: false
         }
     }
@@ -37,6 +38,7 @@ public enum LibrarySyncPhase: Hashable, Sendable {
 @Perceptible
 public final class LibrarySyncStore {
     public private(set) var phase = LibrarySyncPhase.idle
+    public private(set) var operation: String?
     public private(set) var lastSyncedAt: Date?
     /// Increments when synced data changes, so lists can reload.
     public private(set) var revision = 0
@@ -113,6 +115,7 @@ public final class LibrarySyncStore {
         revisionPending = false
         operations.cancel()
         phase = .idle
+        operation = nil
     }
 
     /// Full sync of every song (Settings "Sync now").
@@ -130,6 +133,7 @@ public final class LibrarySyncStore {
     public func cancel() {
         operations.cancel()
         phase = .cancelled
+        operation = nil
     }
 
     /// Incremental sync when the app returns to the foreground, throttled.
@@ -144,7 +148,10 @@ public final class LibrarySyncStore {
     func handle(_ event: LibraryEvent) {
         switch event {
         case let .syncStateChanged(state):
+            operation = state.isSyncing ? state.phase : nil
             switch state.phase {
+            case "connecting":
+                phase = .waitingForConnection
             case "done":
                 phase = .done
                 lastSyncedAt = now()

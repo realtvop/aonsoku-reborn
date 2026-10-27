@@ -1,5 +1,6 @@
 {
   "native": {
+    "sync": { "waitingForConnection": "Waiting for server connection…" },
     "serverConnection": {
       "unchecked": "Server not checked",
       "checking": "Checking server…",

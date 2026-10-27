@@ -52,8 +52,10 @@ struct DiagnosticSyncHTTPClient: LibrarySyncHTTPClient {
     func request(baseUrl: String, path: String, credentials: ServerCredentials,
                  extraQuery: [String: String], method: String) async throws -> SubsonicResponse {
         do {
-            return try await base.request(baseUrl: baseUrl, path: path, credentials: credentials,
-                                          extraQuery: extraQuery, method: method)
+            return try await NetworkService.$diagnosticSource.withValue("Sync") {
+                try await base.request(baseUrl: baseUrl, path: path, credentials: credentials,
+                                       extraQuery: extraQuery, method: method)
+            }
         } catch is CancellationError {
             throw CancellationError()
         } catch {
@@ -61,7 +63,7 @@ struct DiagnosticSyncHTTPClient: LibrarySyncHTTPClient {
         }
     }
 
-    private struct RequestFailure: LocalizedError {
+    fileprivate struct RequestFailure: LocalizedError {
         let operation: String
         let underlying: Error
         var errorDescription: String? { "\(operation): \(underlying.localizedDescription)" }
@@ -83,6 +85,7 @@ final class SyncEngine {
     private let credentialsProvider: @Sendable () -> ServerCredentials?
     private let cachedCoverSize: @Sendable (String) -> String?
     private let downloadCover: @Sendable (String, String) async throws -> Void
+    private let prepareConnection: @Sendable (URL) async throws -> Void
 
     private let taskLock = NSLock()
     private var currentTask: Task<Bool, Never>?
@@ -102,10 +105,14 @@ final class SyncEngine {
             KeychainManager.retrieve()
         },
         cachedCoverSize: @escaping @Sendable (String) -> String? = { _ in nil },
-        downloadCover: @escaping @Sendable (String, String) async throws -> Void = { _, _ in }
+        downloadCover: @escaping @Sendable (String, String) async throws -> Void = { _, _ in },
+        prepareConnection: @escaping @Sendable (URL) async throws -> Void = { url in
+            _ = try await NetworkService.prepareConnection(for: url)
+        }
     ) {
         self.db = db
         self.httpClient = DiagnosticSyncHTTPClient(base: httpClient)
+        self.prepareConnection = prepareConnection
         self.syncStateRepo = SyncStateRepository(db: db)
         self.artistRepo = ArtistRepository(db: db)
         self.albumRepo = AlbumRepository(db: db)
@@ -240,6 +247,15 @@ final class SyncEngine {
         emitState(phase: "idle", tier: nil, processed: 0, total: 0)
 
         do {
+            if !shouldSkipTier(.t1, mode: mode) || !shouldSkipTier(.t2, mode: mode)
+                || (includeFullSongs && !shouldSkipTier(.t3, mode: mode)) || coverArt != nil {
+                guard let url = URL(string: credentials.serverUrl) else { throw URLError(.badURL) }
+                emitState(phase: "connecting", tier: nil, processed: 0, total: 0)
+                forceFlushSyncState()
+                try await prepareConnection(url)
+                try Task.checkCancellation()
+                guard isCurrentGeneration(generation) else { throw CancellationError() }
+            }
             if !shouldSkipTier(.t1, mode: mode) {
                 try await runT1(credentials: credentials)
             }
@@ -687,6 +703,9 @@ final class SyncEngine {
         }
 
         let batchSize = 25
+        var processed = 0
+        emitState(phase: "playlists", tier: "t1", processed: 0, total: playlists.count)
+        forceFlushSyncState()
         for offset in stride(from: 0, to: playlists.count, by: batchSize) {
             try Task.checkCancellation()
 
@@ -694,6 +713,7 @@ final class SyncEngine {
             var details: [PlaylistDetailRecord] = []
 
             for playlist in batch {
+                try Task.checkCancellation()
                 do {
                     let response = try await httpClient.request(
                         baseUrl: credentials.serverUrl,
@@ -704,9 +724,23 @@ final class SyncEngine {
                     if let detail = parsePlaylistDetail(from: response.data) {
                         details.append(detail)
                     }
+                } catch is CancellationError {
+                    throw CancellationError()
                 } catch {
+                    // A broken connection must not incur a full timeout for
+                    // every playlist before the UI can leave Essentials.
+                    let cause = (error as? DiagnosticSyncHTTPClient.RequestFailure)?.underlying ?? error
+                    if let failure = cause as? SubsonicHTTPError {
+                        switch failure {
+                        case .networkUnreachable, .authFailed, .protocolIncompatible: throw error
+                        case let .httpError(code, _) where code >= 500 || code == 401 || code == 403: throw error
+                        default: break
+                        }
+                    }
                     NativeLogger.shared.error("failed to load playlist detail \(playlist.id): \(error)", source: "Sync")
                 }
+                processed += 1
+                emitState(phase: "playlists", tier: "t1", processed: processed, total: playlists.count)
             }
 
             if !details.isEmpty {
@@ -714,9 +748,6 @@ final class SyncEngine {
                 try playlistRepo.bulkUpsertDetails(details)
             }
 
-            emitState(phase: "playlists", tier: "t1",
-                      processed: min(offset + batch.count, playlists.count),
-                      total: playlists.count)
         }
     }
 

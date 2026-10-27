@@ -47,6 +47,11 @@ final class LibrarySyncStoreTests: XCTestCase {
     func testMapsPhasesAndCoalescesDataChanges() async throws {
         let fixture = try LibrarySyncStoreFixture()
         fixture.store.handle(.syncStateChanged(LibrarySyncState(
+            phase: "connecting", isSyncing: true, processedItems: 0, totalItems: 0
+        )))
+        XCTAssertEqual(fixture.store.phase, .waitingForConnection)
+        XCTAssertTrue(fixture.store.isSyncing)
+        fixture.store.handle(.syncStateChanged(LibrarySyncState(
             phase: "songs",
             tier: "t3",
             isSyncing: true,
@@ -54,6 +59,7 @@ final class LibrarySyncStoreTests: XCTestCase {
             totalItems: 10
         )))
         XCTAssertEqual(fixture.store.phase, .syncing(tier: "t3", processed: 3, total: 10))
+        XCTAssertEqual(fixture.store.operation, "songs")
         fixture.store.handle(.syncStateChanged(LibrarySyncState(
             phase: "coverArt",
             isSyncing: true,
@@ -69,6 +75,7 @@ final class LibrarySyncStoreTests: XCTestCase {
             message: "failed"
         )))
         XCTAssertEqual(fixture.store.phase, .failed("failed"))
+        XCTAssertNil(fixture.store.operation)
 
         fixture.store.handle(.dataChanged(tables: ["albums"]))
         fixture.store.handle(.dataChanged(tables: ["songs"]))

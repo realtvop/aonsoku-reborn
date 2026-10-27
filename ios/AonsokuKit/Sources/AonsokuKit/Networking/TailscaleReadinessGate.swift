@@ -3,6 +3,7 @@ import Foundation
 public enum TailscaleReadinessError: LocalizedError, Equatable {
     case loginRequired, approvalRequired, connectionTimedOut, subnetRoutesDisabled
     case missingSubnetRoute(String)
+    case peerUnavailable(String)
     case proxyUnavailable(String)
 
     public var errorDescription: String? {
@@ -12,6 +13,7 @@ public enum TailscaleReadinessError: LocalizedError, Equatable {
         case .connectionTimedOut: "Tailscale did not become ready in time."
         case .subnetRoutesDisabled: "Enable Accept Subnet Routes to reach this server through Tailscale."
         case let .missingSubnetRoute(host): "Tailscale has no approved subnet route to \(host)."
+        case let .peerUnavailable(host): "Tailscale has no reachable peer route to \(host)."
         case let .proxyUnavailable(reason): "The Tailscale proxy is unavailable: \(reason)"
         }
     }
@@ -25,6 +27,8 @@ actor TailscaleReadinessGate {
     private struct Flight {
         let id: UUID
         var worker: Task<Void, Never>?
+        var deadline: Task<Void, Never>?
+        var pending = TailscaleReadinessError.connectionTimedOut
         var waiters: [UUID: CheckedContinuation<Void, Error>] = [:]
     }
     private var flights: [String: Flight] = [:]
@@ -46,9 +50,12 @@ actor TailscaleReadinessGate {
                 }
                 let flightID = UUID()
                 flights[host] = Flight(id: flightID, waiters: [waiterID: continuation])
+                flights[host]?.deadline = Task {
+                    do { try await Task.sleep(for: timeout) } catch { return }
+                    guard let flight = flights[host], flight.id == flightID else { return }
+                    finish(host, id: flightID, result: .failure(flight.pending))
+                }
                 flights[host]?.worker = Task {
-                    let deadline = ContinuousClock.now.advanced(by: timeout)
-                    var pending = TailscaleReadinessError.connectionTimedOut
                     do {
                         while true {
                             try Task.checkCancellation()
@@ -56,10 +63,11 @@ actor TailscaleReadinessGate {
                             case .ready:
                                 finish(host, id: flightID, result: .success(()))
                                 return
-                            case let .waiting(reason): pending = reason
+                            case let .waiting(reason):
+                                guard flights[host]?.id == flightID else { return }
+                                flights[host]?.pending = reason
                             }
-                            guard ContinuousClock.now < deadline else { throw pending }
-                            try await Task.sleep(for: min(interval, ContinuousClock.now.duration(to: deadline)))
+                            try await Task.sleep(for: interval)
                         }
                     } catch { finish(host, id: flightID, result: .failure(error)) }
                 }
@@ -74,6 +82,7 @@ actor TailscaleReadinessGate {
         flights.removeAll()
         for flight in old.values {
             flight.worker?.cancel()
+            flight.deadline?.cancel()
             for waiter in flight.waiters.values { waiter.resume(throwing: CancellationError()) }
         }
     }
@@ -82,12 +91,16 @@ actor TailscaleReadinessGate {
         guard let waiter = flights[host]?.waiters.removeValue(forKey: waiterID) else { return }
         waiter.resume(throwing: CancellationError())
         if flights[host]?.waiters.isEmpty == true {
-            flights.removeValue(forKey: host)?.worker?.cancel()
+            let flight = flights.removeValue(forKey: host)
+            flight?.worker?.cancel()
+            flight?.deadline?.cancel()
         }
     }
 
     private func finish(_ host: String, id: UUID, result: Result<Void, Error>) {
         guard flights[host]?.id == id, let flight = flights.removeValue(forKey: host) else { return }
+        flight.worker?.cancel()
+        flight.deadline?.cancel()
         for waiter in flight.waiters.values { waiter.resume(with: result) }
     }
 }

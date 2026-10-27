@@ -37,6 +37,7 @@ public struct HTTPClient: Sendable {
 /// Shared entry point for ordinary HTTP requests. Background downloads,
 /// WebSockets and AVPlayer retain their dedicated transport lifecycles.
 public final class NetworkService: Sendable {
+    @TaskLocal static var diagnosticSource: String?
     public typealias Transport = @Sendable (
         URLRequest, HTTPRequestProfile
     ) async throws -> (Data, URLResponse)
@@ -66,10 +67,33 @@ public final class NetworkService: Sendable {
          direct: @escaping Transport, tailnet: @escaping Transport) {
         self.transport = { request, profile in
             guard let url = request.url else { throw URLError(.badURL) }
-            let useTailnet = try await prepareRoute(url)
-            try Task.checkCancellation()
-            return try await (useTailnet ? tailnet : direct)(request, profile)
+            let start = ContinuousClock.now
+            var route = "not-sent"
+            do {
+                let useTailnet = try await prepareRoute(url)
+                try Task.checkCancellation()
+                route = useTailnet ? "tailscale" : "direct"
+                if let source = Self.diagnosticSource {
+                    NativeLogger.shared.info("\(url.lastPathComponent) route=\(route) started", source: source)
+                }
+                let result = try await (useTailnet ? tailnet : direct)(request, profile)
+                Self.logRequest(url: url, route: route, start: start,
+                                result: "HTTP \((result.1 as? HTTPURLResponse)?.statusCode ?? 0)")
+                return result
+            } catch {
+                let failure = error as NSError
+                Self.logRequest(url: url, route: route, start: start,
+                                result: "\(failure.domain) code=\(failure.code): \(error.localizedDescription)")
+                throw error
+            }
         }
+    }
+
+    private static func logRequest(url: URL, route: String, start: ContinuousClock.Instant, result: String) {
+        guard let source = diagnosticSource else { return }
+        let duration = start.duration(to: .now).components
+        let milliseconds = duration.seconds * 1_000 + duration.attoseconds / 1_000_000_000_000_000
+        NativeLogger.shared.info("\(url.lastPathComponent) route=\(route) elapsed=\(milliseconds)ms \(result)", source: source)
     }
 
     public init(transport: @escaping Transport) {

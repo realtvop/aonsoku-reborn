@@ -105,6 +105,7 @@ public final class TailscaleRouting: @unchecked Sendable {
     private let lock = NSLock()
     private var configuration: Configuration
     private var peerHosts: [String] = []
+    private var knownPeers: Set<String> = []
     private var subnetRoutes: [String] = []
     private var policy = TailscaleRoutePolicy()
     private let defaults: UserDefaults
@@ -132,6 +133,7 @@ public final class TailscaleRouting: @unchecked Sendable {
     func updatePeers(_ hosts: [String], subnetRoutes: [String] = []) {
         lock.withLock {
             peerHosts = hosts
+            knownPeers = Set(hosts.map { $0.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ".[]")) })
             self.subnetRoutes = subnetRoutes
             rebuildPolicy()
         }
@@ -164,5 +166,10 @@ public final class TailscaleRouting: @unchecked Sendable {
 
     func hasAcceptedSubnetRoute(_ url: URL) -> Bool {
         lock.withLock { configuration.acceptSubnetRoutes && policy.matchesSubnet(url) }
+    }
+
+    func hasKnownPeer(_ url: URL) -> Bool {
+        guard let host = url.host?.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ".[]")) else { return false }
+        return lock.withLock { knownPeers.contains(host) }
     }
 }

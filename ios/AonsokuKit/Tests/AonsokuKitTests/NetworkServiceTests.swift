@@ -3,6 +3,21 @@ import XCTest
 @testable import AonsokuKit
 
 final class NetworkServiceTests: XCTestCase {
+    func testSyncDiagnosticsRecordActualRouteWithoutAuthenticatedQuery() async throws {
+        let source = "SyncTest-\(UUID().uuidString)"
+        let network = NetworkService(prepareRoute: { _ in true }, direct: { _, _ in
+            XCTFail("Must use the chosen transport"); throw URLError(.cannotConnectToHost)
+        }, tailnet: { request, _ in
+            (Data(), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        })
+        _ = try await NetworkService.$diagnosticSource.withValue(source) {
+            try await network.client().data(from: URL(string: "https://alice:secret@music.test/rest/getGenres.view?p=secret")!)
+        }
+        let entries = NativeLogger.shared.getEntries().filter { $0.source == source }
+        XCTAssertTrue(entries.contains { $0.message.contains("getGenres.view route=tailscale elapsed=") })
+        XCTAssertFalse(entries.contains { $0.message.contains("secret") || $0.message.contains("alice") })
+    }
+
     func testSubsonicClientsReachSharedBoundaryWithSignedRequests() async throws {
         let calls = LockedTestBox<[(URLRequest, HTTPRequestProfile)]>([])
         let network = NetworkService { request, profile in

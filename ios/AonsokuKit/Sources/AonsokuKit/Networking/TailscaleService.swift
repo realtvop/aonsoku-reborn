@@ -42,8 +42,9 @@ public actor TailscaleService {
     private func destinationHasRoute(_ url: URL) -> Bool {
         // Hostnames resolve inside tsnet. Literal subnet IPs need an approved
         // prefix, even if the user also listed the address as an explicit host.
-        !TailscaleRoutePolicy.isIP(url) || TailscaleRoutePolicy().routes(url)
-            || TailscaleRouting.shared.hasAcceptedSubnetRoute(url)
+        guard TailscaleRoutePolicy.isIP(url) else { return true }
+        if TailscaleRoutePolicy().routes(url) { return TailscaleRouting.shared.hasKnownPeer(url) }
+        return TailscaleRouting.shared.hasAcceptedSubnetRoute(url)
     }
 
     private func checkReadiness(for url: URL, generation: UInt64) async throws -> TailscaleReadinessCheck {
@@ -54,6 +55,7 @@ public actor TailscaleService {
         case .needsApproval: throw TailscaleReadinessError.approvalRequired
         case .connected:
             guard destinationHasRoute(url) else {
+                if TailscaleRoutePolicy().routes(url) { return .waiting(.peerUnavailable(url.host ?? "")) }
                 if !TailscaleRouting.shared.current.acceptSubnetRoutes { throw TailscaleReadinessError.subnetRoutesDisabled }
                 return .waiting(.missingSubnetRoute(url.host ?? ""))
             }
