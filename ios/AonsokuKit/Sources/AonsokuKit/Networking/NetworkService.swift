@@ -55,6 +55,7 @@ public final class NetworkService: Sendable {
         artwork.timeoutIntervalForResource = 120
         let artworkSession = URLSession(configuration: artwork)
 
+        let fallback = ServerURLFallback.live
         self.init { request, profile in
             let session: URLSession
             switch profile {
@@ -62,7 +63,14 @@ public final class NetworkService: Sendable {
             case .subsonic: session = subsonicSession
             case .artwork: session = artworkSession
             }
-            return try await session.data(for: request)
+            // Login/address-edit probes must test the exact address entered.
+            let endpoint = request.url?.deletingPathExtension().lastPathComponent
+            if case .subsonic = profile, endpoint == "ping" {
+                return try await session.data(for: request)
+            }
+            return try await fallback.data(for: request) { request in
+                try await session.data(for: request)
+            }
         }
     }
 

@@ -76,7 +76,7 @@ public enum ServerCompatibility: Hashable, Sendable {
 @MainActor
 @Perceptible
 public final class SessionStore {
-    public static let accountStorageKey = "session.account.v1"
+    public nonisolated static let accountStorageKey = "session.account.v1"
 
     public private(set) var state: SessionState = .restoring
     /// The signed-in user's roles, loaded with `getUser` when online.
@@ -86,6 +86,7 @@ public final class SessionStore {
     @PerceptionIgnored public let preferences: PreferencesService
     @PerceptionIgnored public let api: any SubsonicAPI
     @PerceptionIgnored private let authenticationClient: SessionAuthenticationClient
+    @PerceptionIgnored private var serverURLObserver: NSObjectProtocol?
 
     public init(
         authentication: AuthenticationService,
@@ -96,6 +97,7 @@ public final class SessionStore {
         self.preferences = preferences
         self.api = api
         self.authenticationClient = .live(authentication)
+        observeServerURLChanges()
     }
 
     init(
@@ -108,6 +110,27 @@ public final class SessionStore {
         self.authenticationClient = authenticationClient
         self.preferences = preferences
         self.api = api
+        observeServerURLChanges()
+    }
+
+    deinit {
+        if let serverURLObserver { NotificationCenter.default.removeObserver(serverURLObserver) }
+    }
+
+    private func observeServerURLChanges() {
+        serverURLObserver = NotificationCenter.default.addObserver(
+            forName: .serverURLDidChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, var account = self.account,
+                      let credentials = self.authenticationClient.getCredentials(),
+                      credentials.username == account.username,
+                      [account.primaryUrl, account.fallbackUrl].contains(credentials.serverUrl)
+                else { return }
+                account.activeUrl = credentials.serverUrl
+                self.state = .signedIn(account)
+            }
+        }
     }
 
     public var account: ServerAccount? {

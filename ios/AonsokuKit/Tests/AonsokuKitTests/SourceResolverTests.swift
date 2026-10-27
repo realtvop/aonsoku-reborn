@@ -110,7 +110,8 @@ final class SourceResolverTests: XCTestCase {
                     fallbackUrl: value.fallbackUrl
                 )
                 return value
-            }
+            },
+            credentialsTTL: 30
         )
         let first = try XCTUnwrap(resolver.buildStreamUrl(songId: "song"))
         username = "second"
@@ -130,6 +131,20 @@ final class SourceResolverTests: XCTestCase {
         XCTAssertEqual(firstQuery["u"], "first")
         XCTAssertEqual(firstQuery, cachedQuery)
         XCTAssertEqual(refreshedQuery["u"], "second")
+    }
+
+    func testDefaultResolverUsesSwitchedServerOnNextStream() throws {
+        var address = "https://main.test"
+        let resolver = NativeSourceResolver(cacheDirectories: [], credentialsProvider: {
+            ServerCredentials(
+                serverUrl: address, username: "alice", password: "secret",
+                authType: "password", protocolVersion: "1.16.0",
+                serverType: "navidrome", fallbackUrl: "https://backup.test"
+            )
+        })
+        XCTAssertEqual(URL(string: try XCTUnwrap(resolver.buildStreamUrl(songId: "song")))?.host, "main.test")
+        address = "https://backup.test"
+        XCTAssertEqual(URL(string: try XCTUnwrap(resolver.buildStreamUrl(songId: "song")))?.host, "backup.test")
     }
 
     private var credentials: ServerCredentials {
