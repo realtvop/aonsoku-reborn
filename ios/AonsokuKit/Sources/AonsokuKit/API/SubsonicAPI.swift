@@ -686,18 +686,32 @@ public struct LiveSubsonicAPI: SubsonicAPI {
 /// Signs requests with the stored credentials through
 /// `AuthenticationService.url(path:query:)` and appends repeated parameters.
 public struct AuthenticatedSubsonicTransport: SubsonicTransport {
-    private let session: URLSession
+    private let client: HTTPClient
     private let urlBuilder: @Sendable (String) -> URL?
 
-    public init(authentication: AuthenticationService = .shared, session: URLSession = .shared) {
-        self.init(urlBuilder: { authentication.url(path: $0) }, session: session)
+    public init(
+        authentication: AuthenticationService = .shared,
+        client: HTTPClient = NetworkService.shared.client()
+    ) {
+        self.init(urlBuilder: { authentication.url(path: $0) }, client: client)
+    }
+
+    public init(authentication: AuthenticationService = .shared, session: URLSession) {
+        self.init(authentication: authentication, client: HTTPClient(session: session))
     }
 
     internal init(
         urlBuilder: @escaping @Sendable (String) -> URL?,
         session: URLSession
     ) {
-        self.session = session
+        self.init(urlBuilder: urlBuilder, client: HTTPClient(session: session))
+    }
+
+    internal init(
+        urlBuilder: @escaping @Sendable (String) -> URL?,
+        client: HTTPClient
+    ) {
+        self.client = client
         self.urlBuilder = urlBuilder
     }
 
@@ -725,7 +739,7 @@ public struct AuthenticatedSubsonicTransport: SubsonicTransport {
 
         let result: (Data, URLResponse)
         do {
-            result = try await session.data(for: urlRequest)
+            result = try await client.data(for: urlRequest)
         } catch {
             throw SubsonicAPIError(mapping: error)
         }

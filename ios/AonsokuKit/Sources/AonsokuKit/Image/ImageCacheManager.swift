@@ -13,27 +13,32 @@ final class ImageCacheManager: @unchecked Sendable {
     private static let publication = ImageCachePublicationState()
 
     private let db: DatabasePool
-    private let session: URLSession
+    private let client: HTTPClient
     private let credentialsProvider: @Sendable () -> ServerCredentials?
 
     convenience init(db: DatabasePool) {
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 30
-        config.timeoutIntervalForResource = 120
         self.init(
             db: db,
-            session: URLSession(configuration: config),
+            client: NetworkService.shared.client(for: .artwork),
             credentialsProvider: { KeychainManager.retrieve() }
         )
     }
 
-    init(
+    convenience init(
         db: DatabasePool,
         session: URLSession,
         credentialsProvider: @escaping @Sendable () -> ServerCredentials?
     ) {
+        self.init(db: db, client: HTTPClient(session: session), credentialsProvider: credentialsProvider)
+    }
+
+    init(
+        db: DatabasePool,
+        client: HTTPClient,
+        credentialsProvider: @escaping @Sendable () -> ServerCredentials?
+    ) {
         self.db = db
-        self.session = session
+        self.client = client
         self.credentialsProvider = credentialsProvider
     }
 
@@ -47,7 +52,7 @@ final class ImageCacheManager: @unchecked Sendable {
 
         let directory = try ImageCacheUtils.cacheDirectoryURL(createIfNeeded: true)
         let url = try buildAvatarURL(credentials: credentials, username: username, size: size)
-        let (data, response) = try await session.data(from: url)
+        let (data, response) = try await client.data(from: url)
 
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode >= 200, httpResponse.statusCode < 300 else {
@@ -79,7 +84,7 @@ final class ImageCacheManager: @unchecked Sendable {
         let directory = try ImageCacheUtils.cacheDirectoryURL(createIfNeeded: true)
 
         let url = try buildCoverArtURL(credentials: credentials, coverArtId: coverArtId, size: size)
-        let (data, response) = try await session.data(from: url)
+        let (data, response) = try await client.data(from: url)
 
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode >= 200, httpResponse.statusCode < 300 else {

@@ -15,17 +15,14 @@ public struct SubsonicResponse {
 }
 
 public final class SubsonicHTTPClient {
-    private let session: URLSession
+    private let client: HTTPClient
 
-    public convenience init() {
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 30
-        config.timeoutIntervalForResource = 300
-        self.init(session: URLSession(configuration: config))
+    public init(client: HTTPClient = NetworkService.shared.client(for: .subsonic)) {
+        self.client = client
     }
 
-    init(session: URLSession) {
-        self.session = session
+    convenience init(session: URLSession) {
+        self.init(client: HTTPClient(session: session))
     }
 
     public func request(
@@ -47,7 +44,7 @@ public final class SubsonicHTTPClient {
 
         let (data, response): (Data, URLResponse)
         do {
-            (data, response) = try await session.data(for: request)
+            (data, response) = try await client.data(for: request)
         } catch {
             throw SubsonicHTTPError.networkUnreachable(error.localizedDescription)
         }

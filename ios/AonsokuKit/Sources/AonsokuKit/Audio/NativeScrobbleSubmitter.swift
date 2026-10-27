@@ -15,8 +15,8 @@ class NativeScrobbleSubmitter {
     private var pendingSubmissionId: UUID?
     private var pendingSubmissionTask: Task<Void, Never>?
 
-    convenience init() {
-        let httpClient = SubsonicHTTPClient()
+    convenience init(client: HTTPClient = NetworkService.shared.client(for: .subsonic)) {
+        let httpClient = SubsonicHTTPClient(client: client)
         self.init(
             credentialsProvider: { KeychainManager.retrieve() },
             request: { credentials, songId, submission, timestamp in

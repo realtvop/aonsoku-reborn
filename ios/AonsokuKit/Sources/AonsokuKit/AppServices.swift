@@ -9,6 +9,7 @@ public final class AppServices: @unchecked Sendable {
     public let authentication: AuthenticationService
     public let preferences: PreferencesService
     public let coordination: CoordinationService
+    public let network: NetworkService
 
     private convenience init() {
         self.init(audio: AudioService(), library: LibraryService())
@@ -29,6 +30,7 @@ public final class AppServices: @unchecked Sendable {
         self.authentication = authentication
         self.preferences = preferences
         self.coordination = coordination
+        self.network = .shared
         self.lifecycle = lifecycleFactory(audio)
     }
 }

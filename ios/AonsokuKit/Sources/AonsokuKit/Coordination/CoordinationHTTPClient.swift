@@ -32,7 +32,7 @@ final class CoordinationHTTPClient: CoordinationAPIClient, @unchecked Sendable {
     ///   - recoveryProof: Builds a proof from the current Subsonic
     ///     credentials when the server rejects the refresh token; nil when
     ///     none are available.
-    ///   - transport: Performs requests; defaults to `URLSession.shared`.
+    ///   - transport: Performs requests through the shared network service.
     ///   - now: Clock used for token expiry.
     init(
         baseURL: String,
@@ -50,7 +50,7 @@ final class CoordinationHTTPClient: CoordinationAPIClient, @unchecked Sendable {
     }
 
     static let urlSessionTransport: CoordinationTransport = { request in
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await NetworkService.shared.client().data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw CoordinationError(code: CoordinationErrorCode.internal)
         }

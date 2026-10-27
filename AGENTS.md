@@ -416,7 +416,14 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   invalidates old downloads before serializing file/index publication. Sign-out
   also resets application-owned artwork tasks, including queued requests.
 - The iOS app owns long-lived native services through
-  `AonsokuKit.AppServices`. `AudioService` owns a long-lived `AVQueuePlayer`,
+  `AonsokuKit.AppServices`. `NetworkService.shared` is the ordinary HTTP
+  request boundary, exposed as `AppServices.network`. Its injectable `HTTPClient`
+  values serve authentication, Subsonic APIs/scrobbling, image downloads,
+  external lyrics and coordination HTTP. Request profiles preserve the existing
+  standard, Subsonic and artwork session policies. Transport selection belongs
+  here, rather than in views or individual API clients. AVPlayer, background
+  downloads and coordination WebSockets retain their dedicated lifecycles.
+  `AudioService` owns a long-lived `AVQueuePlayer`,
   the queue, downloads, scrobbling, playback persistence, system media
   controls, direct-stream background caching, and staged
   `PlaybackRecoveryController` seek/reload fallback.

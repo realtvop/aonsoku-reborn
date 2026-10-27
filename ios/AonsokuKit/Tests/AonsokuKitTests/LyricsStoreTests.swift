@@ -57,7 +57,7 @@ final class LyricsStoreTests: XCTestCase {
             ]
         }
         fixture.api.lyricsHandler = { _, _ in SubsonicPlainLyrics(value: "Plain") }
-        fixture.store.urlSession = makeLyricsSession()
+        fixture.store.httpClient = HTTPClient(session: makeLyricsSession())
         LyricsURLProtocolStub.handler = { request in
             let body = Data(#"{"plainLyrics":"Plain LRC","syncedLyrics":"[00:01.00]Synced"}"#.utf8)
             return (lyricsResponse(request, contentType: "application/json"), body)
@@ -80,7 +80,7 @@ final class LyricsStoreTests: XCTestCase {
             $0.lyrics.customServerUrl = "https://lyrics.example/search?existing=1"
             $0.lyrics.customServerPassword = "secret"
         }
-        fixture.store.urlSession = makeLyricsSession()
+        fixture.store.httpClient = HTTPClient(session: makeLyricsSession())
         let captured = LockedTestBox<URLRequest?>(nil)
         LyricsURLProtocolStub.handler = { request in
             captured.update { $0 = request }
@@ -122,7 +122,7 @@ final class LyricsStoreTests: XCTestCase {
             $0.lyrics.customServerEnabled = false
         }
         fixture.store.serverType = { "lms" }
-        fixture.store.urlSession = makeLyricsSession()
+        fixture.store.httpClient = HTTPClient(session: makeLyricsSession())
         let captured = LockedTestBox<URLRequest?>(nil)
         LyricsURLProtocolStub.handler = { request in
             captured.update { $0 = request }

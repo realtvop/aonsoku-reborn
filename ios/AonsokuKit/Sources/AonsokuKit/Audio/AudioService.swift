@@ -76,7 +76,8 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private var currentReplayGain: AudioReplayGain?
     private var metadata = AudioMetadata()
     private var nowPlayingRevision = 0
-    private var artworkTask: URLSessionDataTask?
+    private var artworkTask: Task<Void, Never>?
+    private let artworkClient: HTTPClient
     private var playbackState: AudioPlaybackSnapshot.State = .idle
     /// Remains true while an automatic load or recovery waits for audio.
     private var wantsPlayback = false
@@ -122,7 +123,8 @@ public final class AudioService: NSObject, @unchecked Sendable {
         scrobbleSubmitter: NativeScrobbleSubmitter = NativeScrobbleSubmitter(),
         recoveryController: PlaybackRecoveryController = PlaybackRecoveryController(),
         playerItemFactory: @escaping PlayerItemFactory = { AVPlayerItem(url: $0) },
-        playerFactory: @escaping PlayerFactory = { AVQueuePlayer(items: [$0]) }
+        playerFactory: @escaping PlayerFactory = { AVQueuePlayer(items: [$0]) },
+        artworkClient: HTTPClient = NetworkService.shared.client()
     ) {
         self.databaseManager = databaseManager
         self.queueEngine = queueEngine
@@ -133,6 +135,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
         self.recoveryController = recoveryController
         self.playerFactory = playerFactory
         self.playerItemFactory = playerItemFactory
+        self.artworkClient = artworkClient
         self.persistence = PlaybackStatePersistence(
             repository: PlaybackStateRepository(db: databaseManager.dbPool)
         )
@@ -2716,12 +2719,12 @@ public final class AudioService: NSObject, @unchecked Sendable {
         coverArtId explicitCoverArtId: String?,
         revision: Int
     ) {
-        var coverArtId = explicitCoverArtId
-        if let components = URLComponents(string: urlString),
-           components.scheme == "aonsoku-media",
-           let queryItems = components.queryItems {
-            coverArtId = coverArtId ?? queryItems.first(where: { $0.name == "id" })?.value
-        }
+        let coverArtId: String? = {
+            if let explicitCoverArtId { return explicitCoverArtId }
+            guard let components = URLComponents(string: urlString),
+                  components.scheme == "aonsoku-media" else { return nil }
+            return components.queryItems?.first(where: { $0.name == "id" })?.value
+        }()
         let imageCache: ImageCacheManager?
         let publication: ImageCachePublicationToken?
         if let coverArtId, !coverArtId.isEmpty {
@@ -2766,30 +2769,32 @@ public final class AudioService: NSObject, @unchecked Sendable {
             }
 
             guard let url = URL(string: urlString) else { return }
-            let task = URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
-                guard let self, error == nil, let data,
-                      let image = UIImage(data: data) else { return }
-                if let coverArtId, !coverArtId.isEmpty,
-                   let imageCache, let publication {
-                    let contentType = (response as? HTTPURLResponse)?
-                        .value(forHTTPHeaderField: "Content-Type") ?? "image/jpeg"
-                    _ = try? imageCache.storeCoverImage(
-                        coverArtId: coverArtId,
-                        data: data,
-                        contentType: contentType,
-                        coverSize: "800",
-                        expectedPublication: publication
-                    )
-                }
-                self.publishNowPlayingArtwork(image, revision: revision)
-            }
             DispatchQueue.main.async {
-                guard self.nowPlayingRevision == revision else {
-                    task.cancel()
-                    return
+                guard self.nowPlayingRevision == revision else { return }
+                let client = self.artworkClient
+                self.artworkTask = Task.detached { [weak self] in
+                    do {
+                        let (data, response) = try await client.data(from: url)
+                        guard !Task.isCancelled, let self,
+                              let image = UIImage(data: data) else { return }
+                        if let coverArtId, !coverArtId.isEmpty,
+                           let imageCache, let publication {
+                            let contentType = (response as? HTTPURLResponse)?
+                                .value(forHTTPHeaderField: "Content-Type") ?? "image/jpeg"
+                            _ = try? imageCache.storeCoverImage(
+                                coverArtId: coverArtId,
+                                data: data,
+                                contentType: contentType,
+                                coverSize: "800",
+                                expectedPublication: publication
+                            )
+                        }
+                        self.publishNowPlayingArtwork(image, revision: revision)
+                    } catch {
+                        // Artwork is optional; cancellation and request failures
+                        // retain the current placeholder, as with data tasks.
+                    }
                 }
-                self.artworkTask = task
-                task.resume()
             }
         }
     }

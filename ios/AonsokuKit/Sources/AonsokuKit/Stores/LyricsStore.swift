@@ -23,7 +23,7 @@ public final class LyricsStore {
     @PerceptionIgnored public let preferences: PreferencesService
     /// The signed-in server type, for the LMS artist rule.
     @PerceptionIgnored public var serverType: @MainActor () -> String? = { nil }
-    @PerceptionIgnored public var urlSession: URLSession = .shared
+    @PerceptionIgnored public var httpClient: HTTPClient
 
     @PerceptionIgnored private var currentSong: Song?
     @PerceptionIgnored private var currentSongKey: String?
@@ -43,12 +43,14 @@ public final class LyricsStore {
         api: any SubsonicAPI,
         library: LibraryService,
         settings: SettingsStore,
-        preferences: PreferencesService
+        preferences: PreferencesService,
+        httpClient: HTTPClient = NetworkService.shared.client()
     ) {
         self.api = api
         self.library = library
         self.settings = settings
         self.preferences = preferences
+        self.httpClient = httpClient
         cachedLyrics = { try library.lyrics(songId: $0) }
         storeCachedLyrics = { try library.storeLyrics(songId: $0, content: $1, synced: $2) }
         now = Date.init
@@ -66,12 +68,14 @@ public final class LyricsStore {
         cachedLyrics: @escaping (String) throws -> LibraryLyrics?,
         storeCachedLyrics: @escaping (String, String, Bool) throws -> Void,
         now: @escaping () -> Date = Date.init,
-        appVersion: @escaping () -> String = { "test" }
+        appVersion: @escaping () -> String = { "test" },
+        httpClient: HTTPClient = NetworkService.shared.client()
     ) {
         self.api = api
         self.library = library
         self.settings = settings
         self.preferences = preferences
+        self.httpClient = httpClient
         self.cachedLyrics = cachedLyrics
         self.storeCachedLyrics = storeCachedLyrics
         self.now = now
@@ -432,7 +436,7 @@ public final class LyricsStore {
         request.setValue(client, forHTTPHeaderField: "Lrclib-Client")
         request.setValue(client, forHTTPHeaderField: "User-Agent")
         do {
-            let (data, response) = try await urlSession.data(for: request)
+            let (data, response) = try await httpClient.data(for: request)
             guard Self.isSuccessful(response) else {
                 return Self.isConnectivity(response) ? .connectivityFailure : .missing
             }
@@ -558,7 +562,7 @@ public final class LyricsStore {
         if let password = password.trimmedNonempty {
             request.setValue(password, forHTTPHeaderField: "Authorization")
         }
-        let (data, response) = try await urlSession.data(for: request)
+        let (data, response) = try await httpClient.data(for: request)
         guard Self.isSuccessful(response) else {
             throw LyricsHTTPError(status: (response as? HTTPURLResponse)?.statusCode ?? 0)
         }
