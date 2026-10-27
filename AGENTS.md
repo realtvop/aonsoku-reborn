@@ -470,7 +470,12 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   Library sync wraps HTTP failures with the endpoint name and underlying
   localized error, excluding authenticated request URLs/query parameters.
   Storage settings shows that detail and allows a manual retry; the account
-  summary retains the compact sync phase. Canceled HTTP requests follow sync's
+  summary shows sync independently of server reachability. Opening the avatar
+  sheet performs an authenticated ping through the normal request boundary;
+  only success shows Server Reachable. It never infers server/Tailscale health
+  from the system network path. Account/address changes invalidate the result,
+  and late or canceled checks cannot publish a status for another session.
+  Canceled HTTP requests follow sync's
   cancellation path rather than becoming a network failure.
   `AudioService` owns a long-lived `AVQueuePlayer`,
   the queue, downloads, scrobbling, playback persistence, system media

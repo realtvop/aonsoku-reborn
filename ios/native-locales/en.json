@@ -1,5 +1,11 @@
 {
   "native": {
+    "serverConnection": {
+      "unchecked": "Server not checked",
+      "checking": "Checking server…",
+      "available": "Server reachable",
+      "failed": "Server connection failed"
+    },
     "generic": {
       "retry": "Try Again"
     },

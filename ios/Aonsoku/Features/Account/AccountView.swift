@@ -115,6 +115,9 @@ private struct AccountHeader: View {
                 }
             }
             .padding(.vertical, 4)
+            .task(id: ConnectionCheckIdentity(account: session.account, online: network.isOnline)) {
+                if network.isOnline { await session.checkServerConnection() }
+            }
         }
     }
 
@@ -129,7 +132,27 @@ private struct AccountHeader: View {
         if !network.isOnline {
             Label(t("offline.mode"), systemImage: "wifi.slash")
                 .foregroundStyle(.orange)
-        } else if let text = SyncPhaseText.text(sync.phase, t) {
+        } else {
+            switch session.serverConnection {
+            case .unchecked:
+                Label(t("native.serverConnection.unchecked"), systemImage: "questionmark.circle")
+                    .foregroundStyle(.secondary)
+            case .checking:
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.mini)
+                    Text(t("native.serverConnection.checking")).foregroundStyle(.secondary)
+                }
+            case .available:
+                Label(t("native.serverConnection.available"), systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            case let .failed(message):
+                Label(t("native.serverConnection.failed"), systemImage: "exclamationmark.circle")
+                    .foregroundStyle(.red)
+                    .accessibilityHint(message)
+                Text(message).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        if let text = SyncPhaseText.text(sync.phase, t) {
             HStack(spacing: 6) {
                 if sync.isSyncing {
                     ProgressView()
@@ -139,10 +162,12 @@ private struct AccountHeader: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-        } else {
-            Label(t("settings.crossDevice.connectionState.connected"), systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
         }
+    }
+
+    private struct ConnectionCheckIdentity: Hashable {
+        let account: ServerAccount?
+        let online: Bool
     }
 }
 

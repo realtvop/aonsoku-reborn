@@ -3,6 +3,54 @@ import XCTest
 
 @MainActor
 final class SessionStoreTests: XCTestCase {
+    func testAvatarConnectionRequiresAuthenticatedPingAndRecoversFromFailure() async throws {
+        let database = try TemporaryDatabase()
+        let api = FakeSubsonicAPI()
+        let store = makeStore(preferences: PreferencesService(db: database.manager.dbPool), api: api,
+                              client: makeClient(getCredentials: { self.makeCredentials() }))
+        store.restore()
+        XCTAssertEqual(store.serverConnection, .unchecked)
+        api.pingHandler = { throw SubsonicAPIError.timedOut }
+        await store.checkServerConnection()
+        XCTAssertEqual(store.serverConnection, .failed(SubsonicAPIError.timedOut.localizedDescription))
+        api.pingHandler = { ServerInfo(type: "navidrome", protocolVersion: "1.16.1") }
+        await store.checkServerConnection()
+        XCTAssertEqual(store.serverConnection, .available)
+    }
+
+    func testLateServerPingCannotPublishAfterSignOut() async throws {
+        let database = try TemporaryDatabase()
+        let api = FakeSubsonicAPI()
+        let store = makeStore(preferences: PreferencesService(db: database.manager.dbPool), api: api,
+                              client: makeClient(getCredentials: { self.makeCredentials() }))
+        store.restore()
+        let started = expectation(description: "Ping started")
+        let release = LockedTestBox<CheckedContinuation<ServerInfo, Error>?>(nil)
+        api.pingHandler = {
+            try await withCheckedThrowingContinuation { continuation in
+                release.update { $0 = continuation }; started.fulfill()
+            }
+        }
+        let check = Task { await store.checkServerConnection() }
+        await fulfillment(of: [started], timeout: 1)
+        XCTAssertEqual(store.serverConnection, .checking)
+        store.signOut()
+        release.read { $0 }?.resume(returning: ServerInfo(type: "navidrome", protocolVersion: "1.16.1"))
+        await check.value
+        XCTAssertEqual(store.serverConnection, .unchecked)
+    }
+
+    func testCanceledAvatarCheckDoesNotReportServerFailure() async throws {
+        let database = try TemporaryDatabase()
+        let api = FakeSubsonicAPI()
+        let store = makeStore(preferences: PreferencesService(db: database.manager.dbPool), api: api,
+                              client: makeClient(getCredentials: { self.makeCredentials() }))
+        store.restore()
+        api.pingHandler = { throw CancellationError() }
+        await store.checkServerConnection()
+        XCTAssertEqual(store.serverConnection, .unchecked)
+    }
+
     func testRestorePrefersAccountRecordWhenCredentialsAreLocked() throws {
         let database = try TemporaryDatabase()
         let preferences = PreferencesService(db: database.manager.dbPool)

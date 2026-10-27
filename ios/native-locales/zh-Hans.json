@@ -1,5 +1,11 @@
 {
   "native": {
+    "serverConnection": {
+      "unchecked": "尚未检查服务器",
+      "checking": "正在检查服务器…",
+      "available": "服务器连接正常",
+      "failed": "服务器连接失败"
+    },
     "generic": {
       "retry": "重试"
     },
