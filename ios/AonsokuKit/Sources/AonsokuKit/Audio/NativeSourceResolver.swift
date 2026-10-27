@@ -85,30 +85,13 @@ class NativeSourceResolver {
         if song.streamUrl.hasPrefix("http://") ||
             song.streamUrl.hasPrefix("https://") {
             guard let streamUrl = URL(string: song.streamUrl) else { return nil }
-            // Queues may retain authenticated URLs created before the user
-            // changed this setting. Refresh only Subsonic stream endpoints;
-            // arbitrary HTTP/radio URLs must pass through unchanged.
-            return (updatingStreamOptions(in: streamUrl), "stream")
+            // Library URLs have already become logical references at queue
+            // import. External audio must retain its original query and host.
+            return (streamUrl, "stream")
         }
 
-        if song.streamUrl.hasPrefix("aonsoku-media://stream"),
-           let components = URLComponents(string: song.streamUrl),
-           let queryItems = components.queryItems {
-            let values = Dictionary(
-                queryItems.compactMap { item in
-                    item.value.map { (item.name, $0) }
-                },
-                uniquingKeysWith: { _, last in last }
-            )
-            let songId = values["id"].flatMap { $0.isEmpty ? nil : $0 } ?? song.id
-            var extra: [String: String] = [:]
-            if let maxBitRate = values["maxBitRate"] {
-                extra["maxBitRate"] = maxBitRate
-            }
-            if let format = values["format"] {
-                extra["format"] = format
-            }
-            return buildAuthenticatedStreamUrl(songId: songId, extra: extra)
+        if let reference = LibraryMediaReference(streamURL: song.streamUrl, fallbackSongID: song.id) {
+            return buildAuthenticatedStreamUrl(songId: reference.songID, extra: reference.options)
                 .map { ($0, "stream") }
         }
 
@@ -153,20 +136,6 @@ class NativeSourceResolver {
         buildAuthenticatedStreamUrl(songId: songId, extra: [:])?.absoluteString
     }
 
-    private func updatingStreamOptions(in url: URL) -> URL {
-        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              components.path.hasSuffix("/rest/stream") ||
-                components.path.hasSuffix("/rest/stream.view") else { return url }
-        var query = components.queryItems ?? []
-        query.removeAll { $0.name == "estimateContentLength" }
-        query.append(URLQueryItem(
-            name: "estimateContentLength",
-            value: String(estimateContentLengthProvider())
-        ))
-        components.queryItems = query
-        return components.url ?? url
-    }
-
     private func buildAuthenticatedStreamUrl(
         songId: String,
         extra: [String: String]
@@ -192,6 +161,8 @@ class NativeSourceResolver {
         let baseString = "\(baseUrl)/rest/stream"
         guard var components = URLComponents(string: baseString) else { return nil }
         components.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
+        components.percentEncodedQuery = components.percentEncodedQuery?
+            .replacingOccurrences(of: "+", with: "%2B")
         return components.url
     }
 

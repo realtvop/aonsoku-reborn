@@ -83,7 +83,9 @@ final class StreamRequestSettingsTests: XCTestCase {
                 XCTAssertEqual(values["maxBitRate"], "320")
                 XCTAssertEqual(values["format"], "mp3")
                 XCTAssertEqual(values["u"], "alice")
-                XCTAssertEqual(result.url.path, path)
+                // Both legacy endpoint spellings migrate to the same identity;
+                // the resolver chooses its canonical endpoint at playback time.
+                XCTAssertEqual(result.url.path, "/base/rest/stream")
             }
 
             var customURL = URLComponents()

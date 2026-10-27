@@ -9,6 +9,8 @@ public struct QueueSong: Codable, Equatable, Sendable {
     public let albumId: String?
     public let duration: Double
     public let coverArtId: String?
+    /// A logical library reference or an original external audio URL. Resolved
+    /// authenticated/proxy URLs belong only to the playback transport.
     public let streamUrl: String
     public let cachedFileUri: String?
     /// Loudness tags for ReplayGain; nil when the server sent none.
@@ -35,23 +37,47 @@ public struct QueueSong: Codable, Equatable, Sendable {
         self.albumId = albumId
         self.duration = duration
         self.coverArtId = coverArtId
-        self.streamUrl = streamUrl
+        self.streamUrl = LibraryMediaReference.canonicalStreamURL(streamUrl, songID: id)
         self.cachedFileUri = cachedFileUri
         self.replayGain = replayGain
     }
 
     init(from dict: [String: Any]) {
-        self.id = dict["id"] as? String ?? ""
-        self.title = dict["title"] as? String ?? ""
-        self.artist = dict["artist"] as? String ?? ""
-        self.artistId = dict["artistId"] as? String
-        self.album = dict["album"] as? String ?? ""
-        self.albumId = dict["albumId"] as? String
-        self.duration = dict["duration"] as? Double ?? 0
-        self.coverArtId = dict["coverArtId"] as? String
-        self.streamUrl = dict["streamUrl"] as? String ?? ""
-        self.cachedFileUri = dict["cachedFileUri"] as? String
-        self.replayGain = (dict["replayGain"] as? [String: Any]).flatMap(AudioReplayGain.init(from:))
+        self.init(
+            id: dict["id"] as? String ?? "",
+            title: dict["title"] as? String ?? "",
+            artist: dict["artist"] as? String ?? "",
+            artistId: dict["artistId"] as? String,
+            album: dict["album"] as? String ?? "",
+            albumId: dict["albumId"] as? String,
+            duration: dict["duration"] as? Double ?? 0,
+            coverArtId: dict["coverArtId"] as? String,
+            streamUrl: dict["streamUrl"] as? String ?? "",
+            cachedFileUri: dict["cachedFileUri"] as? String,
+            replayGain: (dict["replayGain"] as? [String: Any]).flatMap(AudioReplayGain.init(from:))
+        )
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title, artist, artistId, album, albumId, duration, coverArtId
+        case streamUrl, cachedFileUri, replayGain
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try values.decode(String.self, forKey: .id),
+            title: try values.decode(String.self, forKey: .title),
+            artist: try values.decode(String.self, forKey: .artist),
+            artistId: try values.decodeIfPresent(String.self, forKey: .artistId),
+            album: try values.decode(String.self, forKey: .album),
+            albumId: try values.decodeIfPresent(String.self, forKey: .albumId),
+            duration: try values.decode(Double.self, forKey: .duration),
+            coverArtId: try values.decodeIfPresent(String.self, forKey: .coverArtId),
+            streamUrl: try values.decode(String.self, forKey: .streamUrl),
+            cachedFileUri: try values.decodeIfPresent(String.self, forKey: .cachedFileUri),
+            replayGain: try values.decodeIfPresent(AudioReplayGain.self, forKey: .replayGain)
+        )
     }
 
     func toDict() -> [String: Any] {

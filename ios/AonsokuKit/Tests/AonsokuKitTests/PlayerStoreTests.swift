@@ -7,6 +7,19 @@ import XCTest
 
 @MainActor
 final class PlayerStoreTests: XCTestCase {
+    func testQueueStoresLibraryIdentityBeforeResolvingPlaybackURL() async throws {
+        let fixture = try PlayerStoreTestFixture()
+        defer { fixture.audio.shutdown() }
+        let store = fixture.store()
+        store.play([mediaSong("stable-id")])
+        let queued = await waitForPlayerStoreTest {
+            fixture.audio.fullState()?.contextSongs.first?.id == "stable-id"
+        }
+        XCTAssertTrue(queued)
+        XCTAssertEqual(fixture.audio.fullState()?.contextSongs.first?.streamUrl,
+                       "aonsoku-media://stream?id=stable-id")
+    }
+
     func testQueueSnapshotMapsTiersIndexesSourceAndCurrentUser() {
         let context = [makeSong("a"), makeSong("b"), makeSong("c")]
         let users = [makeSong("u1"), makeSong("u2")]
@@ -408,7 +421,6 @@ final class PlayerStoreTests: XCTestCase {
             repository: fixture.repository,
             settings: fixture.settings,
             authentication: .shared,
-            streamURL: { _ in nil },
             playbackSnapshot: {
                 reads.update { $0 += 1 }
                 return oldSnapshot
@@ -445,7 +457,6 @@ final class PlayerStoreTests: XCTestCase {
             repository: fixture.repository,
             settings: fixture.settings,
             authentication: .shared,
-            streamURL: { _ in nil },
             playbackSnapshot: {
                 let isInitialRead = reads.read { $0 == 0 }
                 reads.update { $0 += 1 }
@@ -810,8 +821,7 @@ final class PlayerStoreTestFixture {
             audio: audio,
             repository: repository,
             settings: settings,
-            authentication: .shared,
-            streamURL: { URL(string: "https://example.test/stream/\($0)") }
+            authentication: .shared
         )
         store.remote = remote
         return store
@@ -836,7 +846,13 @@ final class PlayerStoreTestFixture {
     ) -> AudioService {
         let resolver = NativeSourceResolver(
             cacheDirectories: [database.directory],
-            credentialsProvider: { nil }
+            credentialsProvider: {
+                ServerCredentials(
+                    serverUrl: "https://example.test", username: "test", password: "test",
+                    authType: "token", protocolVersion: "1.16.0", serverType: "navidrome",
+                    fallbackUrl: nil
+                )
+            }
         )
         let downloads = NativeDownloadManager(
             sessionFactory: { delegate in

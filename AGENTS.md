@@ -427,6 +427,16 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   the queue, downloads, scrobbling, playback persistence, system media
   controls, direct-stream background caching, and staged
   `PlaybackRecoveryController` seek/reload fallback.
+  Library queue entries use account-scoped `LibraryMediaReference` identities
+  encoded as `aonsoku-media://stream?id=...`, with optional transcoding/stream
+  parameters. `QueueSong` normalizes old authenticated Subsonic stream URLs at
+  construction, dictionary import and Codable restoration, keeping credentials
+  and temporary transport/proxy URLs out of queue persistence and snapshots.
+  `NativeSourceResolver` prefers usable local audio, then builds authenticated
+  requests from the active credentials only when resolving the source. External
+  audio URLs retain their original addresses. PlayerStore builds library queue
+  entries without first generating authenticated URLs; account/server ownership
+  remains governed by AppModel's existing library identity boundary.
   Recovery attempts have their own progress deadline, so a resumed stream
   with no further stall notifications still reaches reload. Pausing cancels
   pending and in-flight recovery through an attempt revision. The service keeps

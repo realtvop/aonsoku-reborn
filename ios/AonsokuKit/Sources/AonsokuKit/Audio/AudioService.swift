@@ -2298,7 +2298,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private func legacySongToQueueSong(_ dictionary: [String: Any]) -> QueueSong {
         let id = dictionary["id"] as? String ?? ""
         var song = dictionary
-        song["streamUrl"] = sourceResolver.buildStreamUrl(songId: id) ?? ""
+        song["streamUrl"] = LibraryMediaReference(songID: id).urlString
         if song["coverArtId"] == nil, let coverArt = song["coverArt"] as? String {
             song["coverArtId"] = coverArt
         }
@@ -3134,7 +3134,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
             if let songId,
                let resolved = sourceResolver.resolveSource(for: QueueSong(
                    id: songId, title: "", artist: "", album: "", duration: 0,
-                   streamUrl: sourceResolver.buildStreamUrl(songId: songId) ?? "",
+                   streamUrl: LibraryMediaReference(songID: songId).urlString,
                    cachedFileUri: uri
                )) {
                 return resolved
@@ -3730,13 +3730,6 @@ private struct PlaylistEntryIdentifier: Decodable {
 
 private extension SongRecord {
     var queueSong: QueueSong {
-        let streamURL: String = {
-            var components = URLComponents()
-            components.scheme = "aonsoku-media"
-            components.host = "stream"
-            components.queryItems = [URLQueryItem(name: "id", value: id)]
-            return components.string ?? "aonsoku-media://stream?id=\(id)"
-        }()
         return QueueSong(
             id: id,
             title: title,
@@ -3746,7 +3739,7 @@ private extension SongRecord {
             albumId: albumId,
             duration: Double(duration),
             coverArtId: coverArt ?? albumId,
-            streamUrl: streamURL
+            streamUrl: LibraryMediaReference(songID: id).urlString
         )
     }
 }

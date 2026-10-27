@@ -137,7 +137,6 @@ public final class PlayerStore {
     @PerceptionIgnored public let repository: LibraryRepository
     @PerceptionIgnored public let settings: SettingsStore
     @PerceptionIgnored public let authentication: AuthenticationService
-    @PerceptionIgnored private let streamURL: @Sendable (String) -> URL?
     @PerceptionIgnored private let playbackSnapshot: @Sendable () -> AudioPlaybackSnapshot
     @PerceptionIgnored private var localPlaybackState: AudioPlaybackSnapshot.State = .idle
     @PerceptionIgnored private var audioSubscription: UUID?
@@ -163,7 +162,6 @@ public final class PlayerStore {
         self.repository = repository
         self.settings = settings
         self.authentication = authentication
-        self.streamURL = { authentication.streamURL(songId: $0) }
         self.playbackSnapshot = { audio.playbackSnapshot() }
     }
 
@@ -172,15 +170,13 @@ public final class PlayerStore {
         repository: LibraryRepository,
         settings: SettingsStore,
         authentication: AuthenticationService,
-        streamURL: @escaping @Sendable (String) -> URL?,
-        playbackSnapshot: (@Sendable () -> AudioPlaybackSnapshot)? = nil
+        playbackSnapshot: @escaping @Sendable () -> AudioPlaybackSnapshot
     ) {
         self.audio = audio
         self.repository = repository
         self.settings = settings
         self.authentication = authentication
-        self.streamURL = streamURL
-        self.playbackSnapshot = playbackSnapshot ?? { audio.playbackSnapshot() }
+        self.playbackSnapshot = playbackSnapshot
     }
 
     // MARK: Target-aware state
@@ -1046,7 +1042,7 @@ public final class PlayerStore {
     }
 
     private func queueSong(from song: Song) -> QueueSong? {
-        guard let url = streamURL(song.id) else { return nil }
+        guard !song.id.isEmpty else { return nil }
         songCache[song.id] = song
         let tags = song.replayGain.map {
             AudioReplayGain(
@@ -1068,7 +1064,7 @@ public final class PlayerStore {
             albumId: song.albumId,
             duration: Double(song.duration),
             coverArtId: coverArt,
-            streamUrl: url.absoluteString,
+            streamUrl: LibraryMediaReference(songID: song.id).urlString,
             replayGain: tags
         )
     }
