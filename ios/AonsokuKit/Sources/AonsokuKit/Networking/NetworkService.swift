@@ -2,7 +2,7 @@ import Foundation
 
 /// The HTTP policies used by existing callers. Routing belongs to the network
 /// service and can be selected per request without changing these callers.
-public enum HTTPRequestProfile: Sendable {
+public enum HTTPRequestProfile: Sendable, Hashable {
     case standard
     case subsonic
     case artwork
@@ -45,17 +45,13 @@ public final class NetworkService: Sendable {
     private let transport: Transport
 
     public convenience init() {
-        let subsonic = URLSessionConfiguration.default
-        subsonic.timeoutIntervalForRequest = 30
-        subsonic.timeoutIntervalForResource = 300
-        let subsonicSession = URLSession(configuration: subsonic)
-
-        let artwork = URLSessionConfiguration.default
-        artwork.timeoutIntervalForRequest = 30
-        artwork.timeoutIntervalForResource = 120
-        let artworkSession = URLSession(configuration: artwork)
+        let subsonicSession = URLSession(configuration: Self.configuration(for: .subsonic))
+        let artworkSession = URLSession(configuration: Self.configuration(for: .artwork))
 
         self.init { request, profile in
+            if #available(iOS 18.1, *), let url = request.url, TailscaleRouting.shared.shouldRoute(url) {
+                return try await TailscaleService.shared.data(for: request, profile: profile)
+            }
             let session: URLSession
             switch profile {
             case .standard: session = .shared
@@ -72,5 +68,29 @@ public final class NetworkService: Sendable {
 
     public func client(for profile: HTTPRequestProfile = .standard) -> HTTPClient {
         HTTPClient { request in try await self.transport(request, profile) }
+    }
+
+    static func configuration(for profile: HTTPRequestProfile) -> URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.default
+        switch profile {
+        case .standard: break
+        case .subsonic:
+            configuration.timeoutIntervalForRequest = 30
+            configuration.timeoutIntervalForResource = 300
+        case .artwork:
+            configuration.timeoutIntervalForRequest = 30
+            configuration.timeoutIntervalForResource = 120
+        }
+        return configuration
+    }
+
+    static func streamingSession(
+        for url: URL, delegate: URLSessionDelegate, configuration: URLSessionConfiguration = .default
+    ) async throws -> URLSession {
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        if #available(iOS 18.1, *), TailscaleRouting.shared.shouldRoute(url) {
+            return try await TailscaleService.shared.makeSession(for: url, configuration: configuration, delegate: delegate)
+        }
+        return URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
     }
 }

@@ -4,6 +4,12 @@ import MediaPlayer
 import UIKit
 
 public final class AudioService: NSObject, @unchecked Sendable {
+    private static var resourceLoaderKey: UInt8 = 0
+    private final class ResourceLoaderLifetime {
+        let loader: StreamingResourceLoader
+        init(_ loader: StreamingResourceLoader) { self.loader = loader }
+        deinit { loader.cancel(); loader.cleanupTempFile() }
+    }
     public typealias EventHandler = @Sendable (AudioServiceEvent) -> Void
     typealias PlayerFactory = (AVPlayerItem) -> AVPlayer
     typealias PlayerItemFactory = (URL) -> AVPlayerItem
@@ -1556,7 +1562,18 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     private func makePlayerItem(url: URL, kind: String?) -> AVPlayerItem {
-        let item = playerItemFactory(url)
+        let item: AVPlayerItem
+        if TailscaleRouting.shared.shouldRoute(url), let loaderURL = StreamingResourceLoader.loaderURL(for: url) {
+            let songID = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?.first(where: { $0.name == "id" })?.value ?? "tailscale-stream"
+            let loader = StreamingResourceLoader(songId: songID, originalURL: url, cacheAudio: false)
+            let asset = AVURLAsset(url: loaderURL)
+            asset.resourceLoader.setDelegate(loader, queue: .global(qos: .userInitiated))
+            item = AVPlayerItem(asset: asset)
+            objc_setAssociatedObject(item, &AudioService.resourceLoaderKey, ResourceLoaderLifetime(loader), .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        } else {
+            item = playerItemFactory(url)
+        }
         item.preferredForwardBufferDuration = kind == "radio"
             ? 0
             : .greatestFiniteMagnitude

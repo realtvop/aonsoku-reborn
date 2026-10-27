@@ -11,6 +11,9 @@ public final class AppServices: @unchecked Sendable {
     public let coordination: CoordinationService
     public let network: NetworkService
 
+    @available(iOS 18.1, *)
+    public var tailscale: TailscaleService { .shared }
+
     private convenience init() {
         self.init(audio: AudioService(), library: LibraryService())
     }

@@ -25,7 +25,7 @@ actor EmbeddedTailscaleNode {
         let password: String
         let localAPIKey: String
 
-        func apply(to configuration: URLSessionConfiguration) throws {
+        func apply(to configuration: URLSessionConfiguration, matching hosts: [String] = []) throws {
             guard let separator = address.lastIndex(of: ":"),
                   let port = UInt16(address[address.index(after: separator)...]),
                   let endpointPort = NWEndpoint.Port(rawValue: port) else {
@@ -35,6 +35,9 @@ actor EmbeddedTailscaleNode {
             var proxy = ProxyConfiguration(socksv5Proxy: .hostPort(host: .init(host), port: endpointPort))
             proxy.applyCredential(username: "tsnet", password: password)
             proxy.allowFailover = false
+            proxy.matchDomains = Array(Set(hosts.flatMap {
+                [$0, $0.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))]
+            }))
             configuration.proxyConfigurations = [proxy]
         }
     }
@@ -119,7 +122,9 @@ actor EmbeddedTailscaleNode {
         try await localAPI("logout")
     }
 
-    private func localAPI(_ endpoint: String, body: Data? = nil) async throws {
+    func verifyLoopback() async throws { try await localAPI("status", method: "GET") }
+
+    private func localAPI(_ endpoint: String, body: Data? = nil, method: String = "POST") async throws {
         let proxy = try loopback()
         let configuration = URLSessionConfiguration.ephemeral
         try proxy.apply(to: configuration)
@@ -129,7 +134,7 @@ actor EmbeddedTailscaleNode {
             throw URLError(.badURL)
         }
         var request = URLRequest(url: url)
-        request.httpMethod = "POST"
+        request.httpMethod = method
         request.timeoutInterval = 15
         request.httpBody = body
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

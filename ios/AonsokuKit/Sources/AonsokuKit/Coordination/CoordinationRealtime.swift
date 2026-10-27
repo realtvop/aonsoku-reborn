@@ -316,6 +316,7 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
 
     private var webSocketTask: URLSessionWebSocketTask?
     private var session: URLSession?
+    private var connectionPreparation: Task<Void, Never>?
     private var reconnectAttempts = 0
     private var isConnecting = false
     private var connectionId: UInt64 = 0
@@ -414,14 +415,38 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
         let config = URLSessionConfiguration.default
         config.shouldUseExtendedBackgroundIdleMode = true
         config.waitsForConnectivity = true
-        self.session = sessionFactory(config, self)
-
-        let task = self.session?.webSocketTask(with: url)
-        self.webSocketTask = task
-        task?.resume()
-
         self.isConnecting = true
         self.notifyState("connecting")
+        if #available(iOS 18.1, *), TailscaleRouting.shared.shouldRoute(url) {
+            connectionPreparation = Task { [weak self] in
+                do {
+                    try await TailscaleService.shared.configureSession(for: url, configuration: config)
+                    try Task.checkCancellation()
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self, self.connectionId == connectionId,
+                              self.isConnecting, !self.manualDisconnect else { return }
+                        self.startSocket(url: url, configuration: config)
+                    }
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self, self.connectionId == connectionId, self.isConnecting else { return }
+                        self.isConnecting = false
+                        self.notifyState("disconnected")
+                        if !self.manualDisconnect && !self.isAppInBackground { self.scheduleReconnect() }
+                    }
+                }
+            }
+        } else {
+            startSocket(url: url, configuration: config)
+        }
+    }
+
+    private func startSocket(url: URL, configuration: URLSessionConfiguration) {
+        session = sessionFactory(configuration, self)
+        let task = session?.webSocketTask(with: url)
+        webSocketTask = task
+        task?.resume()
     }
 
     /// Disconnect from the coordination server.
@@ -840,6 +865,8 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
     }
 
     private func disconnectInternal() {
+        connectionPreparation?.cancel()
+        connectionPreparation = nil
         if handoffPreparing {
             handoffPreparing = false
             AudioCoordinationBridge.rollbackHandoffPlayback()

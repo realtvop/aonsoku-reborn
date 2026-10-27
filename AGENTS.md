@@ -433,6 +433,25 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   `tailscale/libtailscale` C runtime and builds the ignored `CTailscale`
   XCFramework for device arm64 and Simulator arm64/x86_64. Prepare it before
   Xcode/SPM resolution; the iOS CI workflow installs Go and caches this artifact.
+  `AppServices.tailscale` exposes the iOS 18.1+ actor. Login and server settings
+  offer its web authentication and optional user-supplied auth key. Authentication
+  uses the system Safari controller and observes node status; auth keys are not
+  persisted. Node state lives in protected, backup-excluded Application Support.
+  Disabling Tailscale retains this identity; forgetting it removes local keys.
+  Tailscale identity is separate from the Subsonic account. Enabled routing sends
+  tailnet IPs, .ts.net names, discovered peers and explicitly configured hosts
+  through authenticated SOCKS sessions; public targets keep their normal route.
+  Proxy sessions disable failover for matching hosts. Foreground validation
+  recreates a reclaimed loopback listener while keeping node state.
+  Tailnet audio uses `StreamingResourceLoader` over a proxied foreground
+  URLSession, including Range probes and seeking; the AVPlayer item retains
+  the loader until disposal. Native downloads to tailnet hosts use foreground
+  sessions with persisted request descriptors, including active transfers, so
+  a relaunch can retry them. They cannot continue while the app process is
+  suspended. Ordinary downloads retain their background URLSession. Download
+  bookkeeping uses manager-wide task identities because IDs can collide across
+  sessions. Tailnet coordination sockets prepare their proxy configuration
+  asynchronously and retain the existing main-thread lifecycle/delegates.
   `AudioService` owns a long-lived `AVQueuePlayer`,
   the queue, downloads, scrobbling, playback persistence, system media
   controls, direct-stream background caching, and staged

@@ -2,6 +2,37 @@ import XCTest
 @testable import AonsokuKit
 
 final class DownloadTests: XCTestCase {
+    func testTailnetSessionsWithCollidingTaskIDsKeepIndependentState() async throws {
+        let fixture = try DownloadSchedulingFixture(tailscale: true)
+        defer { fixture.manager.cancelAll(); fixture.session.invalidateAndCancel() }
+        try fixture.setLimit(1)
+        fixture.manager.download(songId: "tailnet-one")
+        fixture.manager.download(songId: "tailnet-two")
+        let tasks = try await fixture.waitForTasks(total: 2, running: 1)
+        XCTAssertEqual(tasks[0].taskIdentifier, tasks[1].taskIdentifier)
+        XCTAssertEqual(fixture.manager.activeDownloadSongIds, ["tailnet-one", "tailnet-two"])
+        XCTAssertEqual(Set(fixture.persistedSongIds), ["tailnet-one", "tailnet-two"])
+        fixture.manager.cancel(songId: "tailnet-one")
+        XCTAssertEqual(fixture.manager.activeDownloadSongIds, ["tailnet-two"])
+        XCTAssertEqual(tasks[1].state, .running)
+        XCTAssertEqual(fixture.persistedSongIds, ["tailnet-two"])
+    }
+
+    func testTailnetPreparationCancellationCannotResurrectDownload() async throws {
+        let fixture = try DownloadSchedulingFixture(tailscale: true, preparationDelay: .milliseconds(200))
+        defer { fixture.manager.cancelAll(); fixture.session.invalidateAndCancel() }
+        let spy = DownloadDelegateSpy()
+        fixture.manager.delegate = spy
+        fixture.manager.download(songId: "preparing")
+        XCTAssertEqual(fixture.manager.activeDownloadSongIds, ["preparing"])
+        XCTAssertEqual(fixture.persistedSongIds, ["preparing"])
+        fixture.manager.cancel(songId: "preparing")
+        try await Task.sleep(for: .milliseconds(250))
+        XCTAssertTrue(fixture.manager.downloadTasksSnapshot.isEmpty)
+        XCTAssertTrue(fixture.persistedSongIds.isEmpty)
+        XCTAssertTrue(spy.failedSongIds.isEmpty)
+    }
+
     func testCacheIdentityIsPathSafeAndStable() {
         let id = AudioCacheUtils.cacheId(for: "folder/song+=")
 
@@ -467,7 +498,7 @@ private final class DownloadSchedulingFixture {
     let manager: NativeDownloadManager
     let session: URLSession
 
-    init(restoredCount: Int = 0) throws {
+    init(restoredCount: Int = 0, tailscale: Bool = false, preparationDelay: Duration = .zero) throws {
         let database = try TemporaryDatabase()
         self.database = database
         preferences = PreferencesService(db: database.manager.dbPool)
@@ -496,7 +527,12 @@ private final class DownloadSchedulingFixture {
             },
             estimateContentLengthProvider: { true },
             preferences: preferences,
-            cacheDirectoryProvider: { _ in database.directory }
+            cacheDirectoryProvider: { _ in database.directory },
+            routesThroughTailscale: { _ in tailscale },
+            foregroundSessionFactory: { _, delegate in
+                if preparationDelay > .zero { try await Task.sleep(for: preparationDelay) }
+                return URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+            }
         )
         _ = manager.handleEvents(
             forBackgroundSession: NativeDownloadManager.backgroundSessionIdentifier,
