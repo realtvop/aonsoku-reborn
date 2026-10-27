@@ -231,6 +231,10 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   updates and an exact trailing value.
   `PlayerPresentationState` owns the interactive dismissal offset, while
   `Router.isNowPlayingPresented` remains the presentation authority.
+  `MainTabView` retains that one state and passes it to the presentation host
+  and explicitly into the native bottom accessory. The system accessory's
+  separate hosting tree must not rely on environment injection from inside
+  the presentation modifier.
   The presentation host captures the expanded artwork frame and clipping
   viewport before animating its rendered expansion state. Layout/scroll
   probes do not inherit the host animation or retarget those endpoints in
