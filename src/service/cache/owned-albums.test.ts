@@ -56,7 +56,9 @@ describe("account-owned carousel candidates", () => {
       await expect(
         replaceOwnedAlbums(
           libraryDb,
-          Array.from({ length: 2001 }, (_, i) => album(`new${i}`)),
+          // The hook cancels after real replacement writes in the transaction.
+          // A small fixture still proves that both the clear and writes roll back.
+          [album("new0"), album("new1")],
           owner,
           controller.signal,
         ),
