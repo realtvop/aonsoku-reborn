@@ -49,6 +49,7 @@ xcodebuild -quiet test \
   -scheme AonsokuKit \
   -destination "platform=iOS Simulator,id=$simulator_id" \
   -resultBundlePath "$result_bundle" \
+  -skipMacroValidation \
   CODE_SIGNING_ALLOWED=NO
 xcode_status=$?
 set -e

@@ -73,6 +73,8 @@ node scripts/android/generate-theme-palettes.mjs     # Regenerate ThemePalettes.
 cd android && ./gradlew assembleRelease
 
 # Native iOS AonsokuKit. Selects the first available iPhone Simulator;
+# Executes the pinned swift-perception macros with -skipMacroValidation,
+# matching the iOS archive step and avoiding interactive CI trust prompts.
 # override with IOS_SIMULATOR_ID=<uuid>. Fails when no simulator is available,
 # when no XCTest executes, or when any test fails. The optional result path
 # must not already exist.
