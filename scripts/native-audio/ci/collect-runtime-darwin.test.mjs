@@ -16,6 +16,10 @@ const collector = fileURLToPath(
   new URL("./collect-runtime-darwin.mjs", import.meta.url),
 );
 const directories = [];
+// These integration tests compile dylibs and run Apple's linker/signing tools.
+// Keep their budget local instead of relaxing ordinary unit-test deadlines.
+const toolTimeout = 20_000;
+const testTimeout = 30_000;
 
 afterEach(() => {
   for (const directory of directories.splice(0)) {
@@ -24,7 +28,11 @@ afterEach(() => {
 });
 
 function run(command, args) {
-  const result = spawnSync(command, args, { encoding: "utf8" });
+  const result = spawnSync(command, args, {
+    encoding: "utf8",
+    timeout: toolTimeout,
+  });
+  if (result.error) throw result.error;
   expect(result.status, result.stderr).toBe(0);
   return result.stdout;
 }
@@ -107,7 +115,7 @@ describe.skipIf(process.platform !== "darwin")(
       expect(
         readFileSync(path.join(staging, "libcommon.dylib")).length,
       ).toBeGreaterThan(0);
-    });
+    }, testTimeout);
 
     it("fails collection when a transitive dependency cannot be resolved", () => {
       const { directory, rootLink, common } = fixture();
@@ -121,10 +129,10 @@ describe.skipIf(process.platform !== "darwin")(
           "--staging",
           path.join(directory, "staging"),
         ],
-        { encoding: "utf8" },
+        { encoding: "utf8", timeout: toolTimeout },
       );
       expect(result.status).toBe(1);
       expect(result.stderr).toContain("Cannot resolve @rpath/libcommon.dylib");
-    });
+    }, testTimeout);
   },
 );
