@@ -449,6 +449,13 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   startup, request preparation and a node-owned five-second monitor refresh it,
   including after settings is closed. Disabling acceptance excludes subnet
   prefixes without changing direct tailnet or explicit-host selection.
+  In subnet mode, private IPv4/IPv6 targets require Tailscale even before the
+  first route map arrives. `ensureReady(for:)` gates requests on a running node,
+  an approved target prefix (for literal subnet IPs), and a verified loopback
+  proxy. Same-host waits coalesce with independent cancellation and a 20-second
+  readiness deadline; absent routes fail explicitly without direct fallback.
+  Public requests stay direct. Audio, downloads and WebSockets use the same
+  destination gate, including cached HTTP sessions and cold-launch playback.
   Proxy sessions disable failover for matching hosts. Foreground validation
   recreates a reclaimed loopback listener while keeping node state.
   Tailnet audio uses `StreamingResourceLoader` over a proxied foreground

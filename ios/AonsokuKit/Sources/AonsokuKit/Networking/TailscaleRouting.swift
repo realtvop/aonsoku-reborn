@@ -26,6 +26,21 @@ public struct TailscaleRoutePolicy: Sendable {
         return false
     }
 
+    func matchesSubnet(_ url: URL) -> Bool {
+        guard let host = url.host.map(Self.normalize) else { return false }
+        return subnets.contains { $0.contains(host) }
+    }
+
+    static func isIP(_ url: URL) -> Bool {
+        url.host.flatMap { Subnet.address(normalize($0)) } != nil
+    }
+
+    static func isPrivateIP(_ url: URL) -> Bool {
+        privateSubnets.contains { subnet in url.host.map { subnet.contains(normalize($0)) } == true }
+    }
+
+    private static let privateSubnets = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"].compactMap(Subnet.init)
+
     private static func normalize(_ host: String) -> String {
         host.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ".[]"))
     }
@@ -59,7 +74,7 @@ public struct TailscaleRoutePolicy: Sendable {
             return bytes[whole] & mask == other[whole] & mask
         }
 
-        private static func address(_ host: String) -> [UInt8]? {
+        static func address(_ host: String) -> [UInt8]? {
             var ipv4 = in_addr()
             if inet_pton(AF_INET, host, &ipv4) == 1 { return withUnsafeBytes(of: ipv4) { Array($0) } }
             var ipv6 = in6_addr()
@@ -136,5 +151,18 @@ public final class TailscaleRouting: @unchecked Sendable {
         return lock.withLock {
             configuration.enabled && policy.routes(url)
         }
+    }
+
+    /// Private IP targets in subnet mode must not fall back to a direct session
+    /// while the control-plane map is still arriving. Public requests stay direct.
+    public func requiresTailscale(_ url: URL) -> Bool {
+        guard #available(iOS 18.1, *), ["http", "https", "ws", "wss"].contains(url.scheme?.lowercased() ?? "") else { return false }
+        return lock.withLock {
+            configuration.enabled && (policy.routes(url) || (configuration.acceptSubnetRoutes && TailscaleRoutePolicy.isPrivateIP(url)))
+        }
+    }
+
+    func hasAcceptedSubnetRoute(_ url: URL) -> Bool {
+        lock.withLock { configuration.acceptSubnetRoutes && policy.matchesSubnet(url) }
     }
 }

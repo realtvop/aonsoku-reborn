@@ -107,7 +107,7 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
         },
         fileManager: FileManager = .default,
         now: @escaping () -> Date = Date.init,
-        routesThroughTailscale: @escaping (URL) -> Bool = { TailscaleRouting.shared.shouldRoute($0) },
+        routesThroughTailscale: @escaping (URL) -> Bool = { TailscaleRouting.shared.requiresTailscale($0) },
         foregroundSessionFactory: @escaping ForegroundSessionFactory = { url, delegate in
             let configuration = URLSessionConfiguration.default
             configuration.timeoutIntervalForResource = 600
@@ -232,7 +232,7 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
                 }
             }
             do {
-                await NetworkService.prepareTailscaleRouting()
+                try await NetworkService.prepareConnection(for: url)
                 try Task.checkCancellation()
                 if !self.routesThroughTailscale(url) {
                     self.enqueue(request, url: url, in: self.session, foreground: false, generation: generation)

@@ -48,11 +48,7 @@ public final class NetworkService: Sendable {
         let subsonicSession = URLSession(configuration: Self.configuration(for: .subsonic))
         let artworkSession = URLSession(configuration: Self.configuration(for: .artwork))
 
-        self.init { request, profile in
-            await Self.prepareTailscaleRouting()
-            if #available(iOS 18.1, *), let url = request.url, TailscaleRouting.shared.shouldRoute(url) {
-                return try await TailscaleService.shared.data(for: request, profile: profile)
-            }
+        self.init(prepareRoute: { url in try await Self.prepareConnection(for: url) }, direct: { request, profile in
             let session: URLSession
             switch profile {
             case .standard: session = .shared
@@ -60,6 +56,19 @@ public final class NetworkService: Sendable {
             case .artwork: session = artworkSession
             }
             return try await session.data(for: request)
+        }, tailnet: { request, profile in
+            if #available(iOS 18.1, *) { return try await TailscaleService.shared.data(for: request, profile: profile) }
+            throw URLError(.unsupportedURL)
+        })
+    }
+
+    init(prepareRoute: @escaping @Sendable (URL) async throws -> Bool,
+         direct: @escaping Transport, tailnet: @escaping Transport) {
+        self.transport = { request, profile in
+            guard let url = request.url else { throw URLError(.badURL) }
+            let useTailnet = try await prepareRoute(url)
+            try Task.checkCancellation()
+            return try await (useTailnet ? tailnet : direct)(request, profile)
         }
     }
 
@@ -88,15 +97,20 @@ public final class NetworkService: Sendable {
     static func streamingSession(
         for url: URL, delegate: URLSessionDelegate, configuration: URLSessionConfiguration = .default
     ) async throws -> URLSession {
-        await prepareTailscaleRouting()
+        let useTailnet = try await prepareConnection(for: url)
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        if #available(iOS 18.1, *), TailscaleRouting.shared.shouldRoute(url) {
+        if #available(iOS 18.1, *), useTailnet {
             return try await TailscaleService.shared.makeSession(for: url, configuration: configuration, delegate: delegate)
         }
         return URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
     }
 
-    static func prepareTailscaleRouting() async {
-        if #available(iOS 18.1, *) { await TailscaleService.shared.prepareRouting() }
+    /// Public requests do not wait for Tailscale. Selected private destinations
+    /// either obtain a ready transport or fail explicitly; never fall back.
+    @discardableResult
+    public static func prepareConnection(for url: URL) async throws -> Bool {
+        guard #available(iOS 18.1, *), TailscaleRouting.shared.requiresTailscale(url) else { return false }
+        try await TailscaleService.shared.ensureReady(for: url)
+        return true
     }
 }

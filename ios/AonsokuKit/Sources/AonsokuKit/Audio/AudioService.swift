@@ -1563,7 +1563,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
 
     private func makePlayerItem(url: URL, kind: String?) -> AVPlayerItem {
         let item: AVPlayerItem
-        if TailscaleRouting.shared.shouldRoute(url), let loaderURL = StreamingResourceLoader.loaderURL(for: url) {
+        if TailscaleRouting.shared.requiresTailscale(url), let loaderURL = StreamingResourceLoader.loaderURL(for: url) {
             let songID = URLComponents(url: url, resolvingAgainstBaseURL: false)?
                 .queryItems?.first(where: { $0.name == "id" })?.value ?? "tailscale-stream"
             let loader = StreamingResourceLoader(songId: songID, originalURL: url, cacheAudio: false)

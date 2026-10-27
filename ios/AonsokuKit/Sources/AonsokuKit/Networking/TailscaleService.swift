@@ -21,6 +21,57 @@ public actor TailscaleService {
     private var sessions: [String: URLSession] = [:]
     private var routeMonitor: Task<Void, Never>?
     private var routingUpdatedAt: Date?
+    private var lastState: TailscaleStatusSnapshot.State = .disconnected
+    private var verifiedProxy: EmbeddedTailscaleNode.Proxy?
+    private let readiness = TailscaleReadinessGate()
+
+    public func ensureReady(for url: URL) async throws {
+        try Task.checkCancellation()
+        guard TailscaleRouting.shared.requiresTailscale(url) else { throw CancellationError() }
+        if lastState == .connected, verifiedProxy != nil,
+           let routingUpdatedAt, Date().timeIntervalSince(routingUpdatedAt) < 2,
+           destinationHasRoute(url) { return }
+        let generation = revision
+        try await readiness.wait(for: url.host ?? "") { [self] in
+            try await checkReadiness(for: url, generation: generation)
+        }
+        try Task.checkCancellation()
+        guard generation == revision, TailscaleRouting.shared.requiresTailscale(url) else { throw CancellationError() }
+    }
+
+    private func destinationHasRoute(_ url: URL) -> Bool {
+        // Hostnames resolve inside tsnet. Literal subnet IPs need an approved
+        // prefix, even if the user also listed the address as an explicit host.
+        !TailscaleRoutePolicy.isIP(url) || TailscaleRoutePolicy().routes(url)
+            || TailscaleRouting.shared.hasAcceptedSubnetRoute(url)
+    }
+
+    private func checkReadiness(for url: URL, generation: UInt64) async throws -> TailscaleReadinessCheck {
+        guard generation == revision, TailscaleRouting.shared.requiresTailscale(url) else { throw CancellationError() }
+        let snapshot = try await status()
+        switch snapshot.state {
+        case .needsLogin: throw TailscaleReadinessError.loginRequired
+        case .needsApproval: throw TailscaleReadinessError.approvalRequired
+        case .connected:
+            guard destinationHasRoute(url) else {
+                if !TailscaleRouting.shared.current.acceptSubnetRoutes { throw TailscaleReadinessError.subnetRoutesDisabled }
+                return .waiting(.missingSubnetRoute(url.host ?? ""))
+            }
+            if verifiedProxy == nil {
+                guard let node else { return .waiting(.connectionTimedOut) }
+                do {
+                    try await node.verifyLoopback()
+                    let proxy = try await node.loopback()
+                    guard generation == revision else { throw CancellationError() }
+                    verifiedProxy = proxy
+                } catch is CancellationError { throw CancellationError() }
+                catch { throw TailscaleReadinessError.proxyUnavailable(error.localizedDescription) }
+            }
+            guard generation == revision else { throw CancellationError() }
+            return .ready
+        default: return .waiting(.connectionTimedOut)
+        }
+    }
 
     /// Refresh before selecting a transport so a cold launch can use subnet
     /// addresses without first visiting settings. Failures retain the last map.
@@ -32,8 +83,10 @@ public actor TailscaleService {
 
     public func updateRoutingPreferences() async throws {
         routingUpdatedAt = nil
+        lastState = .connecting
         for session in sessions.values { session.invalidateAndCancel() }
         sessions.removeAll()
+        await readiness.cancelAll()
         _ = try await status()
     }
 
@@ -71,6 +124,7 @@ public actor TailscaleService {
         case "Stopped": state = .disconnected
         default: state = .connecting
         }
+        lastState = state
         let authURL = value.AuthURL.flatMap(URL.init(string:)).flatMap { $0.scheme == "https" ? $0 : nil }
         return TailscaleStatusSnapshot(state: state, authenticationURL: authURL,
                                       hostname: value.`Self`?.HostName ?? "", addresses: value.`Self`?.TailscaleIPs ?? [])
@@ -90,10 +144,13 @@ public actor TailscaleService {
         routeMonitor?.cancel()
         routeMonitor = nil
         routingUpdatedAt = nil
+        lastState = .disconnected
+        verifiedProxy = nil
         for session in sessions.values { session.invalidateAndCancel() }
         sessions.removeAll()
         TailscaleRouting.shared.updatePeers([])
         pending?.cancel()
+        await readiness.cancelAll()
         await node?.stop()
         if let pending, let value = try? await pending.value { await value.stop() }
     }
@@ -119,8 +176,9 @@ public actor TailscaleService {
     }
 
     func data(for request: URLRequest, profile: HTTPRequestProfile) async throws -> (Data, URLResponse) {
-        let generation = revision
         guard let url = request.url else { throw URLError(.badURL) }
+        try await ensureReady(for: url)
+        let generation = revision
         let key = "\(profile):\(url.host ?? "")"
         let session: URLSession
         if let cached = sessions[key] {
@@ -142,9 +200,8 @@ public actor TailscaleService {
 
     func configureSession(for url: URL, configuration: URLSessionConfiguration) async throws {
         let generation = revision
-        let node = try await ensureNode()
-        guard (try await node.status()).isRunning else { throw URLError(.userAuthenticationRequired) }
-        let proxy = try await node.loopback()
+        try await ensureReady(for: url)
+        guard let proxy = verifiedProxy else { throw URLError(.cannotConnectToHost) }
         try Task.checkCancellation()
         guard generation == revision else { throw CancellationError() }
         try proxy.apply(to: configuration, matching: url.host.map { [$0] } ?? [])
