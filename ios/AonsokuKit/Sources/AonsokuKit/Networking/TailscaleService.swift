@@ -19,6 +19,23 @@ public actor TailscaleService {
     private var starting: Task<EmbeddedTailscaleNode, Error>?
     private var revision: UInt64 = 0
     private var sessions: [String: URLSession] = [:]
+    private var routeMonitor: Task<Void, Never>?
+    private var routingUpdatedAt: Date?
+
+    /// Refresh before selecting a transport so a cold launch can use subnet
+    /// addresses without first visiting settings. Failures retain the last map.
+    func prepareRouting() async {
+        guard !Task.isCancelled, TailscaleRouting.shared.current.enabled else { return }
+        if let routingUpdatedAt, Date().timeIntervalSince(routingUpdatedAt) < 2 { return }
+        _ = try? await status()
+    }
+
+    public func updateRoutingPreferences() async throws {
+        routingUpdatedAt = nil
+        for session in sessions.values { session.invalidateAndCancel() }
+        sessions.removeAll()
+        _ = try await status()
+    }
 
     public func connect(authKey: String? = nil, webAuthentication: Bool = true) async throws -> TailscaleStatusSnapshot {
         if let authKey, !authKey.isEmpty { await stop() }
@@ -37,12 +54,15 @@ public actor TailscaleService {
 
     public func status() async throws -> TailscaleStatusSnapshot {
         guard TailscaleRouting.shared.current.enabled else { return TailscaleStatusSnapshot() }
+        let generation = revision
         let node = try await ensureNode()
         let value = try await node.status()
+        guard generation == revision else { throw CancellationError() }
         let peers = value.Peer.map { Array($0.values) } ?? []
         TailscaleRouting.shared.updatePeers(peers.flatMap { peer in
             [peer.HostName, peer.DNSName].compactMap { $0 } + (peer.TailscaleIPs ?? [])
-        })
+        }, subnetRoutes: value.isRunning ? peers.flatMap { $0.PrimaryRoutes ?? [] } : [])
+        routingUpdatedAt = Date()
         let state: TailscaleStatusSnapshot.State
         switch value.BackendState {
         case "Running": state = .connected
@@ -67,6 +87,9 @@ public actor TailscaleService {
         let pending = starting
         self.node = nil
         starting = nil
+        routeMonitor?.cancel()
+        routeMonitor = nil
+        routingUpdatedAt = nil
         for session in sessions.values { session.invalidateAndCancel() }
         sessions.removeAll()
         TailscaleRouting.shared.updatePeers([])
@@ -83,14 +106,16 @@ public actor TailscaleService {
     }
 
     public func validateAfterForeground() async {
-        guard TailscaleRouting.shared.current.enabled, let node else { return }
+        guard TailscaleRouting.shared.current.enabled else { return }
         do {
-            try await node.verifyLoopback()
+            if let node { try await node.verifyLoopback() }
         } catch {
             // The OS can reclaim the loopback listener while suspended. Keep
             // persisted keys, but recreate the node and all proxy sessions.
             await stop()
         }
+        routingUpdatedAt = nil
+        await prepareRouting()
     }
 
     func data(for request: URLRequest, profile: HTTPRequestProfile) async throws -> (Data, URLResponse) {
@@ -127,7 +152,10 @@ public actor TailscaleService {
 
     private func ensureNode(authKey: String? = nil) async throws -> EmbeddedTailscaleNode {
         guard TailscaleRouting.shared.current.enabled else { throw URLError(.notConnectedToInternet) }
-        if let node { return node }
+        if let node {
+            try await node.setAcceptSubnetRoutes(TailscaleRouting.shared.current.acceptSubnetRoutes)
+            return node
+        }
         let generation = revision
         let pending: Task<EmbeddedTailscaleNode, Error>
         if let starting {
@@ -139,6 +167,7 @@ public actor TailscaleService {
                 do {
                     try Task.checkCancellation()
                     try await node.start()
+                    try await node.setAcceptSubnetRoutes(TailscaleRouting.shared.current.acceptSubnetRoutes)
                     return node
                 } catch {
                     await node.stop()
@@ -152,6 +181,14 @@ public actor TailscaleService {
             guard generation == revision else { await value.stop(); throw CancellationError() }
             node = value
             starting = nil
+            if routeMonitor == nil {
+                routeMonitor = Task { [weak self] in
+                    while !Task.isCancelled {
+                        do { try await Task.sleep(for: .seconds(5)) } catch { return }
+                        await self?.prepareRouting()
+                    }
+                }
+            }
             return value
         } catch {
             if generation == revision { starting = nil }

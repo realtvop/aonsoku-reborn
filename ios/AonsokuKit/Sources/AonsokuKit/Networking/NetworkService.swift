@@ -49,6 +49,7 @@ public final class NetworkService: Sendable {
         let artworkSession = URLSession(configuration: Self.configuration(for: .artwork))
 
         self.init { request, profile in
+            await Self.prepareTailscaleRouting()
             if #available(iOS 18.1, *), let url = request.url, TailscaleRouting.shared.shouldRoute(url) {
                 return try await TailscaleService.shared.data(for: request, profile: profile)
             }
@@ -87,10 +88,15 @@ public final class NetworkService: Sendable {
     static func streamingSession(
         for url: URL, delegate: URLSessionDelegate, configuration: URLSessionConfiguration = .default
     ) async throws -> URLSession {
+        await prepareTailscaleRouting()
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         if #available(iOS 18.1, *), TailscaleRouting.shared.shouldRoute(url) {
             return try await TailscaleService.shared.makeSession(for: url, configuration: configuration, delegate: delegate)
         }
         return URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+    }
+
+    static func prepareTailscaleRouting() async {
+        if #available(iOS 18.1, *) { await TailscaleService.shared.prepareRouting() }
     }
 }

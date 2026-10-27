@@ -417,10 +417,13 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
         config.waitsForConnectivity = true
         self.isConnecting = true
         self.notifyState("connecting")
-        if #available(iOS 18.1, *), TailscaleRouting.shared.shouldRoute(url) {
+        if #available(iOS 18.1, *), TailscaleRouting.shared.current.enabled {
             connectionPreparation = Task { [weak self] in
                 do {
-                    try await TailscaleService.shared.configureSession(for: url, configuration: config)
+                    await NetworkService.prepareTailscaleRouting()
+                    if TailscaleRouting.shared.shouldRoute(url) {
+                        try await TailscaleService.shared.configureSession(for: url, configuration: config)
+                    }
                     try Task.checkCancellation()
                     DispatchQueue.main.async { [weak self] in
                         guard let self, self.connectionId == connectionId,

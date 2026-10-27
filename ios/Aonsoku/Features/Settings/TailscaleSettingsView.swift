@@ -58,6 +58,15 @@ struct TailscaleSettingsView: View {
 
                     if store.enabled {
                         Section {
+                            Toggle(t("native.tailscale.acceptSubnetRoutes"), isOn: Binding(
+                                get: { store.acceptSubnetRoutes }, set: { store.setAcceptSubnetRoutes($0) }
+                            ))
+                            .accessibilityIdentifier("tailscale.acceptSubnetRoutes")
+                        } footer: {
+                            Text(t("native.tailscale.subnetRoutesDescription"))
+                        }
+
+                        Section {
                             TextField(t("native.tailscale.hosts"), text: $hosts, axis: .vertical)
                                 .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()

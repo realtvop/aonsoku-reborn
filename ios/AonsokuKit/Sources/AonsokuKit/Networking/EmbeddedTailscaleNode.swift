@@ -11,6 +11,9 @@ actor EmbeddedTailscaleNode {
             var HostName: String?
             var DNSName: String?
             var TailscaleIPs: [String]?
+            // Control-plane-approved routes for which this peer is selected.
+            // Unlike advertised routes, these are ready for client routing.
+            var PrimaryRoutes: [String]?
         }
         var BackendState: String?
         var AuthURL: String?
@@ -44,6 +47,7 @@ actor EmbeddedTailscaleNode {
 
     private var handle: Int32?
     private var proxy: Proxy?
+    private var acceptsSubnetRoutes: Bool?
 
     init(directory: URL, hostname: String, authKey: String? = nil) throws {
         let value = tailscale_new()
@@ -112,6 +116,13 @@ actor EmbeddedTailscaleNode {
     func beginWebAuthentication() async throws {
         try await localAPI("start", body: Data("{}".utf8))
         try await localAPI("login-interactive")
+    }
+
+    func setAcceptSubnetRoutes(_ enabled: Bool) async throws {
+        guard acceptsSubnetRoutes != enabled else { return }
+        let body = try JSONSerialization.data(withJSONObject: ["RouteAll": enabled, "RouteAllSet": true])
+        try await localAPI("prefs", body: body, method: "PATCH")
+        acceptsSubnetRoutes = enabled
     }
 
     func cancelWebAuthentication() async {

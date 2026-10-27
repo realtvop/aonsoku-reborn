@@ -441,6 +441,14 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   Tailscale identity is separate from the Subsonic account. Enabled routing sends
   tailnet IPs, .ts.net names, discovered peers and explicitly configured hosts
   through authenticated SOCKS sessions; public targets keep their normal route.
+  Accept Subnet Routes defaults on and persists independently of the enabled
+  switch, including migration from older configuration. It applies the runtime's
+  `RouteAll` preference and matches IPv4/IPv6 destinations against peers'
+  control-plane-selected `PrimaryRoutes`. Default routes are excluded; this
+  does not select an exit node. Route metadata is not persisted: foreground
+  startup, request preparation and a node-owned five-second monitor refresh it,
+  including after settings is closed. Disabling acceptance excludes subnet
+  prefixes without changing direct tailnet or explicit-host selection.
   Proxy sessions disable failover for matching hosts. Foreground validation
   recreates a reclaimed loopback listener while keeping node state.
   Tailnet audio uses `StreamingResourceLoader` over a proxied foreground

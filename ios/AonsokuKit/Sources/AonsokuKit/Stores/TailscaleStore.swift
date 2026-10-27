@@ -7,6 +7,7 @@ import Perception
 public final class TailscaleStore {
     public static let shared = TailscaleStore()
     public private(set) var enabled = TailscaleRouting.shared.current.enabled
+    public private(set) var acceptSubnetRoutes = TailscaleRouting.shared.current.acceptSubnetRoutes
     public private(set) var snapshot = TailscaleStatusSnapshot()
     public private(set) var isAuthenticating = false
     public private(set) var hasError = false
@@ -14,6 +15,21 @@ public final class TailscaleStore {
     @PerceptionIgnored private var revision: UInt64 = 0
 
     public var additionalHosts: [String] { TailscaleRouting.shared.current.additionalHosts }
+
+    public func setAcceptSubnetRoutes(_ enabled: Bool) {
+        acceptSubnetRoutes = enabled
+        TailscaleRouting.shared.configure(enabled: self.enabled, additionalHosts: additionalHosts, acceptSubnetRoutes: enabled)
+        hasError = false
+        let generation = revision
+        Task {
+            do {
+                try await TailscaleService.shared.updateRoutingPreferences()
+                await refresh()
+            } catch {
+                if generation == revision { hasError = true }
+            }
+        }
+    }
 
     public func saveHosts(_ text: String) {
         let hosts = text.components(separatedBy: CharacterSet(charactersIn: ",\n "))

@@ -207,7 +207,8 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
             return
         }
 
-        if routesThroughTailscale(url) {
+        let routing = TailscaleRouting.shared.current
+        if routesThroughTailscale(url) || (routing.enabled && routing.acceptSubnetRoutes) {
             prepareForegroundDownload(request, url: url, generation: generation)
         } else {
             enqueue(request, url: url, in: session, foreground: false, generation: generation)
@@ -231,6 +232,12 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
                 }
             }
             do {
+                await NetworkService.prepareTailscaleRouting()
+                try Task.checkCancellation()
+                if !self.routesThroughTailscale(url) {
+                    self.enqueue(request, url: url, in: self.session, foreground: false, generation: generation)
+                    return
+                }
                 let session = try await self.foregroundSessionFactory(url, self)
                 if Task.isCancelled { session.invalidateAndCancel(); return }
                 self.enqueue(request, url: url, in: session, foreground: true, generation: generation)
