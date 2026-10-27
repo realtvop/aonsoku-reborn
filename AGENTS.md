@@ -80,6 +80,7 @@ cd android && ./gradlew assembleRelease
 IOS_TEST_RESULT_BUNDLE=/tmp/AonsokuNativeTests.xcresult ./scripts/test-ios-native.sh
 
 # iOS SwiftUI app
+bash scripts/build-ios-tailscale.sh # Once before Xcode/SPM; Go 1.27.1, cached device + Simulator runtime
 xcodebuild -project ios/Aonsoku.xcodeproj -scheme Aonsoku \
   -destination 'generic/platform=iOS Simulator' build
 node scripts/check-ios-strings.mjs # Every translation key the app uses exists
@@ -423,6 +424,11 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   standard, Subsonic and artwork session policies. Transport selection belongs
   here, rather than in views or individual API clients. AVPlayer, background
   downloads and coordination WebSockets retain their dedicated lifecycles.
+  Embedded Tailscale is available only on iOS 18.1 and later; the host app
+  retains iOS 16 support. `scripts/build-ios-tailscale.sh` pins the official
+  `tailscale/libtailscale` C runtime and builds the ignored `CTailscale`
+  XCFramework for device arm64 and Simulator arm64/x86_64. Prepare it before
+  Xcode/SPM resolution; the iOS CI workflow installs Go and caches this artifact.
   `AudioService` owns a long-lived `AVQueuePlayer`,
   the queue, downloads, scrobbling, playback persistence, system media
   controls, direct-stream background caching, and staged

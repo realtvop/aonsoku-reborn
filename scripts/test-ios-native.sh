@@ -5,6 +5,8 @@ set -euo pipefail
 REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PACKAGE_ROOT="$REPOSITORY_ROOT/ios/AonsokuKit"
 
+bash "$REPOSITORY_ROOT/scripts/build-ios-tailscale.sh"
+
 simulator_id="${IOS_SIMULATOR_ID:-}"
 if [[ -z "$simulator_id" ]]; then
   simulator_id="$({
