@@ -70,8 +70,14 @@ public final class NetworkService: Sendable {
         let attempt: Transport = { request, profile in
             guard let url = request.url else { throw URLError(.badURL) }
             let start = ContinuousClock.now
+            let requestID = String(UUID().uuidString.prefix(8))
+            let source = Self.diagnosticSource ?? "Network"
+            let logSuccess = profile != .artwork || Self.diagnosticSource != nil
             var route = "not-sent"
             do {
+                if logSuccess {
+                    NativeLogger.shared.info("request=\(requestID) preparing \(NetworkDiagnostics.target(url))", source: source)
+                }
                 let observer = Self.diagnosticSource == nil ? nil : Self.connectionPreparationChanged
                 observer?(true)
                 let useTailnet: Bool
@@ -80,17 +86,18 @@ public final class NetworkService: Sendable {
                 observer?(false)
                 try Task.checkCancellation()
                 route = useTailnet ? "tailscale" : "direct"
-                if let source = Self.diagnosticSource {
-                    NativeLogger.shared.info("\(url.lastPathComponent) route=\(route) started", source: source)
+                if logSuccess {
+                    NativeLogger.shared.info("request=\(requestID) route=\(route) started", source: source)
                 }
                 let result = try await (useTailnet ? tailnet : direct)(request, profile)
-                Self.logRequest(url: url, route: route, start: start,
-                                result: "HTTP \((result.1 as? HTTPURLResponse)?.statusCode ?? 0)")
+                if logSuccess {
+                    Self.logRequest(url: url, route: route, start: start, source: source, requestID: requestID,
+                                    result: "HTTP \((result.1 as? HTTPURLResponse)?.statusCode ?? 0)")
+                }
                 return result
             } catch {
-                let failure = error as NSError
-                Self.logRequest(url: url, route: route, start: start,
-                                result: "\(failure.domain) code=\(failure.code): \(error.localizedDescription)")
+                Self.logRequest(url: url, route: route, start: start, source: source, requestID: requestID,
+                                result: NetworkDiagnostics.failure(error, taskCancelled: Task.isCancelled), failed: true)
                 throw error
             }
         }
@@ -109,11 +116,12 @@ public final class NetworkService: Sendable {
         }
     }
 
-    private static func logRequest(url: URL, route: String, start: ContinuousClock.Instant, result: String) {
-        guard let source = diagnosticSource else { return }
+    private static func logRequest(url: URL, route: String, start: ContinuousClock.Instant,
+                                   source: String, requestID: String, result: String, failed: Bool = false) {
         let duration = start.duration(to: .now).components
         let milliseconds = duration.seconds * 1_000 + duration.attoseconds / 1_000_000_000_000_000
-        NativeLogger.shared.info("\(url.lastPathComponent) route=\(route) elapsed=\(milliseconds)ms \(result)", source: source)
+        let message = "\(NetworkDiagnostics.endpoint(url)) route=\(route) elapsed=\(milliseconds)ms request=\(requestID) \(NetworkDiagnostics.target(url)) \(result)"
+        NativeLogger.shared.log(failed ? .warn : .info, message, source: source)
     }
 
     public init(transport: @escaping Transport) {

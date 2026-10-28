@@ -84,6 +84,7 @@ public actor TailscaleService {
     }
 
     public func updateRoutingPreferences() async throws {
+        NativeLogger.shared.info("Cancelling proxy sessions reason=routingPreferencesChanged revision=\(revision) sessions=\(sessions.count)", source: "Tailscale")
         routingUpdatedAt = nil
         lastState = .connecting
         for session in sessions.values { session.invalidateAndCancel() }
@@ -93,7 +94,7 @@ public actor TailscaleService {
     }
 
     public func connect(authKey: String? = nil, webAuthentication: Bool = true) async throws -> TailscaleStatusSnapshot {
-        if let authKey, !authKey.isEmpty { await stop() }
+        if let authKey, !authKey.isEmpty { await stop(reason: "authKeyChanged") }
         let node = try await ensureNode(authKey: authKey)
         if webAuthentication, !(try await node.status()).isRunning {
             try await node.beginWebAuthentication()
@@ -134,10 +135,15 @@ public actor TailscaleService {
 
     public func cancelAuthentication() async {
         await node?.cancelWebAuthentication()
-        await stop()
+        await stop(reason: "authenticationCancelled")
     }
 
     public func stop() async {
+        await stop(reason: "explicitStop")
+    }
+
+    private func stop(reason: String) async {
+        NativeLogger.shared.info("Stopping node reason=\(reason) revision=\(revision) sessions=\(sessions.count)", source: "Tailscale")
         revision &+= 1
         let node = self.node
         let pending = starting
@@ -159,7 +165,7 @@ public actor TailscaleService {
 
     public func forgetIdentity() async throws {
         if let node { try? await node.logout() }
-        await stop()
+        await stop(reason: "forgetIdentity")
         let directory = try Self.stateDirectory()
         try FileManager.default.removeItem(at: directory)
     }
@@ -171,7 +177,8 @@ public actor TailscaleService {
         } catch {
             // The OS can reclaim the loopback listener while suspended. Keep
             // persisted keys, but recreate the node and all proxy sessions.
-            await stop()
+            NativeLogger.shared.warn("Foreground loopback validation failed \(NetworkDiagnostics.failure(error, taskCancelled: Task.isCancelled))", source: "Tailscale")
+            await stop(reason: "foregroundLoopbackValidationFailed")
         }
         routingUpdatedAt = nil
         await prepareRouting()
@@ -189,6 +196,7 @@ public actor TailscaleService {
             session = try await makeSession(for: url, configuration: NetworkService.configuration(for: profile))
             guard generation == revision else { session.invalidateAndCancel(); throw CancellationError() }
             sessions[key] = session
+            NativeLogger.shared.info("Created proxy session revision=\(generation) profile=\(profile) \(NetworkDiagnostics.target(url))", source: "Tailscale")
         }
         return try await session.data(for: request)
     }

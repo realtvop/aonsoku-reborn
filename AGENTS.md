@@ -487,6 +487,15 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   being swallowed across every playlist. Sync-scoped network diagnostics log
   endpoint, actual direct/Tailscale route, elapsed time and error domain/code,
   excluding authenticated URLs and queries; no automatic timeout retries occur.
+  Ordinary requests also retain bounded `Network` diagnostics, and login/server
+  address probes use `Server`. Failures record the original error domain/code,
+  nested error codes, caller cancellation and sanitized scheme/host/port plus a
+  known Subsonic endpoint. Never interpolate NSError descriptions/userInfo,
+  full URLs, query parameters, URL user-info or encoded loader paths into these
+  diagnostics. `Audio` identifies loader/tasks, preparation/HTTP failures and
+  AVFoundation/loader cancellation; `Tailscale` records proxy-session creation
+  and the reason for node/session invalidation. These logs diagnose failures;
+  they do not add retries or suppress failed user operations.
   The readiness deadline expires independently of a still-pending probe. Literal
   tailnet IPs also require a known peer map entry before proxy dispatch, avoiding
   tsnet's system-dial fallback for an unknown peer during startup.

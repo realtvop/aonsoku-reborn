@@ -67,6 +67,7 @@ public final class ToastCenter {
 
     /// Shows an error's description, or `fallbackKey` when it has none.
     public func show(error: Error, fallbackKey: String = "toast.server.error") {
+        NativeLogger.shared.warn("Presenting request error \(NetworkDiagnostics.failure(error, taskCancelled: Task.isCancelled))", source: "Network")
         let description = (error as? LocalizedError)?.errorDescription
         if let description, !description.isEmpty {
             show(.text(description), style: .error)

@@ -123,16 +123,19 @@ public final class SubsonicHTTPClient {
         )
 
         do {
-            _ = try await queryServerInfo(
-                baseUrl: baseUrl,
-                credentials: credentials
-            )
+            _ = try await NetworkService.$diagnosticSource.withValue("Server") {
+                try await queryServerInfo(baseUrl: baseUrl, credentials: credentials)
+            }
+            NativeLogger.shared.info("Server probe succeeded \(NetworkDiagnostics.target(URL(string: baseUrl)))", source: "Server")
             return (true, nil)
         } catch SubsonicHTTPError.authFailed {
+            NativeLogger.shared.warn("Server probe rejected credentials \(NetworkDiagnostics.target(URL(string: baseUrl)))", source: "Server")
             return (false, "auth_failed")
         } catch SubsonicHTTPError.networkUnreachable {
+            NativeLogger.shared.warn("Server probe transport failed; see preceding request \(NetworkDiagnostics.target(URL(string: baseUrl)))", source: "Server")
             return (false, "network_unreachable")
         } catch {
+            NativeLogger.shared.warn("Server probe failed \(NetworkDiagnostics.target(URL(string: baseUrl))) \(NetworkDiagnostics.failure(error, taskCancelled: Task.isCancelled))", source: "Server")
             return (false, "server_error")
         }
     }

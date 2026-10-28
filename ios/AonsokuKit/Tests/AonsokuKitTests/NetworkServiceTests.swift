@@ -3,6 +3,40 @@ import XCTest
 @testable import AonsokuKit
 
 final class NetworkServiceTests: XCTestCase {
+    func testOrdinaryRequestCancellationIsLoggedWithoutSyncScopeOrSecrets() async throws {
+        let host = "\(UUID().uuidString.lowercased()).test"
+        let url = try XCTUnwrap(URL(string: "http://alice:secret@\(host):4533/rest/star.view?p=secret"))
+        let network = NetworkService(prepareRoute: { _ in true }, direct: { _, _ in
+            XCTFail("Expected Tailscale transport"); throw URLError(.badURL)
+        }, tailnet: { _, _ in
+            throw URLError(.cancelled, userInfo: [NSLocalizedDescriptionKey: url.absoluteString])
+        })
+        do {
+            _ = try await network.client().data(from: url)
+            XCTFail("Expected original cancellation")
+        } catch { XCTAssertEqual((error as? URLError)?.code, .cancelled) }
+        let messages = NativeLogger.shared.getEntries().filter { $0.source == "Network" && $0.message.contains(host) }.map(\.message)
+        XCTAssertTrue(messages.contains { $0.contains("route=tailscale") && $0.contains("code=-999 taskCancelled=false") })
+        XCTAssertFalse(messages.contains { $0.contains("alice") || $0.contains("secret") })
+    }
+
+    func testSettingsProbeLogsUnderlyingBadURLBeforeReturningGenericFailure() async throws {
+        let host = "\(UUID().uuidString.lowercased()).test"
+        let network = NetworkService(prepareRoute: { _ in true }, direct: { _, _ in
+            XCTFail("Expected Tailscale transport"); throw URLError(.badURL)
+        }, tailnet: { request, _ in
+            throw URLError(.badURL, userInfo: [NSURLErrorFailingURLErrorKey: request.url!])
+        })
+        let client = SubsonicHTTPClient(client: network.client(for: .subsonic))
+        let result = await client.ping(baseUrl: "http://\(host):4533", username: "alice", password: "secret", authType: "password")
+        XCTAssertFalse(result.reachable)
+        XCTAssertEqual(result.error, "network_unreachable")
+        let messages = NativeLogger.shared.getEntries().filter { $0.source == "Server" && $0.message.contains(host) }.map(\.message)
+        XCTAssertTrue(messages.contains { $0.contains("route=tailscale") && $0.contains("reason=badURL") && $0.contains("code=-1000") })
+        XCTAssertTrue(messages.contains { $0.contains("probe transport failed") })
+        XCTAssertFalse(messages.contains { $0.contains("alice") || $0.contains("secret") })
+    }
+
     func testMissingPrivateRouteCanUseConfiguredBackupWithoutDirectPrivateAttempt() async throws {
         let state = LockedTestBox(fallbackConfiguration())
         let prepared = LockedTestBox<[String]>([])

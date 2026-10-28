@@ -28,6 +28,8 @@ final class StreamingResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
     private var isCancelled = false
     private var cacheCompleted = false
     private var nextRequestId = 0
+    private let diagnosticID = String(UUID().uuidString.prefix(8))
+    private var diagnosticRoute = "preparing"
 
     init(songId: String, originalURL: URL, cacheAudio: Bool = true) {
         self.songId = songId
@@ -41,12 +43,20 @@ final class StreamingResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
                 queue.async {
                     guard !self.isCancelled else { session.invalidateAndCancel(); return }
                     self.session = session
+                    if #available(iOS 18.1, *), !session.configuration.proxyConfigurations.isEmpty {
+                        self.diagnosticRoute = "tailscale"
+                    } else {
+                        self.diagnosticRoute = "direct"
+                    }
+                    NativeLogger.shared.info("ResourceLoader: loader=\(self.diagnosticID) prepared route=\(self.diagnosticRoute) \(NetworkDiagnostics.target(originalURL))", source: "Audio")
                     let requests = self.waitingRequests
                     self.waitingRequests.removeAll()
                     for request in requests { self.handleLoadingRequest(request) }
                 }
             } catch {
+                let failure = NetworkDiagnostics.failure(error, taskCancelled: Task.isCancelled)
                 queue.async {
+                    NativeLogger.shared.warn("ResourceLoader: loader=\(self.diagnosticID) preparation failed \(NetworkDiagnostics.target(originalURL)) \(failure)", source: "Audio")
                     self.preparationError = error
                     let requests = self.waitingRequests
                     self.waitingRequests.removeAll()
@@ -95,6 +105,7 @@ final class StreamingResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
 
     func cancel() {
         queue.async { [self] in
+            NativeLogger.shared.info("ResourceLoader: loader=\(diagnosticID) cancelled reason=loaderDisposed pending=\(pendingRequests.count) waiting=\(waitingRequests.count)", source: "Audio")
             isCancelled = true
             preparation?.cancel()
             session?.invalidateAndCancel()
@@ -137,6 +148,7 @@ final class StreamingResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
         queue.async { [self] in
             waitingRequests.removeAll { $0 === loadingRequest }
             if let entry = pendingRequests.first(where: { $0.value.loadingRequest === loadingRequest }) {
+                NativeLogger.shared.info("ResourceLoader: loader=\(diagnosticID) task=\(entry.value.task?.taskIdentifier ?? -1) cancelled reason=avFoundationRequestCancelled", source: "Audio")
                 entry.value.task?.cancel()
                 pendingRequests.removeValue(forKey: entry.key)
             }
@@ -199,6 +211,7 @@ final class StreamingResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
             requestedOffset: offset
         )
         pendingRequests[requestId] = state
+        NativeLogger.shared.info("ResourceLoader: loader=\(diagnosticID) task=\(task.taskIdentifier) route=\(diagnosticRoute) started offset=\(offset) toEnd=\(requestsToEnd) \(NetworkDiagnostics.target(originalURL))", source: "Audio")
         task.resume()
     }
 
@@ -313,7 +326,7 @@ extension StreamingResourceLoader: URLSessionDataDelegate {
                 .value(forHTTPHeaderField: "Accept-Ranges")?.lowercased().contains("bytes") == true
             NativeLogger.shared.info("ResourceLoader: HTTP \(statusCode), Content-Type=\(httpResponse.value(forHTTPHeaderField: "Content-Type") ?? "nil"), Content-Length=\(httpResponse.value(forHTTPHeaderField: "Content-Length") ?? "nil")", source: "Audio")
             guard (200..<300).contains(statusCode) else {
-                NativeLogger.shared.warn("StreamingResourceLoader: HTTP \(statusCode) for \(songId)", source: "Audio")
+                NativeLogger.shared.warn("ResourceLoader: loader=\(diagnosticID) task=\(dataTask.taskIdentifier) response rejected HTTP=\(statusCode); cancelling task", source: "Audio")
                 completionHandler(.cancel)
                 return
             }
@@ -426,8 +439,8 @@ extension StreamingResourceLoader: URLSessionDataDelegate {
             pendingRequests.removeValue(forKey: requestId)
 
             if let error {
+                NativeLogger.shared.warn("ResourceLoader: loader=\(diagnosticID) task=\(task.taskIdentifier) task failed route=\(diagnosticRoute) loaderCancelled=\(isCancelled) current={\(NetworkDiagnostics.target(task.currentRequest?.url))} original={\(NetworkDiagnostics.target(originalURL))} \(NetworkDiagnostics.failure(error))", source: "Audio")
                 if (error as NSError).code != NSURLErrorCancelled {
-                    NativeLogger.shared.warn("ResourceLoader: task failed: \(error.localizedDescription)", source: "Audio")
                     state.loadingRequest.finishLoading(with: error)
                     if pendingRequests.isEmpty && !cacheCompleted {
                         delegate?.resourceLoader(self, didFailWithError: error)
