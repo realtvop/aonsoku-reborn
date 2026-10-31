@@ -112,6 +112,7 @@ private struct AccountHeader: View {
                         .lineLimit(1)
                     status
                         .font(.footnote.weight(.medium))
+                        .labelStyle(CompactStatusLabelStyle())
                 }
             }
             .padding(.vertical, 4)
@@ -168,6 +169,15 @@ private struct AccountHeader: View {
     private struct ConnectionCheckIdentity: Hashable {
         let account: ServerAccount?
         let online: Bool
+    }
+}
+
+private struct CompactStatusLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 6) {
+            configuration.icon
+            configuration.title
+        }
     }
 }
 
