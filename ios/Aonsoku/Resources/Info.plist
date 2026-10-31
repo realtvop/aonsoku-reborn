@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>AonsokuBuildHash</key>
 	<string>$(AONSOKU_BUILD_HASH)</string>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
@@ -31,7 +33,6 @@
 	</array>
 	<key>ITSEncryptionExportComplianceCode</key>
 	<string></string>
-	<!-- Users can connect to self-hosted Subsonic servers that only expose HTTP. -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
@@ -41,7 +42,6 @@
 	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Aonsoku uses your local network to reach music servers and establish direct Tailscale connections.</string>
-	<!-- Poppins, the web app's typeface, for headings. -->
 	<key>UIAppFonts</key>
 	<array>
 		<string>Poppins-Medium.ttf</string>
