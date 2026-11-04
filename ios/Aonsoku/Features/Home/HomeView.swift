@@ -206,6 +206,7 @@ private struct HomeShelf<Item: Identifiable, Tile: View>: View {
             .scrollIndicators(.hidden)
             .appScrollClipDisabled()
             .appHorizontalScrollMargins(Layout.margin(sizeClass))
+            .appShelfPaging()
         }
     }
 }

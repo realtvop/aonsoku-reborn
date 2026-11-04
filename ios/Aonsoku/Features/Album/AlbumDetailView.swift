@@ -16,6 +16,7 @@ struct AlbumDetailView: View {
     @State private var extras: Extras?
     @State private var palette: ArtworkPalette?
     @State private var headerHeight: CGFloat = 360
+    @State private var selection = Set<SongRowTag>()
 
     @Environment(AppModel.self) private var app
     @Environment(LibrarySyncStore.self) private var sync
@@ -45,7 +46,7 @@ struct AlbumDetailView: View {
 
     var body: some View {
         WithPerceptionTracking {
-            List {
+            AppList(selection: $selection) {
                 if let album {
                     VStack(alignment: .leading, spacing: 0) {
                         header(album)
@@ -93,6 +94,11 @@ struct AlbumDetailView: View {
             }
             .listStyle(.plain)
             .environment(\.defaultMinListRowHeight, 0)
+            .appSelectionMenu(forSelectionType: SongRowTag.self) { tags in
+                SongSelectionMenuItems(songs: selectedSongs(tags), context: .album) { playFirst(of: tags) }
+            } primaryAction: { tags in
+                playFirst(of: tags)
+            }
             .overlay {
                 WithPerceptionTracking {
                     if album == nil {
@@ -268,6 +274,15 @@ struct AlbumDetailView: View {
         .disabled(songs.isEmpty)
     }
 
+    private func selectedSongs(_ tags: Set<SongRowTag>) -> [Song] {
+        tags.map(\.position).sorted().compactMap { songs.indices.contains($0) ? songs[$0] : nil }
+    }
+
+    private func playFirst(of tags: Set<SongRowTag>) {
+        guard let album, let first = tags.map(\.position).min() else { return }
+        play(album, startingAt: first, shuffle: false)
+    }
+
     private func play(_ album: Album, startingAt index: Int? = nil, shuffle: Bool) {
         guard !songs.isEmpty else { return }
         player.play(
@@ -307,6 +322,7 @@ struct AlbumDetailView: View {
                                 play(album, startingAt: track.index, shuffle: false)
                             }
                             .listRowBackground(Color.clear)
+                            .tag(SongRowTag(position: track.index))
                         }
                     }
                 }

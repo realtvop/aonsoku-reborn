@@ -129,6 +129,104 @@ struct SongMenuItems: View {
 
 }
 
+/// The actions for the songs selected in a Mac list, or the one
+/// right-clicked: Play first, since a click there only selects, then the
+/// song's own menu for one song, or what applies to all of them for several.
+struct SongSelectionMenuItems: View {
+    let songs: [Song]
+    /// The menu context when one song is selected.
+    var context: SongMenuContext = .standard
+    /// The selected positions in the user's own playlist, which can be
+    /// removed from it.
+    var playlistRemoval: PlaylistSongRemoval?
+    let play: () -> Void
+
+    @Environment(Router.self) private var router
+    @Environment(PlayerStore.self) private var player
+    @Environment(FavoritesStore.self) private var favorites
+    @Environment(DownloadsStore.self) private var downloads
+    @Environment(ToastCenter.self) private var toasts
+    @Environment(Localizer.self) private var t
+
+    var body: some View {
+        WithPerceptionTracking {
+            if songs.count == 1, let song = songs.first {
+                Button(action: play) {
+                    Label(t("options.play"), systemImage: "play")
+                }
+                SongMenuItems(song: song, context: context)
+            } else if !songs.isEmpty {
+                severalSongs
+                    .mediaMenuAppearance()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var severalSongs: some View {
+        Section {
+            Button(action: play) {
+                Label(t("options.play"), systemImage: "play")
+            }
+            Button {
+                player.enqueue(songs, position: .next, announcingWith: toasts)
+            } label: {
+                Label(t("options.playNext"), systemImage: QueueSymbol.playNext)
+            }
+            Button {
+                player.enqueue(songs, position: .last, announcingWith: toasts)
+            } label: {
+                Label(t("options.addLast"), systemImage: QueueSymbol.playLast)
+            }
+        }
+        Section {
+            Button {
+                router.present(.addToPlaylist(songs))
+            } label: {
+                Label(t("options.playlist.add"), systemImage: "text.badge.plus")
+            }
+            let allFavorite = songs.allSatisfy { favorites.isFavorite(.song, id: $0.id) }
+            Button {
+                let ids = songs.map(\.id)
+                Task { await favorites.setFavorite(songIds: ids, isFavorite: !allFavorite) }
+            } label: {
+                Label(
+                    t(allFavorite ? "options.unlike" : "options.like"),
+                    systemImage: allFavorite ? "heart.slash" : "heart"
+                )
+            }
+        }
+        Section {
+            let _ = downloads.revision
+            let states = songs.map { downloads.state(ofSong: $0.id) }
+            if states.contains(where: { if case .cached(.explicit, _) = $0 { false } else { true } }) {
+                Button {
+                    Task { await downloads.download(songs: songs) }
+                } label: {
+                    Label(t("options.download"), systemImage: "arrow.down.circle")
+                }
+            }
+            if states.contains(where: { if case .cached(.explicit, _) = $0 { true } else { false } }) {
+                Button(role: .destructive) {
+                    let ids = songs.map(\.id)
+                    Task { await downloads.remove(songIds: ids) }
+                } label: {
+                    Label(t("options.removeDownload"), systemImage: "trash")
+                }
+            }
+        }
+        if let playlistRemoval {
+            Section {
+                Button(role: .destructive) {
+                    router.playlistSongRemoval = playlistRemoval
+                } label: {
+                    Label(t("options.playlist.removeSong"), systemImage: "text.badge.minus")
+                }
+            }
+        }
+    }
+}
+
 /// Playback-specific actions shared by the song and radio menus.
 private struct PlaybackMenuItems: View {
     @Environment(PlayerStore.self) private var player

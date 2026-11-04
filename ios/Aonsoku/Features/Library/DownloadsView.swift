@@ -156,12 +156,14 @@ private struct DownloadedSongs: View {
     @Environment(DownloadsStore.self) private var downloads
     @Environment(Localizer.self) private var t
 
+    @State private var selection = Set<SongRowTag>()
+
     var body: some View {
         WithPerceptionTracking {
             DownloadedItems(emptyTitle: t("native.downloads.noSongs"), systemImage: "music.note") {
                 await downloads.downloadedSongs()
             } content: { songs in
-                List {
+                AppList(selection: $selection) {
                     if !songs.isEmpty {
                         PlayShuffleButtons {
                             player.play(songs, sourceName: title)
@@ -187,12 +189,33 @@ private struct DownloadedSongs: View {
                                 .tint(.red)
                             }
                             .themedRow(plain: true)
+                            .tag(SongRowTag(position: index))
                         }
                     }
                 }
                 .listStyle(.plain)
+                .appSelectionMenu(forSelectionType: SongRowTag.self) { tags in
+                    SongSelectionMenuItems(songs: Self.songs(songs, at: tags)) {
+                        if let first = tags.map(\.position).min() {
+                            player.play(songs, startingAt: first, sourceName: title)
+                        }
+                    }
+                } primaryAction: { tags in
+                    if let first = tags.map(\.position).min() {
+                        player.play(songs, startingAt: first, sourceName: title)
+                    }
+                }
+                .appDeleteCommand(perform: selection.isEmpty ? nil : {
+                    let ids = Self.songs(songs, at: selection).map(\.id)
+                    selection.removeAll()
+                    Task { await downloads.remove(songIds: ids) }
+                })
             }
         }
+    }
+
+    private static func songs(_ songs: [Song], at tags: Set<SongRowTag>) -> [Song] {
+        tags.map(\.position).sorted().compactMap { songs.indices.contains($0) ? songs[$0] : nil }
     }
 
     private var title: String {

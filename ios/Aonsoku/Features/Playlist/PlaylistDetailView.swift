@@ -15,6 +15,7 @@ struct PlaylistDetailView: View {
     @State private var palette: ArtworkPalette?
     @State private var isDescriptionExpanded = false
     @State private var headerHeight: CGFloat = 360
+    @State private var selection = Set<SongRowTag>()
 
     @Environment(AppModel.self) private var app
     @Environment(LibrarySyncStore.self) private var sync
@@ -63,7 +64,7 @@ struct PlaylistDetailView: View {
 
     var body: some View {
         WithPerceptionTracking {
-            List {
+            AppList(selection: $selection) {
                 if let playlist {
                     header(playlist)
                         .onGeometryChange(for: CGFloat.self) { proxy in
@@ -83,6 +84,18 @@ struct PlaylistDetailView: View {
                 }
             }
             .listStyle(.plain)
+            .appSelectionMenu(forSelectionType: SongRowTag.self) { tags in
+                SongSelectionMenuItems(
+                    songs: selectedSongs(tags),
+                    context: singleContext(tags),
+                    playlistRemoval: removal(tags)
+                ) { playFirst(of: tags) }
+            } primaryAction: { tags in
+                playFirst(of: tags)
+            }
+            .appDeleteCommand(perform: isOwned && !selection.isEmpty ? {
+                router.playlistSongRemoval = removal(selection)
+            } : nil)
             .overlay {
                 WithPerceptionTracking {
                     if playlist == nil {
@@ -200,6 +213,26 @@ struct PlaylistDetailView: View {
         }
     }
 
+    private func selectedSongs(_ tags: Set<SongRowTag>) -> [Song] {
+        tags.map(\.position).sorted().compactMap { songs.indices.contains($0) ? songs[$0] : nil }
+    }
+
+    private func singleContext(_ tags: Set<SongRowTag>) -> SongMenuContext {
+        guard isOwned, tags.count == 1, let index = tags.first?.position else { return .standard }
+        return .playlist(id: playlistId, index: index)
+    }
+
+    /// The selected positions to remove, in the user's own playlist.
+    private func removal(_ tags: Set<SongRowTag>) -> PlaylistSongRemoval? {
+        guard isOwned, !tags.isEmpty else { return nil }
+        return PlaylistSongRemoval(playlistId: playlistId, indexes: tags.map(\.position).sorted())
+    }
+
+    private func playFirst(of tags: Set<SongRowTag>) {
+        guard let playlist, let first = tags.map(\.position).min() else { return }
+        play(playlist, startingAt: first, shuffle: false)
+    }
+
     private func play(_ playlist: Playlist, startingAt index: Int? = nil, shuffle: Bool) {
         guard !songs.isEmpty else { return }
         player.play(
@@ -243,6 +276,7 @@ struct PlaylistDetailView: View {
                         }
                     }
                     .listRowBackground(Color.clear)
+                    .tag(SongRowTag(position: index))
                 }
             }
         } else {

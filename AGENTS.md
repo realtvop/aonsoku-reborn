@@ -378,6 +378,21 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   Mac `Info.plist`). `Router.openSettings` calls `settingsWindowOpener` when
   the shell set one, so shared pages open the Settings window instead of the
   account sheet.
+  Song lists use `AppList` (a selectable `List` on macOS, a plain one on iOS)
+  with rows tagged by `SongRowTag` position: on a Mac a click selects, a
+  double-click or Return plays from the first selected row and the
+  right-click menu is `SongSelectionMenuItems` (Play, then the song's own
+  menu for one song, or Play Next, Add to Queue, Add to Playlist, Like and
+  Download for several), all through `appSelectionMenu`. Delete removes the
+  selection from the user's own playlist, after the usual confirmation, or
+  from Downloads (`appDeleteCommand`), and rows drag onto sidebar playlists
+  (`appDraggableSongs`). Inside such a list `SongRow` reads
+  `appRowsSelectable`: it leaves clicks and its menu to the list and shows a
+  play button and its menu button on hover. Rows and buttons take
+  `AppMetrics` sizes (touch targets on iOS, denser Mac rows). Album, playlist
+  and artist tiles show a play button on hover (`appHoverPlayButton`), and
+  horizontal shelves get hover paging buttons (`appShelfPaging`), since a mouse
+  wheel scrolls only vertically.
   DEBUG builds have a snapshot mode for looking at the app without a screen:
   `Aonsoku --snapshot-dir <dir> --snapshot-server <url>` (user/password `qa`
   unless `--snapshot-user`/`--snapshot-password`, `--snapshot-scenes a,b` to

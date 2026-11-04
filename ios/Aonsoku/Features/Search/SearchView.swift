@@ -10,9 +10,11 @@ struct SearchView: View {
     @State private var query = ""
     @State private var results: SearchResults?
     @State private var phase = LoadPhase.idle
+    @State private var selection = Set<SongRowTag>()
 
     @Environment(AppModel.self) private var app
     @Environment(Router.self) private var router
+    @Environment(PlayerStore.self) private var player
     @Environment(NetworkMonitor.self) private var network
     @Environment(Localizer.self) private var t
 
@@ -64,7 +66,7 @@ struct SearchView: View {
     }
 
     private var resultsList: some View {
-        List {
+        AppList(selection: $selection) {
             if let results {
                 // Artists first, as in Apple Music: a name usually means
                 // the artist.
@@ -102,6 +104,7 @@ struct SearchView: View {
                                     isLast: index == results.songs.count - 1
                                 )
                                     .themedRow(plain: true)
+                                    .tag(SongRowTag(position: index))
                             }
                         }
                     } header: {
@@ -111,6 +114,11 @@ struct SearchView: View {
             }
         }
         .listStyle(.plain)
+        .appSelectionMenu(forSelectionType: SongRowTag.self) { tags in
+            SongSelectionMenuItems(songs: selectedSongs(tags)) { playSelection(tags) }
+        } primaryAction: { tags in
+            playSelection(tags)
+        }
         .scrollDismissesKeyboard(.immediately)
         .loadStates(phase, isEmpty: results?.isEmpty ?? true) {
             Task { await search() }
@@ -140,6 +148,21 @@ struct SearchView: View {
             }
         }
         .textCase(nil)
+    }
+
+    private func selectedSongs(_ tags: Set<SongRowTag>) -> [Song] {
+        let songs = results?.songs ?? []
+        return tags.map(\.position).sorted().compactMap { songs.indices.contains($0) ? songs[$0] : nil }
+    }
+
+    /// One song plays on its own, as a tap does; several play together.
+    private func playSelection(_ tags: Set<SongRowTag>) {
+        let songs = selectedSongs(tags)
+        if songs.count == 1, let song = songs.first {
+            player.play(song: song)
+        } else if !songs.isEmpty {
+            player.play(songs)
+        }
     }
 
     private func search() async {

@@ -175,9 +175,11 @@ struct PagedSongList<Header: View, Empty: View>: View {
     @ViewBuilder let header: Header
     @ViewBuilder let empty: Empty
 
+    @State private var selection = Set<SongRowTag>()
+
     var body: some View {
         WithPerceptionTracking {
-            List {
+            AppList(selection: $selection) {
                 if !collection.isEmpty {
                     header
                         .listRowSeparator(.hidden)
@@ -192,6 +194,7 @@ struct PagedSongList<Header: View, Empty: View>: View {
                         ) { play(index) }
                             .onAppear { collection.loadMoreIfNeeded(currentItem: song) }
                             .themedRow(plain: true)
+                            .tag(SongRowTag(position: index))
                     }
                 }
                 if collection.phase == .loadingMore {
@@ -202,8 +205,21 @@ struct PagedSongList<Header: View, Empty: View>: View {
                 }
             }
             .listStyle(.plain)
+            .appSelectionMenu(forSelectionType: SongRowTag.self) { tags in
+                SongSelectionMenuItems(songs: songs(at: tags)) { playFirst(of: tags) }
+            } primaryAction: { tags in
+                playFirst(of: tags)
+            }
             .pagedStates(collection) { empty }
             .refreshable { await collection.refresh() }
         }
+    }
+
+    private func songs(at tags: Set<SongRowTag>) -> [Song] {
+        tags.map(\.position).sorted().compactMap { collection.items.indices.contains($0) ? collection.items[$0] : nil }
+    }
+
+    private func playFirst(of tags: Set<SongRowTag>) {
+        if let first = tags.map(\.position).min() { play(first) }
     }
 }

@@ -161,11 +161,17 @@ struct AlbumTile: View {
     let album: Album
     var caption: Caption = .artist
 
+    @Environment(PlayerStore.self) private var player
+    @Environment(Localizer.self) private var t
+
     var body: some View {
         WithPerceptionTracking {
             NavigationLink(value: AppRoute.album(album)) {
                 VStack(alignment: .leading, spacing: 8) {
                     ArtworkImage(id: album.coverArt, cornerRadius: Layout.artworkRadius)
+                        .appHoverPlayButton(label: t("options.play")) {
+                            Task { await player.playAlbum(id: album.id) }
+                        }
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 4) {
                             Text(album.name)
@@ -206,6 +212,7 @@ struct AlbumTile: View {
 struct PlaylistTile: View {
     let playlist: Playlist
 
+    @Environment(PlayerStore.self) private var player
     @Environment(Localizer.self) private var t
 
     var body: some View {
@@ -213,6 +220,9 @@ struct PlaylistTile: View {
             NavigationLink(value: AppRoute.playlist(id: playlist.id)) {
                 VStack(alignment: .leading, spacing: 8) {
                     ArtworkImage(id: playlist.coverArt, cornerRadius: Layout.artworkRadius, placeholder: "music.note.list")
+                        .appHoverPlayButton(label: t("options.play")) {
+                            Task { await player.playPlaylist(id: playlist.id) }
+                        }
                     VStack(alignment: .leading, spacing: 2) {
                         Text(playlist.name)
                             .font(.subheadline.weight(.semibold))
@@ -241,11 +251,17 @@ struct PlaylistTile: View {
 struct ArtistTile: View {
     let artist: Artist
 
+    @Environment(PlayerStore.self) private var player
+    @Environment(Localizer.self) private var t
+
     var body: some View {
         WithPerceptionTracking {
             NavigationLink(value: AppRoute.artist(id: artist.id, name: artist.name)) {
                 VStack(spacing: 8) {
                     ArtworkImage(id: artist.coverArt, isCircular: true, placeholder: "music.mic")
+                        .appHoverPlayButton(label: t("options.play")) {
+                            Task { await player.playArtist(id: artist.id, name: artist.name) }
+                        }
                     Text(artist.name)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.primary)
@@ -313,6 +329,7 @@ struct Shelf<Item: Identifiable, Tile: View>: View {
             .scrollIndicators(.hidden)
             .appScrollClipDisabled()
             .appHorizontalScrollMargins(Layout.margin(sizeClass))
+            .appShelfPaging()
         }
     }
 }
@@ -383,7 +400,9 @@ enum SongRowSubtitle: Equatable {
 /// A song in a list, like the web's mobile song rows: cover or number,
 /// title and artist, its download state, length and a menu. Separators
 /// start at the title, with full-width list boundaries; swipe right to
-/// queue it in a native List.
+/// queue it in a native List. In a Mac list that selects its rows, a click
+/// selects the row and the list plays it and shows its menu; hovering shows
+/// a play button and the menu button.
 struct SongRow: View {
     let song: Song
     var leading: SongRowLeading = .artwork
@@ -398,38 +417,25 @@ struct SongRow: View {
     @Environment(Localizer.self) private var t
     @Environment(\.themeContext) private var theme
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.appRowsSelectable) private var rowsSelectable
+    @State private var isHovered = false
 
     var body: some View {
         WithPerceptionTracking {
             HStack(spacing: 4) {
-                Button(action: play) {
-                    HStack(spacing: 12) {
-                        leadingView
-                        titles
-                        Spacer(minLength: 4)
-                        SongCacheBadge(songId: song.id)
-                        if showsDuration {
-                            Text(Formatters.clock(TimeInterval(song.duration)))
-                                .font(.footnote)
-                                .monospacedDigit()
-                                .themeForeground(.mutedForeground)
-                        }
-                    }
-                    .frame(minHeight: 44)
-                    .contentShape(.rect)
-                }
-                .buttonStyle(.touchFeedback)
-
+                activation
                 Menu {
                     SongMenuItems(song: song, context: context)
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.subheadline.weight(.semibold))
                         .themeForeground(.mutedForeground)
-                        .frame(width: 44, height: 44)
+                        .frame(width: AppMetrics.iconButton, height: AppMetrics.iconButton)
                         .contentShape(.rect)
                 }
                 .buttonStyle(.borderless)
+                .menuIndicator(.hidden)
+                .opacity(rowsSelectable && !isHovered ? 0 : 1)
                 .accessibilityLabel(t("playlist.buttons.options", ["name": song.title]))
             }
             .overlay(alignment: .top) {
@@ -451,13 +457,64 @@ struct SongRow: View {
             .listRowSeparatorTint(theme.palette.border)
             .alignmentGuide(.listRowSeparatorTrailing) { $0[.trailing] }
             .compactRowInsets(vertical: 4, trailingInset: 8)
-            .contextMenu {
+            .modifier(RowContextMenu(isEnabled: !rowsSelectable) {
                 SongMenuItems(song: song, context: context)
-            }
+            })
             .swipeActions(edge: .leading) {
                 EnqueueSwipeActions(songs: [song])
             }
+            .appDraggableSongs { [song] }
+            .onHover { isHovered = $0 }
         }
+    }
+
+    /// Plays on a tap, unless the list selects its rows and plays them itself.
+    @ViewBuilder
+    private var activation: some View {
+        if rowsSelectable {
+            rowContent
+                .frame(minHeight: AppMetrics.rowHeight)
+                .contentShape(.rect)
+        } else {
+            Button(action: play) {
+                rowContent
+                    .frame(minHeight: AppMetrics.rowHeight)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.touchFeedback)
+        }
+    }
+
+    private var rowContent: some View {
+        HStack(spacing: 12) {
+            leadingView
+            titles
+            Spacer(minLength: 4)
+            SongCacheBadge(songId: song.id)
+            if showsDuration {
+                Text(Formatters.clock(TimeInterval(song.duration)))
+                    .font(.footnote)
+                    .monospacedDigit()
+                    .themeForeground(.mutedForeground)
+            }
+        }
+    }
+
+    /// The play button a pointer over a Mac list row shows.
+    private var showsHoverPlay: Bool {
+        rowsSelectable && isHovered && !isCurrent
+    }
+
+    private var hoverPlayButton: some View {
+        Button(action: play) {
+            Image(systemName: "play.fill")
+                .font(.caption.weight(.bold))
+                .frame(width: 22, height: 22)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.borderless)
+        .help(t("options.play"))
+        .accessibilityLabel(t("options.play"))
     }
 
     private var boundarySeparator: some View {
@@ -489,13 +546,18 @@ struct SongRow: View {
         switch leading {
         case .artwork:
             SongArtwork(song: song, cornerRadius: Layout.rowArtworkRadius)
-                .frame(width: 44, height: 44)
+                .frame(width: AppMetrics.rowArtwork, height: AppMetrics.rowArtwork)
                 .overlay {
                     WithPerceptionTracking {
                         if isCurrent {
                             RoundedRectangle(cornerRadius: Layout.rowArtworkRadius, style: .continuous)
                                 .fill(.black.opacity(0.4))
                             NowPlayingIndicator(isPlaying: player.isPlaying, size: 18)
+                                .foregroundStyle(.white)
+                        } else if showsHoverPlay {
+                            RoundedRectangle(cornerRadius: Layout.rowArtworkRadius, style: .continuous)
+                                .fill(.black.opacity(0.35))
+                            hoverPlayButton
                                 .foregroundStyle(.white)
                         }
                     }
@@ -504,6 +566,9 @@ struct SongRow: View {
             Group {
                 if isCurrent {
                     NowPlayingIndicator(isPlaying: player.isPlaying)
+                        .foregroundStyle(.tint)
+                } else if showsHoverPlay {
+                    hoverPlayButton
                         .foregroundStyle(.tint)
                 } else {
                     Text(number.map(String.init) ?? "")
@@ -539,6 +604,27 @@ struct SongRow: View {
         // The separator starts under the title, as in Apple Music.
         .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
     }
+}
+
+/// A row's own context menu, which a Mac list that selects its rows
+/// replaces with the menu for its selection.
+private struct RowContextMenu<Items: View>: ViewModifier {
+    let isEnabled: Bool
+    @ViewBuilder let items: () -> Items
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.contextMenu { items() }
+        } else {
+            content
+        }
+    }
+}
+
+/// Tags a song row in a selectable list by its position, since a list can
+/// hold a song more than once.
+struct SongRowTag: Hashable {
+    let position: Int
 }
 
 /// A song's cover, or its album's when the setting asks for it.

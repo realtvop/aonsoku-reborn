@@ -327,3 +327,214 @@ private struct AppFormRowStyle: LabeledContentStyle {
     }
 }
 #endif
+
+// MARK: - Selectable lists
+
+extension EnvironmentValues {
+    /// True inside a list whose rows a Mac user selects. Its rows then leave
+    /// clicks, menus and the primary action to the list.
+    @Entry var appRowsSelectable = false
+}
+
+/// A `List` whose rows a Mac user selects with clicks, Shift and Command, and
+/// the arrow keys. iOS selects only while editing, so there it is a plain
+/// list whose rows act on a tap.
+struct AppList<Selection: Hashable, Content: View>: View {
+    @Binding var selection: Set<Selection>
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        #if os(macOS)
+        List(selection: $selection) {
+            content
+        }
+        .environment(\.appRowsSelectable, true)
+        #else
+        List {
+            content
+        }
+        #endif
+    }
+}
+
+extension View {
+    /// The menu for the selected rows, or the right-clicked one, and what a
+    /// double-click or Return does with them (macOS).
+    func appSelectionMenu<Selection: Hashable, Menu: View>(
+        forSelectionType type: Selection.Type,
+        @ViewBuilder menu: @escaping (Set<Selection>) -> Menu,
+        primaryAction: @escaping (Set<Selection>) -> Void
+    ) -> some View {
+        #if os(macOS)
+        contextMenu(forSelectionType: type, menu: menu, primaryAction: primaryAction)
+        #else
+        self
+        #endif
+    }
+
+    /// What Delete does with a Mac list's selection; nil when it does nothing.
+    func appDeleteCommand(perform action: (() -> Void)?) -> some View {
+        #if os(macOS)
+        onDeleteCommand(perform: action)
+        #else
+        self
+        #endif
+    }
+
+    /// Lets a row be dragged onto a playlist or the queue (macOS).
+    func appDraggableSongs(_ songs: @escaping () -> [Song]) -> some View {
+        #if os(macOS)
+        draggable(MacSongTransfer(songs: songs()))
+        #else
+        self
+        #endif
+    }
+}
+
+// MARK: - Metrics
+
+/// Sizes that follow the pointing device: touch targets on iOS, the denser
+/// rows and buttons of a Mac list.
+enum AppMetrics {
+    static var rowHeight: CGFloat {
+        #if os(macOS)
+        32
+        #else
+        44
+        #endif
+    }
+
+    static var rowArtwork: CGFloat {
+        #if os(macOS)
+        34
+        #else
+        44
+        #endif
+    }
+
+    static var iconButton: CGFloat {
+        #if os(macOS)
+        26
+        #else
+        44
+        #endif
+    }
+}
+
+// MARK: - Pointer
+
+extension View {
+    /// A play button over a cover while the pointer rests on it (macOS).
+    func appHoverPlayButton(label: String, action: @escaping () -> Void) -> some View {
+        #if os(macOS)
+        modifier(HoverPlayButton(label: label, action: action))
+        #else
+        self
+        #endif
+    }
+
+    /// Buttons at the ends of a horizontal shelf that scroll it by a page
+    /// while the pointer is over it: a mouse wheel scrolls only vertically
+    /// (macOS).
+    func appShelfPaging() -> some View {
+        #if os(macOS)
+        modifier(ShelfPaging())
+        #else
+        self
+        #endif
+    }
+}
+
+#if os(macOS)
+private struct HoverPlayButton: ViewModifier {
+    let label: String
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(alignment: .bottomLeading) {
+                if isHovered {
+                    Button(action: action) {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 32, height: 32)
+                            .background(.tint, in: .circle)
+                            .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+                            .contentShape(.circle)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(8)
+                    .help(label)
+                    .accessibilityLabel(label)
+                    .transition(.opacity)
+                }
+            }
+            .onHover { hovering in
+                withAnimation(.easeOut(duration: 0.15)) { isHovered = hovering }
+            }
+    }
+}
+
+private struct ShelfPaging: ViewModifier {
+    @State private var position = ScrollPosition(edge: .leading)
+    @State private var metrics = Metrics()
+    @State private var isHovered = false
+
+    private struct Metrics: Equatable {
+        var offset: CGFloat = 0
+        var content: CGFloat = 0
+        var viewport: CGFloat = 0
+    }
+
+    @Environment(Localizer.self) private var t
+
+    func body(content: Content) -> some View {
+        content
+            .scrollPosition($position)
+            .onScrollGeometryChange(for: Metrics.self) { geometry in
+                Metrics(
+                    offset: geometry.contentOffset.x + geometry.contentInsets.leading,
+                    content: geometry.contentSize.width + geometry.contentInsets.leading + geometry.contentInsets.trailing,
+                    viewport: geometry.containerSize.width
+                )
+            } action: { _, new in
+                metrics = new
+            }
+            .overlay(alignment: .leading) {
+                if isHovered, metrics.offset > 1 {
+                    pageButton(-1, systemImage: "chevron.backward", label: t("navigation.back"))
+                }
+            }
+            .overlay(alignment: .trailing) {
+                if isHovered, metrics.offset < metrics.content - metrics.viewport - 1 {
+                    pageButton(1, systemImage: "chevron.forward", label: t("native.mac.navigation.forward"))
+                }
+            }
+            .onHover { isHovered = $0 }
+    }
+
+    private func pageButton(_ direction: CGFloat, systemImage: String, label: String) -> some View {
+        Button {
+            let maximum = max(metrics.content - metrics.viewport, 0)
+            let target = min(max(metrics.offset + direction * metrics.viewport * 0.85, 0), maximum)
+            withAnimation(.smooth(duration: 0.4)) {
+                position.scrollTo(x: target)
+            }
+        } label: {
+            Image(systemName: systemImage)
+                .font(.system(size: 14, weight: .bold))
+                .frame(width: 30, height: 30)
+                .background(.regularMaterial, in: .circle)
+                .shadow(color: .black.opacity(0.2), radius: 4, y: 1)
+                .contentShape(.circle)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 6)
+        .help(label)
+        .accessibilityLabel(label)
+    }
+}
+#endif
