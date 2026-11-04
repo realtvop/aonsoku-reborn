@@ -74,6 +74,14 @@
       },
       "erase": "Usuń i kontynuuj",
       "keep": "Zachowaj bibliotekę"
+    },
+    "mac": {
+      "navigation": {
+        "forward": "Forward"
+      },
+      "account": {
+        "menu": "Account"
+      }
     }
   }
 }

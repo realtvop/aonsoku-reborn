@@ -252,27 +252,16 @@ extension View {
     /// they would otherwise inherit this inline one.
     func rootPageHeader(_ title: String) -> some View {
         navigationTitle(title)
-            .appTitleDisplayMode(.inline)
-            .appHideNavigationTitle()
-            .toolbar {
-                ToolbarItem(placement: .appLeading) {
-                    WithPerceptionTracking {
-                        // At its ideal width: the bar collapses a flexible
-                        // title into its overflow button.
-                        Text(title)
-                            .displayFont(.largeTitle)
-                            .lineLimit(1)
-                            .fixedSize()
-                            .accessibilityAddTraits(.isHeader)
-                    }
-                }
-                .appHideSharedBackground()
-                ToolbarItem(placement: .appTrailing) {
-                    WithPerceptionTracking {
-                        AccountButton()
-                    }
-                }
-                .appHideSharedBackground()
+            .appRootPageHeader {
+                // At its ideal width: the bar collapses a flexible title
+                // into its overflow button.
+                Text(title)
+                    .displayFont(.largeTitle)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .accessibilityAddTraits(.isHeader)
+            } account: {
+                AccountButton()
             }
     }
 }

@@ -74,6 +74,14 @@
       },
       "erase": "消去して続ける",
       "keep": "ライブラリを残す"
+    },
+    "mac": {
+      "navigation": {
+        "forward": "Forward"
+      },
+      "account": {
+        "menu": "Account"
+      }
     }
   }
 }

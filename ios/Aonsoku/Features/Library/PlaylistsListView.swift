@@ -67,7 +67,7 @@ struct PlaylistsListView: View {
             .themedBackground()
             .navigationTitle(t("sidebar.playlists"))
             .appTitleDisplayMode(.large)
-            .searchable(text: $searchText, prompt: Text(t("options.playlist.search")))
+            .appFilterField(text: $searchText, prompt: t("options.playlist.search"))
             .refreshable { await playlists.reload() }
             .task { await playlists.loadIfNeeded() }
         }

@@ -74,6 +74,14 @@
       },
       "erase": "Vymazat a pokračovat",
       "keep": "Ponechat knihovnu"
+    },
+    "mac": {
+      "navigation": {
+        "forward": "Forward"
+      },
+      "account": {
+        "menu": "Account"
+      }
     }
   }
 }

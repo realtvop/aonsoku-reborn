@@ -194,9 +194,11 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   disc labels, loading states and recommendations hide their separators.
   On iOS 26, `MainTabView` uses the system tab bar, a fixed search-role tab and the
   native bottom accessory for a layout-only `PlayerAccessorySlot`. Search stays separate from the
-  other tabs; minimization and transitions are system-owned. `SearchView`
-  owns its text/query state and native `searchable` field, using the system's
-  default placement and activation behavior. On iOS 26 the system owns the
+  other tabs; minimization and transitions are system-owned. The search text
+  lives in `Router.searchText` (Return counts `searchSubmissions`); `SearchView`
+  owns the debounced query and attaches the native `searchable` field through
+  `appSearchField`, using the system's default placement and activation
+  behavior (a Mac window's toolbar field writes the same text instead). On iOS 26 the system owns the
   search-role tab, bottom accessory and tab-bar minimization. Earlier systems
   use classic tabs on phones and NavigationSplitView on iPad, with a layout-only
   mini-player inset inside each navigation stack. Only the selected stack
@@ -204,7 +206,9 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   artwork remain shared. Search uses the older system's native field placement.
   Typing debounces and submitting
   searches immediately. Keep `searchable` scoped to `SearchView` so other
-  tabs do not gain a search field. iPad keeps the adaptable sidebar.
+  tabs do not gain a search field; pages that filter their own list use
+  `appFilterField` (the navigation bar's field on iOS, a filter bar over the
+  page on a Mac). iPad keeps the adaptable sidebar.
   `NowPlayingPresentation` keeps the full-screen player in the same view
   tree as the tabs. One persistent container owns `MiniPlayer`,
   `NowPlayingView`, their shared background and the sole `PlayerArtwork`.
@@ -354,11 +358,38 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   and scheme (macOS 15, sandboxed, `github.realtvop.aonsoku`). It links
   `AonsokuKit` and Perception, but neither SliderControl nor the Tailscale
   runtime: `TailscaleSupport.isAvailable` is false there, so the Tailscale links
-  in Login and Server settings are hidden. It is a bring-up target. The shared
-  screens run in a throwaway `Mac/MacMainView` (a `NavigationSplitView` over
-  Home, Library and Search, with no player; the avatar's account sheet, which
-  holds Settings, is presented as on iOS); the Mac shell and player replace it.
-  CI does not build it yet.
+  in Login and Server settings are hidden. CI does not build it yet.
+  The app has one main `Window` scene (`MacWindowID.main`). `Router(style:
+  .sidebar)` keeps one stack per `SidebarSection` (Home, Search, the library's
+  sections, pinned items and the user's playlists) in `sectionPaths`, with
+  pages left by Back kept in `forwardPaths` for Forward; `navigate(to:)` pushes
+  on the selected section and, unlike the iOS tabs, leaves Now Playing open,
+  because on a Mac it is an inspector rather than a layer (`topLayer` stays
+  `.root`). `Mac/Shell/MacMainView` is a `NavigationSplitView` of
+  `MacSidebar` and the selected section's `NavigationStack` (system Back
+  hidden by `appHidesSystemBackButton`, Back/Forward in the toolbar), one
+  toolbar `searchable` over `Router.searchText` that switches to Search while
+  text is typed, `MacAccountMenu` (user, server ping, sync, Sync Now,
+  Settings, Sign Out) and the size class forced to `.regular`, so shared
+  pages take their iPad layouts. The selected section is saved in
+  `@AppStorage("mac.sidebar.section")`, the window frame under the autosave
+  name `AonsokuMainWindow`. Sidebar playlists accept dropped
+  `MacSongTransfer` songs (UTI `github.realtvop.aonsoku.songs`, declared in the
+  Mac `Info.plist`). `Router.openSettings` calls `settingsWindowOpener` when
+  the shell set one, so shared pages open the Settings window instead of the
+  account sheet.
+  DEBUG builds have a snapshot mode for looking at the app without a screen:
+  `Aonsoku --snapshot-dir <dir> --snapshot-server <url>` (user/password `qa`
+  unless `--snapshot-user`/`--snapshot-password`, `--snapshot-scenes a,b` to
+  pick scenes, `--snapshot-activate` to draw windows as key) signs in, walks
+  `Mac/Debug/MacSnapshotScript`, writes each window as a PNG with an
+  accessibility dump plus `menus.txt` and `report.txt`, signs out and quits. A
+  relative `<dir>` lands in the sandbox container's `tmp`; the run keeps its
+  credentials in a keychain item of its own
+  (`KeychainManager.debugServiceSuffix`), since an ad-hoc signature changes
+  with every build. Run it sandboxed (`CODE_SIGN_IDENTITY=-`): an unsigned
+  build is unsandboxed and shares `~/Library/Application Support/Aonsoku` with
+  the Electron app.
   `App/`, `Compatibility/`, `DesignSystem/`, `Features/` and `Resources/` are
   synchronized groups shared by both targets, so a file added to one compiles
   for both. What must stay iOS-only is excluded from the Mac target by a
@@ -372,7 +403,8 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   `SleepTimer.swift`, `LyricsPanel` and `QueueScrollAnchors`) stay shared.
   Mac-only files live in `ios/Aonsoku/Mac/`, which only the Mac target
   includes: `AonsokuMacApp` (entry point, `NSApplicationDelegateAdaptor`),
-  `MacMainView`, its own `Info.plist` and `Aonsoku.entitlements` (app sandbox
+  `Shell/` (window shell), `Debug/` (snapshot mode), its own `Info.plist` and
+  `Aonsoku.entitlements` (app sandbox
   and outgoing network), and an `Assets.xcassets` with the macOS app icon. The
   bundled Poppins is registered at launch by `BrandFont.registerBundledFonts()`;
   iOS lists the fonts in `UIAppFonts`. `RootView` is generic over the signed-in
@@ -384,13 +416,20 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   `Perception.Bindable` is obsolete from macOS 14), `appTitleDisplayMode`,
   the `.appTrailing`/`.appLeading` toolbar placements, `appToolbarColorScheme`,
   `appURLField`, `appAutocapitalization`, `appSearchableDrawer`,
+  `appSearchField`, `appFilterField`, `appHidesSystemBackButton`,
+  `appRootPageHeader` (the iOS large title and avatar; a Mac window uses its
+  title bar and toolbar), `appGroupedFormStyle` (`ThemedForm` draws grouped,
+  and a field in a labeled row hides its own title, on a Mac),
   `appPageTabViewStyle`, `appAlwaysEditing`, `Image(platformImage:)` and
-  `AppDevice` (device name and platform). AppKit puts QuickDraw's `RGBColor`
+  `AppDevice` (device name and platform). `appGlassButtonStyle(prominent:)`
+  falls back to a tinted capsule on macOS 15, since AppKit greys prominent
+  buttons out in inactive windows. AppKit puts QuickDraw's `RGBColor`
   next to `AonsokuKit.RGBColor`, so the app declares a typealias that wins.
   Write `#available(iOS 26, macOS 26, *)` for iOS 26 APIs: with `iOS 26` alone
   the `*` counts macOS 15 as new enough and the Mac build fails. `ToastOverlay`
-  is an overlay on the window content on macOS (a `UIWindow` on iOS), so a toast
-  sits below sheets there. Scroll observation uses the iOS 18 / macOS 15
+  shows toasts in a click-through floating `NSPanel` that follows the window's
+  top edge (a `UIWindow` on iOS), so a toast stays above sheets; it hides while
+  the app is in the background. Scroll observation uses the iOS 18 / macOS 15
   SwiftUI APIs on macOS; the UIKit observers exist only for iOS 16/17.
 - Android Home restores its account/server-scoped `home.snapshot.v1` from
   `HomeCache` (native preferences), seeds missing results from Room, then

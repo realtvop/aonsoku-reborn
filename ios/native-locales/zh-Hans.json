@@ -109,6 +109,14 @@
       "failed": "连接失败",
       "error": "无法连接 Tailscale，请检查网络或重新登录。",
       "downloadsDescription": "通过 Tailscale 下载时需要保持 Aonsoku 运行。如果 iOS 挂起了 App，请重新打开以继续下载。"
+    },
+    "mac": {
+      "navigation": {
+        "forward": "Forward"
+      },
+      "account": {
+        "menu": "Account"
+      }
     }
   }
 }

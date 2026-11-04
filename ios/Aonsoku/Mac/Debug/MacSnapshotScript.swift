@@ -12,20 +12,60 @@ enum MacSnapshotScript {
             await driver.waitForSync()
         },
         .init(name: "home", settle: .seconds(3)) { driver in
-            driver.router.select(.home)
+            driver.router.section = .home
         },
-        .init(name: "library") { driver in
-            driver.router.select(.library)
+        .init(name: "albums") { driver in
+            driver.router.section = .albums
+        },
+        .init(name: "artists") { driver in
+            driver.router.section = .artists
+        },
+        .init(name: "songs") { driver in
+            driver.router.section = .songs
+        },
+        .init(name: "playlists") { driver in
+            driver.router.section = .playlists
+        },
+        .init(name: "playlist") { driver in
+            driver.router.section = .playlist(id: "pl1")
+        },
+        .init(name: "favorites") { driver in
+            driver.router.section = .favorites
+        },
+        .init(name: "genres") { driver in
+            driver.router.section = .genres
+        },
+        .init(name: "search", settle: .seconds(2)) { driver in
+            driver.router.section = .home
+            driver.router.searchText = "glass"
         },
         .init(name: "album") { driver in
-            driver.router.select(.home)
+            driver.router.searchText = ""
+            driver.router.section = .albums
             driver.router.navigate(to: .album(id: "al7", preview: nil))
         },
-        .init(name: "search") { driver in
-            driver.router.select(.search)
+        .init(name: "artist") { driver in
+            driver.router.navigate(to: .artist(id: "ar4", name: "Delta Static"))
+            driver.notePath()
         },
-        .init(name: "account") { driver in
-            driver.router.openSettings()
+        .init(name: "back") { driver in
+            driver.notePath()
+            driver.router.goBack()
+            driver.notePath()
+        },
+        .init(name: "forward") { driver in
+            driver.router.goForward()
+            driver.notePath()
+        },
+        .init(name: "toast-over-sheet", settle: .milliseconds(900)) { driver in
+            driver.router.present(.songInfo(Song(id: "so1", title: "Sheet", album: "", artist: "")))
+            try? await Task.sleep(for: .seconds(1))
+            driver.app.toasts.show(.key("options.playNext"), style: .success)
+            try? await Task.sleep(for: .milliseconds(300))
+            driver.noteWindowOrder()
+        },
+        .init(name: "dismiss-sheet", captures: false) { driver in
+            driver.router.sheet = nil
         },
     ]
 }

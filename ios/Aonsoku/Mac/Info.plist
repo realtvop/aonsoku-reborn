@@ -34,5 +34,18 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Aonsoku uses your local network to reach music servers.</string>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Aonsoku Songs</string>
+			<key>UTTypeIdentifier</key>
+			<string>github.realtvop.aonsoku.songs</string>
+		</dict>
+	</array>
 </dict>
 </plist>

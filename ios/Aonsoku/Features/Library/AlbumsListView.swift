@@ -46,7 +46,7 @@ struct AlbumsListView: View {
             .navigationTitle(title)
             .appNavigationSubtitle(subtitle)
             .appTitleDisplayMode(.large)
-            .searchable(isSortable, text: $searchText, prompt: t("album.list.search.placeholder"))
+            .appFilterField(isSortable, text: $searchText, prompt: t("album.list.search.placeholder"))
             .toolbar {
                 if isSortable {
                     ToolbarItem(placement: .appTrailing) {

@@ -28,7 +28,7 @@ struct ArtistsListView: View {
             .themedBackground()
             .navigationTitle(t("sidebar.artists"))
             .appTitleDisplayMode(.large)
-            .searchable(text: $searchText, prompt: Text(t("native.artists.search")))
+            .appFilterField(text: $searchText, prompt: t("native.artists.search"))
         }
     }
 

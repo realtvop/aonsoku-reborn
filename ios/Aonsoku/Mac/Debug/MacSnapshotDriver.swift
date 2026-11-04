@@ -189,6 +189,28 @@ final class MacSnapshotDriver {
         }
     }
 
+    /// Notes the selected section's pages and Forward pages.
+    func notePath() {
+        let path = router.sectionPath.wrappedValue.map { "\($0)".prefix(40) }
+        note("section \(router.section.storageKey) path \(path) back=\(router.canGoBack) forward=\(router.canGoForward)")
+    }
+
+    /// Notes the app's windows from front to back.
+    func noteWindowOrder() {
+        let numbers = NSWindow.windowNumbers(options: []) ?? []
+        let windows = numbers.compactMap { NSApp.window(withWindowNumber: $0.intValue) }
+        let order = windows.filter(\.isVisible).map { window in
+            let kind = window.sheetParent != nil ? "sheet" : (window is NSPanel ? "panel" : "window")
+            return "\(kind)(\(window.title.isEmpty ? "-" : window.title), level \(window.level.rawValue))"
+        }
+        note("windows front to back: \(order.joined(separator: ", "))")
+        let levels = NSApp.windows.filter(\.isVisible).map { window in
+            let kind = window.sheetParent != nil ? "sheet" : (window is NSPanel ? "panel" : "window")
+            return "\(kind) level \(window.level.rawValue)"
+        }
+        note("visible window levels: \(levels.joined(separator: ", "))")
+    }
+
     // MARK: - Capture
 
     private func configureMainWindow() {

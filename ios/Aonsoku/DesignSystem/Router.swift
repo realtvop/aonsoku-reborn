@@ -8,6 +8,73 @@ enum AppTab: Hashable {
     case search
 }
 
+/// How the signed-in interface keeps its navigation stacks.
+enum NavigationStyle {
+    /// One stack per tab, with Now Playing and the account sheet presented
+    /// over them (iOS).
+    case tabs
+    /// One stack per sidebar section; Now Playing is an inspector beside
+    /// the content and Settings a window of its own (macOS).
+    case sidebar
+}
+
+/// A destination in the Mac sidebar. Each section keeps a stack of its own.
+enum SidebarSection: Hashable {
+    case home
+    case search
+    case albums
+    case artists
+    case songs
+    case playlists
+    case favorites
+    case genres
+    case radios
+    case downloads
+    /// One of the user's playlists, from the sidebar's playlist list.
+    case playlist(id: String)
+    /// An album or playlist pinned to Home.
+    case pinned(PinnedItem)
+
+    /// A stable text form, for restoring the selection.
+    var storageKey: String {
+        switch self {
+        case .home: "home"
+        case .search: "search"
+        case .albums: "albums"
+        case .artists: "artists"
+        case .songs: "songs"
+        case .playlists: "playlists"
+        case .favorites: "favorites"
+        case .genres: "genres"
+        case .radios: "radios"
+        case .downloads: "downloads"
+        case let .playlist(id): "playlist:\(id)"
+        case let .pinned(item): "pinned:\(item.kind.rawValue):\(item.itemId)"
+        }
+    }
+
+    init?(storageKey: String) {
+        let parts = storageKey.split(separator: ":", maxSplits: 2).map(String.init)
+        switch parts.first {
+        case "home": self = .home
+        case "search": self = .search
+        case "albums": self = .albums
+        case "artists": self = .artists
+        case "songs": self = .songs
+        case "playlists": self = .playlists
+        case "favorites": self = .favorites
+        case "genres": self = .genres
+        case "radios": self = .radios
+        case "downloads": self = .downloads
+        case "playlist" where parts.count == 2: self = .playlist(id: parts[1])
+        case "pinned" where parts.count == 3:
+            guard let kind = PinnedItem.Kind(rawValue: parts[1]) else { return nil }
+            self = .pinned(PinnedItem(itemId: parts[2], kind: kind))
+        default: return nil
+        }
+    }
+}
+
 /// Pushed destinations, shared by every tab's navigation stack.
 enum AppRoute: Hashable {
     /// `preview` fills the header while the album loads.
@@ -81,6 +148,12 @@ struct PlaylistSongRemoval: Equatable {
 @MainActor
 @Perceptible
 final class Router {
+    let style: NavigationStyle
+
+    init(style: NavigationStyle = .tabs) {
+        self.style = style
+    }
+
     /// What is presented over the tabs. Sheets and alerts attach to the
     /// topmost layer, because a view that already presents cannot present
     /// again.
@@ -99,26 +172,118 @@ final class Router {
     var isNowPlayingPresented = false
     var isAccountPresented = false
     var sheet: GlobalSheet?
+    /// The search field's text. Search reads it; on a Mac the window's
+    /// toolbar field writes it from any section.
+    var searchText = ""
+    /// Counts searches submitted with Return, which skip the typing pause.
+    private(set) var searchSubmissions = 0
+    /// Counts requests to put the cursor in the search field (Find).
+    private(set) var searchFocusRequests = 0
+
+    // Sidebar navigation (`style == .sidebar`).
+    var section: SidebarSection = .home
+    private(set) var sectionPaths: [SidebarSection: [AppRoute]] = [:]
+    /// Pages left with Back, newest last, for Forward.
+    private(set) var forwardPaths: [SidebarSection: [AppRoute]] = [:]
+    /// The settings page a Settings window shows.
+    var settingsPage: SettingsPage = .server
+    /// Opens Settings in a window of its own instead of the account sheet.
+    @PerceptionIgnored var settingsWindowOpener: (() -> Void)?
     /// A playlist waiting for the user to confirm its deletion.
     var playlistPendingDeletion: Playlist?
     var playlistSongRemoval: PlaylistSongRemoval?
 
     var topLayer: Layer {
-        if isNowPlayingPresented { return .nowPlaying }
+        // A sidebar's Now Playing is an inspector in the window, not a layer.
+        if isNowPlayingPresented, style == .tabs { return .nowPlaying }
         if isAccountPresented { return .account }
         return .root
     }
 
-    /// Pushes `route` on the selected tab, closing anything presented.
+    /// Pushes `route` on the selected tab or section, closing what is
+    /// presented over it.
     func navigate(to route: AppRoute) {
         sheet = nil
-        isNowPlayingPresented = false
         isAccountPresented = false
-        switch selectedTab {
-        case .home: homePath.append(route)
-        case .library: libraryPath.append(route)
-        case .search: searchPath.append(route)
+        switch style {
+        case .tabs:
+            isNowPlayingPresented = false
+            switch selectedTab {
+            case .home: homePath.append(route)
+            case .library: libraryPath.append(route)
+            case .search: searchPath.append(route)
+            }
+        case .sidebar:
+            sectionPaths[section, default: []].append(route)
+            forwardPaths[section] = nil
         }
+    }
+
+    // MARK: Sidebar
+
+    /// The selected section's stack, for its `NavigationStack`. Popping
+    /// through it, as the stack's own gestures do, keeps the pages for
+    /// Forward; pushing anything else forgets them.
+    var sectionPath: Binding<[AppRoute]> {
+        let section = section
+        return Binding(
+            get: { self.sectionPaths[section] ?? [] },
+            set: { self.setPath($0, in: section) }
+        )
+    }
+
+    var canGoBack: Bool { !(sectionPaths[section] ?? []).isEmpty }
+    var canGoForward: Bool { !(forwardPaths[section] ?? []).isEmpty }
+
+    func goBack() {
+        guard var path = sectionPaths[section], let last = path.popLast() else { return }
+        sectionPaths[section] = path
+        forwardPaths[section, default: []].append(last)
+    }
+
+    func goForward() {
+        guard var forward = forwardPaths[section], let next = forward.popLast() else { return }
+        forwardPaths[section] = forward
+        sectionPaths[section, default: []].append(next)
+    }
+
+    /// Selects `section`; selecting the selected one returns it to its root.
+    func select(section: SidebarSection) {
+        if section == self.section {
+            popToRoot()
+        }
+        self.section = section
+    }
+
+    /// Returns the selected section to its root page, keeping the pages for
+    /// Forward.
+    func popToRoot() {
+        guard let path = sectionPaths[section], !path.isEmpty else { return }
+        sectionPaths[section] = []
+        forwardPaths[section, default: []].append(contentsOf: path.reversed())
+    }
+
+    private func setPath(_ path: [AppRoute], in section: SidebarSection) {
+        let old = sectionPaths[section] ?? []
+        guard path != old else { return }
+        if path.count < old.count, Array(old.prefix(path.count)) == path {
+            forwardPaths[section, default: []].append(contentsOf: old[path.count...].reversed())
+        } else {
+            forwardPaths[section] = nil
+        }
+        sectionPaths[section] = path
+    }
+
+    // MARK: Search
+
+    /// Searches for the field's text at once.
+    func submitSearch() {
+        searchSubmissions += 1
+    }
+
+    /// Asks the window to put the cursor in its search field.
+    func focusSearch() {
+        searchFocusRequests += 1
     }
 
     func presentNowPlaying() {
@@ -131,9 +296,14 @@ final class Router {
         self.sheet = sheet
     }
 
-    /// Opens the account sheet, at `page` when given.
+    /// Opens the account sheet, or the Settings window, at `page` when given.
     func openSettings(_ page: SettingsPage? = nil) {
         sheet = nil
+        if let settingsWindowOpener {
+            if let page { settingsPage = page }
+            settingsWindowOpener()
+            return
+        }
         isNowPlayingPresented = false
         accountPath = page.map { [$0] } ?? []
         isAccountPresented = true
@@ -150,6 +320,12 @@ final class Router {
         truncate(&homePath)
         truncate(&libraryPath)
         truncate(&searchPath)
+        for key in Array(sectionPaths.keys) {
+            truncate(&sectionPaths[key, default: []])
+        }
+        for key in Array(forwardPaths.keys) {
+            forwardPaths[key]?.removeAll(where: isRemoved)
+        }
     }
 
     /// Selecting the selected tab again returns it to its root.
@@ -176,6 +352,10 @@ final class Router {
         searchPath.removeAll()
         accountPath.removeAll()
         selectedTab = .home
+        searchText = ""
+        sectionPaths.removeAll()
+        forwardPaths.removeAll()
+        section = .home
     }
 }
 
@@ -186,6 +366,7 @@ extension View {
     func appDestinations() -> some View {
         navigationDestination(for: AppRoute.self) { route in
             RouteView(route: route)
+                .appHidesSystemBackButton()
         }
     }
 

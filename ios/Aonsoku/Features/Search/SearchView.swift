@@ -6,18 +6,19 @@ import SwiftUI
 /// browse; typing searches artists, albums and songs in sections captioned
 /// like the web's mobile search, each linking to its full results.
 struct SearchView: View {
-    @State private var text = ""
-    /// `text` once typing pauses.
+    /// The field's text once typing pauses.
     @State private var query = ""
     @State private var results: SearchResults?
     @State private var phase = LoadPhase.idle
 
     @Environment(AppModel.self) private var app
+    @Environment(Router.self) private var router
     @Environment(NetworkMonitor.self) private var network
     @Environment(Localizer.self) private var t
 
     var body: some View {
         WithPerceptionTracking {
+            @AppBindable var router = router
             Group {
                 if Self.isSearchable(query) {
                     resultsList
@@ -28,10 +29,12 @@ struct SearchView: View {
             .offlineBanner()
             .themedBackground()
             .navigationTitle(t("sidebar.miniSearch"))
-            .searchable(text: $text, prompt: Text(t("command.inputPlaceholder")))
-            .autocorrectionDisabled()
-            .appAutocapitalization(.never)
-            .onSubmit(of: .search) {
+            // The text lives in the router, so a Mac window's toolbar field
+            // can search from any section.
+            .appSearchField(text: $router.searchText, prompt: Text(t("command.inputPlaceholder"))) {
+                router.submitSearch()
+            }
+            .appOnChange(of: router.searchSubmissions) {
                 query = trimmedText
             }
             .task(id: trimmedText) {
@@ -51,7 +54,7 @@ struct SearchView: View {
     }
 
     private var trimmedText: String {
-        text.trimmingCharacters(in: .whitespacesAndNewlines)
+        router.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Searches start at three bytes, as on the web, so a single CJK

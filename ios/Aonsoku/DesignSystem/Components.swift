@@ -992,21 +992,6 @@ private struct OfflineBannerModifier: ViewModifier {
     }
 }
 
-// MARK: - Search
-
-extension View {
-    /// Adds a search field only when `isEnabled`, for pages that can search
-    /// some of what they show and not the rest.
-    @ViewBuilder
-    func searchable(_ isEnabled: Bool, text: Binding<String>, prompt: String) -> some View {
-        if isEnabled {
-            searchable(text: text, prompt: Text(prompt))
-        } else {
-            self
-        }
-    }
-}
-
 // MARK: - Play buttons
 
 /// The web's action row, centered: Shuffle, the long primary Play and any

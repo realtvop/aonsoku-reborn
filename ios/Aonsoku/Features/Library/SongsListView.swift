@@ -47,7 +47,7 @@ struct SongsListView: View {
             .themedBackground()
             .navigationTitle(title)
             .appTitleDisplayMode(.large)
-            .searchable(text: $searchText, prompt: Text(t("songs.list.search.placeholder")))
+            .appFilterField(text: $searchText, prompt: t("songs.list.search.placeholder"))
             .toolbar {
                 ToolbarItem(placement: .appTrailing) {
                     WithPerceptionTracking {

@@ -74,6 +74,14 @@
       },
       "erase": "Sil ve devam et",
       "keep": "Kitaplığı koru"
+    },
+    "mac": {
+      "navigation": {
+        "forward": "Forward"
+      },
+      "account": {
+        "menu": "Account"
+      }
     }
   }
 }

@@ -691,6 +691,7 @@ struct ThemedForm<Content: View>: View {
                 .themedRow()
             }
             .scrollDismissesKeyboard(.interactively)
+            .appGroupedFormStyle()
             .themedBackground(grouped: true)
         }
     }

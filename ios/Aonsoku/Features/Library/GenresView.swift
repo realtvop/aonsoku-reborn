@@ -43,7 +43,7 @@ struct GenresView: View {
             .themedBackground()
             .navigationTitle(t("table.columns.genres"))
             .appTitleDisplayMode(.large)
-            .searchable(text: $searchText, prompt: Text(t("album.list.genre.search")))
+            .appFilterField(text: $searchText, prompt: t("album.list.genre.search"))
             .refreshable { await load() }
             .task {
                 guard phase == .idle else { return }

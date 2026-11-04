@@ -109,6 +109,14 @@
       "failed": "Connection failed",
       "error": "Could not connect to Tailscale. Check your connection or sign in again.",
       "downloadsDescription": "Tailscale downloads require Aonsoku to keep running. If iOS suspends the app, reopen it to continue downloading."
+    },
+    "mac": {
+      "navigation": {
+        "forward": "Forward"
+      },
+      "account": {
+        "menu": "Account"
+      }
     }
   }
 }

@@ -25,8 +25,15 @@ extension View {
             if prominent { buttonStyle(.glassProminent) }
             else { buttonStyle(.glass) }
         } else {
+            #if os(macOS)
+            // AppKit greys prominent buttons out in inactive windows, which
+            // leaves a light label on a white capsule; this one keeps its tint.
+            if prominent { buttonStyle(AppTintedButtonStyle()) }
+            else { buttonStyle(.bordered) }
+            #else
             if prominent { buttonStyle(.borderedProminent) }
             else { buttonStyle(.bordered) }
+            #endif
         }
     }
 
@@ -127,6 +134,24 @@ extension View {
         modifier(HorizontalRelativeFrame(count: count, span: span, spacing: spacing))
     }
 }
+
+#if os(macOS)
+/// A capsule in the tint color whether or not its window is key.
+private struct AppTintedButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.controlSize) private var controlSize
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, controlSize == .large ? 16 : 10)
+            .padding(.vertical, controlSize == .large ? 7 : 3)
+            .foregroundStyle(.white)
+            .background(.tint, in: .capsule)
+            .contentShape(.capsule)
+            .opacity(configuration.isPressed ? 0.75 : (isEnabled ? 1 : 0.45))
+    }
+}
+#endif
 
 private struct AppChangeObserver<Value: Equatable>: ViewModifier {
     let value: Value

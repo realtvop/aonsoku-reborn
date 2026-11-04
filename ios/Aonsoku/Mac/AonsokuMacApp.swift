@@ -25,7 +25,7 @@ struct AonsokuMacApp: App {
         services.lifecycle.didFinishLaunching()
         let model = AppModel(services: services)
         model.start()
-        let router = Router()
+        let router = Router(style: .sidebar)
         _app = State(initialValue: model)
         _router = State(initialValue: router)
         #if DEBUG
@@ -34,10 +34,11 @@ struct AonsokuMacApp: App {
     }
 
     var body: some Scene {
-        WindowGroup(id: MacWindowID.main) {
+        Window("Aonsoku", id: MacWindowID.main) {
             MacAppRoot(app: app, router: router)
         }
-        .defaultSize(width: 1100, height: 720)
+        .defaultSize(width: 1200, height: 780)
+        .windowToolbarStyle(.unified)
         .onChange(of: scenePhase) { _, phase in
             // A Mac app keeps running and playing while another app is in
             // front or its windows are closed, so only activation is
@@ -66,8 +67,18 @@ private struct MacAppRoot: View {
     var body: some View {
         WithPerceptionTracking {
             RootView { MacMainView() }
+                .frame(minWidth: 860, minHeight: 560)
                 .themeRoot()
                 .toastHost(app)
+                .background {
+                    HostWindowReader { window in
+                        // Saved in the user's defaults, so the frame comes
+                        // back even when the system does not restore windows.
+                        if window.frameAutosaveName.isEmpty {
+                            window.setFrameAutosaveName("AonsokuMainWindow")
+                        }
+                    }
+                }
                 .appEnvironment(app, router: router)
         }
     }

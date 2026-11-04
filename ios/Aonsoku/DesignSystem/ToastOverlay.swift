@@ -114,30 +114,155 @@ private struct WindowSceneReader: UIViewRepresentable {
 }
 
 #else
-/// On a Mac the toast is an overlay on the window's content: it stays above
-/// the window's pages and Now Playing, but not above sheets, which AppKit
-/// draws as separate windows.
+/// On a Mac the toast is a click-through panel over the window's top edge,
+/// one level up so it stays above sheets too: AppKit draws them as windows of
+/// their own over the window. It follows the window instead of being its
+/// child, since a child window is kept at its parent's level, and like other
+/// panels it hides while the app is in the background.
 private struct ToastHostModifier: ViewModifier {
     let app: AppModel
+    @State private var presenter = ToastPanelPresenter()
 
     func body(content: Content) -> some View {
         WithPerceptionTracking {
-            content.overlay(alignment: .top) {
-                WithPerceptionTracking {
-                    ToastLayer()
-                        .themeRoot()
-                        .environment(app.toasts)
-                        .environment(app.localizer)
-                        .environment(app.settings)
-                        .allowsHitTesting(false)
+            content
+                .background {
+                    WithPerceptionTracking {
+                        HostWindowReader { window in
+                            presenter.attach(to: window, app: app)
+                        }
+                    }
                 }
+                .appOnChange(of: app.toasts.current?.id) { _, id in
+                    presenter.setVisible(id != nil)
+                }
+        }
+    }
+}
+
+@MainActor
+private final class ToastPanelPresenter {
+    private weak var parent: NSWindow?
+    private var panel: NSPanel?
+    private var hideTask: Task<Void, Never>?
+    private var observers: [NSObjectProtocol] = []
+
+    private static let size = CGSize(width: 560, height: 120)
+
+    func attach(to window: NSWindow, app: AppModel) {
+        guard parent !== window else { return }
+        detach()
+        parent = window
+        let panel = NSPanel(
+            contentRect: CGRect(origin: .zero, size: Self.size),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: true
+        )
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.ignoresMouseEvents = true
+        panel.isReleasedWhenClosed = false
+        panel.hidesOnDeactivate = true
+        panel.level = .floating
+        panel.collectionBehavior = [.transient, .ignoresCycle, .fullScreenAuxiliary]
+        let host = NSHostingView(
+            rootView: ToastLayer()
+                .themeRoot()
+                .environment(app.toasts)
+                .environment(app.localizer)
+                .environment(app.settings)
+        )
+        host.frame = CGRect(origin: .zero, size: Self.size)
+        host.autoresizingMask = [.width, .height]
+        panel.contentView = host
+        self.panel = panel
+        let center = NotificationCenter.default
+        for name in [NSWindow.didResizeNotification, NSWindow.didMoveNotification] {
+            observers.append(center.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.position() }
+            })
+        }
+        for name in [NSWindow.willCloseNotification, NSWindow.willMiniaturizeNotification] {
+            observers.append(center.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.panel?.orderOut(nil) }
+            })
+        }
+        if app.toasts.current != nil { setVisible(true) }
+    }
+
+    func setVisible(_ isVisible: Bool) {
+        hideTask?.cancel()
+        guard let panel, let parent else { return }
+        if isVisible {
+            position()
+            guard parent.isVisible, !parent.isMiniaturized else { return }
+            panel.orderFront(nil)
+        } else {
+            // Leaves time for the toast's exit animation.
+            hideTask = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(600))
+                guard !Task.isCancelled, let self else { return }
+                self.panel?.orderOut(nil)
             }
         }
+    }
+
+    /// Centered under the title bar and toolbar.
+    private func position() {
+        guard let panel, let parent else { return }
+        let frame = parent.frame
+        let contentTop = parent.contentLayoutRect.maxY
+        let width = min(Self.size.width, frame.width)
+        panel.setFrame(
+            CGRect(
+                x: frame.minX + (frame.width - width) / 2,
+                y: frame.minY + contentTop - Self.size.height,
+                width: width,
+                height: Self.size.height
+            ),
+            display: false
+        )
+    }
+
+    private func detach() {
+        observers.forEach(NotificationCenter.default.removeObserver)
+        observers.removeAll()
+        panel?.orderOut(nil)
+        panel = nil
+    }
+}
+
+/// Reports the window a view is shown in.
+struct HostWindowReader: NSViewRepresentable {
+    let onWindow: (NSWindow) -> Void
+
+    func makeNSView(context: Context) -> WindowReportingView {
+        let view = WindowReportingView()
+        view.onWindow = onWindow
+        return view
+    }
+
+    func updateNSView(_ view: WindowReportingView, context: Context) {
+        view.onWindow = onWindow
+        if let window = view.window { onWindow(window) }
+    }
+
+    final class WindowReportingView: NSView {
+        var onWindow: ((NSWindow) -> Void)?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let window { onWindow?(window) }
+        }
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
     }
 }
 #endif
 
-/// The toast itself: a glass capsule under the status bar.
+/// The toast itself: a glass capsule under the status bar or toolbar.
 private struct ToastLayer: View {
     @Environment(ToastCenter.self) private var toasts
     @Environment(SettingsStore.self) private var settings

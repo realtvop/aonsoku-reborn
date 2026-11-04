@@ -185,3 +185,145 @@ extension View {
         #endif
     }
 }
+
+// MARK: - Search and filter fields
+
+extension View {
+    /// The Search page's field. A Mac window's toolbar has one search field
+    /// for every section, which writes the same text, so the page adds none.
+    func appSearchField(text: Binding<String>, prompt: Text, onSubmit: @escaping () -> Void) -> some View {
+        #if os(macOS)
+        self
+        #else
+        searchable(text: text, prompt: prompt)
+            .autocorrectionDisabled()
+            .textInputAutocapitalization(.never)
+            .onSubmit(of: .search, onSubmit)
+        #endif
+    }
+
+    /// A field that narrows what the page lists: the navigation bar's search
+    /// field on iOS. On a Mac, whose toolbar field searches the whole
+    /// library, a filter field over the top of the page.
+    @ViewBuilder
+    func appFilterField(_ isEnabled: Bool = true, text: Binding<String>, prompt: String) -> some View {
+        if isEnabled {
+            #if os(macOS)
+            safeAreaInset(edge: .top, spacing: 0) {
+                AppFilterBar(text: text, prompt: prompt)
+            }
+            #else
+            searchable(text: text, prompt: Text(prompt))
+            #endif
+        } else {
+            self
+        }
+    }
+}
+
+#if os(macOS)
+/// A Mac filter field at the trailing end of a bar over the page.
+private struct AppFilterBar: View {
+    @Binding var text: String
+    let prompt: String
+
+    @Environment(Localizer.self) private var t
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Spacer(minLength: 0)
+            HStack(spacing: 4) {
+                Image(systemName: "line.3.horizontal.decrease")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                TextField(prompt, text: $text)
+                    .textFieldStyle(.plain)
+                    .autocorrectionDisabled()
+                    .accessibilityLabel(prompt)
+                if !text.isEmpty {
+                    Button {
+                        text = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(t("generic.clear"))
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .frame(width: 240)
+            .background(.quaternary.opacity(0.6), in: .rect(cornerRadius: 6))
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 8)
+        .themeBackground(.page, in: Rectangle())
+    }
+}
+#endif
+
+// MARK: - Navigation chrome
+
+extension View {
+    /// Hides a pushed page's own Back button where the window's toolbar
+    /// has Back and Forward for every page (macOS).
+    func appHidesSystemBackButton() -> some View {
+        #if os(macOS)
+        navigationBarBackButtonHidden(true)
+        #else
+        self
+        #endif
+    }
+
+    /// The large leading title and the account avatar that Home and Library
+    /// show in the iOS navigation bar. A Mac window shows the title in its
+    /// title bar and keeps the account menu in its own toolbar.
+    @ViewBuilder
+    func appRootPageHeader<Title: View, Account: View>(
+        @ViewBuilder title: @escaping () -> Title,
+        @ViewBuilder account: @escaping () -> Account
+    ) -> some View {
+        #if os(macOS)
+        self
+        #else
+        appTitleDisplayMode(.inline)
+            .appHideNavigationTitle()
+            .toolbar {
+                ToolbarItem(placement: .appLeading) {
+                    WithPerceptionTracking { title() }
+                }
+                .appHideSharedBackground()
+                ToolbarItem(placement: .appTrailing) {
+                    WithPerceptionTracking { account() }
+                }
+                .appHideSharedBackground()
+            }
+        #endif
+    }
+
+    /// Grouped rows like the iOS default, which a Mac form draws as System
+    /// Settings does. A Mac text field shows its own title beside it, so a
+    /// field inside a labeled row hides it there.
+    func appGroupedFormStyle() -> some View {
+        #if os(macOS)
+        formStyle(.grouped)
+            .labeledContentStyle(AppFormRowStyle())
+        #else
+        self
+        #endif
+    }
+}
+
+#if os(macOS)
+private struct AppFormRowStyle: LabeledContentStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            configuration.label
+            Spacer(minLength: 12)
+            configuration.content
+                .labelsHidden()
+        }
+    }
+}
+#endif
