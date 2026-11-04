@@ -57,6 +57,7 @@ the same on every platform (see [Design language](#design-language)).
 | Item | Value |
 | --- | --- |
 | Minimum OS | iOS 16.0 (iPhone and iPad) |
+| `AonsokuKit` also builds for | macOS 15.0, as a library for a future macOS app (`swift test` on the host); the SwiftUI app is iOS-only |
 | Toolchain | Xcode 26, Swift 6.2 compiler, Swift 5 language mode |
 | Player sliders | [SliderControl](https://github.com/realtvop/slidercontrol), pinned to a revision in the app target |
 | Bundle identifier | `github.realtvop.aonsoku` (unchanged, so upgrades keep data) |
@@ -81,6 +82,7 @@ ios/
   native-locales/        Strings only the native app uses, under `native.*`.
   AonsokuKit/            Swift package. All logic and observable state.
     Sources/AonsokuKit/  Services, API client, stores (see below).
+      Platform/          The iOS/macOS seams (see "Platform abstractions").
     Tests/AonsokuKitTests/
 ```
 
@@ -95,7 +97,8 @@ every key the Swift sources use exists in English.
 `AonsokuKit` owns every piece of logic and state: networking, persistence,
 playback, sync, caching, lyrics, coordination, settings, and the
 `@MainActor @Perceptible` stores the UI binds to. It has no UIKit views except
-the shake-to-open native debug controller, and it never imports Capacitor.
+the shake-to-open native debug controller (compiled only where UIKit exists),
+and it never imports Capacitor.
 
 The app target owns presentation only: views, navigation, animation,
 haptics, and presentation state (selected tab, sheet routing, scroll
@@ -142,6 +145,30 @@ Identity comparison preserves the URL scheme and username case.
 | `PreferencesService` | Key/value preferences in the library database, play history, change notifications. |
 | `CoordinationService` | Coordination token/config storage, HTTP requests, realtime WebSocket transport, heartbeats, reconnect policy, native snapshot publication, remote command execution, and handoff transactions against `AudioService`. |
 | `AppLifecycleService` | App/scene lifecycle fan-out to audio, coordination, and background URL sessions. |
+
+## Platform abstractions
+
+`AonsokuKit` also compiles and tests on macOS 15 (`cd ios/AonsokuKit && swift
+test`), so a macOS app can reuse it later. Nothing about iOS 16+ behavior
+changes. What differs by platform is isolated in `Sources/AonsokuKit/Platform/`
+behind small protocols that tests replace with fakes, so the rest of the package
+carries no `#if` for platform frameworks. `PlatformBoundaryTests` enforces that.
+
+| Seam | iOS | macOS |
+| --- | --- | --- |
+| `PlaybackAudioSession` (`SystemAudioSession`) | `AVAudioSession`: category, activation, interruptions, route changes. The system pauses `AVPlayer` when the output goes away. | No session. Nothing interrupts playback. `pausesWhenOutputDisappears` is true, so `AudioService` pauses on a lost output itself, even in the background. |
+| `AudioRouteMonitor` | Not used. | Turns changes of the Core Audio default output device, its data source and the device list (`CoreAudioOutputSource`) into the iOS route vocabulary (`AudioRouteClassifier`). A 2-second grace period absorbs out-of-order notifications. |
+| `OutputVolumeControlling` | `SystemVolumeControl`: the hidden `MPVolumeView` slider moves the system volume; the player keeps full gain. | `AppVolumeControl`: an app volume stored as `audio.appVolume.v1`, multiplied into `AVPlayer.volume` together with ReplayGain. |
+| `ApplicationLifecycleObserving` | `UIApplication` background/foreground notifications. | `NSApplication` resign/become-active. `PlatformApplication.isInBackground` is always false. |
+| `BackgroundRefreshScheduling` | `BGTaskRefreshScheduler` (`BGAppRefreshTask`). | `ActivityRefreshScheduler` (`NSBackgroundActivityScheduler`). |
+| `TailscaleRuntime` | `LibTailscaleRuntime` over the `CTailscale` XCFramework, usable on iOS 18.1+. | `CTailscale` is not linked. `UnavailableTailscaleRuntime` throws `TailscaleUnavailableError`; `TailscaleRouting` never routes, `TailscaleService.status()` reports disconnected. |
+| `PlatformImage`, `PlatformView` | `UIImage`, `UIView` | `NSImage`, `NSView` |
+| `DebugViewController` | Available. | Compiled out. |
+
+`@available(iOS 18.1, *)` matches every macOS version, so it does not mean
+Tailscale can run: check `TailscaleSupport.isAvailable`. Real headphone
+unplugging, the system's own refresh scheduling and macOS Now Playing are not
+covered by tests.
 
 ## Stores and UI contracts
 
@@ -343,6 +370,9 @@ into native storage; a failed read is retried on the next launch.
 # AonsokuKit unit tests (first available iPhone simulator, or IOS_SIMULATOR_ID)
 ./scripts/test-ios-native.sh
 bash scripts/test-ios-queue-scroll.sh # Queue/history geometry; no Simulator required
+
+# The same package on the macOS 15 host: no Simulator, no CTailscale
+(cd ios/AonsokuKit && swift test)
 
 # App build for the simulator
 xcodebuild -project ios/Aonsoku.xcodeproj -scheme Aonsoku \

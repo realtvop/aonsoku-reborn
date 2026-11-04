@@ -1,3 +1,5 @@
+#if canImport(UIKit)
+
 import UIKit
 import AVFoundation
 
@@ -711,3 +713,5 @@ extension DebugViewController: UISearchBarDelegate {
         searchBar.resignFirstResponder()
     }
 }
+
+#endif

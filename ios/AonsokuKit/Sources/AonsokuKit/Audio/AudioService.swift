@@ -1,7 +1,6 @@
 import AVFoundation
 import Foundation
 import MediaPlayer
-import UIKit
 
 public final class AudioService: NSObject, @unchecked Sendable {
     private static var resourceLoaderKey: UInt8 = 0
@@ -21,7 +20,8 @@ public final class AudioService: NSObject, @unchecked Sendable {
         let item: AVPlayerItem
     }
 
-    private let audioSession = AVAudioSession.sharedInstance()
+    private let audioSession: PlaybackAudioSession
+    private let volumeControl: OutputVolumeControlling
     private let databaseManager: DatabaseManager
     private let queueEngine: NativeQueueEngine
     private let sourceResolver: NativeSourceResolver
@@ -65,18 +65,14 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private var endObserver: NSObjectProtocol?
     private var failedObserver: NSObjectProtocol?
     private var stalledObserver: NSObjectProtocol?
-    private var interruptionObserver: NSObjectProtocol?
-    private var routeObserver: NSObjectProtocol?
+    private var interruptionObservation: ObservationToken?
+    private var routeObservation: ObservationToken?
     private var coverImageCachedObserver: NSObjectProtocol?
     private var interruptionResumePolicy = AudioInterruptionResumePolicy()
     private var bufferMismatchFirstSeen: Date?
     private var endOfStreamTracker = QueueEndOfStreamTracker()
     private var isSeeking = false
     private var remoteTargets: [(MPRemoteCommand, Any)] = []
-    private var volumeObservation: NSKeyValueObservation?
-    private var volumeView: MPVolumeView?
-    private weak var volumeHostView: UIView?
-    private var isVolumeHUDEnabled = true
     private let replayGainLock = NSLock()
     private var replayGainConfig: AudioReplayGainConfig?
     private var currentReplayGain: AudioReplayGain?
@@ -130,8 +126,12 @@ public final class AudioService: NSObject, @unchecked Sendable {
         recoveryController: PlaybackRecoveryController = PlaybackRecoveryController(),
         playerItemFactory: @escaping PlayerItemFactory = { AVPlayerItem(url: $0) },
         playerFactory: @escaping PlayerFactory = { AVQueuePlayer(items: [$0]) },
-        artworkClient: HTTPClient = NetworkService.shared.client()
+        artworkClient: HTTPClient = NetworkService.shared.client(),
+        audioSession: PlaybackAudioSession = PlatformAudio.makeSession(),
+        volumeControl: OutputVolumeControlling = PlatformAudio.makeVolumeControl()
     ) {
+        self.audioSession = audioSession
+        self.volumeControl = volumeControl
         self.databaseManager = databaseManager
         self.queueEngine = queueEngine
         self.sourceResolver = sourceResolver
@@ -155,17 +155,12 @@ public final class AudioService: NSObject, @unchecked Sendable {
         teardown(deactivateSession: false)
     }
 
-    public func start(volumeHostView: UIView? = nil) {
+    /// - Parameter volumeHostView: iOS hosts the hidden system volume slider in
+    ///   this view. macOS has no such slider and ignores it.
+    public func start(volumeHostView: PlatformView? = nil) {
         dispatchMain { [weak self] in
             guard let self else { return }
-            if let volumeHostView,
-               self.volumeHostView !== volumeHostView {
-                self.volumeHostView = volumeHostView
-                if let volumeView = self.volumeView {
-                    volumeView.removeFromSuperview()
-                    volumeHostView.addSubview(volumeView)
-                }
-            }
+            self.volumeControl.setHostView(volumeHostView)
             guard !self.started else { return }
             self.started = true
             self.downloadManager.restoreDownloads()
@@ -199,10 +194,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
         recoveryController.stopProgressMonitoring()
         unregisterRemoteCommands()
         removeAudioSessionObservers()
-        volumeObservation?.invalidate()
-        volumeObservation = nil
-        volumeView?.removeFromSuperview()
-        volumeView = nil
+        volumeControl.stopObserving()
         sleepTimer?.invalidate()
         sleepTimer = nil
         clearPlayer(deactivateSession: deactivateSession)
@@ -219,7 +211,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     public func applicationWillEnterForeground() {
         isInForeground = true
         recoveryController.setBackground(false)
-        start(volumeHostView: volumeHostView)
+        start()
         dispatchMain { [weak self] in
             guard let self else { return }
             do {
@@ -232,7 +224,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
             }
             self.emitCurrentPlaybackState()
             self.emitProgress()
-            self.emit(.systemVolumeChanged(self.audioSession.outputVolume))
+            self.emit(.systemVolumeChanged(self.volumeControl.volume))
             self.scrobbleSubmitter.submitPending(buffer: self.scrobbleBuffer)
         }
     }
@@ -493,7 +485,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
             }
             self.persistence.flushNow()
             self.emitPlaybackState(.stopped, force: true)
-            try? self.audioSession.setActive(false)
+            self.audioSession.deactivate()
         }
     }
 
@@ -1392,39 +1384,21 @@ public final class AudioService: NSObject, @unchecked Sendable {
         dispatchMain { [weak self] in
             guard let self else { return }
             let clamped = Float(max(0, min(1, value)))
-            let usesPersistentView = !self.isVolumeHUDEnabled
-            let volumeView: MPVolumeView
-            if usesPersistentView, let existing = self.volumeView {
-                volumeView = existing
-            } else {
-                volumeView = MPVolumeView(
-                    frame: CGRect(x: -2000, y: -2000, width: 120, height: 40)
-                )
-                volumeView.alpha = 0.001
-                self.volumeHostView?.addSubview(volumeView)
-                if usesPersistentView { self.volumeView = volumeView }
-            }
-            volumeView.layoutIfNeeded()
-            guard let slider = Self.findSlider(in: volumeView) else {
-                if !usesPersistentView { volumeView.removeFromSuperview() }
-                completion(.failure(AudioServiceError(
-                    code: "volume_control_unavailable",
-                    message: "System volume control is unavailable."
-                )))
-                return
-            }
-            slider.value = clamped
-            slider.sendActions(for: .valueChanged)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                if !usesPersistentView { volumeView.removeFromSuperview() }
-                let actual = self.audioSession.outputVolume
-                self.emit(.systemVolumeChanged(actual))
-                completion(.success(actual))
+            self.volumeControl.set(clamped) { result in
+                switch result {
+                case .success(let actual):
+                    // Where the app owns the volume, the player follows it.
+                    self.applyCurrentReplayGain()
+                    self.emit(.systemVolumeChanged(actual))
+                    completion(.success(actual))
+                case .failure(let error):
+                    completion(.failure(error))
+                }
             }
         }
     }
 
-    public var systemVolume: Float { audioSession.outputVolume }
+    public var systemVolume: Float { volumeControl.volume }
 
     /// Applies ReplayGain to every following load and the current song;
     /// nil turns it off.
@@ -1435,19 +1409,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
 
     public func setVolumeHUDEnabled(_ enabled: Bool) {
         dispatchMain { [weak self] in
-            guard let self else { return }
-            self.isVolumeHUDEnabled = enabled
-            if enabled {
-                self.volumeView?.removeFromSuperview()
-                self.volumeView = nil
-            } else if self.volumeView == nil {
-                let view = MPVolumeView(
-                    frame: CGRect(x: -2000, y: -2000, width: 120, height: 40)
-                )
-                view.alpha = 0.001
-                self.volumeHostView?.addSubview(view)
-                self.volumeView = view
-            }
+            self?.volumeControl.setHUDEnabled(enabled)
         }
     }
 
@@ -1925,7 +1887,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
         }
         player = nil
         playerItem = nil
-        if deactivateSession { try? audioSession.setActive(false) }
+        if deactivateSession { audioSession.deactivate() }
     }
 
     private func removePlayerObservers() {
@@ -2173,9 +2135,11 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     private func applyReplayGainScale(_ scale: Double) {
+        // iOS output follows the system volume, so its gain is 1. Where the
+        // app owns the volume (macOS) the player scales by it as well.
         player?.volume = Float(
             max(0, min(scale, Double(Float.greatestFiniteMagnitude)))
-        )
+        ) * volumeControl.playerGain
     }
 
     private func makeQueueSnapshot() -> AudioQueueSnapshot {
@@ -2468,28 +2432,19 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     private func configureAudioSession() throws {
-        try audioSession.setCategory(.playback, mode: .default)
+        try audioSession.configure()
     }
 
     private func activateAudioSession() throws {
-        try audioSession.setActive(true)
+        try audioSession.activate()
     }
 
     private func registerAudioSessionObservers() {
-        interruptionObserver = NotificationCenter.default.addObserver(
-            forName: AVAudioSession.interruptionNotification,
-            object: audioSession,
-            queue: .main
-        ) { [weak self] note in self?.handleInterruption(note) }
-        routeObserver = NotificationCenter.default.addObserver(
-            forName: AVAudioSession.routeChangeNotification,
-            object: audioSession,
-            queue: .main
-        ) { [weak self] note in
-            guard let self, self.isInForeground else { return }
-            self.emit(.routeChanged(reason: self.routeChangeReason(from: note)))
-            self.emitCurrentPlaybackState()
-            self.emitProgress()
+        interruptionObservation = audioSession.observeInterruptions {
+            [weak self] event in self?.handleInterruption(event)
+        }
+        routeObservation = audioSession.observeRouteChanges { [weak self] reason in
+            self?.handleRouteChange(reason)
         }
         coverImageCachedObserver = NotificationCenter.default.addObserver(
             forName: .aonsokuCoverImageCached,
@@ -2501,34 +2456,25 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     private func removeAudioSessionObservers() {
-        if let interruptionObserver {
-            NotificationCenter.default.removeObserver(interruptionObserver)
-        }
-        if let routeObserver { NotificationCenter.default.removeObserver(routeObserver) }
+        interruptionObservation?.cancel()
+        routeObservation?.cancel()
         if let coverImageCachedObserver {
             NotificationCenter.default.removeObserver(coverImageCachedObserver)
         }
-        interruptionObserver = nil
-        routeObserver = nil
+        interruptionObservation = nil
+        routeObservation = nil
         coverImageCachedObserver = nil
     }
 
-    private func handleInterruption(_ notification: Notification) {
-        guard let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey]
-            as? UInt,
-              let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
-        if type == .began {
+    private func handleInterruption(_ event: AudioInterruptionEvent) {
+        switch event {
+        case .began:
             interruptionResumePolicy.interruptionBegan(
                 wasPlaying: player?.timeControlStatus == .playing
             )
             emit(.interruptionChanged(type: "began", shouldResume: nil))
             pause()
-        } else {
-            let optionsRaw = notification.userInfo?[AVAudioSessionInterruptionOptionKey]
-                as? UInt ?? 0
-            let shouldResume = AVAudioSession.InterruptionOptions(
-                rawValue: optionsRaw
-            ).contains(.shouldResume)
+        case .ended(let shouldResume):
             emit(.interruptionChanged(type: "ended", shouldResume: shouldResume))
             if interruptionResumePolicy.interruptionEnded(
                 shouldResume: shouldResume
@@ -2538,23 +2484,19 @@ public final class AudioService: NSObject, @unchecked Sendable {
         }
     }
 
-    private func routeChangeReason(from notification: Notification) -> String {
-        guard let raw = notification.userInfo?[AVAudioSessionRouteChangeReasonKey]
-            as? UInt,
-              let reason = AVAudioSession.RouteChangeReason(rawValue: raw) else {
-            return "unknown"
+    private func handleRouteChange(_ reason: AudioRouteChangeReason) {
+        // iOS pauses AVPlayer by itself when the output it used goes away.
+        // Elsewhere it keeps playing through the next device, so pause here,
+        // whether or not the app is in the foreground.
+        if reason == .oldDeviceUnavailable,
+           audioSession.pausesWhenOutputDisappears,
+           wantsPlayback {
+            pause()
         }
-        switch reason {
-        case .unknown: return "unknown"
-        case .newDeviceAvailable: return "newDeviceAvailable"
-        case .oldDeviceUnavailable: return "oldDeviceUnavailable"
-        case .categoryChange: return "categoryChange"
-        case .override: return "override"
-        case .wakeFromSleep: return "wakeFromSleep"
-        case .noSuitableRouteForCategory: return "noSuitableRouteForCategory"
-        case .routeConfigurationChange: return "routeConfigurationChange"
-        @unknown default: return "unknown"
-        }
+        guard isInForeground else { return }
+        emit(.routeChanged(reason: reason.rawValue))
+        emitCurrentPlaybackState()
+        emitProgress()
     }
 
     private func emitCurrentPlaybackState() {
@@ -2668,9 +2610,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     private func observeSystemVolume() {
-        volumeObservation = audioSession.observe(\.outputVolume, options: [.new]) {
-            [weak self] _, change in
-            guard let volume = change.newValue else { return }
+        volumeControl.startObserving { [weak self] volume in
             self?.emit(.systemVolumeChanged(volume))
         }
     }
@@ -2761,7 +2701,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                 let cache = imageCache
                 if let localURL = cache.resolveCoverImage(coverArtId: coverArtId),
                    let data = try? Data(contentsOf: localURL),
-                   let image = UIImage(data: data) {
+                   let image = PlatformImage(data: data) {
                     self.publishNowPlayingArtwork(image, revision: revision)
                     return
                 }
@@ -2793,7 +2733,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
                     do {
                         let (data, response) = try await client.data(from: url)
                         guard !Task.isCancelled, let self,
-                              let image = UIImage(data: data) else { return }
+                              let image = PlatformImage(data: data) else { return }
                         if let coverArtId, !coverArtId.isEmpty,
                            let imageCache, let publication {
                             let contentType = (response as? HTTPURLResponse)?
@@ -2816,7 +2756,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
         }
     }
 
-    private func publishNowPlayingArtwork(_ image: UIImage, revision: Int) {
+    private func publishNowPlayingArtwork(_ image: PlatformImage, revision: Int) {
         let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
         DispatchQueue.main.async { [weak self] in
             guard let self, self.nowPlayingRevision == revision else { return }
@@ -3315,11 +3255,6 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private func dispatchMainSync<Result>(_ work: () -> Result) -> Result {
         if Thread.isMainThread { return work() }
         return DispatchQueue.main.sync(execute: work)
-    }
-
-    private static func findSlider(in view: UIView) -> UISlider? {
-        if let slider = view as? UISlider { return slider }
-        return view.subviews.lazy.compactMap(findSlider(in:)).first
     }
 
     private static func orderedUnique(_ values: [String]) -> [String] {

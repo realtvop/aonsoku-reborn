@@ -81,8 +81,18 @@ and fails if zero XCTest cases ran, any test failed, or no requested simulator
 is available. `IOS_SIMULATOR_ID=<uuid>` selects a simulator and
 `IOS_TEST_RESULT_BUNDLE=<path>` preserves the result bundle for CI artifacts.
 
+`cd ios/AonsokuKit && swift test` runs the same package tests on the macOS 15
+host, with no Simulator and no embedded Tailscale. It adds the macOS-only
+Core Audio and `NSBackgroundActivityScheduler` adapter tests; the simulator
+script stays the iOS gate. The platform seams in `Sources/AonsokuKit/Platform/`
+are tested through fakes on both platforms (`AudioServicePlatformTests`,
+`AudioRouteTests`, `OutputVolumeTests`, `SyncSchedulerTests`,
+`TailscaleRuntimeTests`, `PlatformSupportTests`, `PlatformBoundaryTests`).
+
 Simulator parity does not replace real-device validation for background audio
 continuity, lock-screen/Control Center commands, protected-data transitions,
 OS relaunch of a background transfer after process termination, audio-route
 changes/interruption recovery, and connectivity changes involving a real
-Subsonic and coordination server.
+Subsonic and coordination server. On a Mac the same applies to unplugging
+headphones (the Core Audio route monitor is tested with fakes), the system's own
+scheduling of background refreshes, and the Now Playing slot.

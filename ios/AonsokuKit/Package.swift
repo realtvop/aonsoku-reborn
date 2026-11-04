@@ -4,7 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "AonsokuKit",
-    platforms: [.iOS(.v16)],
+    platforms: [.iOS(.v16), .macOS(.v15)],
     products: [
         .library(
             name: "AonsokuKit",
@@ -18,7 +18,9 @@ let package = Package(
         .target(
             name: "AonsokuKit",
             dependencies: [
-                "CTailscale",
+                // The libtailscale archive only has iOS slices. macOS builds
+                // omit it and `TailscaleRuntime` reports the node unavailable.
+                .target(name: "CTailscale", condition: .when(platforms: [.iOS])),
                 .product(name: "GRDB", package: "GRDB.swift"),
                 .product(name: "Perception", package: "swift-perception"),
             ],

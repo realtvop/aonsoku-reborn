@@ -297,7 +297,7 @@ public final class AppModel {
 
     /// The scene became active.
     public func didBecomeActive() {
-        if #available(iOS 18.1, *) {
+        if #available(iOS 18.1, *), TailscaleSupport.isAvailable {
             Task { await services.tailscale.validateAfterForeground() }
         }
         guard isActive else { return }

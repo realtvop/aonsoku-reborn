@@ -5,6 +5,9 @@ Aonsoku packages the official `tailscale/libtailscale` C runtime, pinned to
 Its thin `EmbeddedTailscaleNode` Swift facade uses the same C/tsnet APIs as
 upstream TailscaleKit. The feature is available only on iOS 18.1 and later;
 the static archive keeps the host application's iOS 16 deployment target.
+The archive has no macOS slice, so `Package.swift` links `CTailscale` on iOS
+only. A macOS build of `AonsokuKit` leaves it out and reports the node as
+unavailable (`TailscaleSupport.isAvailable`).
 
 Before opening/building the Xcode project or resolving AonsokuKit:
 

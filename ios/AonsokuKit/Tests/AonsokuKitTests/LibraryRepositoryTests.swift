@@ -1,4 +1,5 @@
-import UIKit
+import CoreGraphics
+import ImageIO
 import XCTest
 @testable import AonsokuKit
 
@@ -335,8 +336,7 @@ final class ArtworkProviderTests: XCTestCase {
         let database = try TemporaryDatabase()
         let library = LibraryService(dbManager: database.manager)
         let id = "artwork-test-\(UUID().uuidString)"
-        let image = makeQuadrantImage()
-        let data = try XCTUnwrap(image.pngData())
+        let data = try makeQuadrantPNG()
         _ = try library.storeCover(
             id: id,
             data: data,
@@ -379,10 +379,9 @@ final class ArtworkProviderTests: XCTestCase {
         let database = try TemporaryDatabase()
         let library = LibraryService(dbManager: database.manager)
         let id = "palette-purge-\(UUID().uuidString)"
-        let image = makeQuadrantImage()
         _ = try library.storeCover(
             id: id,
-            data: try XCTUnwrap(image.pngData()),
+            data: try makeQuadrantPNG(),
             contentType: "image/png",
             size: ArtworkSize.large.requestValue
         )
@@ -428,8 +427,8 @@ final class ArtworkProviderTests: XCTestCase {
         let id = "image-purge-\(UUID().uuidString)"
         let gate = PaletteExtractionGate()
         let calls = LockedTestBox(0)
-        let staleImage = makeQuadrantImage()
-        let freshImage = makeQuadrantImage()
+        let staleImage = try makeQuadrantImage()
+        let freshImage = try makeQuadrantImage()
         let provider = ArtworkProvider(
             library: library,
             coverLoader: { _, _ in
@@ -457,18 +456,51 @@ final class ArtworkProviderTests: XCTestCase {
         XCTAssertEqual(calls.read { $0 }, 2)
     }
 
-    private func makeQuadrantImage() -> UIImage {
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 128, height: 128))
-        return renderer.image { context in
-            UIColor.red.setFill()
-            context.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
-            UIColor.green.setFill()
-            context.fill(CGRect(x: 64, y: 0, width: 64, height: 64))
-            UIColor.blue.setFill()
-            context.fill(CGRect(x: 0, y: 64, width: 64, height: 64))
-            UIColor.yellow.setFill()
-            context.fill(CGRect(x: 64, y: 64, width: 64, height: 64))
+    /// Red, green, blue and yellow quadrants, clockwise from the top left.
+    private func makeQuadrantCGImage() throws -> CGImage {
+        let context = try XCTUnwrap(CGContext(
+            data: nil,
+            width: 128,
+            height: 128,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        // Core Graphics draws from the bottom left; the image reads from the top.
+        let quadrants: [(red: CGFloat, green: CGFloat, blue: CGFloat, rect: CGRect)] = [
+            (1, 0, 0, CGRect(x: 0, y: 64, width: 64, height: 64)),
+            (0, 1, 0, CGRect(x: 64, y: 64, width: 64, height: 64)),
+            (0, 0, 1, CGRect(x: 0, y: 0, width: 64, height: 64)),
+            (1, 1, 0, CGRect(x: 64, y: 0, width: 64, height: 64)),
+        ]
+        for quadrant in quadrants {
+            context.setFillColor(
+                red: quadrant.red,
+                green: quadrant.green,
+                blue: quadrant.blue,
+                alpha: 1
+            )
+            context.fill(quadrant.rect)
         }
+        return try XCTUnwrap(context.makeImage())
+    }
+
+    private func makeQuadrantImage() throws -> PlatformImage {
+        PlatformImage.make(cgImage: try makeQuadrantCGImage())
+    }
+
+    private func makeQuadrantPNG() throws -> Data {
+        let data = NSMutableData()
+        let destination = try XCTUnwrap(CGImageDestinationCreateWithData(
+            data,
+            "public.png" as CFString,
+            1,
+            nil
+        ))
+        CGImageDestinationAddImage(destination, try makeQuadrantCGImage(), nil)
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+        return data as Data
     }
 }
 

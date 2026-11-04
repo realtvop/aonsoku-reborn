@@ -109,10 +109,17 @@ public final class TailscaleRouting: @unchecked Sendable {
     private var subnetRoutes: [String] = []
     private var policy = TailscaleRoutePolicy()
     private let defaults: UserDefaults
+    /// Without libtailscale (macOS) nothing can reach a tailnet, so no URL is
+    /// ever routed there, whatever a saved configuration says.
+    private let isRuntimeAvailable: Bool
     private static let key = "tailscale.configuration.v1"
 
-    init(defaults: UserDefaults = .standard) {
+    init(
+        defaults: UserDefaults = .standard,
+        isRuntimeAvailable: Bool = TailscaleSupport.isAvailable
+    ) {
         self.defaults = defaults
+        self.isRuntimeAvailable = isRuntimeAvailable
         configuration = defaults.data(forKey: Self.key)
             .flatMap { try? JSONDecoder().decode(Configuration.self, from: $0) } ?? Configuration()
         rebuildPolicy()
@@ -149,7 +156,7 @@ public final class TailscaleRouting: @unchecked Sendable {
     }
 
     public func shouldRoute(_ url: URL) -> Bool {
-        guard #available(iOS 18.1, *) else { return false }
+        guard isRuntimeAvailable else { return false }
         return lock.withLock {
             configuration.enabled && policy.routes(url)
         }
@@ -158,7 +165,7 @@ public final class TailscaleRouting: @unchecked Sendable {
     /// Private IP targets in subnet mode must not fall back to a direct session
     /// while the control-plane map is still arriving. Public requests stay direct.
     public func requiresTailscale(_ url: URL) -> Bool {
-        guard #available(iOS 18.1, *), ["http", "https", "ws", "wss"].contains(url.scheme?.lowercased() ?? "") else { return false }
+        guard isRuntimeAvailable, ["http", "https", "ws", "wss"].contains(url.scheme?.lowercased() ?? "") else { return false }
         return lock.withLock {
             configuration.enabled && (policy.routes(url) || (configuration.acceptSubnetRoutes && TailscaleRoutePolicy.isPrivateIP(url)))
         }

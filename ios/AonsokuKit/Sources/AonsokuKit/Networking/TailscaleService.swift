@@ -109,7 +109,8 @@ public actor TailscaleService {
     }
 
     public func status() async throws -> TailscaleStatusSnapshot {
-        guard TailscaleRouting.shared.current.enabled else { return TailscaleStatusSnapshot() }
+        guard TailscaleSupport.isAvailable,
+              TailscaleRouting.shared.current.enabled else { return TailscaleStatusSnapshot() }
         let generation = revision
         let node = try await ensureNode()
         let value = try await node.status()
@@ -218,6 +219,7 @@ public actor TailscaleService {
     }
 
     private func ensureNode(authKey: String? = nil) async throws -> EmbeddedTailscaleNode {
+        guard TailscaleSupport.isAvailable else { throw TailscaleUnavailableError() }
         guard TailscaleRouting.shared.current.enabled else { throw URLError(.notConnectedToInternet) }
         if let node {
             try await node.setAcceptSubnetRoutes(TailscaleRouting.shared.current.acceptSubnetRoutes)

@@ -91,7 +91,7 @@ final class TailscaleReadinessTests: XCTestCase {
 
     func testPrivateSubnetTargetsRequireReadinessBeforeMapArrives() throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: "readiness-\(UUID().uuidString)"))
-        let routing = TailscaleRouting(defaults: defaults)
+        let routing = TailscaleRouting(defaults: defaults, isRuntimeAvailable: true)
         routing.configure(enabled: true, additionalHosts: [])
         if #available(iOS 18.1, *) {
             XCTAssertTrue(routing.requiresTailscale(URL(string: "http://192.168.50.123")!))

@@ -488,6 +488,7 @@ final class PausedLoadMonitoringTests: XCTestCase {
     /// Playing needs an active audio session, which a machine without an
     /// output device may refuse; the monitor only starts once it is active.
     private func requireActivatableAudioSession() throws {
+        #if canImport(UIKit)
         let session = AVAudioSession.sharedInstance()
         do {
             try session.setCategory(.playback, mode: .default)
@@ -495,6 +496,7 @@ final class PausedLoadMonitoringTests: XCTestCase {
         } catch {
             throw XCTSkip("The audio session cannot be activated here: \(error)")
         }
+        #endif
     }
 }
 

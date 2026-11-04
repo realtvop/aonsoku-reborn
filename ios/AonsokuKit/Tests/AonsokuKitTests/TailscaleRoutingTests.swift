@@ -27,7 +27,7 @@ final class TailscaleRoutingTests: XCTestCase {
     func testSubnetPreferenceMigrationPersistenceAndRouteWithdrawal() throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: "tailscale-test-\(UUID().uuidString)"))
         defaults.set(Data(#"{"enabled":true,"additionalHosts":["music.internal"]}"#.utf8), forKey: "tailscale.configuration.v1")
-        let routing = TailscaleRouting(defaults: defaults)
+        let routing = TailscaleRouting(defaults: defaults, isRuntimeAvailable: true)
         XCTAssertTrue(routing.current.enabled)
         XCTAssertEqual(routing.current.additionalHosts, ["music.internal"])
         XCTAssertTrue(routing.current.acceptSubnetRoutes)
@@ -36,7 +36,7 @@ final class TailscaleRoutingTests: XCTestCase {
         if #available(iOS 18.1, *) { XCTAssertTrue(routing.shouldRoute(server)) }
         routing.configure(enabled: true, additionalHosts: ["music.internal"], acceptSubnetRoutes: false)
         XCTAssertFalse(routing.shouldRoute(server))
-        let restored = TailscaleRouting(defaults: defaults)
+        let restored = TailscaleRouting(defaults: defaults, isRuntimeAvailable: true)
         XCTAssertFalse(restored.current.acceptSubnetRoutes)
         restored.configure(enabled: true, additionalHosts: [])
         XCTAssertFalse(restored.current.acceptSubnetRoutes)
@@ -49,7 +49,7 @@ final class TailscaleRoutingTests: XCTestCase {
         routing.updatePeers([])
         XCTAssertFalse(routing.shouldRoute(server))
         // Control-plane routes are never restored from preferences.
-        XCTAssertFalse(TailscaleRouting(defaults: defaults).shouldRoute(server))
+        XCTAssertFalse(TailscaleRouting(defaults: defaults, isRuntimeAvailable: true).shouldRoute(server))
     }
 
     func testStatusDecodesControlPlaneSelectedRoutes() throws {
@@ -75,7 +75,7 @@ final class TailscaleRoutingTests: XCTestCase {
 
     func testAdditionalServerHostsAreExactAndStoredWithoutCredentials() throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: "tailscale-test-\(UUID().uuidString)"))
-        let routing = TailscaleRouting(defaults: defaults)
+        let routing = TailscaleRouting(defaults: defaults, isRuntimeAvailable: true)
         routing.configure(enabled: false, additionalHosts: ["https://user:secret@Music.Internal:4533/base?token=secret"])
         XCTAssertEqual(routing.current.additionalHosts, ["music.internal"])
         XCTAssertFalse(routing.shouldRoute(URL(string: "https://music.internal")!))

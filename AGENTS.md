@@ -81,6 +81,10 @@ cd android && ./gradlew assembleRelease
 ./scripts/test-ios-native.sh
 IOS_TEST_RESULT_BUNDLE=/tmp/AonsokuNativeTests.xcresult ./scripts/test-ios-native.sh
 
+# Native AonsokuKit on the macOS 15 host: no Simulator, no CTailscale, the same
+# tests as above. The library for a future macOS app; there is no app target yet.
+cd ios/AonsokuKit && swift test
+
 # iOS SwiftUI app
 bash scripts/build-ios-tailscale.sh # Once before Xcode/SPM; Go 1.27.1, cached device + Simulator runtime
 xcodebuild -project ios/Aonsoku.xcodeproj -scheme Aonsoku \
@@ -135,7 +139,9 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   links the local `ios/AonsokuKit` Swift package. The app does not load the
   shared `src/` SPA or Capacitor. SwiftUI owns presentation; `AonsokuKit` owns
   networking, persistence, playback, sync, downloads, coordination, settings,
-  and observable stores. See `docs/ios-native-app.md`.
+  and observable stores. See `docs/ios-native-app.md`. `AonsokuKit` also
+  compiles and tests natively on macOS 15 (see its `Platform/` bullet below);
+  the SwiftUI app stays iOS-only.
   Startup restores local settings and the session before the first SwiftUI
   frame, opening Home directly for signed-in users or Login otherwise,
   without a separate in-app splash screen. Home shows theme-colored featured
@@ -431,7 +437,12 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   here, rather than in views or individual API clients. AVPlayer, background
   downloads and coordination WebSockets retain their dedicated lifecycles.
   Embedded Tailscale is available only on iOS 18.1 and later; the host app
-  retains iOS 16 support. `scripts/build-ios-tailscale.sh` pins the official
+  retains iOS 16 support. It is never available on macOS: `CTailscale` is an
+  iOS-only dependency of the package, so `TailscaleSupport.isAvailable` is false
+  there and the routing, readiness and status paths behave as if Tailscale were
+  disabled (see the `Platform/` bullet below). Do not use `@available(iOS 18.1, *)`
+  alone to mean "Tailscale can run": that attribute matches every macOS version.
+  `scripts/build-ios-tailscale.sh` pins the official
   `tailscale/libtailscale` C runtime and builds the ignored `CTailscale`
   XCFramework for device arm64 and Simulator arm64/x86_64. Prepare it before
   Xcode/SPM resolution; the iOS CI workflow installs Go and caches this artifact.
@@ -629,6 +640,71 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   parses its `.xcresult` and requires a non-zero executed test count;
   `build-ios.yml` preserves that result bundle before packaging, and the tag
   release workflow calls it to attach the unsigned native iOS IPA.
+- `AonsokuKit` builds and passes its tests natively on macOS 15 (`cd
+  ios/AonsokuKit && swift test`, `platforms: [.iOS(.v16), .macOS(.v15)]`) as the
+  library for a future macOS app, with no behavior change on iOS 16+. The SwiftUI
+  app, the Xcode project and CI are unchanged and iOS-only. Everything that
+  differs by platform sits behind a small injectable abstraction in
+  `Sources/AonsokuKit/Platform/`; the rest of the package does not scatter `#if`
+  or touch UIKit/AppKit directly. `PlatformBoundaryTests` fails when
+  `UIApplication`, `NSApplication`, `AVAudioSession`, `MPVolumeView`,
+  `BGTaskScheduler`, `NSBackgroundActivityScheduler`, `os(iOS)`, `os(macOS)`,
+  `canImport(UIKit)`, `canImport(AppKit)`, `canImport(CTailscale)` or an import of
+  UIKit, AppKit, BackgroundTasks or CTailscale appears outside `Platform/` and the
+  UIKit-only `Debug/` folder. Add the next platform difference there, not inline.
+  The seams:
+  - `PlaybackAudioSession` (`SystemAudioSession`, `PlatformAudio.makeSession()`):
+    iOS wraps `AVAudioSession` (category, activation, interruptions, route
+    changes). macOS has no session: configure/activate are no-ops, nothing
+    interrupts, and `pausesWhenOutputDisappears` is true, so `AudioService`
+    pauses on `.oldDeviceUnavailable` itself, in the foreground or background,
+    before its foreground-only publishing guard. `AudioRouteMonitor` produces
+    those route changes from `CoreAudioOutputSource` (default output device,
+    its data source and the output device list), and `AudioRouteClassifier`
+    names a snapshot change with the iOS route vocabulary (headphones out,
+    device gone, device added, user override). A 2-second recent-defaults grace
+    period absorbs CoreAudio's out-of-order notifications, at the cost of
+    reporting a device that stops being default and vanishes within it as lost.
+  - `OutputVolumeControlling` (`PlatformAudio.makeVolumeControl()`): iOS
+    `SystemVolumeControl` drives the system volume through the hidden
+    `MPVolumeView` slider and reports a `playerGain` of 1. macOS
+    `AppVolumeControl` owns an app-level volume persisted as `audio.appVolume.v1`
+    with `playerGain` equal to it. `AudioService` multiplies `playerGain` into
+    `AVPlayer.volume` together with ReplayGain (`applyReplayGainScale`), so the
+    volume survives ReplayGain changes and applies to songs loaded later. The
+    volume HUD flag and the host view of `start(volumeHostView:)` only matter on
+    iOS.
+  - `ApplicationLifecycleObserving` (`SystemApplicationLifecycle`): the
+    `didEnterBackground`/`willEnterForeground` events come from `UIApplication`
+    on iOS and from `NSApplication` resign/become-active on macOS. `SyncScheduler`
+    swaps its foreground timer for a background refresh on them.
+    `PlatformApplication.isInBackground`, which `CoordinationRealtime` reads,
+    is always false on macOS, because a Mac app keeps running and playing while
+    another app is frontmost.
+  - `BackgroundRefreshScheduling` (`PlatformBackgroundRefresh`): iOS
+    `BGTaskRefreshScheduler` over `BGTaskScheduler`, macOS
+    `ActivityRefreshScheduler` over `NSBackgroundActivityScheduler`. The
+    scheduler asks for the next run when a refresh starts, then syncs with an
+    expiration that cancels the work; the foreground timer is unchanged.
+  - `TailscaleRuntime` (`TailscaleRuntimes.platform`, `TailscaleSupport.isAvailable`):
+    `LibTailscaleRuntime` where `canImport(CTailscale)` (iOS), otherwise
+    `UnavailableTailscaleRuntime`, which throws `TailscaleUnavailableError`.
+    `EmbeddedTailscaleNode` keeps its API on both platforms. `TailscaleRouting`
+    takes `isRuntimeAvailable`, so a saved "enabled" preference never routes or
+    requires Tailscale on macOS, and `TailscaleService` reports a disconnected
+    status instead of failing.
+  - `PlatformImage`/`PlatformView` (`UIImage`/`NSImage`, `UIView`/`NSView`)
+    with `make(cgImage:)` and `platformCGImage`, used by `ArtworkProvider`;
+    `ObservationToken`, the idempotent cancel handle every observation returns.
+  - `DebugViewController` and the `AVAudioSession` half of `DebugDataProvider`
+    exist only where UIKit does.
+
+  Each seam has a fake in the tests, so both platforms run the same expectations
+  (`AudioServicePlatformTests`, `AudioRouteTests`, `OutputVolumeTests`,
+  `SyncSchedulerTests`, `TailscaleRuntimeTests`, `PlatformSupportTests`); the
+  CoreAudio and `NSBackgroundActivityScheduler` adapters are covered by
+  `#if os(macOS)` tests. Not covered anywhere: real headphone unplugging, the
+  system's own refresh scheduling, and macOS Now Playing.
 - Platform/runtime detection is centralized in `src/utils/capabilities.ts`,
   with lower-level helpers in `src/utils/desktop.ts` and
   `src/utils/platform.ts`.
@@ -970,7 +1046,8 @@ route chunks or application CSS.
   `coordination-server/`.
 - **Native**: the native Android app lives under `android/` (`:core` services
   + `:app` Compose UI); the native SwiftUI app and `AonsokuKit` live under
-  `ios/`. `capacitor-plugins/capacitor-native/` retains shared TypeScript
+  `ios/`. `AonsokuKit` also builds for macOS 15 (`swift test` on the host,
+  library only). `capacitor-plugins/capacitor-native/` retains shared TypeScript
   bridge definitions with no iOS or Android Capacitor target.
 - **Git hooks**: Husky is configured (`.husky/`) and pre-commit runs
   `pnpm lint`.

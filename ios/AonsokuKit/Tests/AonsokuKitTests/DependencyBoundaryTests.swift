@@ -1,7 +1,11 @@
 import AVFoundation
+import XCTest
+
+#if canImport(UIKit)
 import MediaPlayer
 import UIKit
-import XCTest
+#endif
+
 @testable import AonsokuKit
 
 @MainActor
@@ -80,6 +84,7 @@ final class DependencyBoundaryTests: XCTestCase {
         }
     }
 
+    #if canImport(UIKit)
     func testVolumeHUDControlStaysAttachedWhenTheHostChanges() throws {
         let database = try TemporaryDatabase()
         let service = AudioService(
@@ -104,4 +109,5 @@ final class DependencyBoundaryTests: XCTestCase {
         XCTAssertFalse(secondHost.subviews.contains { $0 is MPVolumeView })
         service.shutdown()
     }
+    #endif
 }

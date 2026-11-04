@@ -1,6 +1,5 @@
 import Foundation
 import AVFoundation
-import UIKit
 
 protocol CoordinationRealtimeTransport: AnyObject {
     var onStateChange: ((String, UInt64) -> Void)? { get set }
@@ -352,16 +351,17 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
     /// When the audio session is active the coordination URLSession is kept
     /// eligible for background execution; when interrupted, the plugin
     /// degrades gracefully.
-    private var interruptionObserver: NSObjectProtocol?
-    private var routeChangeObserver: NSObjectProtocol?
+    private let audioSession: AudioSessionEventSource
+    private var interruptionObservation: ObservationToken?
     private var audioStateDidChangeObserver: NSObjectProtocol?
     private var isAppInBackground = false
 
     // MARK: - Lifecycle
 
-    override init() {
+    init(audioSession: AudioSessionEventSource = PlatformAudio.makeSession()) {
+        self.audioSession = audioSession
         super.init()
-        isAppInBackground = Thread.isMainThread ? UIApplication.shared.applicationState == .background : false
+        isAppInBackground = PlatformApplication.isInBackground
         registerAudioSessionObservers()
     }
 
@@ -417,7 +417,8 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
         config.waitsForConnectivity = true
         self.isConnecting = true
         self.notifyState("connecting")
-        if #available(iOS 18.1, *), TailscaleRouting.shared.current.enabled {
+        if #available(iOS 18.1, *), TailscaleSupport.isAvailable,
+           TailscaleRouting.shared.current.enabled {
             connectionPreparation = Task { [weak self] in
                 do {
                     if try await NetworkService.prepareConnection(for: url) {
@@ -733,24 +734,12 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
     private func registerAudioSessionObservers() {
         let center = NotificationCenter.default
 
-        if interruptionObserver == nil {
-            interruptionObserver = center.addObserver(
-                forName: AVAudioSession.interruptionNotification,
-                object: AVAudioSession.sharedInstance(),
-                queue: .main
-            ) { [weak self] notification in
-                self?.handleAudioSessionInterruption(notification)
-            }
-        }
-
-        if routeChangeObserver == nil {
-            routeChangeObserver = center.addObserver(
-                forName: AVAudioSession.routeChangeNotification,
-                object: AVAudioSession.sharedInstance(),
-                queue: .main
-            ) { [weak self] _ in
-                // Route changes do not require coordination action; we only
-                // observe to keep the session eligible. No-op here.
+        // Route changes do not require coordination action. macOS has no
+        // interruptions, so there this observation never fires.
+        if interruptionObservation == nil {
+            interruptionObservation = audioSession.observeInterruptions {
+                [weak self] event in
+                self?.handleAudioSessionInterruption(event)
             }
         }
 
@@ -773,26 +762,16 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
     }
 
     private func removeAudioSessionObservers() {
-        let center = NotificationCenter.default
-        for observer in [
-            interruptionObserver,
-            routeChangeObserver,
-            audioStateDidChangeObserver,
-        ] {
-            if let observer { center.removeObserver(observer) }
+        interruptionObservation?.cancel()
+        interruptionObservation = nil
+        if let audioStateDidChangeObserver {
+            NotificationCenter.default.removeObserver(audioStateDidChangeObserver)
         }
-        interruptionObserver = nil
-        routeChangeObserver = nil
         audioStateDidChangeObserver = nil
     }
 
-    private func handleAudioSessionInterruption(_ notification: Notification) {
-        guard
-            let rawType = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
-            let type = AVAudioSession.InterruptionType(rawValue: rawType)
-        else { return }
-
-        switch type {
+    private func handleAudioSessionInterruption(_ event: AudioInterruptionEvent) {
+        switch event {
         case .began:
             self.heartbeatTimer?.invalidate()
             self.heartbeatTimer = nil
@@ -807,8 +786,6 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
                 self.notifyState("disconnected")
                 self.scheduleReconnect()
             }
-        @unknown default:
-            break
         }
     }
 

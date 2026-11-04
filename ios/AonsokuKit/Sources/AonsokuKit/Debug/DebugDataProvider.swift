@@ -1,4 +1,8 @@
+import Foundation
+
+#if canImport(UIKit)
 import AVFoundation
+#endif
 
 struct QueueItemInfo {
     let id: String
@@ -37,6 +41,9 @@ struct ConnectionDebugSnapshot {
     let hasFallbackUrl: Bool
 }
 
+#if canImport(UIKit)
+/// What `AVAudioSession` reports. macOS has no audio session, and the debug
+/// screen that shows this is iOS-only.
 struct AudioSessionSnapshot {
     let category: String
     let mode: String
@@ -46,6 +53,7 @@ struct AudioSessionSnapshot {
     let outputLatency: TimeInterval
     let ioBufferDuration: TimeInterval
 }
+#endif
 
 final class DebugDataProvider {
     private let audioService: AudioService
@@ -119,6 +127,7 @@ final class DebugDataProvider {
         )
     }
 
+    #if canImport(UIKit)
     func audioSessionSnapshot() -> AudioSessionSnapshot {
         let session = AVAudioSession.sharedInstance()
         return AudioSessionSnapshot(
@@ -131,6 +140,7 @@ final class DebugDataProvider {
             ioBufferDuration: session.ioBufferDuration
         )
     }
+    #endif
 
     func memoryUsageMB() -> Double {
         var info = mach_task_basic_info()

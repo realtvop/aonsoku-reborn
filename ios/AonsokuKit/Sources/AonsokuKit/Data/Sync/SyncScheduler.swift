@@ -1,21 +1,37 @@
 import Foundation
-import UIKit
-import BackgroundTasks
 
 public final class SyncScheduler {
     public static let bgTaskIdentifier = "github.realtvop.aonsoku.sync.refresh"
 
+    /// The earliest the next background refresh may start after a request.
+    static let backgroundRefreshInterval: TimeInterval = 30 * 60
+
     private static var shared: SyncScheduler?
 
+    /// `register()` and every scheduler share one platform scheduler, so the
+    /// handler installed at launch is the one that receives later requests.
+    static let platformBackgroundRefresh = PlatformBackgroundRefresh
+        .makeScheduler(identifier: bgTaskIdentifier)
+
     private let syncEngine: SyncEngine
+    private let backgroundRefresh: BackgroundRefreshScheduling
+    private var lifecycleObservation: ObservationToken?
     private var foregroundTimer: Timer?
     private var isInForeground = true
     private(set) var isForegroundSchedulingEnabled = false
 
-    init(syncEngine: SyncEngine) {
+    /// Whether the periodic foreground sync is currently ticking.
+    var isForegroundTimerRunning: Bool { foregroundTimer != nil }
+
+    init(
+        syncEngine: SyncEngine,
+        lifecycle: ApplicationLifecycleObserving = SystemApplicationLifecycle(),
+        backgroundRefresh: BackgroundRefreshScheduling = SyncScheduler.platformBackgroundRefresh
+    ) {
         self.syncEngine = syncEngine
+        self.backgroundRefresh = backgroundRefresh
         Self.shared = self
-        observeAppLifecycle()
+        observeAppLifecycle(lifecycle)
     }
 
     func setForegroundSchedulingEnabled(_ enabled: Bool) {
@@ -45,28 +61,25 @@ public final class SyncScheduler {
         syncEngine.syncAll()
     }
 
-    // MARK: - Background Tasks
+    // MARK: - Background Refresh
 
+    /// Installs the background refresh handler. Call it before the app
+    /// finishes launching: iOS rejects registrations made afterwards.
     public static func register() {
-        BGTaskScheduler.shared.register(
-            forTaskWithIdentifier: Self.bgTaskIdentifier,
-            using: nil
-        ) { task in
-            guard let refreshTask = task as? BGAppRefreshTask else {
-                task.setTaskCompleted(success: false)
-                return
-            }
+        register(on: platformBackgroundRefresh)
+    }
+
+    static func register(on scheduler: BackgroundRefreshScheduling) {
+        scheduler.register { task in
             if let shared = Self.shared {
-                shared.handleBackgroundRefresh(refreshTask)
+                shared.handleBackgroundRefresh(task)
             } else {
                 let db = DatabaseManager.shared.dbPool
                 let httpClient = SubsonicHTTPClient()
                 let syncEngine = SyncEngine(db: db, httpClient: httpClient)
 
                 // Schedule next background refresh
-                let request = BGAppRefreshTaskRequest(identifier: Self.bgTaskIdentifier)
-                request.earliestBeginDate = Date(timeIntervalSinceNow: 30 * 60)
-                try? BGTaskScheduler.shared.submit(request)
+                scheduler.schedule(after: backgroundRefreshInterval)
 
                 let syncTask = Task {
                     await syncEngine.syncAllAndWait(
@@ -75,26 +88,24 @@ public final class SyncScheduler {
                     )
                 }
 
-                refreshTask.expirationHandler = {
+                task.expirationHandler = {
                     syncEngine.cancel()
                     syncTask.cancel()
                 }
 
                 Task {
                     let succeeded = await syncTask.value
-                    refreshTask.setTaskCompleted(success: succeeded)
+                    task.setCompleted(success: succeeded)
                 }
             }
         }
     }
 
     func scheduleNextBackgroundRefresh() {
-        let request = BGAppRefreshTaskRequest(identifier: Self.bgTaskIdentifier)
-        request.earliestBeginDate = Date(timeIntervalSinceNow: 30 * 60)
-        try? BGTaskScheduler.shared.submit(request)
+        backgroundRefresh.schedule(after: Self.backgroundRefreshInterval)
     }
 
-    private func handleBackgroundRefresh(_ task: BGAppRefreshTask) {
+    func handleBackgroundRefresh(_ task: BackgroundRefreshTask) {
         scheduleNextBackgroundRefresh()
 
         let syncTask = Task {
@@ -111,34 +122,28 @@ public final class SyncScheduler {
 
         Task {
             let succeeded = await syncTask.value
-            task.setTaskCompleted(success: succeeded)
+            task.setCompleted(success: succeeded)
         }
     }
 
     // MARK: - App Lifecycle
 
-    private func observeAppLifecycle() {
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(appDidEnterBackground),
-            name: UIApplication.didEnterBackgroundNotification,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(appWillEnterForeground),
-            name: UIApplication.willEnterForegroundNotification,
-            object: nil
-        )
+    private func observeAppLifecycle(_ lifecycle: ApplicationLifecycleObserving) {
+        lifecycleObservation = lifecycle.observe { [weak self] event in
+            switch event {
+            case .didEnterBackground: self?.appDidEnterBackground()
+            case .willEnterForeground: self?.appWillEnterForeground()
+            }
+        }
     }
 
-    @objc private func appDidEnterBackground() {
+    func appDidEnterBackground() {
         isInForeground = false
         stopForegroundSchedule()
         scheduleNextBackgroundRefresh()
     }
 
-    @objc private func appWillEnterForeground() {
+    func appWillEnterForeground() {
         isInForeground = true
         guard isForegroundSchedulingEnabled else { return }
         startForegroundSchedule()
@@ -146,7 +151,7 @@ public final class SyncScheduler {
     }
 
     deinit {
-        NotificationCenter.default.removeObserver(self)
+        lifecycleObservation?.cancel()
         stopForegroundSchedule()
     }
 }

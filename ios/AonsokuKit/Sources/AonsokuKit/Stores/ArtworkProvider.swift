@@ -1,6 +1,6 @@
+import CoreGraphics
 import Foundation
 import ImageIO
-import UIKit
 
 /// Cover sizes requested from the server, in pixels.
 public enum ArtworkSize: Int, Sendable, CaseIterable {
@@ -56,10 +56,10 @@ public struct ArtworkPalette: Hashable, Sendable {
 /// cached for offline use. A larger cached size satisfies a smaller request.
 public final class ArtworkProvider: @unchecked Sendable {
     public let library: LibraryService
-    private let images = NSCache<NSString, UIImage>()
+    private let images = NSCache<NSString, PlatformImage>()
     private let state = ArtworkProviderState()
-    private let coverLoader: @Sendable (String, ArtworkSize) async -> UIImage?
-    private let paletteExtractor: @Sendable (UIImage) async -> ArtworkPalette?
+    private let coverLoader: @Sendable (String, ArtworkSize) async -> PlatformImage?
+    private let paletteExtractor: @Sendable (PlatformImage) async -> ArtworkPalette?
 
     public convenience init(library: LibraryService) {
         self.init(
@@ -77,7 +77,7 @@ public final class ArtworkProvider: @unchecked Sendable {
 
     convenience init(
         library: LibraryService,
-        paletteExtractor: @escaping @Sendable (UIImage) async -> ArtworkPalette?
+        paletteExtractor: @escaping @Sendable (PlatformImage) async -> ArtworkPalette?
     ) {
         self.init(
             library: library,
@@ -90,8 +90,8 @@ public final class ArtworkProvider: @unchecked Sendable {
 
     init(
         library: LibraryService,
-        coverLoader: @escaping @Sendable (String, ArtworkSize) async -> UIImage?,
-        paletteExtractor: @escaping @Sendable (UIImage) async -> ArtworkPalette?
+        coverLoader: @escaping @Sendable (String, ArtworkSize) async -> PlatformImage?,
+        paletteExtractor: @escaping @Sendable (PlatformImage) async -> ArtworkPalette?
     ) {
         self.library = library
         self.coverLoader = coverLoader
@@ -100,14 +100,14 @@ public final class ArtworkProvider: @unchecked Sendable {
     }
 
     /// A decoded image already in memory, for the first frame of a view.
-    public func cachedImage(for coverArtId: String, size: ArtworkSize) -> UIImage? {
+    public func cachedImage(for coverArtId: String, size: ArtworkSize) -> PlatformImage? {
         cachedImage(prefix: "cover", id: coverArtId, size: size)
     }
 
     /// The largest smaller size already in memory, to show while `size`
     /// loads, so a cover a row or the mini player has shown does not
     /// flash a placeholder in Now Playing or a detail header.
-    public func previewImage(for coverArtId: String, size: ArtworkSize) -> UIImage? {
+    public func previewImage(for coverArtId: String, size: ArtworkSize) -> PlatformImage? {
         ArtworkSize.allCases
             .filter { $0.rawValue < size.rawValue }
             .sorted { $0.rawValue > $1.rawValue }
@@ -119,7 +119,7 @@ public final class ArtworkProvider: @unchecked Sendable {
     }
 
     /// The decoded image, downloading it when needed. nil when unavailable.
-    public func image(for coverArtId: String, size: ArtworkSize) async -> UIImage? {
+    public func image(for coverArtId: String, size: ArtworkSize) async -> PlatformImage? {
         if let cached = cachedImage(for: coverArtId, size: size) { return cached }
         let key = cacheKey(prefix: "cover", id: coverArtId, size: size)
         let request = state.imageRequest(key: key) { [coverLoader] in
@@ -137,7 +137,7 @@ public final class ArtworkProvider: @unchecked Sendable {
         return result
     }
 
-    public func avatar(username: String, size: ArtworkSize = .small) async -> UIImage? {
+    public func avatar(username: String, size: ArtworkSize = .small) async -> PlatformImage? {
         if let cached = cachedImage(prefix: "avatar", id: username, size: size) {
             return cached
         }
@@ -193,7 +193,7 @@ public final class ArtworkProvider: @unchecked Sendable {
         prefix: String,
         id: String,
         size: ArtworkSize
-    ) -> UIImage? {
+    ) -> PlatformImage? {
         ArtworkSize.allCases
             .filter { $0.rawValue >= size.rawValue }
             .sorted { $0.rawValue < $1.rawValue }
@@ -212,7 +212,7 @@ public final class ArtworkProvider: @unchecked Sendable {
         library: LibraryService,
         id: String,
         size: ArtworkSize
-    ) async -> UIImage? {
+    ) async -> PlatformImage? {
         var image: LibraryCachedImage?
         if let stored = library.coverSize(id: id) {
             let storedSize = stored.coverSize.flatMap(Int.init)
@@ -226,7 +226,7 @@ public final class ArtworkProvider: @unchecked Sendable {
         return image.flatMap { downsample($0.uri, pixelSize: size.rawValue) }
     }
 
-    private static func downsample(_ location: String, pixelSize: Int) -> UIImage? {
+    private static func downsample(_ location: String, pixelSize: Int) -> PlatformImage? {
         let url = URL(string: location) ?? URL(fileURLWithPath: location)
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
         let options: [CFString: Any] = [
@@ -240,11 +240,11 @@ public final class ArtworkProvider: @unchecked Sendable {
             0,
             options as CFDictionary
         ) else { return nil }
-        return UIImage(cgImage: image)
+        return PlatformImage.make(cgImage: image)
     }
 
-    private static func extractPalette(from image: UIImage) -> ArtworkPalette? {
-        guard let cgImage = image.cgImage else { return nil }
+    private static func extractPalette(from image: PlatformImage) -> ArtworkPalette? {
+        guard let cgImage = image.platformCGImage else { return nil }
         let width = 32
         let height = 32
         var pixels = [UInt8](repeating: 0, count: width * height * 4)
@@ -358,13 +358,13 @@ private extension RGBColor {
 
 private final class ArtworkProviderState: @unchecked Sendable {
     struct ImageRequest {
-        let task: Task<UIImage?, Never>
+        let task: Task<PlatformImage?, Never>
         let token: UUID
         let generation: Int
     }
 
     private struct PendingImage {
-        let task: Task<UIImage?, Never>
+        let task: Task<PlatformImage?, Never>
         let token: UUID
         let generation: Int
     }
@@ -376,7 +376,7 @@ private final class ArtworkProviderState: @unchecked Sendable {
 
     func imageRequest(
         key: String,
-        load: @escaping @Sendable () async -> UIImage?
+        load: @escaping @Sendable () async -> PlatformImage?
     ) -> ImageRequest {
         lock.lock()
         defer { lock.unlock() }
@@ -414,10 +414,10 @@ private final class ArtworkProviderState: @unchecked Sendable {
     }
 
     func storeImage(
-        _ image: UIImage,
+        _ image: PlatformImage,
         forKey key: String,
         generation expectedGeneration: Int,
-        in images: NSCache<NSString, UIImage>
+        in images: NSCache<NSString, PlatformImage>
     ) -> Bool {
         lock.lock()
         defer { lock.unlock() }
@@ -444,7 +444,7 @@ private final class ArtworkProviderState: @unchecked Sendable {
         return true
     }
 
-    func purge(images: NSCache<NSString, UIImage>) {
+    func purge(images: NSCache<NSString, PlatformImage>) {
         lock.lock()
         generation += 1
         let tasks = requests.values.map(\.task)

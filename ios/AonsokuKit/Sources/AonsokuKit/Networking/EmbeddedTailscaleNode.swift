@@ -1,9 +1,10 @@
-import CTailscale
 import Foundation
 import Network
 
 /// A small Swift facade over the same official libtailscale runtime used by
-/// TailscaleKit. No VPN extension or system-wide routing is installed.
+/// TailscaleKit. No VPN extension or system-wide routing is installed. The C
+/// calls live behind `TailscaleRuntime`; builds without the C archive (macOS)
+/// get a runtime that fails every call with `TailscaleUnavailableError`.
 @available(iOS 18.1, *)
 actor EmbeddedTailscaleNode {
     struct Status: Decodable, Sendable {
@@ -45,70 +46,48 @@ actor EmbeddedTailscaleNode {
         }
     }
 
+    private let runtime: any TailscaleRuntime
     private var handle: Int32?
     private var proxy: Proxy?
     private var acceptsSubnetRoutes: Bool?
 
-    init(directory: URL, hostname: String, authKey: String? = nil) throws {
-        let value = tailscale_new()
-        guard value > 0 else { throw URLError(.cannotConnectToHost) }
-        handle = value
-        tailscale_set_logfd(value, -1)
-        tailscale_set_ephemeral(value, 0)
-        guard tailscale_set_dir(value, directory.path) == 0,
-              tailscale_set_hostname(value, hostname) == 0 else {
-            tailscale_close(value)
-            handle = nil
-            throw URLError(.cannotCreateFile)
-        }
-        if let authKey, !authKey.isEmpty {
-            guard tailscale_set_authkey(value, authKey) == 0 else {
-                tailscale_close(value)
-                handle = nil
-                throw URLError(.userAuthenticationRequired)
-            }
-        }
+    init(
+        directory: URL,
+        hostname: String,
+        authKey: String? = nil,
+        runtime: any TailscaleRuntime = TailscaleRuntimes.platform
+    ) throws {
+        self.runtime = runtime
+        handle = try runtime.open(directory: directory, hostname: hostname, authKey: authKey)
     }
 
     deinit {
-        if let handle { tailscale_close(handle) }
+        if let handle { runtime.close(handle) }
     }
 
     func start() throws {
-        guard let handle, tailscale_start(handle) == 0 else {
-            throw URLError(.cannotConnectToHost)
-        }
+        guard let handle else { throw URLError(.cannotConnectToHost) }
+        try runtime.start(handle)
     }
 
     func stop() {
         guard let value = handle else { return }
         handle = nil
         proxy = nil
-        tailscale_close(value)
+        runtime.close(value)
     }
 
     func status() throws -> Status {
         guard let handle else { throw URLError(.notConnectedToInternet) }
-        var pointer: UnsafeMutablePointer<CChar>?
-        guard tailscale_status_json(handle, &pointer) == 0, let pointer else {
-            throw URLError(.cannotConnectToHost)
-        }
-        defer { free(pointer) }
-        let data = Data(bytes: pointer, count: strlen(pointer))
-        return try JSONDecoder().decode(Status.self, from: data)
+        return try JSONDecoder().decode(Status.self, from: runtime.statusJSON(handle))
     }
 
     func loopback() throws -> Proxy {
         if let proxy { return proxy }
         guard let handle else { throw URLError(.notConnectedToInternet) }
-        var address = [CChar](repeating: 0, count: 128)
-        var password = [CChar](repeating: 0, count: 33)
-        var localAPI = [CChar](repeating: 0, count: 33)
-        guard tailscale_loopback(handle, &address, address.count, &password, &localAPI) == 0 else {
-            throw URLError(.cannotConnectToHost)
-        }
-        let result = Proxy(address: String(cString: address), password: String(cString: password),
-                           localAPIKey: String(cString: localAPI))
+        let value = try runtime.loopback(handle)
+        let result = Proxy(address: value.address, password: value.password,
+                           localAPIKey: value.localAPIKey)
         proxy = result
         return result
     }
