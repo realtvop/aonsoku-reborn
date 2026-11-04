@@ -164,7 +164,7 @@ carries no `#if` for platform frameworks. `PlatformBoundaryTests` enforces that.
 | `BackgroundRefreshScheduling` | `BGTaskRefreshScheduler` (`BGAppRefreshTask`). | `ActivityRefreshScheduler` (`NSBackgroundActivityScheduler`). |
 | `TailscaleRuntime` | `LibTailscaleRuntime` over the `CTailscale` XCFramework, usable on iOS 18.1+. | `CTailscale` is not linked. `UnavailableTailscaleRuntime` throws `TailscaleUnavailableError`; `TailscaleRouting` never routes, `TailscaleService.status()` reports disconnected. |
 | `PlatformImage`, `PlatformView` | `UIImage`, `UIView` | `NSImage`, `NSView` |
-| `DebugViewController` | Available. | Compiled out. |
+| `DebugViewController` | Available. | Compiled out; the Mac app's Native Player Debug window reads the public `DebugDataProvider` and `NativeLogger` instead. |
 
 `@available(iOS 18.1, *)` matches every macOS version, so it does not mean
 Tailscale can run: check `TailscaleSupport.isAvailable`. Real headphone
@@ -176,15 +176,44 @@ covered by tests.
 `AonsokuMac` is a second app target in `ios/Aonsoku.xcodeproj`, with its own
 scheme. It links `AonsokuKit` and Perception, not SliderControl or the Tailscale
 runtime, and it is sandboxed (`com.apple.security.app-sandbox` and
-`com.apple.security.network.client`). It is a bring-up target: the shared screens
-run in `Mac/MacMainView`, a `NavigationSplitView` over Home, Library and Search
-with no player; the avatar's account sheet (Settings) is presented as on iOS.
-The Mac shell and player replace it.
+`com.apple.security.network.client`). It is a Mac app over the shared screens:
+
+- **Window** (`Mac/Shell/MacMainView`): one `Window` scene with a
+  `NavigationSplitView` sidebar (Home, Search, the library's sections, pinned
+  items, the user's playlists, which accept dropped songs), a navigation stack
+  per section with Back and Forward in the toolbar, one toolbar search field,
+  the account menu (server status, sync, Settings, Sign Out) and an inspector
+  button. The window frame and the selected section are restored.
+- **Pages**: song lists select rows; a double-click or Return plays, the
+  right-click menu replaces swipe actions, Delete removes from the user's
+  playlists and Downloads, rows drag onto sidebar playlists; tiles and shelves
+  have hover play and paging buttons.
+- **Player bar** (`Mac/Player/MacPlayerBar`), below the split view: cover,
+  title and artist links, like and the song's menu, shuffle, transport,
+  repeat, a scrubber that seeks on release with the quality badge, the sleep
+  timer, Lyrics and Queue, devices, AirPlay and the app volume.
+- **Now Playing inspector** (`Mac/Player/MacNowPlayingInspector`): the shared
+  `LyricsPanel` or an editable queue list over the cover-tinted background.
+- **Menus** (`Mac/Shell/MacCommands`): File, Edit, View, Playback, Library and
+  Help with Mac shortcuts; Space plays and pauses except while typing.
+- **Windows**: Settings (⌘,, `Mac/Shell/MacSettingsView`) with every settings
+  page, and Native Player Debug (`Mac/Debug/MacDebugView`).
+- **App delegate**: closing the window keeps the app and playback running, the
+  Dock reopens it and its menu has the transport; resigning active saves the
+  playback state (`AppLifecycleService.didResignActive`) without the iOS
+  background transition.
+
+Not there yet: macOS Now Playing and the media keys, the coordination platform
+string, storage locations and sleep/wake handling (the next phase); a
+large-cover page like the iOS player's (the cover shows in the bar, and the
+inspector holds lyrics and the queue); sortable song tables; and checks with a
+real pointer, keyboard and VoiceOver, since the app has so far been looked at
+through its DEBUG snapshot mode (`--snapshot-dir`, see `AGENTS.md`).
 
 | Folder | Target membership |
 | --- | --- |
 | `App/`, `Compatibility/`, `DesignSystem/`, `Features/`, `Resources/` | Synchronized groups shared by both targets. A new file compiles for both. |
-| `Mac/` | Mac only: `AonsokuMacApp`, `MacMainView`, its own `Info.plist`, `Aonsoku.entitlements` and `Assets.xcassets` (macOS app icon). |
+| `Mac/` | Mac only: `AonsokuMacApp`, `Shell/`, `Player/`, `Debug/`, its own `Info.plist`, `Aonsoku.entitlements` and `Assets.xcassets` (macOS app icon). |
 
 What stays iOS-only is excluded from the Mac target with per-target
 `membershipExceptions` in `project.pbxproj`: `App/AonsokuApp`, `AppDelegate`,

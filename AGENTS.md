@@ -463,6 +463,14 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   `didEnterBackground`: a Mac app keeps playing and drawing behind other apps,
   and the background transition would stop the coordination heartbeat and the
   published playback state. Termination flushes as before.
+  Gaps against the iOS player and a finished Mac app: macOS Now Playing and
+  the media keys, the coordination platform string, storage locations and
+  sleep/wake are the next phase; there is no large-cover page (the cover is in
+  the bar, the inspector holds lyrics and the queue), long titles in the bar
+  truncate, song lists are not sortable tables, Liquid Glass has only been
+  built (the QA host runs macOS 15), and clicks, hover, drags, real key presses
+  in an active app and VoiceOver have not been tried by hand: the snapshot mode
+  drives the stores and synthesized key events in an inactive app.
   DEBUG builds have a snapshot mode for looking at the app without a screen:
   `Aonsoku --snapshot-dir <dir> --snapshot-server <url>` (user/password `qa`
   unless `--snapshot-user`/`--snapshot-password`, `--snapshot-scenes a,b` to
