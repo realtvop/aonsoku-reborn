@@ -27,7 +27,7 @@ struct ArtistsListView: View {
             .offlineBanner()
             .themedBackground()
             .navigationTitle(t("sidebar.artists"))
-            .navigationBarTitleDisplayMode(.large)
+            .appTitleDisplayMode(.large)
             .searchable(text: $searchText, prompt: Text(t("native.artists.search")))
         }
     }

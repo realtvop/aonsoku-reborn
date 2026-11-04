@@ -325,7 +325,7 @@ private struct FeaturedCarousel: View {
                             }
                         }
                     }
-                    .tabViewStyle(.page(indexDisplayMode: .never))
+                    .appPageTabViewStyle()
                     .frame(height: sizeClass == .regular ? 250 : 150)
                     .appOnScrollPhaseChange { _, phase in
                         isScrolling = phase != .idle

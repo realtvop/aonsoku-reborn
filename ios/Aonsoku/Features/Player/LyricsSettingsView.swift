@@ -46,9 +46,9 @@ struct LyricsSettingsView: View {
                         }
                     }
                     .navigationTitle(t("lyrics.customSelect.title"))
-                    .navigationBarTitleDisplayMode(.inline)
+                    .appTitleDisplayMode(.inline)
                     .toolbar {
-                        ToolbarItem(placement: .navigationBarTrailing) {
+                        ToolbarItem(placement: .appTrailing) {
                             WithPerceptionTracking {
                                 AppCloseButton {
                                     dismiss()

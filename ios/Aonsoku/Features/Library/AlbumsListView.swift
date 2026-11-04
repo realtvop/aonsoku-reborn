@@ -45,17 +45,17 @@ struct AlbumsListView: View {
             .themedBackground()
             .navigationTitle(title)
             .appNavigationSubtitle(subtitle)
-            .navigationBarTitleDisplayMode(.large)
+            .appTitleDisplayMode(.large)
             .searchable(isSortable, text: $searchText, prompt: t("album.list.search.placeholder"))
             .toolbar {
                 if isSortable {
-                    ToolbarItem(placement: .navigationBarTrailing) {
+                    ToolbarItem(placement: .appTrailing) {
                         WithPerceptionTracking {
                             sortMenu
                         }
                     }
                 } else if case let .byGenre(genre) = filter {
-                    ToolbarItem(placement: .navigationBarTrailing) {
+                    ToolbarItem(placement: .appTrailing) {
                         WithPerceptionTracking {
                             NavigationLink(value: AppRoute.songs(SongListQuery(scope: .genre(genre)))) {
                                 Label(t("sidebar.songs"), systemImage: "music.note")

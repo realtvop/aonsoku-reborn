@@ -42,9 +42,7 @@ struct LoginView: View {
                             Section {
                                 LabeledContent(t("login.form.url")) {
                                     TextField(t("login.form.url"), text: $url, prompt: Text(verbatim: "https://"))
-                                        .keyboardType(.URL)
-                                        .textContentType(.URL)
-                                        .textInputAutocapitalization(.never)
+                                        .appURLField()
                                         .autocorrectionDisabled()
                                         .submitLabel(.next)
                                         .focused($focus, equals: .url)
@@ -59,7 +57,7 @@ struct LoginView: View {
                             }
                             .themedRow()
 
-                            if #available(iOS 18.1, *) {
+                            if #available(iOS 18.1, *), TailscaleSupport.isAvailable {
                                 Section { TailscaleSettingsLink() }
                             }
 
@@ -70,9 +68,7 @@ struct LoginView: View {
                                         text: $fallbackUrl,
                                         prompt: Text(t("settings.server.fallbackUrl.placeholder"))
                                     )
-                                    .keyboardType(.URL)
-                                    .textContentType(.URL)
-                                    .textInputAutocapitalization(.never)
+                                    .appURLField()
                                     .autocorrectionDisabled()
                                     .submitLabel(.next)
                                     .focused($focus, equals: .fallbackUrl)
@@ -95,7 +91,7 @@ struct LoginView: View {
                                         prompt: Text(t("login.form.usernamePlaceholder"))
                                     )
                                     .textContentType(.username)
-                                    .textInputAutocapitalization(.never)
+                                    .appAutocapitalization(.never)
                                     .autocorrectionDisabled()
                                     .submitLabel(.next)
                                     .focused($focus, equals: .username)
@@ -123,7 +119,7 @@ struct LoginView: View {
                         connectButton
                     }
                     .toolbar {
-                        ToolbarItem(placement: .navigationBarTrailing) {
+                        ToolbarItem(placement: .appTrailing) {
                             WithPerceptionTracking {
                                 LanguageMenu()
                             }

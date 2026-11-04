@@ -1,5 +1,8 @@
 import SwiftUI
+
+#if canImport(UIKit)
 import UIKit
+#endif
 
 struct AppScrollGeometry: Equatable {
     var contentOffset: CGPoint
@@ -31,13 +34,9 @@ private struct ScrollGeometryObserver<Value: Equatable>: ViewModifier {
     @State private var previous: Value?
 
     @ViewBuilder func body(content: Content) -> some View {
+        #if canImport(UIKit)
         if #available(iOS 18, *) {
-            content.onScrollGeometryChange(for: Value.self) { geometry in
-                transform(AppScrollGeometry(
-                    contentOffset: geometry.contentOffset, contentInsets: geometry.contentInsets,
-                    contentSize: geometry.contentSize, containerSize: geometry.containerSize
-                ))
-            } action: { action($0, $1) }
+            observed(content)
         } else {
             content.background(LegacyScrollObserver(onUpdate: { geometry, _ in
                 let next = transform(geometry)
@@ -47,6 +46,19 @@ private struct ScrollGeometryObserver<Value: Equatable>: ViewModifier {
                 action(old, next)
             }))
         }
+        #else
+        observed(content)
+        #endif
+    }
+
+    @available(iOS 18, macOS 15, *)
+    private func observed(_ content: Content) -> some View {
+        content.onScrollGeometryChange(for: Value.self) { geometry in
+            transform(AppScrollGeometry(
+                contentOffset: geometry.contentOffset, contentInsets: geometry.contentInsets,
+                contentSize: geometry.contentSize, containerSize: geometry.containerSize
+            ))
+        } action: { action($0, $1) }
     }
 }
 
@@ -55,10 +67,9 @@ private struct ScrollPhaseObserver: ViewModifier {
     @State private var previous = AppScrollPhase.idle
 
     @ViewBuilder func body(content: Content) -> some View {
+        #if canImport(UIKit)
         if #available(iOS 18, *) {
-            content.onScrollPhaseChange { old, new in
-                action(phase(old), phase(new))
-            }
+            observed(content)
         } else {
             content.background(LegacyScrollObserver(onUpdate: { _, phase in
                 guard phase != previous else { return }
@@ -67,9 +78,19 @@ private struct ScrollPhaseObserver: ViewModifier {
                 action(old, phase)
             }))
         }
+        #else
+        observed(content)
+        #endif
     }
 
-    @available(iOS 18, *)
+    @available(iOS 18, macOS 15, *)
+    private func observed(_ content: Content) -> some View {
+        content.onScrollPhaseChange { old, new in
+            action(phase(old), phase(new))
+        }
+    }
+
+    @available(iOS 18, macOS 15, *)
     private func phase(_ value: ScrollPhase) -> AppScrollPhase {
         switch value {
         case .idle: .idle
@@ -82,6 +103,7 @@ private struct ScrollPhaseObserver: ViewModifier {
     }
 }
 
+#if canImport(UIKit)
 /// Read the existing scroll view without replacing its delegate or pan gesture.
 /// KVO handles geometry; a temporary display link observes the end of deceleration.
 struct LegacyScrollObserver: UIViewRepresentable {
@@ -266,3 +288,4 @@ final class ViewUpdateLink {
         @objc func tick() { action() }
     }
 }
+#endif

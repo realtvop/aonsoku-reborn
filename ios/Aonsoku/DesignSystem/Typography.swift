@@ -1,7 +1,12 @@
 import CoreText
 import Perception
 import SwiftUI
+
+#if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 /// Poppins, the web app's typeface, carries Aonsoku's headings: navigation
 /// titles, page titles and section titles. Body text, rows and controls keep
@@ -9,6 +14,14 @@ import UIKit
 /// system's fonts for the preferred languages at the same weight, as the web
 /// falls back to the platform sans-serif.
 enum BrandFont {
+    #if canImport(UIKit)
+    typealias NativeFont = UIFont
+    typealias NativeFontDescriptor = UIFontDescriptor
+    #else
+    typealias NativeFont = NSFont
+    typealias NativeFontDescriptor = NSFontDescriptor
+    #endif
+
     enum Weight: Hashable {
         case medium
         case semibold
@@ -22,7 +35,7 @@ enum BrandFont {
             }
         }
 
-        fileprivate var systemWeight: UIFont.Weight {
+        fileprivate var systemWeight: NativeFont.Weight {
             switch self {
             case .medium: .medium
             case .semibold: .semibold
@@ -32,20 +45,36 @@ enum BrandFont {
     }
 
     /// Poppins at exactly `size`.
-    static func uiFont(size: CGFloat, weight: Weight) -> UIFont {
-        let system = UIFont.systemFont(ofSize: size, weight: weight.systemWeight)
-        guard let poppins = UIFont(name: weight.postScriptName, size: size) else {
+    static func nativeFont(size: CGFloat, weight: Weight) -> NativeFont {
+        let system = NativeFont.systemFont(ofSize: size, weight: weight.systemWeight)
+        guard let poppins = NativeFont(name: weight.postScriptName, size: size) else {
             return system
         }
         let languages = Locale.preferredLanguages as CFArray
         let fallbacks = CTFontCopyDefaultCascadeListForLanguages(system as CTFont, languages)
-            as? [UIFontDescriptor] ?? []
+            as? [NativeFontDescriptor] ?? []
         let descriptor = poppins.fontDescriptor.addingAttributes([
             .cascadeList: [system.fontDescriptor] + fallbacks,
         ])
+        #if canImport(UIKit)
         return UIFont(descriptor: descriptor, size: size)
+        #else
+        return NSFont(descriptor: descriptor, size: size) ?? poppins
+        #endif
     }
 
+    #if os(macOS)
+    /// Registers the bundled Poppins files with the process. iOS reads them
+    /// from the Info.plist's font list; a Mac app registers them itself, and
+    /// must do so before the first heading asks for one.
+    static func registerBundledFonts() {
+        let urls = Bundle.main.urls(forResourcesWithExtension: "ttf", subdirectory: nil) ?? []
+        guard !urls.isEmpty else { return }
+        CTFontManagerRegisterFontURLs(urls as CFArray, .process, true, nil)
+    }
+    #endif
+
+    #if canImport(UIKit)
     /// Poppins at `size` for the default text size, scaled for `category`
     /// the way `textStyle` scales.
     static func uiFont(
@@ -56,7 +85,7 @@ enum BrandFont {
     ) -> UIFont {
         let traits = UITraitCollection(preferredContentSizeCategory: category)
         let scaled = UIFontMetrics(forTextStyle: textStyle).scaledValue(for: size, compatibleWith: traits)
-        return uiFont(size: scaled, weight: weight)
+        return nativeFont(size: scaled, weight: weight)
     }
 
     /// Navigation bar titles in Poppins. Call once at launch, before the
@@ -71,10 +100,11 @@ enum BrandFont {
             .font: uiFont(size: 17, weight: .semibold, relativeTo: .headline, category: category),
         ]
     }
+    #endif
 }
 
 /// The heading styles, each scaled with Dynamic Type like the system style
-/// it stands in for.
+/// it stands in for. A Mac has no Dynamic Type, so they keep their size there.
 enum DisplayStyle: Hashable {
     /// Large navigation titles.
     case largeTitle
@@ -107,6 +137,7 @@ enum DisplayStyle: Hashable {
         }
     }
 
+    #if canImport(UIKit)
     var textStyle: UIFont.TextStyle {
         switch self {
         case .largeTitle: .largeTitle
@@ -115,6 +146,7 @@ enum DisplayStyle: Hashable {
         case .inline: .headline
         }
     }
+    #endif
 }
 
 extension View {
@@ -150,13 +182,17 @@ private enum DisplayFontCache {
         if let font = fonts[key] {
             return font
         }
-        let uiFont = BrandFont.uiFont(
+        #if canImport(UIKit)
+        let native = BrandFont.uiFont(
             size: style.size,
             weight: style.weight,
             relativeTo: style.textStyle,
             category: UIContentSizeCategory(size)
         )
-        let font = Font(uiFont)
+        #else
+        let native = BrandFont.nativeFont(size: style.size, weight: style.weight)
+        #endif
+        let font = Font(native)
         fonts[key] = font
         return font
     }

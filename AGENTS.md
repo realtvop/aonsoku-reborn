@@ -7,7 +7,8 @@ repository.
 
 Aonsoku is a multi-runtime music streaming client for Navidrome/Subsonic
 servers. It targets the web, Electron desktop, native Android (Kotlin +
-Jetpack Compose), and a native SwiftUI app for iOS 16 and later. It supports synchronized
+Jetpack Compose), a native SwiftUI app for iOS 16 and later, and a macOS 15
+SwiftUI app target that shares the iOS screens. It supports synchronized
 lyrics, radio streaming, Discord RPC, offline library/cache features, and
 cross-device coordination with remote control and handoff.
 
@@ -82,7 +83,7 @@ cd android && ./gradlew assembleRelease
 IOS_TEST_RESULT_BUNDLE=/tmp/AonsokuNativeTests.xcresult ./scripts/test-ios-native.sh
 
 # Native AonsokuKit on the macOS 15 host: no Simulator, no CTailscale, the same
-# tests as above. The library for a future macOS app; there is no app target yet.
+# tests as above. The library the macOS app target links.
 cd ios/AonsokuKit && swift test
 
 # iOS SwiftUI app
@@ -91,6 +92,12 @@ xcodebuild -project ios/Aonsoku.xcodeproj -scheme Aonsoku \
   -destination 'generic/platform=iOS Simulator' build
 node scripts/check-ios-strings.mjs # Every translation key the app uses exists
 bash scripts/test-ios-queue-scroll.sh # Queue/history snap geometry and animation curve (macOS, no Simulator)
+
+# macOS SwiftUI app: target and scheme AonsokuMac in the same project, macOS 15.
+# Unsigned local build. SPM still resolves the CTailscale binary target, so run
+# scripts/build-ios-tailscale.sh once first even though the Mac app never links it.
+xcodebuild -project ios/Aonsoku.xcodeproj -scheme AonsokuMac \
+  -destination 'platform=macOS' -skipMacroValidation CODE_SIGNING_ALLOWED=NO build
 
 # Electron desktop native audio
 pnpm native-audio:build   # Build the Node-API libmpv addon
@@ -140,8 +147,8 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   shared `src/` SPA or Capacitor. SwiftUI owns presentation; `AonsokuKit` owns
   networking, persistence, playback, sync, downloads, coordination, settings,
   and observable stores. See `docs/ios-native-app.md`. `AonsokuKit` also
-  compiles and tests natively on macOS 15 (see its `Platform/` bullet below);
-  the SwiftUI app stays iOS-only.
+  compiles and tests natively on macOS 15 (see its `Platform/` bullet below),
+  and the macOS app target shares the screens (see the Native macOS bullet).
   Startup restores local settings and the session before the first SwiftUI
   frame, opening Home directly for signed-in users or Login otherwise,
   without a separate in-app splash screen. Home shows theme-colored featured
@@ -343,6 +350,48 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   except downward pans starting on the current-track row while it is settled
   at its top anchor. That row cancels the List pan and dismisses the player;
   other rows continue to browse history. The grabber also dismisses the player.
+- **Native macOS**: `ios/Aonsoku.xcodeproj` also holds the `AonsokuMac` target
+  and scheme (macOS 15, sandboxed, `github.realtvop.aonsoku`). It links
+  `AonsokuKit` and Perception, but neither SliderControl nor the Tailscale
+  runtime: `TailscaleSupport.isAvailable` is false there, so the Tailscale links
+  in Login and Server settings are hidden. It is a bring-up target. The shared
+  screens run in a throwaway `Mac/MacMainView` (a `NavigationSplitView` over
+  Home, Library and Search, with no player; the avatar's account sheet, which
+  holds Settings, is presented as on iOS); the Mac shell and player replace it.
+  CI does not build it yet.
+  `App/`, `Compatibility/`, `DesignSystem/`, `Features/` and `Resources/` are
+  synchronized groups shared by both targets, so a file added to one compiles
+  for both. What must stay iOS-only is excluded from the Mac target by a
+  per-target `membershipExceptions` set in `project.pbxproj`: in `App/`,
+  `AonsokuApp`, `AppDelegate`, `MainTabView` and `ShakeToDebug`; in
+  `Features/Player/`, `MiniPlayer`, `NowPlayingPresentation`, `NowPlayingView`,
+  `PlaybackControls`, `PlayerDismissGesture`, `QueueHeaderTrackingReader` and
+  `QueuePanel`; and in `Resources/`, the iOS `Info.plist` and `Assets.xcassets`.
+  A new iOS-only file in a shared folder breaks the Mac build until it gets
+  the same exception; platform-neutral pieces of the player stack (such as
+  `SleepTimer.swift`, `LyricsPanel` and `QueueScrollAnchors`) stay shared.
+  Mac-only files live in `ios/Aonsoku/Mac/`, which only the Mac target
+  includes: `AonsokuMacApp` (entry point, `NSApplicationDelegateAdaptor`),
+  `MacMainView`, its own `Info.plist` and `Aonsoku.entitlements` (app sandbox
+  and outgoing network), and an `Assets.xcassets` with the macOS app icon. The
+  bundled Poppins is registered at launch by `BrandFont.registerBundledFonts()`;
+  iOS lists the fonts in `UIAppFonts`. `RootView` is generic over the signed-in
+  shell (`RootView { MainTabView() }` on iOS, `RootView { MacMainView() }` on
+  macOS), so session, sign-in and account-switch handling stay shared.
+  Screens do not branch on the platform. API gaps are closed by `app`-prefixed
+  modifiers in `Compatibility/` (`ViewCompatibility`, `PlatformCompatibility`,
+  `ScrollCompatibility`): `AppBindable` (SwiftUI's `Bindable`, because
+  `Perception.Bindable` is obsolete from macOS 14), `appTitleDisplayMode`,
+  the `.appTrailing`/`.appLeading` toolbar placements, `appToolbarColorScheme`,
+  `appURLField`, `appAutocapitalization`, `appSearchableDrawer`,
+  `appPageTabViewStyle`, `appAlwaysEditing`, `Image(platformImage:)` and
+  `AppDevice` (device name and platform). AppKit puts QuickDraw's `RGBColor`
+  next to `AonsokuKit.RGBColor`, so the app declares a typealias that wins.
+  Write `#available(iOS 26, macOS 26, *)` for iOS 26 APIs: with `iOS 26` alone
+  the `*` counts macOS 15 as new enough and the Mac build fails. `ToastOverlay`
+  is an overlay on the window content on macOS (a `UIWindow` on iOS), so a toast
+  sits below sheets there. Scroll observation uses the iOS 18 / macOS 15
+  SwiftUI APIs on macOS; the UIKit observers exist only for iOS 16/17.
 - Android Home restores its account/server-scoped `home.snapshot.v1` from
   `HomeCache` (native preferences), seeds missing results from Room, then
   refreshes each section independently online. Missing sections use individual
@@ -642,8 +691,8 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   release workflow calls it to attach the unsigned native iOS IPA.
 - `AonsokuKit` builds and passes its tests natively on macOS 15 (`cd
   ios/AonsokuKit && swift test`, `platforms: [.iOS(.v16), .macOS(.v15)]`) as the
-  library for a future macOS app, with no behavior change on iOS 16+. The SwiftUI
-  app, the Xcode project and CI are unchanged and iOS-only. Everything that
+  library of the macOS app target, with no behavior change on iOS 16+. The iOS
+  target, its scheme and CI are unchanged. Everything that
   differs by platform sits behind a small injectable abstraction in
   `Sources/AonsokuKit/Platform/`; the rest of the package does not scatter `#if`
   or touch UIKit/AppKit directly. `PlatformBoundaryTests` fails when
@@ -1046,8 +1095,9 @@ route chunks or application CSS.
   `coordination-server/`.
 - **Native**: the native Android app lives under `android/` (`:core` services
   + `:app` Compose UI); the native SwiftUI app and `AonsokuKit` live under
-  `ios/`. `AonsokuKit` also builds for macOS 15 (`swift test` on the host,
-  library only). `capacitor-plugins/capacitor-native/` retains shared TypeScript
+  `ios/`. `AonsokuKit` also builds for macOS 15 (`swift test` on the host),
+  and the `AonsokuMac` app target lives in the same Xcode project.
+  `capacitor-plugins/capacitor-native/` retains shared TypeScript
   bridge definitions with no iOS or Android Capacitor target.
 - **Git hooks**: Husky is configured (`.husky/`) and pre-commit runs
   `pnpm lint`.

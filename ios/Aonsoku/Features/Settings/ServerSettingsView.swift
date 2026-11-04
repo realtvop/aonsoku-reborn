@@ -69,7 +69,7 @@ struct ServerSettingsView: View {
                         Text(t("settings.server.activeType.info"))
                     }
                     management
-                    if #available(iOS 18.1, *) {
+                    if #available(iOS 18.1, *), TailscaleSupport.isAvailable {
                         Section { TailscaleSettingsLink() }
                     }
                 }

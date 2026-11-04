@@ -63,10 +63,9 @@ struct AddToPlaylistView: View {
                     }
                     .themedBackground()
                     .navigationTitle(t("options.playlist.add"))
-                    .navigationBarTitleDisplayMode(.inline)
-                    .searchable(
+                    .appTitleDisplayMode(.inline)
+                    .appSearchableDrawer(
                         text: $searchText,
-                        placement: .navigationBarDrawer(displayMode: .always),
                         prompt: Text(t("options.playlist.search"))
                     )
                     .toolbar {

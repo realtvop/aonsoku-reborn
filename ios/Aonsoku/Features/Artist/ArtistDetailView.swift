@@ -94,7 +94,7 @@ struct ArtistDetailView: View {
                 headerIsDark: theme.palette.isDark
             )
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .appTrailing) {
                     WithPerceptionTracking {
                         Menu {
                             if let artist {

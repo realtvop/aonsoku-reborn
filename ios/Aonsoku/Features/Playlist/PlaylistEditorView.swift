@@ -81,7 +81,7 @@ struct PlaylistEditorView: View {
                     }
                     .disabled(isSaving)
                     .navigationTitle(t(isCreating ? "playlist.form.create.title" : "playlist.form.edit.title"))
-                    .navigationBarTitleDisplayMode(.inline)
+                    .appTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
                             WithPerceptionTracking {

@@ -15,7 +15,7 @@ struct AccountView: View {
 
     var body: some View {
         WithPerceptionTracking {
-            @Perception.Bindable var router = router
+            @AppBindable var router = router
             NavigationStack(path: $router.accountPath) {
                 WithPerceptionTracking {
                     ThemedList {
@@ -50,9 +50,9 @@ struct AccountView: View {
                         }
                     }
                     .navigationTitle(t("settings.label"))
-                    .navigationBarTitleDisplayMode(.inline)
+                    .appTitleDisplayMode(.inline)
                     .toolbar {
-                        ToolbarItem(placement: .navigationBarTrailing) {
+                        ToolbarItem(placement: .appTrailing) {
                             WithPerceptionTracking {
                                 AppCloseButton {
                                     dismiss()
@@ -252,10 +252,10 @@ extension View {
     /// they would otherwise inherit this inline one.
     func rootPageHeader(_ title: String) -> some View {
         navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
+            .appTitleDisplayMode(.inline)
             .appHideNavigationTitle()
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+                ToolbarItem(placement: .appLeading) {
                     WithPerceptionTracking {
                         // At its ideal width: the bar collapses a flexible
                         // title into its overflow button.
@@ -267,7 +267,7 @@ extension View {
                     }
                 }
                 .appHideSharedBackground()
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .appTrailing) {
                     WithPerceptionTracking {
                         AccountButton()
                     }

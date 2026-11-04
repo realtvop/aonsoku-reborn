@@ -48,16 +48,16 @@ struct DevicesView: View {
                         }
                     }
                     .navigationTitle(t("settings.crossDevice.title"))
-                    .navigationBarTitleDisplayMode(.inline)
+                    .appTitleDisplayMode(.inline)
                     .toolbar {
-                        ToolbarItem(placement: .navigationBarLeading) {
+                        ToolbarItem(placement: .appLeading) {
                             WithPerceptionTracking {
                                 AppCloseButton {
                                     dismiss()
                                 }
                             }
                         }
-                        ToolbarItem(placement: .navigationBarTrailing) {
+                        ToolbarItem(placement: .appTrailing) {
                             WithPerceptionTracking {
                                 Button(t("settings.label"), systemImage: "gearshape") {
                                     router.openSettings(.crossDevice)
@@ -259,7 +259,7 @@ private struct ThisDeviceRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(localTitle)
                         .lineLimit(1)
-                    Label(device?.name ?? UIDevice.current.name, systemImage: DeviceSymbol.name(for: "ios"))
+                    Label(device?.name ?? AppDevice.name, systemImage: DeviceSymbol.name(for: AppDevice.platform))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)

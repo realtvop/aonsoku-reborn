@@ -1,7 +1,12 @@
 import AonsokuKit
 import Perception
 import SwiftUI
+
+#if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 extension View {
     /// Shows the app's toasts in a window of their own, so they stay above
@@ -11,6 +16,7 @@ extension View {
     }
 }
 
+#if canImport(UIKit)
 private struct ToastHostModifier: ViewModifier {
     let app: AppModel
     @State private var presenter = ToastWindowPresenter()
@@ -107,6 +113,30 @@ private struct WindowSceneReader: UIViewRepresentable {
     }
 }
 
+#else
+/// On a Mac the toast is an overlay on the window's content: it stays above
+/// the window's pages and Now Playing, but not above sheets, which AppKit
+/// draws as separate windows.
+private struct ToastHostModifier: ViewModifier {
+    let app: AppModel
+
+    func body(content: Content) -> some View {
+        WithPerceptionTracking {
+            content.overlay(alignment: .top) {
+                WithPerceptionTracking {
+                    ToastLayer()
+                        .themeRoot()
+                        .environment(app.toasts)
+                        .environment(app.localizer)
+                        .environment(app.settings)
+                        .allowsHitTesting(false)
+                }
+            }
+        }
+    }
+}
+#endif
+
 /// The toast itself: a glass capsule under the status bar.
 private struct ToastLayer: View {
     @Environment(ToastCenter.self) private var toasts
@@ -144,9 +174,24 @@ private struct ToastLayer: View {
             }
             .appOnChange(of: toast?.id) { _, id in
                 guard id != nil, let toast else { return }
-                UIAccessibility.post(notification: .announcement, argument: text(of: toast))
+                announce(text(of: toast))
             }
         }
+    }
+
+    private func announce(_ text: String) {
+        #if canImport(UIKit)
+        UIAccessibility.post(notification: .announcement, argument: text)
+        #else
+        NSAccessibility.post(
+            element: NSApp as Any,
+            notification: .announcementRequested,
+            userInfo: [
+                .announcement: text,
+                .priority: NSAccessibilityPriorityLevel.high.rawValue,
+            ]
+        )
+        #endif
     }
 
     private func text(of toast: Toast) -> String {

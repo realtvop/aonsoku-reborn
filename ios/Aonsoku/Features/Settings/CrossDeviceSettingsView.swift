@@ -1,7 +1,6 @@
 import AonsokuKit
 import Perception
 import SwiftUI
-import UIKit
 
 /// The coordination server connection, this device and the devices bound
 /// to the account, like the web cross-device settings.
@@ -154,7 +153,7 @@ struct CrossDeviceSettingsView: View {
                 text: $deviceName,
                 prompt: Text(t("settings.crossDevice.deviceName.placeholder"))
             )
-            .textInputAutocapitalization(.words)
+            .appAutocapitalization(.words)
             Button(action: connect) {
                 HStack {
                     Text(t("settings.crossDevice.connect"))
@@ -188,7 +187,7 @@ struct CrossDeviceSettingsView: View {
         } else {
             identityUrl = session.account?.activeUrl ?? ""
         }
-        deviceName = UIDevice.current.name
+        deviceName = AppDevice.name
     }
 
     private func connect() {
@@ -206,7 +205,7 @@ struct CrossDeviceSettingsView: View {
                 try await coordination.connect(
                     serverUrl: server,
                     identityUrl: identity,
-                    deviceName: name.isEmpty ? UIDevice.current.name : name
+                    deviceName: name.isEmpty ? AppDevice.name : name
                 )
                 serverUrl = server
                 identityUrl = identity

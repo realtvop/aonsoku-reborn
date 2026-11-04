@@ -52,7 +52,7 @@ struct FavoritesView: View {
             .navigationTitle(t("favorites.headline"))
             // A large title would sit under the blur of the bar holding the
             // picker, so the title stays inline.
-            .navigationBarTitleDisplayMode(.inline)
+            .appTitleDisplayMode(.inline)
         }
     }
 }

@@ -236,7 +236,7 @@ private struct LyricsSourceOrderView: View {
                     }
                 }
             }
-            .environment(\.editMode, .constant(.active))
+            .appAlwaysEditing()
             .navigationTitle(t("settings.audio.lyrics.source.label"))
         }
     }

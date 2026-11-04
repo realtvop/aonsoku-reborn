@@ -48,7 +48,7 @@ private struct AppRoot: View {
 
     var body: some View {
         WithPerceptionTracking {
-            RootView()
+            RootView { MainTabView() }
                 .themeRoot()
                 .toastHost(app)
                 .shakeToOpenDebugPanel()

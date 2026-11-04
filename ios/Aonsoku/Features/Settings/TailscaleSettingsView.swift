@@ -1,7 +1,10 @@
 import AonsokuKit
 import Perception
-import SafariServices
 import SwiftUI
+
+#if canImport(SafariServices)
+import SafariServices
+#endif
 
 @available(iOS 18.1, *)
 struct TailscaleSettingsView: View {
@@ -68,9 +71,9 @@ struct TailscaleSettingsView: View {
 
                         Section {
                             TextField(t("native.tailscale.hosts"), text: $hosts, axis: .vertical)
-                                .textInputAutocapitalization(.never)
+                                .appAutocapitalization(.never)
                                 .autocorrectionDisabled()
-                                .keyboardType(.URL)
+                                .appURLKeyboard()
                             Button(t("settings.server.save")) { store.saveHosts(hosts) }
                         } header: {
                             Text(t("native.tailscale.hosts"))
@@ -81,7 +84,7 @@ struct TailscaleSettingsView: View {
                         Section {
                             DisclosureGroup(t("native.tailscale.authKey")) {
                                 SecureField(t("native.tailscale.authKey"), text: $authKey)
-                                    .textInputAutocapitalization(.never)
+                                    .appAutocapitalization(.never)
                                     .autocorrectionDisabled()
                                 Button(t("native.tailscale.useKey")) {
                                     let key = authKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -140,19 +143,34 @@ struct TailscaleSettingsView: View {
     }
 }
 
+#if canImport(UIKit)
 private struct TailscaleAuthenticationBrowser: UIViewControllerRepresentable {
     let url: URL
     func makeUIViewController(context: Context) -> SFSafariViewController { SFSafariViewController(url: url) }
     func updateUIViewController(_ controller: SFSafariViewController, context: Context) {}
 }
+#else
+/// A Mac has no in-app browser sheet: sign-in opens in the default browser.
+/// Tailscale does not run on macOS, so this is never presented there.
+private struct TailscaleAuthenticationBrowser: View {
+    let url: URL
+    @Environment(\.openURL) private var openURL
 
-/// Older systems retain ordinary server connections and have no Tailscale entry.
+    var body: some View {
+        ProgressView()
+            .padding(32)
+            .task { openURL(url) }
+    }
+}
+#endif
+
+/// Older systems and platforms without the runtime (macOS) have no Tailscale entry.
 struct TailscaleSettingsLink: View {
     @Environment(Localizer.self) private var t
 
     var body: some View {
         WithPerceptionTracking {
-            if #available(iOS 18.1, *) {
+            if #available(iOS 18.1, *), TailscaleSupport.isAvailable {
                 NavigationLink {
                     TailscaleSettingsView(t: t)
                 } label: {

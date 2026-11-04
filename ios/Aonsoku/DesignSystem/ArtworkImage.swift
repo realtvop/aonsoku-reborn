@@ -21,7 +21,7 @@ struct ArtworkImage: View {
                         .overlay {
                             WithPerceptionTracking {
                                 if let image {
-                                    Image(uiImage: image)
+                                    Image(platformImage: image)
                                         .resizable()
                                         .scaledToFill()
                                         .transition(.opacity)
@@ -68,7 +68,7 @@ struct ArtworkBackdrop: View {
                         WithPerceptionTracking {
                             if let image {
                                 let frame = Self.fill(image.size, in: proxy.size, focus: focus)
-                                Image(uiImage: image)
+                                Image(platformImage: image)
                                     .resizable()
                                     .frame(width: frame.width, height: frame.height)
                                     .offset(x: frame.minX, y: frame.minY)
@@ -106,7 +106,7 @@ struct ArtworkBackdrop: View {
 struct ArtworkReader<Content: View>: View {
     let id: String?
     var size: ArtworkSize = .medium
-    @ViewBuilder let content: (UIImage?) -> Content
+    @ViewBuilder let content: (PlatformImage?) -> Content
 
     @Environment(AppModel.self) private var app
     @State private var loaded: LoadedImage?
@@ -132,7 +132,7 @@ struct ArtworkReader<Content: View>: View {
         id.map { "\($0)@\(size.rawValue)" }
     }
 
-    private var currentImage: UIImage? {
+    private var currentImage: PlatformImage? {
         guard let key, let id else { return nil }
         if let loaded, loaded.key == key { return loaded.image }
         return app.artwork.cachedImage(for: id, size: size)
@@ -154,7 +154,7 @@ struct AvatarImage: View {
     var size: CGFloat = 32
 
     @Environment(AppModel.self) private var app
-    @State private var image: UIImage?
+    @State private var image: PlatformImage?
 
     var body: some View {
         WithPerceptionTracking {
@@ -168,7 +168,7 @@ struct AvatarImage: View {
                 .overlay {
                     WithPerceptionTracking {
                         if let image {
-                            Image(uiImage: image)
+                            Image(platformImage: image)
                                 .resizable()
                                 .scaledToFill()
                         } else {
@@ -190,7 +190,7 @@ struct AvatarImage: View {
 
 private struct LoadedImage {
     let key: String
-    let image: UIImage
+    let image: PlatformImage
 }
 
 private struct PlaceholderSymbol: View {

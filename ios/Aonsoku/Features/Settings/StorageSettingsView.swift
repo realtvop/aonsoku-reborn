@@ -356,7 +356,7 @@ struct CacheManagerView: View {
             }
             .navigationTitle(t("settings.storage.cacheManager.group"))
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .appTrailing) {
                     WithPerceptionTracking {
                         Menu {
                             Picker(t("album.list.filter.label"), selection: $filter) {

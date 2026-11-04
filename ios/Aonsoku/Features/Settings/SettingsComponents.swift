@@ -52,9 +52,7 @@ struct URLField: View {
     var body: some View {
         WithPerceptionTracking {
             TextField(title, text: $text, prompt: Text(prompt))
-                .keyboardType(.URL)
-                .textContentType(.URL)
-                .textInputAutocapitalization(.never)
+                .appURLField()
                 .autocorrectionDisabled()
         }
     }

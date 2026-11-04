@@ -12,31 +12,109 @@
 		4E5A00000000000000000103 /* native-locales in Resources */ = {isa = PBXBuildFile; fileRef = 4E5A00000000000000000203 /* native-locales */; };
 		4E5A00000000000000000104 /* SliderControl in Frameworks */ = {isa = PBXBuildFile; productRef = 4E5A00000000000000000902 /* SliderControl */; };
 		4E5A00000000000000000105 /* Perception in Frameworks */ = {isa = PBXBuildFile; productRef = 4E5A00000000000000000903 /* Perception */; };
+		4E5A00000000000000001101 /* AonsokuKit in Frameworks */ = {isa = PBXBuildFile; productRef = 4E5A00000000000000001901 /* AonsokuKit */; };
+		4E5A00000000000000001102 /* locales in Resources */ = {isa = PBXBuildFile; fileRef = 4E5A00000000000000000202 /* locales */; };
+		4E5A00000000000000001103 /* native-locales in Resources */ = {isa = PBXBuildFile; fileRef = 4E5A00000000000000000203 /* native-locales */; };
+		4E5A00000000000000001105 /* Perception in Frameworks */ = {isa = PBXBuildFile; productRef = 4E5A00000000000000001903 /* Perception */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		4E5A00000000000000000201 /* Aonsoku.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Aonsoku.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4E5A00000000000000000202 /* locales */ = {isa = PBXFileReference; lastKnownFileType = folder; name = locales; path = ../src/i18n/locales; sourceTree = "<group>"; };
 		4E5A00000000000000000203 /* native-locales */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "native-locales"; sourceTree = "<group>"; };
+		4E5A00000000000000001201 /* Aonsoku.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Aonsoku.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		4E5A00000000000000000302 /* Exceptions for "Aonsoku" folder in "Aonsoku" target */ = {
+		4E5A00000000000000000302 /* Exceptions for "Resources" folder in "Aonsoku" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				Resources/Info.plist,
+				Info.plist,
 			);
 			target = 4E5A00000000000000000501 /* Aonsoku */;
+		};
+		4E5A00000000000000001311 /* Exceptions for "App" folder in "AonsokuMac" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				AonsokuApp.swift,
+				AppDelegate.swift,
+				MainTabView.swift,
+				ShakeToDebug.swift,
+			);
+			target = 4E5A00000000000000001501 /* AonsokuMac */;
+		};
+		4E5A00000000000000001312 /* Exceptions for "Features" folder in "AonsokuMac" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Player/MiniPlayer.swift,
+				Player/NowPlayingPresentation.swift,
+				Player/NowPlayingView.swift,
+				Player/PlaybackControls.swift,
+				Player/PlayerDismissGesture.swift,
+				Player/QueueHeaderTrackingReader.swift,
+				Player/QueuePanel.swift,
+			);
+			target = 4E5A00000000000000001501 /* AonsokuMac */;
+		};
+		4E5A00000000000000001313 /* Exceptions for "Resources" folder in "AonsokuMac" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Assets.xcassets,
+				Info.plist,
+			);
+			target = 4E5A00000000000000001501 /* AonsokuMac */;
+		};
+		4E5A00000000000000001314 /* Exceptions for "Mac" folder in "AonsokuMac" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 4E5A00000000000000001501 /* AonsokuMac */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		4E5A00000000000000000301 /* Aonsoku */ = {
+		4E5A00000000000000001301 /* App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				4E5A00000000000000000302 /* Exceptions for "Aonsoku" folder in "Aonsoku" target */,
+				4E5A00000000000000001311 /* Exceptions for "App" folder in "AonsokuMac" target */,
 			);
-			path = Aonsoku;
+			path = App;
+			sourceTree = "<group>";
+		};
+		4E5A00000000000000001302 /* Compatibility */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Compatibility;
+			sourceTree = "<group>";
+		};
+		4E5A00000000000000001303 /* DesignSystem */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = DesignSystem;
+			sourceTree = "<group>";
+		};
+		4E5A00000000000000001304 /* Features */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				4E5A00000000000000001312 /* Exceptions for "Features" folder in "AonsokuMac" target */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		4E5A00000000000000001305 /* Resources */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				4E5A00000000000000000302 /* Exceptions for "Resources" folder in "Aonsoku" target */,
+				4E5A00000000000000001313 /* Exceptions for "Resources" folder in "AonsokuMac" target */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		4E5A00000000000000001306 /* Mac */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				4E5A00000000000000001314 /* Exceptions for "Mac" folder in "AonsokuMac" target */,
+			);
+			path = Mac;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -49,6 +127,15 @@
 				4E5A00000000000000000101 /* AonsokuKit in Frameworks */,
 				4E5A00000000000000000104 /* SliderControl in Frameworks */,
 				4E5A00000000000000000105 /* Perception in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4E5A00000000000000001401 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4E5A00000000000000001101 /* AonsokuKit in Frameworks */,
+				4E5A00000000000000001105 /* Perception in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -69,8 +156,22 @@
 			isa = PBXGroup;
 			children = (
 				4E5A00000000000000000201 /* Aonsoku.app */,
+				4E5A00000000000000001201 /* Aonsoku.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		4E5A00000000000000000301 /* Aonsoku */ = {
+			isa = PBXGroup;
+			children = (
+				4E5A00000000000000001301 /* App */,
+				4E5A00000000000000001302 /* Compatibility */,
+				4E5A00000000000000001303 /* DesignSystem */,
+				4E5A00000000000000001304 /* Features */,
+				4E5A00000000000000001306 /* Mac */,
+				4E5A00000000000000001305 /* Resources */,
+			);
+			path = Aonsoku;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -89,7 +190,11 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				4E5A00000000000000000301 /* Aonsoku */,
+				4E5A00000000000000001301 /* App */,
+				4E5A00000000000000001302 /* Compatibility */,
+				4E5A00000000000000001303 /* DesignSystem */,
+				4E5A00000000000000001304 /* Features */,
+				4E5A00000000000000001305 /* Resources */,
 			);
 			name = Aonsoku;
 			packageProductDependencies = (
@@ -99,6 +204,35 @@
 			);
 			productName = Aonsoku;
 			productReference = 4E5A00000000000000000201 /* Aonsoku.app */;
+			productType = "com.apple.product-type.application";
+		};
+		4E5A00000000000000001501 /* AonsokuMac */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4E5A00000000000000001702 /* Build configuration list for PBXNativeTarget "AonsokuMac" */;
+			buildPhases = (
+				4E5A00000000000000001402 /* Sources */,
+				4E5A00000000000000001401 /* Frameworks */,
+				4E5A00000000000000001403 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				4E5A00000000000000001301 /* App */,
+				4E5A00000000000000001302 /* Compatibility */,
+				4E5A00000000000000001303 /* DesignSystem */,
+				4E5A00000000000000001304 /* Features */,
+				4E5A00000000000000001305 /* Resources */,
+				4E5A00000000000000001306 /* Mac */,
+			);
+			name = AonsokuMac;
+			packageProductDependencies = (
+				4E5A00000000000000001901 /* AonsokuKit */,
+				4E5A00000000000000001903 /* Perception */,
+			);
+			productName = AonsokuMac;
+			productReference = 4E5A00000000000000001201 /* Aonsoku.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -112,6 +246,9 @@
 				LastUpgradeCheck = 2630;
 				TargetAttributes = {
 					4E5A00000000000000000501 = {
+						CreatedOnToolsVersion = 26.3;
+					};
+					4E5A00000000000000001501 = {
 						CreatedOnToolsVersion = 26.3;
 					};
 				};
@@ -136,6 +273,7 @@
 			projectRoot = "";
 			targets = (
 				4E5A00000000000000000501 /* Aonsoku */,
+				4E5A00000000000000001501 /* AonsokuMac */,
 			);
 		};
 /* End PBXProject section */
@@ -150,10 +288,26 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		4E5A00000000000000001403 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4E5A00000000000000001102 /* locales in Resources */,
+				4E5A00000000000000001103 /* native-locales in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		4E5A00000000000000000402 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4E5A00000000000000001402 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -360,6 +514,74 @@
 			};
 			name = Release;
 		};
+		4E5A00000000000000001721 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Aonsoku/Mac/Aonsoku.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZW372988NV;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Aonsoku/Mac/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Aonsoku;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.30.0;
+				PRODUCT_BUNDLE_IDENTIFIER = github.realtvop.aonsoku;
+				PRODUCT_NAME = Aonsoku;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		4E5A00000000000000001722 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Aonsoku/Mac/Aonsoku.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZW372988NV;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Aonsoku/Mac/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Aonsoku;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.30.0;
+				PRODUCT_BUNDLE_IDENTIFIER = github.realtvop.aonsoku;
+				PRODUCT_NAME = Aonsoku;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -377,6 +599,15 @@
 			buildConfigurations = (
 				4E5A00000000000000000721 /* Debug */,
 				4E5A00000000000000000722 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4E5A00000000000000001702 /* Build configuration list for PBXNativeTarget "AonsokuMac" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4E5A00000000000000001721 /* Debug */,
+				4E5A00000000000000001722 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -420,6 +651,15 @@
 			productName = SliderControl;
 		};
 		4E5A00000000000000000903 /* Perception */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4E5A00000000000000000803 /* XCRemoteSwiftPackageReference "swift-perception" */;
+			productName = Perception;
+		};
+		4E5A00000000000000001901 /* AonsokuKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AonsokuKit;
+		};
+		4E5A00000000000000001903 /* Perception */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 4E5A00000000000000000803 /* XCRemoteSwiftPackageReference "swift-perception" */;
 			productName = Perception;

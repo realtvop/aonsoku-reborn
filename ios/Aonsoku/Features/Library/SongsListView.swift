@@ -46,10 +46,10 @@ struct SongsListView: View {
             .offlineBanner()
             .themedBackground()
             .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.large)
+            .appTitleDisplayMode(.large)
             .searchable(text: $searchText, prompt: Text(t("songs.list.search.placeholder")))
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .appTrailing) {
                     WithPerceptionTracking {
                         sortMenu
                     }

@@ -68,9 +68,9 @@ struct RadiosView: View {
             .offlineBanner()
             .themedBackground()
             .navigationTitle(t("sidebar.radios"))
-            .navigationBarTitleDisplayMode(.large)
+            .appTitleDisplayMode(.large)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .appTrailing) {
                     WithPerceptionTracking {
                         Button(t("radios.addRadio"), systemImage: "plus") {
                             router.present(.radioEditor(nil))

@@ -2,8 +2,10 @@ import AonsokuKit
 import Perception
 import SwiftUI
 
-/// Sign-in or the tabs, following the session.
-struct RootView: View {
+/// Sign-in or the signed-in interface, following the session. Each platform
+/// supplies its own signed-in shell: the tabs on iOS, the sidebar on macOS.
+struct RootView<Main: View>: View {
+    @ViewBuilder let main: () -> Main
     @Environment(AppModel.self) private var app
     @Environment(SessionStore.self) private var session
     @Environment(Router.self) private var router
@@ -20,7 +22,7 @@ struct RootView: View {
                     LoginView()
                         .transition(.opacity)
                 case .main:
-                    MainTabView()
+                    main()
                         .transition(.opacity)
                 }
             }

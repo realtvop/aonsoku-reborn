@@ -1,13 +1,18 @@
 import AonsokuKit
 import Perception
 import SwiftUI
+
+#if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 // Keep availability decisions here so pages share one fallback on older systems.
 extension View {
     @ViewBuilder
     func appGlass<S: Shape>(in shape: S, interactive: Bool = false) -> some View {
-        if #available(iOS 26, *) {
+        if #available(iOS 26, macOS 26, *) {
             glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
         } else {
             background(.regularMaterial, in: shape)
@@ -16,7 +21,7 @@ extension View {
 
     @ViewBuilder
     func appGlassButtonStyle(prominent: Bool = false) -> some View {
-        if #available(iOS 26, *) {
+        if #available(iOS 26, macOS 26, *) {
             if prominent { buttonStyle(.glassProminent) }
             else { buttonStyle(.glass) }
         } else {
@@ -70,7 +75,7 @@ extension View {
 
     @ViewBuilder
     func appHideScrollEdgeEffects() -> some View {
-        if #available(iOS 26, *) { scrollEdgeEffectHidden() }
+        if #available(iOS 26, macOS 26, *) { scrollEdgeEffectHidden() }
         else { self }
     }
 
@@ -82,8 +87,12 @@ extension View {
 
     @ViewBuilder
     func appListSectionSpacing(_ spacing: CGFloat) -> some View {
+        #if os(macOS)
+        self // Mac lists space their sections themselves.
+        #else
         if #available(iOS 17, *) { listSectionSpacing(spacing) }
         else { environment(\.defaultMinListHeaderHeight, spacing) }
+        #endif
     }
 
     @ViewBuilder
@@ -100,8 +109,12 @@ extension View {
 
     @ViewBuilder
     func appScrollClipDisabled() -> some View {
+        #if canImport(UIKit)
         if #available(iOS 17, *) { scrollClipDisabled() }
         else { background(LegacyScrollObserver(configure: { $0.clipsToBounds = false })) }
+        #else
+        scrollClipDisabled()
+        #endif
     }
 
     func appHorizontalScrollMargins(_ margin: CGFloat) -> some View {
@@ -159,19 +172,29 @@ enum AppFeedback {
     }
 
     @MainActor func play() {
+        #if canImport(UIKit)
         switch self {
         case .selection: UISelectionFeedbackGenerator().selectionChanged()
         case .lightImpact: UIImpactFeedbackGenerator(style: .light).impactOccurred()
         case .success: UINotificationFeedbackGenerator().notificationOccurred(.success)
         case .error: UINotificationFeedbackGenerator().notificationOccurred(.error)
         }
+        #else
+        // The trackpad's Taptic Engine; other pointing devices ignore it.
+        let pattern: NSHapticFeedbackManager.FeedbackPattern = switch self {
+        case .selection: .alignment
+        case .lightImpact: .generic
+        case .success, .error: .levelChange
+        }
+        NSHapticFeedbackManager.defaultPerformer.perform(pattern, performanceTime: .default)
+        #endif
     }
 }
 
 extension ToolbarContent {
     @ToolbarContentBuilder
     func appHideSharedBackground() -> some ToolbarContent {
-        if #available(iOS 26, *) { sharedBackgroundVisibility(.hidden) }
+        if #available(iOS 26, macOS 26, *) { sharedBackgroundVisibility(.hidden) }
         else { self }
     }
 }
@@ -272,7 +295,7 @@ struct AppCloseButton: View {
 
     var body: some View {
         WithPerceptionTracking {
-            if #available(iOS 26, *) {
+            if #available(iOS 26, macOS 26, *) {
                 Button(role: .close, action: action)
             } else {
                 Button(action: action) { Image(systemName: "xmark") }
@@ -288,7 +311,7 @@ struct AppCancelButton: View {
 
     var body: some View {
         WithPerceptionTracking {
-            if #available(iOS 26, *) { Button(role: .cancel, action: action) }
+            if #available(iOS 26, macOS 26, *) { Button(role: .cancel, action: action) }
             else { Button(t("generic.cancel"), role: .cancel, action: action) }
         }
     }
@@ -300,7 +323,7 @@ struct AppSaveButton: View {
 
     var body: some View {
         WithPerceptionTracking {
-            if #available(iOS 26, *) { Button(role: .confirm, action: action) }
+            if #available(iOS 26, macOS 26, *) { Button(role: .confirm, action: action) }
             else { Button(t("settings.crossDevice.device.save"), action: action).fontWeight(.semibold) }
         }
     }
@@ -316,8 +339,12 @@ extension View {
 
 enum AppStyle {
     static var tertiaryFill: AnyShapeStyle {
+        #if canImport(UIKit)
         if #available(iOS 17, *) { AnyShapeStyle(.fill.tertiary) }
         else { AnyShapeStyle(Color(uiColor: .tertiarySystemFill)) }
+        #else
+        AnyShapeStyle(.fill.tertiary)
+        #endif
     }
 }
 
@@ -331,6 +358,7 @@ extension View {
 
 extension Color {
     func appMix(with other: Color, by fraction: Double) -> Color {
+        #if canImport(UIKit)
         if #available(iOS 18, *) { return mix(with: other, by: fraction, in: .device) }
         let base = UIColor(self)
         let cover = UIColor(other)
@@ -345,6 +373,9 @@ extension Color {
             blue: Double(blue + (coverBlue - blue) * amount),
             opacity: Double(alpha + (coverAlpha - alpha) * amount)
         )
+        #else
+        return mix(with: other, by: fraction, in: .device)
+        #endif
     }
 }
 
@@ -373,7 +404,7 @@ extension View {
     func appSafeAreaBar<Bar: View>(
         edge: VerticalEdge, @ViewBuilder content: @escaping () -> Bar
     ) -> some View {
-        if #available(iOS 26, *) {
+        if #available(iOS 26, macOS 26, *) {
             safeAreaBar(edge: edge) { WithPerceptionTracking { content() } }
         } else {
             safeAreaInset(edge: edge, spacing: 0) {

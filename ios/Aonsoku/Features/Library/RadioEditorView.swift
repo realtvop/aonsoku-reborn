@@ -40,7 +40,7 @@ struct RadioEditorView: View {
                         WithPerceptionTracking {
                             Section {
                                 TextField(t("radios.table.name"), text: $name)
-                                    .textInputAutocapitalization(.words)
+                                    .appAutocapitalization(.words)
                                     .focused($focusedField, equals: .name)
                                     .submitLabel(.next)
                                     .onSubmit { focusedField = .stream }
@@ -71,7 +71,7 @@ struct RadioEditorView: View {
                     }
                     .disabled(isSaving)
                     .navigationTitle(t(station == nil ? "radios.form.create.title" : "radios.form.edit.title"))
-                    .navigationBarTitleDisplayMode(.inline)
+                    .appTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
                             WithPerceptionTracking {
@@ -105,9 +105,7 @@ struct RadioEditorView: View {
 
     private func urlField(_ title: String, field: Field, text: Binding<String>) -> some View {
         TextField(title, text: text, prompt: Text(verbatim: "https://"))
-            .keyboardType(.URL)
-            .textContentType(.URL)
-            .textInputAutocapitalization(.never)
+            .appURLField()
             .autocorrectionDisabled()
             .focused($focusedField, equals: field)
     }

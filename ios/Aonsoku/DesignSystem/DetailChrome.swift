@@ -227,8 +227,8 @@ private struct ScrollRevealedTitle: ViewModifier {
         WithPerceptionTracking {
             content
                 .navigationTitle(title)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbarColorScheme(barColorScheme, for: .navigationBar)
+                .appTitleDisplayMode(.inline)
+                .appToolbarColorScheme(barColorScheme)
                 .appOnScrollGeometryChange(for: Bool.self) { geometry in
                     geometry.contentOffset.y + geometry.contentInsets.top > threshold
                 } action: { _, revealed in
@@ -438,9 +438,9 @@ private struct AboutSheet: View {
                         .padding(20)
                     }
                     .navigationTitle(title)
-                    .navigationBarTitleDisplayMode(.inline)
+                    .appTitleDisplayMode(.inline)
                     .toolbar {
-                        ToolbarItem(placement: .navigationBarTrailing) {
+                        ToolbarItem(placement: .appTrailing) {
                             WithPerceptionTracking {
                                 AppCloseButton {
                                     dismiss()

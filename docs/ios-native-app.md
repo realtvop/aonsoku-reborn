@@ -57,7 +57,8 @@ the same on every platform (see [Design language](#design-language)).
 | Item | Value |
 | --- | --- |
 | Minimum OS | iOS 16.0 (iPhone and iPad) |
-| `AonsokuKit` also builds for | macOS 15.0, as a library for a future macOS app (`swift test` on the host); the SwiftUI app is iOS-only |
+| `AonsokuKit` also builds for | macOS 15.0 (`swift test` on the host), as the library of the `AonsokuMac` app target |
+| macOS app | Target and scheme `AonsokuMac` in the same project, macOS 15.0, sandboxed. A bring-up shell over the shared screens; see "macOS app target" |
 | Toolchain | Xcode 26, Swift 6.2 compiler, Swift 5 language mode |
 | Player sliders | [SliderControl](https://github.com/realtvop/slidercontrol), pinned to a revision in the app target |
 | Bundle identifier | `github.realtvop.aonsoku` (unchanged, so upgrades keep data) |
@@ -149,7 +150,7 @@ Identity comparison preserves the URL scheme and username case.
 ## Platform abstractions
 
 `AonsokuKit` also compiles and tests on macOS 15 (`cd ios/AonsokuKit && swift
-test`), so a macOS app can reuse it later. Nothing about iOS 16+ behavior
+test`), and the macOS app target links it. Nothing about iOS 16+ behavior
 changes. What differs by platform is isolated in `Sources/AonsokuKit/Platform/`
 behind small protocols that tests replace with fakes, so the rest of the package
 carries no `#if` for platform frameworks. `PlatformBoundaryTests` enforces that.
@@ -169,6 +170,46 @@ carries no `#if` for platform frameworks. `PlatformBoundaryTests` enforces that.
 Tailscale can run: check `TailscaleSupport.isAvailable`. Real headphone
 unplugging, the system's own refresh scheduling and macOS Now Playing are not
 covered by tests.
+
+## macOS app target
+
+`AonsokuMac` is a second app target in `ios/Aonsoku.xcodeproj`, with its own
+scheme. It links `AonsokuKit` and Perception, not SliderControl or the Tailscale
+runtime, and it is sandboxed (`com.apple.security.app-sandbox` and
+`com.apple.security.network.client`). It is a bring-up target: the shared screens
+run in `Mac/MacMainView`, a `NavigationSplitView` over Home, Library and Search
+with no player; the avatar's account sheet (Settings) is presented as on iOS.
+The Mac shell and player replace it.
+
+| Folder | Target membership |
+| --- | --- |
+| `App/`, `Compatibility/`, `DesignSystem/`, `Features/`, `Resources/` | Synchronized groups shared by both targets. A new file compiles for both. |
+| `Mac/` | Mac only: `AonsokuMacApp`, `MacMainView`, its own `Info.plist`, `Aonsoku.entitlements` and `Assets.xcassets` (macOS app icon). |
+
+What stays iOS-only is excluded from the Mac target with per-target
+`membershipExceptions` in `project.pbxproj`: `App/AonsokuApp`, `AppDelegate`,
+`MainTabView`, `ShakeToDebug`; in `Features/Player/`, `MiniPlayer`,
+`NowPlayingPresentation`, `NowPlayingView`, `PlaybackControls`,
+`PlayerDismissGesture`, `QueueHeaderTrackingReader` and `QueuePanel`; and the
+iOS `Info.plist` and `Assets.xcassets` in `Resources/`. A new iOS-only file in a
+shared folder needs the same exception, or the Mac build fails. `RootView` takes
+the signed-in shell as a closure, so session, sign-in and account-switch
+handling are shared.
+
+Screens call `app`-prefixed modifiers from `Compatibility/` where the two
+platforms' SwiftUI differ, instead of branching themselves: `AppBindable`,
+`appTitleDisplayMode`, `.appTrailing` / `.appLeading`, `appToolbarColorScheme`,
+`appURLField`, `appAutocapitalization`, `appSearchableDrawer`,
+`appPageTabViewStyle`, `appAlwaysEditing`, `Image(platformImage:)` and
+`AppDevice`. APIs new in iOS 26 are gated with `#available(iOS 26, macOS 26, *)`.
+The Tailscale entries in Login and Server settings are hidden unless
+`TailscaleSupport.isAvailable`.
+
+```bash
+bash scripts/build-ios-tailscale.sh # once; SPM resolves the CTailscale binary target even for macOS
+xcodebuild -project ios/Aonsoku.xcodeproj -scheme AonsokuMac \
+  -destination 'platform=macOS' -skipMacroValidation CODE_SIGNING_ALLOWED=NO build
+```
 
 ## Stores and UI contracts
 
@@ -377,6 +418,10 @@ bash scripts/test-ios-queue-scroll.sh # Queue/history geometry; no Simulator req
 # App build for the simulator
 xcodebuild -project ios/Aonsoku.xcodeproj -scheme Aonsoku \
   -destination 'generic/platform=iOS Simulator' build
+
+# The macOS app target (unsigned)
+xcodebuild -project ios/Aonsoku.xcodeproj -scheme AonsokuMac \
+  -destination 'platform=macOS' -skipMacroValidation CODE_SIGNING_ALLOWED=NO build
 
 # Translation keys used by the Swift sources
 node scripts/check-ios-strings.mjs

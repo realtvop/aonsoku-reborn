@@ -1,7 +1,12 @@
 import AonsokuKit
 import Perception
 import SwiftUI
+
+#if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 /// The app's version and build, the server's type and API version, and the
 /// project link, like the web About dialog.
@@ -137,16 +142,25 @@ enum AppInfo {
     }
 }
 
-/// The app icon from the bundle, rounded like the Home Screen's.
+/// The app icon from the bundle, rounded like the Home Screen's. A Mac icon
+/// comes with its own shape and margin, so it is shown as it is.
 private struct AppIconImage: View {
     var body: some View {
         WithPerceptionTracking {
+            #if os(macOS)
+            if let icon = Self.icon {
+                Image(platformImage: icon)
+                    .resizable()
+                    .scaledToFit()
+                    .accessibilityHidden(true)
+            }
+            #else
             GeometryReader { proxy in
                 WithPerceptionTracking {
                     let shape = RoundedRectangle(cornerRadius: proxy.size.width * 0.225, style: .continuous)
                     Group {
                         if let icon = Self.icon {
-                            Image(uiImage: icon)
+                            Image(platformImage: icon)
                                 .resizable()
                                 .scaledToFill()
                         } else {
@@ -163,10 +177,14 @@ private struct AppIconImage: View {
                 }
             }
             .accessibilityHidden(true)
+            #endif
         }
     }
 
-    private static let icon: UIImage? = {
+    #if os(macOS)
+    private static let icon: PlatformImage? = NSApp.applicationIconImage
+    #else
+    private static let icon: PlatformImage? = {
         guard let icons = Bundle.main.object(forInfoDictionaryKey: "CFBundleIcons") as? [String: Any],
               let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
               let files = primary["CFBundleIconFiles"] as? [String],
@@ -175,4 +193,5 @@ private struct AppIconImage: View {
         }
         return UIImage(named: name)
     }()
+    #endif
 }

@@ -30,7 +30,7 @@ struct SearchView: View {
             .navigationTitle(t("sidebar.miniSearch"))
             .searchable(text: $text, prompt: Text(t("command.inputPlaceholder")))
             .autocorrectionDisabled()
-            .textInputAutocapitalization(.never)
+            .appAutocapitalization(.never)
             .onSubmit(of: .search) {
                 query = trimmedText
             }
