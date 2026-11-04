@@ -116,7 +116,7 @@ final class MacSnapshotDriver {
     }
 
     private func finish() {
-        dumpMenus()
+        dumpMenus(to: "menus.txt")
         let text = report.joined(separator: "\n") + "\n"
         try? text.write(to: options.directory.appendingPathComponent("report.txt"), atomically: true, encoding: .utf8)
         if !options.keepsSession, app.session.isSignedIn {
@@ -187,6 +187,43 @@ final class MacSnapshotDriver {
                 NSApp.sendEvent(event)
             }
         }
+    }
+
+    /// The window's toolbar search field.
+    func searchField(in window: NSWindow) -> NSSearchField? {
+        func find(_ view: NSView) -> NSSearchField? {
+            if let field = view as? NSSearchField { return field }
+            for subview in view.subviews {
+                if let field = find(subview) { return field }
+            }
+            return nil
+        }
+        return (window.contentView?.superview).flatMap(find)
+    }
+
+    /// Chooses the menu bar item titled `title`, as a click would.
+    @discardableResult
+    func performMenuItem(titled title: String) -> Bool {
+        func find(in menu: NSMenu) -> (NSMenu, Int)? {
+            for (index, item) in menu.items.enumerated() {
+                if item.title == title { return (menu, index) }
+                if let submenu = item.submenu, let found = find(in: submenu) { return found }
+            }
+            return nil
+        }
+        guard let main = NSApp.mainMenu, let (menu, index) = find(in: main) else {
+            note("no menu item \(title)")
+            return false
+        }
+        menu.update()
+        menu.performActionForItem(at: index)
+        return true
+    }
+
+    /// Notes each visible window's identifier and title.
+    func noteWindows(_ label: String) {
+        let windows = NSApp.windows.filter(\.isVisible).map { "\($0.identifier?.rawValue ?? "-") \"\($0.title)\"" }
+        note("\(label): \(windows)")
     }
 
     /// Notes the selected section's pages and Forward pages.
@@ -299,10 +336,12 @@ final class MacSnapshotDriver {
         }
     }
 
-    private func dumpMenus() {
+    func dumpMenus(to name: String) {
         guard let menu = NSApp.mainMenu else { return }
         var lines: [String] = []
         func walk(_ menu: NSMenu, depth: Int) {
+            // As when the menu opens: SwiftUI fills its items then.
+            menu.delegate?.menuNeedsUpdate?(menu)
             menu.update()
             for item in menu.items {
                 if item.isSeparatorItem {
@@ -324,7 +363,7 @@ final class MacSnapshotDriver {
         }
         walk(menu, depth: 0)
         try? (lines.joined(separator: "\n") + "\n")
-            .write(to: options.directory.appendingPathComponent("menus.txt"), atomically: true, encoding: .utf8)
+            .write(to: options.directory.appendingPathComponent(name), atomically: true, encoding: .utf8)
     }
 }
 #endif

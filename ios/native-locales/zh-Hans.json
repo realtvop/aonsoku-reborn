@@ -127,6 +127,46 @@
       },
       "queue": {
         "removeFromHistory": "Remove from History"
+      },
+      "menu": {
+        "seekForward": "Forward 10 Seconds",
+        "seekBackward": "Back 10 Seconds",
+        "repeatOff": "Off",
+        "repeatAll": "All",
+        "repeatOne": "One",
+        "goToCurrentSong": "Go to Current Song",
+        "website": "Aonsoku on GitHub",
+        "debug": "Native Player Debug…"
+      },
+      "debug": {
+        "title": "Native Player Debug",
+        "playback": "Playback",
+        "info": "Info",
+        "logs": "Logs",
+        "nowPlaying": "Now Playing",
+        "track": "Track",
+        "time": "Time",
+        "buffered": "Buffered",
+        "mode": "Mode",
+        "context": "Context Queue",
+        "idle": "Nothing playing",
+        "buffer": "Buffer",
+        "status": "Status",
+        "recovery": "Recovery",
+        "connection": "Connection",
+        "user": "User",
+        "auth": "Authentication",
+        "serverType": "Server Type",
+        "noCredentials": "No credentials",
+        "system": "System",
+        "memory": "Memory",
+        "version": "Version",
+        "sources": "Sources",
+        "filter": "Filter",
+        "copy": "Copy",
+        "level": "Level",
+        "source": "Source",
+        "message": "Message"
       }
     }
   }

@@ -570,11 +570,17 @@ public final class PlayerStore {
     }
     /// Off, all, one, off.
     public func cycleRepeat() {
-        let next = repeatMode.next
+        setRepeatMode(repeatMode.next)
+    }
+
+    /// Sets one repeat mode, as a menu of the three modes does; setting the
+    /// mode already in effect does nothing.
+    public func setRepeatMode(_ mode: AudioRepeatMode) {
+        guard mode != repeatMode else { return }
         if target.isRemote {
-            sendRemote(.setRepeat(CoordinationRepeatMode(rawValue: next.rawValue) ?? .off))
+            sendRemote(.setRepeat(CoordinationRepeatMode(rawValue: mode.rawValue) ?? .off))
         } else if !isRadio {
-            audio.setRepeatMode(next)
+            audio.setRepeatMode(mode)
         }
     }
     /// System volume 0...1 (local), or the controlled device's volume.

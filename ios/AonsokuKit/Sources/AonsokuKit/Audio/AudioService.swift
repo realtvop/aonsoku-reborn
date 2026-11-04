@@ -208,6 +208,15 @@ public final class AudioService: NSObject, @unchecked Sendable {
         scrobbleSubmitter.submitPending(buffer: scrobbleBuffer)
     }
 
+    /// Saves the playback state and sends pending scrobbles while the app
+    /// keeps running and drawing, as a Mac app does when another app comes
+    /// to the front. Unlike entering the background, playback, recovery and
+    /// the published state carry on as they are.
+    public func applicationDidResignActive() {
+        persistence.flushNow()
+        scrobbleSubmitter.submitPending(buffer: scrobbleBuffer)
+    }
+
     public func applicationWillEnterForeground() {
         isInForeground = true
         recoveryController.setBackground(false)

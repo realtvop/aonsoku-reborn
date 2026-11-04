@@ -55,6 +55,47 @@ final class LifecycleTests: XCTestCase {
         XCTAssertEqual(lifecycle.phase, .terminated)
     }
 
+    func testResignActiveSavesStateWithoutLeavingTheForeground() {
+        var calls: [String] = []
+        let lifecycle = AppLifecycleService(
+            audio: AudioLifecycleActions(
+                start: { calls.append("audio:start") },
+                didEnterBackground: { calls.append("audio:background") },
+                willEnterForeground: { calls.append("audio:foreground") },
+                willTerminate: { calls.append("audio:terminate") },
+                handleBackgroundSession: { _, _ in false },
+                didResignActive: { calls.append("audio:resign") }
+            ),
+            coordination: CoordinationLifecycleActions(
+                didEnterBackground: { calls.append("coordination:background") },
+                willEnterForeground: { calls.append("coordination:foreground") },
+                willTerminate: { calls.append("coordination:terminate") }
+            )
+        )
+
+        // Before launch finishes there is nothing to save.
+        lifecycle.didResignActive()
+        lifecycle.didFinishLaunching()
+        lifecycle.didResignActive()
+        XCTAssertEqual(lifecycle.phase, .active)
+        lifecycle.didBecomeActive()
+        lifecycle.didResignActive()
+        lifecycle.didEnterBackground()
+        lifecycle.didResignActive()
+        lifecycle.willTerminate()
+        lifecycle.didResignActive()
+
+        XCTAssertEqual(calls, [
+            "audio:start",
+            "audio:resign",
+            "audio:resign",
+            "audio:background",
+            "coordination:background",
+            "coordination:terminate",
+            "audio:terminate",
+        ])
+    }
+
     func testBackgroundSessionRoutingReturnsOwnershipAndCompletion() {
         var routedIdentifier: String?
         var completed = false

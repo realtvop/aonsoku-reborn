@@ -429,6 +429,40 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   for several. `PlayerStore` applies the iOS rules for asking before songs the
   user queued are replaced. A station shows its badge instead, since radio has
   neither lyrics nor a queue, and the inspector closes once nothing is loaded.
+  The menu bar is `Mac/Shell/MacCommands`: File (New Playlist ⌘N), Edit
+  (Search… ⌘F focuses the toolbar field), View (Show/Hide Now Playing ⌃⌘I,
+  Lyrics ⌥⌘L, Queue ⌥⌘U, Go to Current Song ⌘L for its album, Back ⌘[ and
+  Forward ⌘], beside the system sidebar and toolbar items), Playback
+  (Play/Pause Space, Next ⌘→, Previous ⌘←, ten seconds on or back ⌥⌘→/⌥⌘←,
+  volume ⌘↑/⌘↓, Shuffle, Repeat off/all/one through `PlayerStore.setRepeatMode`,
+  Like, the sleep timer), Library (Sync Now ⌘R, Cancel) and Help (the
+  repository, Native Player Debug…), titled through the Localizer. SwiftUI
+  rebuilds `Commands` for an observed object but not for a Perceptible store
+  read inside a menu, so `MacCommandState` mirrors what titles and enablement
+  need under `withObservationTracking`. It also fills a submenu's items only
+  when that menu opens, so the Playback shortcuts (`MacPlaybackShortcut`, shared
+  with their menu items) are matched and performed by `MacKeyRouting`, a local
+  key monitor, rather than by possibly stale menu items. While a text view is
+  first responder those keys go straight to its window instead, so Space and
+  Command-arrows edit the text; sheets and panels keep Space for their buttons.
+  Settings (⌘,) is a `Settings` scene showing `MacSettingsView`: the account
+  sheet's pages in a sidebar, each detail in its own stack (Storage opens the
+  cache manager there), with `Router.settingsPage` as the selection; signed
+  out, Server, Storage and Cross-device are left out. Help ▸ Native Player
+  Debug… opens `Mac/Debug/MacDebugView` (window `MacWindowID.debug`), which
+  replaces iOS's shake gesture: Playback (what plays, transport, the queues),
+  Info (buffer, connection, memory, version) and Logs (level, source and text
+  filters, Copy and ⌘C, Clear), read every two seconds from `DebugDataProvider`
+  and `NativeLogger`. `MacAppDelegate` keeps the app and playback running when
+  the main window closes (`applicationShouldTerminateAfterLastWindowClosed` is
+  false), reopens the window from the Dock through the `openWindow` action the
+  window registered, gives the Dock menu what plays with Play/Pause, Next,
+  Previous and Like, and forwards activation to
+  `AppLifecycleService.didBecomeActive` and `AppModel.didBecomeActive`.
+  Resigning goes to `AppLifecycleService.didResignActive`, never to
+  `didEnterBackground`: a Mac app keeps playing and drawing behind other apps,
+  and the background transition would stop the coordination heartbeat and the
+  published playback state. Termination flushes as before.
   DEBUG builds have a snapshot mode for looking at the app without a screen:
   `Aonsoku --snapshot-dir <dir> --snapshot-server <url>` (user/password `qa`
   unless `--snapshot-user`/`--snapshot-password`, `--snapshot-scenes a,b` to
@@ -455,8 +489,9 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   `QueueScrollAnchors`) stay shared.
   Mac-only files live in `ios/Aonsoku/Mac/`, which only the Mac target
   includes: `AonsokuMacApp` (entry point, `NSApplicationDelegateAdaptor`),
-  `Shell/` (window shell), `Player/` (player bar and inspector), `Debug/`
-  (snapshot mode), its own `Info.plist` and
+  `Shell/` (window shell, menu commands, Settings window), `Player/` (player
+  bar and inspector), `Debug/` (the Native Player Debug window, and the
+  DEBUG-only snapshot mode), its own `Info.plist` and
   `Aonsoku.entitlements` (app sandbox
   and outgoing network), and an `Assets.xcassets` with the macOS app icon. The
   bundled Poppins is registered at launch by `BrandFont.registerBundledFonts()`;
@@ -758,7 +793,9 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   preserved coordination registration after sign-out.
 - `AppLifecycleService` is the App/Scene lifecycle boundary shared by the iOS
   host and `AppServices`. It starts/restores audio once, flushes playback state
-  on background/termination, validates coordination with a foreground ping and
+  on background/termination (and on `didResignActive`, which the Mac app sends
+  when another app comes to the front, without leaving the foreground),
+  validates coordination with a foreground ping and
   capped fresh-ticket reconnect requests, and routes background URLSession
   relaunch callbacks to the audio download manager. WebSockets use a normal
   URLSession because iOS background sessions are reserved for transfer tasks;
@@ -838,7 +875,8 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
     with `make(cgImage:)` and `platformCGImage`, used by `ArtworkProvider`;
     `ObservationToken`, the idempotent cancel handle every observation returns.
   - `DebugViewController` and the `AVAudioSession` half of `DebugDataProvider`
-    exist only where UIKit does.
+    exist only where UIKit does; the rest of `DebugDataProvider` and
+    `NativeLogger`'s entries are public for the Mac debug window.
 
   Each seam has a fake in the tests, so both platforms run the same expectations
   (`AudioServicePlatformTests`, `AudioRouteTests`, `OutputVolumeTests`,

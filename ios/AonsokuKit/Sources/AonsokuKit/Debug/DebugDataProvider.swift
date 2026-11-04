@@ -4,41 +4,41 @@ import Foundation
 import AVFoundation
 #endif
 
-struct QueueItemInfo {
-    let id: String
-    let title: String
-    let artist: String
-    let duration: Double
-    let isCurrent: Bool
+public struct QueueItemInfo: Sendable {
+    public let id: String
+    public let title: String
+    public let artist: String
+    public let duration: Double
+    public let isCurrent: Bool
 }
 
-struct AudioDebugSnapshot {
-    let title: String?
-    let artist: String?
-    let album: String?
-    let isPlaying: Bool
-    let currentTime: Double
-    let duration: Double
-    let bufferedTime: Double
-    let sourceKind: String?
-    let bufferEmpty: Bool
-    let likelyToKeepUp: Bool
-    let recoveryState: String
-    let repeatMode: String
-    let shuffleEnabled: Bool
-    let queueIndex: Int
-    let queueItemCount: Int
-    let queue: [QueueItemInfo]
-    let userQueue: [QueueItemInfo]
+public struct AudioDebugSnapshot: Sendable {
+    public let title: String?
+    public let artist: String?
+    public let album: String?
+    public let isPlaying: Bool
+    public let currentTime: Double
+    public let duration: Double
+    public let bufferedTime: Double
+    public let sourceKind: String?
+    public let bufferEmpty: Bool
+    public let likelyToKeepUp: Bool
+    public let recoveryState: String
+    public let repeatMode: String
+    public let shuffleEnabled: Bool
+    public let queueIndex: Int
+    public let queueItemCount: Int
+    public let queue: [QueueItemInfo]
+    public let userQueue: [QueueItemInfo]
 }
 
-struct ConnectionDebugSnapshot {
-    let serverUrl: String
-    let username: String
-    let authType: String
-    let protocolVersion: String
-    let serverType: String
-    let hasFallbackUrl: Bool
+public struct ConnectionDebugSnapshot: Sendable {
+    public let serverUrl: String
+    public let username: String
+    public let authType: String
+    public let protocolVersion: String
+    public let serverType: String
+    public let hasFallbackUrl: Bool
 }
 
 #if canImport(UIKit)
@@ -55,14 +55,16 @@ struct AudioSessionSnapshot {
 }
 #endif
 
-final class DebugDataProvider {
+/// What the native player debug screens show: the playback snapshot, the
+/// signed-in connection and memory use.
+public final class DebugDataProvider {
     private let audioService: AudioService
 
-    init(audioService: AudioService = AppServices.shared.audio) {
+    public init(audioService: AudioService = AppServices.shared.audio) {
         self.audioService = audioService
     }
 
-    func audioSnapshot() -> AudioDebugSnapshot? {
+    public func audioSnapshot() -> AudioDebugSnapshot? {
         let snapshot = audioService.playbackSnapshot()
         let context = snapshot.queue?.contextSongs ?? []
         let currentId = snapshot.queue?.currentSongId
@@ -103,19 +105,19 @@ final class DebugDataProvider {
         )
     }
 
-    func playPause() {
+    public func playPause() {
         _ = audioService.execute(.togglePlayPause)
     }
 
-    func skipNext() {
+    public func skipNext() {
         audioService.skipToNext()
     }
 
-    func skipPrevious() {
+    public func skipPrevious() {
         audioService.skipToPrevious()
     }
 
-    func connectionSnapshot() -> ConnectionDebugSnapshot? {
+    public func connectionSnapshot() -> ConnectionDebugSnapshot? {
         guard let creds = KeychainManager.retrieve() else { return nil }
         return ConnectionDebugSnapshot(
             serverUrl: creds.serverUrl,
@@ -142,7 +144,7 @@ final class DebugDataProvider {
     }
     #endif
 
-    func memoryUsageMB() -> Double {
+    public func memoryUsageMB() -> Double {
         var info = mach_task_basic_info()
         var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
         let result = withUnsafeMutablePointer(to: &info) {

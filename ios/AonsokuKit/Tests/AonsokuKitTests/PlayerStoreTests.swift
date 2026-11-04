@@ -167,6 +167,24 @@ final class PlayerStoreTests: XCTestCase {
         XCTAssertEqual(volume, 1)
     }
 
+    func testSetRepeatModeSendsOnlyAChangeToTheControlledDevice() async throws {
+        let fixture = try PlayerStoreTestFixture()
+        let remote = PlayerRemoteSpy()
+        remote.remoteNowPlaying = RemoteNowPlaying(
+            deviceId: "remote-1",
+            deviceName: "Living Room"
+        )
+        let store = fixture.store(remote: remote)
+
+        // The device already repeats nothing.
+        store.setRepeatMode(.off)
+        store.setRepeatMode(.one)
+        let sent = await waitForPlayerStoreTest { remote.commands.count == 1 }
+        XCTAssertTrue(sent)
+        XCTAssertEqual(remote.commandTypes, ["set_repeat"])
+        XCTAssertEqual(remote.commands.first?.jsonObject["mode"] as? String, "one")
+    }
+
     func testClearRejectsAnInFlightAlbumSelectionFromOldAccount() async throws {
         let fixture = try PlayerStoreTestFixture()
         let requested = expectation(description: "old album requested")

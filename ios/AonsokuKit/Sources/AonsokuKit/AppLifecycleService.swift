@@ -36,6 +36,7 @@ struct AudioLifecycleActions {
     let willEnterForeground: () -> Void
     let willTerminate: () -> Void
     let handleBackgroundSession: (String, @escaping () -> Void) -> Bool
+    let didResignActive: () -> Void
 
     init(
         start: @escaping () -> Void,
@@ -45,17 +46,20 @@ struct AudioLifecycleActions {
         handleBackgroundSession: @escaping (
             String,
             @escaping () -> Void
-        ) -> Bool
+        ) -> Bool,
+        didResignActive: @escaping () -> Void = {}
     ) {
         self.start = start
         self.didEnterBackground = didEnterBackground
         self.willEnterForeground = willEnterForeground
         self.willTerminate = willTerminate
         self.handleBackgroundSession = handleBackgroundSession
+        self.didResignActive = didResignActive
     }
 
     init(audio: AudioService) {
         start = { audio.start() }
+        didResignActive = { audio.applicationDidResignActive() }
         didEnterBackground = { audio.applicationDidEnterBackground() }
         willEnterForeground = { audio.applicationWillEnterForeground() }
         willTerminate = { audio.applicationWillTerminate() }
@@ -120,6 +124,16 @@ public final class AppLifecycleService: @unchecked Sendable {
         guard transition(to: .foreground) else { return }
         audio.willEnterForeground()
         coordination.willEnterForeground()
+    }
+
+    /// The app is no longer the active one but keeps running in front of
+    /// the user, as a Mac app does while another app is frontmost. Saves the
+    /// playback state without entering the background, which would stop the
+    /// coordination heartbeat and the published playback state; ignored
+    /// once the app is in the background or terminating.
+    public func didResignActive() {
+        guard phase == .active || phase == .foreground else { return }
+        audio.didResignActive()
     }
 
     public func didBecomeActive() {

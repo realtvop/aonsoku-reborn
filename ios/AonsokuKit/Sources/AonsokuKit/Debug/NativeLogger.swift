@@ -1,15 +1,16 @@
 import Foundation
 
-final class NativeLogger {
-    static let shared = NativeLogger()
+/// The ring buffer of native log entries the debug screens show.
+public final class NativeLogger {
+    public static let shared = NativeLogger()
 
-    struct Entry {
-        let timestamp: Date
-        let level: Level
-        let message: String
-        let source: String
+    public struct Entry: Sendable {
+        public let timestamp: Date
+        public let level: Level
+        public let message: String
+        public let source: String
 
-        enum Level: String, CaseIterable {
+        public enum Level: String, CaseIterable, Sendable {
             case debug, info, warn, error
         }
     }
@@ -63,13 +64,13 @@ final class NativeLogger {
         log(.error, message, source: source)
     }
 
-    func getEntries() -> [Entry] {
+    public func getEntries() -> [Entry] {
         queue.sync {
             buckets.values.flatMap { $0 }.sorted { $0.timestamp < $1.timestamp }
         }
     }
 
-    func clear() {
+    public func clear() {
         queue.async { self.buckets.removeAll() }
     }
 }
