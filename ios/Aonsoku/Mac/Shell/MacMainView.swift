@@ -68,11 +68,13 @@ struct MacMainView: View {
                 WithPerceptionTracking {
                     MacSectionStack(section: router.section)
                         .id(router.section)
-                        .inspector(isPresented: $router.isNowPlayingPresented) {
-                            MacNowPlayingInspector()
-                                .inspectorColumnWidth(min: 300, ideal: 360, max: 560)
-                        }
                 }
+            }
+            // On the split view rather than the section's stack, which drops
+            // its inspector while a page is pushed.
+            .inspector(isPresented: $router.isNowPlayingPresented) {
+                MacNowPlayingInspector()
+                    .inspectorColumnWidth(min: 300, ideal: 360, max: 560)
             }
         }
     }

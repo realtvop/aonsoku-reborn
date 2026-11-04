@@ -415,7 +415,8 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   the shared `Features/Player/PlayerShared.swift`.
   Now Playing is the split view's inspector (`Mac/Player/MacNowPlayingInspector`,
   shown by `Router.isNowPlayingPresented`, the toolbar's inspector button and
-  the player's cover), drawn over `NowPlayingBackground` tinted with the cover in
+  the player's cover; attached to the `NavigationSplitView`, since a section's
+  stack drops its inspector while a page is pushed), drawn over `NowPlayingBackground` tinted with the cover in
   the dark scheme, like the iOS player. A segmented control picks Lyrics, the
   shared `LyricsPanel` (synced lines follow playback and a click seeks; the
   sliders button opens the per-song lyrics settings; lines use
@@ -429,6 +430,9 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   for several. `PlayerStore` applies the iOS rules for asking before songs the
   user queued are replaced. A station shows its badge instead, since radio has
   neither lyrics nor a queue, and the inspector closes once nothing is loaded.
+  A collapsed inspector stays built, so its lyrics and queue are only built
+  while it is shown: the queue's table would otherwise take every queue
+  change, which AppKit reports as a reentrant table operation.
   The menu bar is `Mac/Shell/MacCommands`: File (New Playlist ⌘N), Edit
   (Search… ⌘F focuses the toolbar field), View (Show/Hide Now Playing ⌃⌘I,
   Lyrics ⌥⌘L, Queue ⌥⌘U, Go to Current Song ⌘L for its album, Back ⌘[ and

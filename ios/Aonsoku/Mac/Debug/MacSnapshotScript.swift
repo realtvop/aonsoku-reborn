@@ -60,6 +60,7 @@ enum MacSnapshotScript {
         .init(name: "toast-over-sheet", settle: .milliseconds(900)) { driver in
             driver.router.present(.songInfo(Song(id: "so1", title: "Sheet", album: "", artist: "")))
             try? await Task.sleep(for: .seconds(1))
+            driver.note("sheet presented")
             driver.app.toasts.show(.key("options.playNext"), style: .success)
             try? await Task.sleep(for: .milliseconds(300))
             driver.noteWindowOrder()

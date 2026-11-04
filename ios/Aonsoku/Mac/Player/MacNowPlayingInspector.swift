@@ -38,7 +38,12 @@ struct MacNowPlayingInspector: View {
 
     @ViewBuilder
     private var content: some View {
-        if player.isRadio {
+        if !router.isNowPlayingPresented {
+            // A collapsed inspector stays built; its queue table would still
+            // take every change, which AppKit reports as a reentrant table
+            // operation.
+            Color.clear
+        } else if player.isRadio {
             MacRadioNowPlaying()
         } else {
             switch panel {
@@ -215,14 +220,15 @@ private struct MacQueueList: View {
                     .onDeleteCommand {
                         remove(selection)
                     }
-                    .onAppear {
-                        proxy.scrollTo(currentAnchor, anchor: .top)
-                    }
-                    .appOnChange(of: queue.current?.id) {
+                    .task(id: queue.current?.id) {
+                        // Once the table has laid out its rows, which it has
+                        // not when the list appears: scrolling or changing the
+                        // selection while it updates them is a reentrant table
+                        // operation, and scrolling earlier does nothing.
+                        try? await Task.sleep(for: .milliseconds(150))
+                        guard !Task.isCancelled else { return }
                         selection = []
-                        withAnimation(.smooth(duration: 0.3)) {
-                            proxy.scrollTo(currentAnchor, anchor: .top)
-                        }
+                        proxy.scrollTo(currentAnchor, anchor: .top)
                     }
                 }
             }
