@@ -195,6 +195,18 @@ final class MacSnapshotDriver {
         note("section \(router.section.storageKey) path \(path) back=\(router.canGoBack) forward=\(router.canGoForward)")
     }
 
+    /// Notes what the player shows.
+    func notePlayer() {
+        let player = app.player
+        let song = player.currentSong.map { "\($0.title) / \($0.artist)" } ?? "none"
+        let clock = player.clock
+        note(
+            "player song=\(song) playing=\(player.isPlaying) radio=\(player.isRadio) "
+                + "pos=\(Int(clock.position()))/\(Int(clock.duration)) shuffle=\(player.isShuffleActive) "
+                + "repeat=\(player.repeatMode) volume=\(player.volume) upcoming=\(player.queue.upNext.count)"
+        )
+    }
+
     /// Notes the app's windows from front to back.
     func noteWindowOrder() {
         let numbers = NSWindow.windowNumbers(options: []) ?? []

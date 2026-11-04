@@ -393,6 +393,25 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   and artist tiles show a play button on hover (`appHoverPlayButton`), and
   horizontal shelves get hover paging buttons (`appShelfPaging`), since a mouse
   wheel scrolls only vertically.
+  `Mac/Player/MacPlayerBar` runs along the bottom of the window (a
+  `safeAreaInset` of the split view, `appGlass`: Liquid Glass on macOS 26, a
+  material on 15) with the controls of the iOS full-screen player: the cover
+  (toggles `Router.isNowPlayingPresented`, which opens the inspector), the
+  title and artist as links to the album and artist, the like button and the
+  song's menu, a status line (the device under remote control with Exit, the
+  sleep timer, a playback error); shuffle, transport and repeat over a native
+  `Slider` scrubber that seeks on release, with elapsed and remaining time and
+  the quality badge (radio shows that it is live); and the sleep timer menu,
+  the Lyrics and Queue buttons (which pick the inspector's panel, stored as
+  `mac.inspector.panel`), the devices sheet, AirPlay (`MacRoutePicker`, an
+  `AVRoutePickerView` labeled with the app's own string), mute and a volume
+  slider. The volume is `PlayerStore.setVolume`, which reaches
+  `AppVolumeControl` (`audio.appVolume.v1`) locally or the controlled device
+  remotely; mute remembers the volume to return to as
+  `mac.player.unmutedVolume`. There are no haptics on a Mac. The pieces both
+  players draw (`PlayerArtwork`, `NowPlayingText`, `PlayerBufferingIndicator`,
+  `NowPlayingBackground` and the `nowPlayingPalette` environment value) live in
+  the shared `Features/Player/PlayerShared.swift`.
   DEBUG builds have a snapshot mode for looking at the app without a screen:
   `Aonsoku --snapshot-dir <dir> --snapshot-server <url>` (user/password `qa`
   unless `--snapshot-user`/`--snapshot-password`, `--snapshot-scenes a,b` to
@@ -415,10 +434,12 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   `QueuePanel`; and in `Resources/`, the iOS `Info.plist` and `Assets.xcassets`.
   A new iOS-only file in a shared folder breaks the Mac build until it gets
   the same exception; platform-neutral pieces of the player stack (such as
-  `SleepTimer.swift`, `LyricsPanel` and `QueueScrollAnchors`) stay shared.
+  `PlayerShared.swift`, `SleepTimer.swift`, `LyricsPanel` and
+  `QueueScrollAnchors`) stay shared.
   Mac-only files live in `ios/Aonsoku/Mac/`, which only the Mac target
   includes: `AonsokuMacApp` (entry point, `NSApplicationDelegateAdaptor`),
-  `Shell/` (window shell), `Debug/` (snapshot mode), its own `Info.plist` and
+  `Shell/` (window shell), `Player/` (player bar and inspector), `Debug/`
+  (snapshot mode), its own `Info.plist` and
   `Aonsoku.entitlements` (app sandbox
   and outgoing network), and an `Assets.xcassets` with the macOS app icon. The
   bundled Poppins is registered at launch by `BrandFont.registerBundledFonts()`;

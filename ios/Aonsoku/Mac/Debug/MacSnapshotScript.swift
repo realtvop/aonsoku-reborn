@@ -67,6 +67,36 @@ enum MacSnapshotScript {
         .init(name: "dismiss-sheet", captures: false) { driver in
             driver.router.sheet = nil
         },
+        // Playback: the fake server streams silence, and the app volume
+        // goes to 0 before anything plays all the same.
+        .init(name: "player", settle: .seconds(2)) { driver in
+            driver.app.player.setVolume(0)
+            driver.router.section = .albums
+            await driver.app.player.playAlbum(id: "al1")
+            _ = await driver.waitUntil(timeout: .seconds(10)) { driver.app.player.isPlaying }
+            try? await Task.sleep(for: .seconds(3))
+            driver.notePlayer()
+        },
+        .init(name: "player-paused") { driver in
+            driver.app.player.pause()
+            driver.app.player.seek(to: 14)
+            driver.app.player.toggleShuffle()
+            driver.app.player.cycleRepeat()
+            try? await Task.sleep(for: .milliseconds(600))
+            driver.notePlayer()
+        },
+        .init(name: "radio", settle: .seconds(3)) { driver in
+            await driver.app.radios.load()
+            driver.app.player.playRadio(driver.app.radios.stations, index: 0)
+            _ = await driver.waitUntil(timeout: .seconds(10)) { driver.app.player.isRadio }
+            driver.notePlayer()
+        },
+        .init(name: "stop-radio", captures: false) { driver in
+            driver.app.player.pause()
+            await driver.app.player.playAlbum(id: "al7", startingAt: 2)
+            _ = await driver.waitUntil(timeout: .seconds(10)) { driver.app.player.isPlaying }
+            driver.app.player.pause()
+        },
     ]
 }
 #endif

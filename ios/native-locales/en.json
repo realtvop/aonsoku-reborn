@@ -116,6 +116,11 @@
       },
       "account": {
         "menu": "Account"
+      },
+      "player": {
+        "showNowPlaying": "Show Now Playing",
+        "hideNowPlaying": "Hide Now Playing",
+        "airPlay": "AirPlay and Outputs"
       }
     }
   }

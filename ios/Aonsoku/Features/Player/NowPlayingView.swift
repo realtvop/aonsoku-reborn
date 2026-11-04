@@ -601,28 +601,3 @@ private struct DevicesButton: View {
         }
     }
 }
-
-// MARK: - Background
-
-/// One opaque fill for every player page and pinned header. Blending the
-/// colors before drawing avoids translucent layers and conditional insertion
-/// transitions exposing the dark theme underneath.
-struct NowPlayingBackground: View {
-    @Environment(\.nowPlayingPalette) private var palette
-    @Environment(SettingsStore.self) private var settings
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        WithPerceptionTracking {
-            let appearance = settings.settings.appearance
-            let base = appearance.darkTheme.palette.background
-            let cover = (palette?.average ?? palette?.colors.first).map(Color.init) ?? base
-            base.appMix(with: cover, by: min(max(appearance.nowPlayingColorIntensity, 0), 1))
-                .animation(reduceMotion ? .linear(duration: 0.15) : .smooth(duration: 0.6), value: palette)
-        }
-    }
-}
-
-extension EnvironmentValues {
-    @Entry var nowPlayingPalette: ArtworkPalette?
-}

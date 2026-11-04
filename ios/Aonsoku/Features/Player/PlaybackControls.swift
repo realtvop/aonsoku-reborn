@@ -291,35 +291,3 @@ struct AudioRoutePicker: UIViewRepresentable {
 
     func updateUIView(_ view: AVRoutePickerView, context: Context) {}
 }
-
-/// Keep Pause available while showing only sustained local buffering.
-struct PlayerBufferingIndicator: View {
-    @Environment(PlayerStore.self) private var player
-    @State private var isVisible = false
-
-    private var isBuffering: Bool {
-        player.remoteNowPlaying == nil && player.isPlaying && player.isBuffering
-    }
-
-    var body: some View {
-        WithPerceptionTracking {
-            ProgressView()
-                .controlSize(.mini)
-                .tint(.white)
-                .opacity(isVisible && isBuffering ? 1 : 0)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-                .task(id: isBuffering) {
-                    isVisible = false
-                    guard isBuffering else { return }
-                    do {
-                        try await Task.sleep(for: .milliseconds(800))
-                        try Task.checkCancellation()
-                        isVisible = true
-                    } catch {
-                        // Pausing, finishing the load or changing targets cancels it.
-                    }
-                }
-        }
-    }
-}
