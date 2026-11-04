@@ -11,20 +11,30 @@ struct AonsokuMacApp: App {
     @NSApplicationDelegateAdaptor(MacAppDelegate.self) private var appDelegate
     @Environment(\.scenePhase) private var scenePhase
     @State private var app: AppModel
-    @State private var router = Router()
+    @State private var router: Router
 
     init() {
         // Before any view asks for a heading font.
         BrandFont.registerBundledFonts()
+        #if DEBUG
+        if MacSnapshotDriver.options != nil {
+            KeychainManager.debugServiceSuffix = "snapshot.\(UUID().uuidString)"
+        }
+        #endif
         let services = AppServices.shared
         services.lifecycle.didFinishLaunching()
         let model = AppModel(services: services)
         model.start()
+        let router = Router()
         _app = State(initialValue: model)
+        _router = State(initialValue: router)
+        #if DEBUG
+        MacSnapshotDriver.startIfRequested(app: model, router: router)
+        #endif
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: MacWindowID.main) {
             MacAppRoot(app: app, router: router)
         }
         .defaultSize(width: 1100, height: 720)
@@ -38,6 +48,12 @@ struct AonsokuMacApp: App {
             }
         }
     }
+}
+
+/// Window identifiers shared by the scenes, the app delegate and the
+/// DEBUG snapshot driver.
+enum MacWindowID {
+    static let main = "main"
 }
 
 /// The window content, inside the app environment. The environment is

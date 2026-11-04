@@ -30,8 +30,22 @@ public struct ServerCredentials: Codable, Equatable, Sendable {
 }
 
 public final class KeychainManager {
-    private static let service = "github.realtvop.aonsoku.credentials"
+    private static let baseService = "github.realtvop.aonsoku.credentials"
     private static let account = "server-credentials"
+
+    #if DEBUG
+    /// Keeps a DEBUG run's credentials in an item of their own. The Mac
+    /// app's snapshot runs set it before the session restores: an ad-hoc
+    /// signature changes with every build, and the login keychain would ask
+    /// the user before a new build may read an item an older one stored.
+    public static var debugServiceSuffix: String?
+
+    private static var service: String {
+        debugServiceSuffix.map { "\(baseService).\($0)" } ?? baseService
+    }
+    #else
+    private static let service = baseService
+    #endif
 
     public static func set(_ value: String, forKey key: String, service: String) {
         guard let data = value.data(using: .utf8) else { return }
