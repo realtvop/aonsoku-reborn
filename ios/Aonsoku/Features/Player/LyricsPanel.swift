@@ -193,7 +193,7 @@ private struct LyricLineView: View {
     let isActive: Bool
     let showsTranslation: Bool
 
-    @ScaledMetric(relativeTo: .title) private var size: CGFloat = 30
+    @ScaledMetric(relativeTo: .title) private var size: CGFloat = AppMetrics.lyricLine
 
     var body: some View {
         WithPerceptionTracking {

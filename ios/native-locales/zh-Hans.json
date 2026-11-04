@@ -121,6 +121,12 @@
         "showNowPlaying": "Show Now Playing",
         "hideNowPlaying": "Hide Now Playing",
         "airPlay": "AirPlay and Outputs"
+      },
+      "inspector": {
+        "title": "Now Playing"
+      },
+      "queue": {
+        "removeFromHistory": "Remove from History"
       }
     }
   }

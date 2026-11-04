@@ -281,7 +281,15 @@ final class MacSnapshotDriver {
             "AXTextField", "AXLink", "AXIncrementor", "AXDisclosureTriangle", "AXSegmentedControl",
         ]
         let isControl = interesting.contains(role)
-        let flag = isControl && label.isEmpty && title.isEmpty ? " UNLABELED" : ""
+        var flag = ""
+        if isControl, label.isEmpty, title.isEmpty {
+            // Where it is and what else it says, to find it on the PNG.
+            let frame = node.accessibilityFrame()
+            let help = node.accessibilityHelp() ?? ""
+            let identifier = node.accessibilityIdentifier() ?? ""
+            flag = " UNLABELED at \(Int(frame.minX)),\(Int(frame.minY)) \(Int(frame.width))x\(Int(frame.height))"
+                + (help.isEmpty ? "" : " help=\(help)") + (identifier.isEmpty ? "" : " id=\(identifier)")
+        }
         if isControl || !label.isEmpty || !title.isEmpty || role == "AXStaticText" || role == "AXRow" {
             let text = [label, title, value].filter { !$0.isEmpty }.joined(separator: " | ")
             lines.append(String(repeating: "  ", count: depth) + "\(role) \(text)\(flag)")

@@ -20,36 +20,41 @@ struct MacMainView: View {
 
     var body: some View {
         WithPerceptionTracking {
-            splitView
-                .modifier(MacToolbarSearch(showSearch: showSearch))
-                .toolbar {
-                    ToolbarItemGroup(placement: .navigation) {
-                        WithPerceptionTracking {
-                            MacHistoryButtons()
+            // The player sits below the columns rather than over them, so no
+            // column (the tinted inspector least of all) shows through it.
+            VStack(spacing: 0) {
+                splitView
+                    .modifier(MacToolbarSearch(showSearch: showSearch))
+                    .toolbar {
+                        ToolbarItemGroup(placement: .navigation) {
+                            WithPerceptionTracking {
+                                MacHistoryButtons()
+                            }
+                        }
+                        ToolbarItem(placement: .primaryAction) {
+                            WithPerceptionTracking {
+                                MacAccountMenu()
+                            }
+                        }
+                        ToolbarItem(placement: .primaryAction) {
+                            WithPerceptionTracking {
+                                MacInspectorToggle()
+                            }
                         }
                     }
-                    ToolbarItem(placement: .primaryAction) {
-                        WithPerceptionTracking {
-                            MacAccountMenu()
-                        }
-                    }
+                MacPlayerBar()
+            }
+            .environment(\.horizontalSizeClass, .regular)
+            .globalPresentations(.root)
+            .modifier(MacShellObservers(storedSection: $storedSection, showSearch: showSearch))
+            .onAppear {
+                router.settingsWindowOpener = { openSettings() }
+                if let section = SidebarSection(storageKey: storedSection) {
+                    router.section = section
                 }
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    WithPerceptionTracking {
-                        MacPlayerBar()
-                    }
-                }
-                .environment(\.horizontalSizeClass, .regular)
-                .globalPresentations(.root)
-                .modifier(MacShellObservers(storedSection: $storedSection, showSearch: showSearch))
-                .onAppear {
-                    router.settingsWindowOpener = { openSettings() }
-                    if let section = SidebarSection(storageKey: storedSection) {
-                        router.section = section
-                    }
-                }
-                .task { await playlists.loadIfNeeded() }
-                .task(id: pinned.items) { await pinned.refresh() }
+            }
+            .task { await playlists.loadIfNeeded() }
+            .task(id: pinned.items) { await pinned.refresh() }
         }
     }
 
@@ -143,6 +148,10 @@ private struct MacShellObservers: ViewModifier {
                         router.presentNowPlaying()
                     }
                 }
+                .appOnChange(of: player.hasMedia) { _, hasMedia in
+                    // As on iOS, Now Playing closes once nothing is loaded.
+                    if !hasMedia { router.isNowPlayingPresented = false }
+                }
         }
     }
 }
@@ -189,6 +198,26 @@ private struct MacSectionRoot: View {
                 case .playlist: PlaylistDetailView(playlistId: item.itemId)
                 }
             }
+        }
+    }
+}
+
+/// Shows and hides Now Playing beside the content.
+private struct MacInspectorToggle: View {
+    @Environment(Router.self) private var router
+    @Environment(PlayerStore.self) private var player
+    @Environment(Localizer.self) private var t
+
+    var body: some View {
+        WithPerceptionTracking {
+            let label = t(router.isNowPlayingPresented ? "native.mac.player.hideNowPlaying" : "native.mac.player.showNowPlaying")
+            Button {
+                router.isNowPlayingPresented.toggle()
+            } label: {
+                Label(label, systemImage: "sidebar.right")
+            }
+            .disabled(!player.hasMedia && !router.isNowPlayingPresented)
+            .help(label)
         }
     }
 }

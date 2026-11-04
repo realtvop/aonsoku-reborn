@@ -487,7 +487,7 @@ private struct MacPlayerAccessories: View {
     }
 
     private func panelButton(_ target: MacInspectorPanel, systemImage: String, label: String) -> some View {
-        let isOn = router.isNowPlayingPresented && panel == target
+        let isOn = router.isNowPlayingPresented && panel == target && !player.isRadio
         return Button {
             if isOn {
                 router.isNowPlayingPresented = false

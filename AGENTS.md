@@ -393,9 +393,10 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   and artist tiles show a play button on hover (`appHoverPlayButton`), and
   horizontal shelves get hover paging buttons (`appShelfPaging`), since a mouse
   wheel scrolls only vertically.
-  `Mac/Player/MacPlayerBar` runs along the bottom of the window (a
-  `safeAreaInset` of the split view, `appGlass`: Liquid Glass on macOS 26, a
-  material on 15) with the controls of the iOS full-screen player: the cover
+  `Mac/Player/MacPlayerBar` runs along the bottom of the window, below the
+  split view rather than over it, so no column shows through its `appGlass`
+  (Liquid Glass on macOS 26, a material on 15). It has the controls of the iOS
+  full-screen player: the cover
   (toggles `Router.isNowPlayingPresented`, which opens the inspector), the
   title and artist as links to the album and artist, the like button and the
   song's menu, a status line (the device under remote control with Exit, the
@@ -412,6 +413,22 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   players draw (`PlayerArtwork`, `NowPlayingText`, `PlayerBufferingIndicator`,
   `NowPlayingBackground` and the `nowPlayingPalette` environment value) live in
   the shared `Features/Player/PlayerShared.swift`.
+  Now Playing is the split view's inspector (`Mac/Player/MacNowPlayingInspector`,
+  shown by `Router.isNowPlayingPresented`, the toolbar's inspector button and
+  the player's cover), drawn over `NowPlayingBackground` tinted with the cover in
+  the dark scheme, like the iOS player. A segmented control picks Lyrics, the
+  shared `LyricsPanel` (synced lines follow playback and a click seeks; the
+  sliders button opens the per-song lyrics settings; lines use
+  `AppMetrics.lyricLine`, 24 pt on a Mac), or Queue: one selectable `List`
+  with the listening history, the current song, the user's queue (Clear) and
+  the rest of the album or playlist, opening scrolled to the current song.
+  There a double-click or Return plays (a history song plays next, a queue row
+  is jumped to, the current song starts over), Delete removes from the queue or
+  the history, rows drag to a new place in their section, and the right-click
+  menu is the song's own menu for one row or Play, Add to Playlist and Remove
+  for several. `PlayerStore` applies the iOS rules for asking before songs the
+  user queued are replaced. A station shows its badge instead, since radio has
+  neither lyrics nor a queue, and the inspector closes once nothing is loaded.
   DEBUG builds have a snapshot mode for looking at the app without a screen:
   `Aonsoku --snapshot-dir <dir> --snapshot-server <url>` (user/password `qa`
   unless `--snapshot-user`/`--snapshot-password`, `--snapshot-scenes a,b` to

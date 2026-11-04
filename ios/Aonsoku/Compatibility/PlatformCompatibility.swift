@@ -419,6 +419,16 @@ enum AppMetrics {
         44
         #endif
     }
+
+    /// Synced lyric lines: the full-screen player on iOS, the narrower
+    /// inspector on a Mac.
+    static var lyricLine: CGFloat {
+        #if os(macOS)
+        24
+        #else
+        30
+        #endif
+    }
 }
 
 // MARK: - Pointer

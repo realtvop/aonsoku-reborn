@@ -77,6 +77,26 @@ enum MacSnapshotScript {
             try? await Task.sleep(for: .seconds(3))
             driver.notePlayer()
         },
+        .init(name: "inspector-lyrics", settle: .seconds(3)) { driver in
+            UserDefaults.standard.set(MacInspectorPanel.lyrics.rawValue, forKey: MacInspectorPanel.storageKey)
+            driver.router.isNowPlayingPresented = true
+            try? await Task.sleep(for: .seconds(3))
+            driver.note("lyrics \(driver.app.lyrics.state)".prefix(160).description)
+        },
+        .init(name: "inspector-queue", settle: .seconds(2)) { driver in
+            if let songs = try? await driver.app.repository.songs(ids: ["so20", "so31"]) {
+                driver.app.player.enqueue(songs, position: .last)
+            }
+            UserDefaults.standard.set(MacInspectorPanel.queue.rawValue, forKey: MacInspectorPanel.storageKey)
+            try? await Task.sleep(for: .seconds(1))
+            driver.notePlayer()
+        },
+        .init(name: "queue-history", settle: .seconds(2)) { driver in
+            // The song played past ten seconds, so skipping records it.
+            driver.app.player.next()
+            _ = await driver.waitUntil(timeout: .seconds(5)) { !driver.app.history.songs.isEmpty }
+            driver.note("history \(driver.app.history.songs.map(\.title))")
+        },
         .init(name: "player-paused") { driver in
             driver.app.player.pause()
             driver.app.player.seek(to: 14)
