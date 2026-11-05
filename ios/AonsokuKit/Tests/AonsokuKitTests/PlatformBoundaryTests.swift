@@ -9,6 +9,7 @@ final class PlatformBoundaryTests: XCTestCase {
     private static let platformSpecific = [
         "import UIKit", "import AppKit", "import BackgroundTasks", "import CTailscale",
         "UIApplication", "NSApplication", "AVAudioSession", "MPVolumeView",
+        "MPNowPlayingInfoCenter", "MPRemoteCommandCenter", "import MediaPlayer",
         "BGTaskScheduler", "NSBackgroundActivityScheduler",
         "os(iOS)", "os(macOS)",
         "canImport(UIKit)", "canImport(AppKit)", "canImport(CTailscale)",

@@ -1,6 +1,5 @@
 import AVFoundation
 import Foundation
-import MediaPlayer
 
 public final class AudioService: NSObject, @unchecked Sendable {
     private static var resourceLoaderKey: UInt8 = 0
@@ -73,7 +72,11 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private var bufferMismatchFirstSeen: Date?
     private var endOfStreamTracker = QueueEndOfStreamTracker()
     private var isSeeking = false
-    private var remoteTargets: [(MPRemoteCommand, Any)] = []
+    private let systemMedia: SystemMediaSession
+    private var commandObservation: ObservationToken?
+    /// What the system's Now Playing surface shows; nil while nothing is
+    /// published. Main thread only.
+    private var nowPlaying: SystemNowPlayingInfo?
     private let replayGainLock = NSLock()
     private var replayGainConfig: AudioReplayGainConfig?
     private var currentReplayGain: AudioReplayGain?
@@ -130,10 +133,12 @@ public final class AudioService: NSObject, @unchecked Sendable {
         playerFactory: @escaping PlayerFactory = { AVQueuePlayer(items: [$0]) },
         artworkClient: HTTPClient = NetworkService.shared.client(),
         audioSession: PlaybackAudioSession = PlatformAudio.makeSession(),
-        volumeControl: OutputVolumeControlling = PlatformAudio.makeVolumeControl()
+        volumeControl: OutputVolumeControlling = PlatformAudio.makeVolumeControl(),
+        systemMedia: SystemMediaSession = PlatformSystemMedia.makeSession()
     ) {
         self.audioSession = audioSession
         self.volumeControl = volumeControl
+        self.systemMedia = systemMedia
         self.databaseManager = databaseManager
         self.storage = storage
         self.queueEngine = queueEngine
@@ -1421,8 +1426,8 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     public func setLikeActive(_ active: Bool) {
-        dispatchMain {
-            MPRemoteCommandCenter.shared().likeCommand.isActive = active
+        dispatchMain { [weak self] in
+            self?.systemMedia.setLikeActive(active)
         }
     }
 
@@ -2528,92 +2533,72 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     private func registerRemoteCommands() {
-        let center = MPRemoteCommandCenter.shared()
-        addTarget(center.playCommand) { [weak self] _ in
-            guard let self else { return .commandFailed }
-            return self.routeRemoteOrLocal(
-                command: ["type": "play"],
-                local: .play
-            )
+        // One registration at a time, or every command would run twice.
+        commandObservation?.cancel()
+        commandObservation = systemMedia.startReceivingCommands { [weak self] command in
+            guard let self else { return .failed }
+            return self.handleSystemMediaCommand(command)
         }
-        addTarget(center.pauseCommand) { [weak self] _ in
-            guard let self else { return .commandFailed }
-            return self.routeRemoteOrLocal(
-                command: ["type": "pause"],
-                local: .pause
-            )
-        }
-        addTarget(center.togglePlayPauseCommand) { [weak self] _ in
-            guard let self else { return .commandFailed }
-            return self.routeRemoteOrLocal(
+    }
+
+    private func unregisterRemoteCommands() {
+        commandObservation?.cancel()
+        commandObservation = nil
+    }
+
+    /// A media key, Control Center, the Lock Screen or headphones. While
+    /// another device is controlled the command goes to that device.
+    private func handleSystemMediaCommand(
+        _ command: SystemMediaCommand
+    ) -> SystemMediaCommandResult {
+        switch command {
+        case .play:
+            routeRemoteOrLocal(command: ["type": "play"], local: .play)
+        case .pause:
+            routeRemoteOrLocal(command: ["type": "pause"], local: .pause)
+        case .togglePlayPause:
+            routeRemoteOrLocal(
                 command: ["type": "toggle_play_pause"],
                 local: .togglePlayPause
             )
-        }
-        addTarget(center.nextTrackCommand) { [weak self] _ in
-            guard let self else { return .commandFailed }
-            return self.routeRemoteOrLocal(
-                command: ["type": "next"],
-                local: .next
+        case .nextTrack:
+            routeRemoteOrLocal(command: ["type": "next"], local: .next)
+        case .previousTrack:
+            routeRemoteOrLocal(command: ["type": "previous"], local: .previous)
+        case let .changePlaybackPosition(seconds):
+            routeRemoteOrLocal(
+                command: ["type": "seek", "seconds": seconds],
+                local: .seek(seconds)
             )
-        }
-        addTarget(center.previousTrackCommand) { [weak self] _ in
-            guard let self else { return .commandFailed }
-            return self.routeRemoteOrLocal(
-                command: ["type": "previous"],
-                local: .previous
-            )
-        }
-        addTarget(center.changePlaybackPositionCommand) { [weak self] event in
-            guard let event = event as? MPChangePlaybackPositionCommandEvent else {
-                return .commandFailed
-            }
-            guard let self else { return .commandFailed }
-            return self.routeRemoteOrLocal(
-                command: ["type": "seek", "seconds": event.positionTime],
-                local: .seek(event.positionTime)
-            )
-        }
-        addTarget(center.likeCommand) { [weak self] _ in
-            guard let self else { return .commandFailed }
-            return self.routeRemoteOrLocal(
+        case .toggleLike:
+            routeRemoteOrLocal(
                 command: ["type": "toggle_like"],
                 local: .toggleLike
             )
         }
     }
 
-    private func addTarget(
-        _ command: MPRemoteCommand,
-        handler: @escaping (MPRemoteCommandEvent) -> MPRemoteCommandHandlerStatus
-    ) {
-        command.isEnabled = true
-        let target = command.addTarget(handler: handler)
-        remoteTargets.append((command, target))
-    }
-
-    private func unregisterRemoteCommands() {
-        for (command, target) in remoteTargets { command.removeTarget(target) }
-        remoteTargets.removeAll()
-    }
-
     private func routeRemoteOrLocal(
         command: [String: Any],
         local: AudioCommand
-    ) -> MPRemoteCommandHandlerStatus {
-        if let projection = remoteProjection {
-            guard let targetDeviceId = projection.targetDeviceId,
-                  CoordinationService.shared.sendCommandFromActive(
-                      targetDeviceId: targetDeviceId,
-                      expectedGeneration: projection.expectedGeneration,
-                      command: command
-                  ) else {
-                return .commandFailed
+    ) -> SystemMediaCommandResult {
+        // The system may call from any thread; the projection and the
+        // coordination socket belong to the main one.
+        dispatchMainSync { () -> SystemMediaCommandResult in
+            if let projection = remoteProjection {
+                guard let targetDeviceId = projection.targetDeviceId,
+                      CoordinationService.shared.sendCommandFromActive(
+                          targetDeviceId: targetDeviceId,
+                          expectedGeneration: projection.expectedGeneration,
+                          command: command
+                      ) else {
+                    return .failed
+                }
+                return .success
             }
+            _ = execute(local)
             return .success
         }
-        _ = execute(local)
-        return .success
     }
 
     private func observeSystemVolume() {
@@ -2622,21 +2607,33 @@ public final class AudioService: NSObject, @unchecked Sendable {
         }
     }
 
+    /// Publishes the song, or the controlled device's while another device is
+    /// controlled. Called whenever what the song is may have changed; the
+    /// artwork follows once it is at hand.
     private func updateNowPlayingInfo() {
         nowPlayingRevision += 1
         let revision = nowPlayingRevision
         artworkTask?.cancel()
         artworkTask = nil
 
-        let projection = remoteProjection
-        let displayedMetadata = projection?.metadata ?? metadata
-        var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
-        apply(displayedMetadata.title, forKey: MPMediaItemPropertyTitle, to: &info)
-        apply(displayedMetadata.artist, forKey: MPMediaItemPropertyArtist, to: &info)
-        apply(displayedMetadata.album, forKey: MPMediaItemPropertyAlbumTitle, to: &info)
-        info.removeValue(forKey: MPMediaItemPropertyArtwork)
+        guard hasNowPlayingContent() else {
+            // An entry without a song would be a blank card, and on a Mac the
+            // app would still be what the media keys address.
+            publishNowPlaying(nil)
+            return
+        }
+        let displayedMetadata = remoteProjection?.metadata ?? metadata
+        var info = SystemNowPlayingInfo(
+            title: displayedMetadata.title,
+            artist: displayedMetadata.artist,
+            album: displayedMetadata.album,
+            duration: nil,
+            elapsed: 0,
+            rate: 0,
+            artwork: nil
+        )
         applyNowPlayingPlaybackFields(to: &info)
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        publishNowPlaying(info)
 
         if let artworkUrl = displayedMetadata.artworkUrl {
             loadNowPlayingArtwork(
@@ -2647,10 +2644,25 @@ public final class AudioService: NSObject, @unchecked Sendable {
         }
     }
 
+    /// Whether there is a song to show: the loaded one, the one a restored
+    /// queue is paused on (it has its metadata but no player yet), or the one
+    /// the controlled device plays.
+    private func hasNowPlayingContent() -> Bool {
+        let displayed = remoteProjection?.metadata ?? metadata
+        let hasText = [displayed.title, displayed.artist, displayed.album]
+            .contains { !($0 ?? "").isEmpty }
+        return hasText || (remoteProjection == nil && player != nil)
+    }
+
+    /// Brings the entry's position, duration and state up to date after a
+    /// state change, a seek or the end of a song. It never creates an entry:
+    /// the song's own update does, and a card with only a position is blank.
     private func updateNowPlayingPlaybackInfo() {
-        var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
-        applyNowPlayingPlaybackFields(to: &info)
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        dispatchMain { [weak self] in
+            guard let self, var info = self.nowPlaying else { return }
+            self.applyNowPlayingPlaybackFields(to: &info)
+            self.publishNowPlaying(info)
+        }
     }
 
     private func handleCoverImageCached(_ notification: Notification) {
@@ -2659,7 +2671,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
         ] as? String,
               cachedCoverArtId == currentNowPlayingCoverArtId(),
               (remoteProjection?.metadata ?? metadata).artworkUrl != nil,
-              MPNowPlayingInfoCenter.default().nowPlayingInfo != nil else {
+              nowPlaying != nil else {
             return
         }
         updateNowPlayingInfo()
@@ -2764,12 +2776,15 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     private func publishNowPlayingArtwork(_ image: PlatformImage, revision: Int) {
-        let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
         DispatchQueue.main.async { [weak self] in
-            guard let self, self.nowPlayingRevision == revision else { return }
-            var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
-            info[MPMediaItemPropertyArtwork] = artwork
-            MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+            guard let self, self.nowPlayingRevision == revision,
+                  var info = self.nowPlaying else { return }
+            info.artwork = image
+            // The entry went out before the artwork was at hand. Bring its
+            // position and state up to date as well, or the system would jump
+            // back to where the song was when the entry was published.
+            self.applyNowPlayingPlaybackFields(to: &info)
+            self.publishNowPlaying(info)
         }
     }
 
@@ -2777,46 +2792,44 @@ public final class AudioService: NSObject, @unchecked Sendable {
         nowPlayingRevision += 1
         artworkTask?.cancel()
         artworkTask = nil
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        publishNowPlaying(nil)
     }
 
-    private func apply(
-        _ value: String?,
-        forKey key: String,
-        to info: inout [String: Any]
-    ) {
-        guard let value, !value.isEmpty else {
-            info.removeValue(forKey: key)
-            return
-        }
-        info[key] = value
+    /// Hands the entry to the system and remembers what it was told. Main
+    /// thread only.
+    private func publishNowPlaying(_ info: SystemNowPlayingInfo?) {
+        // Nothing was published, so there is nothing to withdraw.
+        if info == nil, nowPlaying == nil { return }
+        nowPlaying = info
+        systemMedia.publish(
+            info,
+            state: info == nil ? .stopped : systemPlaybackState()
+        )
     }
 
-    private func applyNowPlayingPlaybackFields(to info: inout [String: Any]) {
+    /// What the system is told about playback: the controlled device's while
+    /// another one is controlled, otherwise this device's intent, so an
+    /// automatic load or recovery still reads as playing.
+    private func systemPlaybackState() -> SystemPlaybackState {
         if let projection = remoteProjection {
-            MPNowPlayingInfoCenter.default().playbackState =
-                projection.isPlaying ? .playing : .paused
-            if projection.duration > 0 {
-                info[MPMediaItemPropertyPlaybackDuration] = projection.duration
-            } else {
-                info.removeValue(forKey: MPMediaItemPropertyPlaybackDuration)
-            }
-            info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = projection.position
-            info[MPNowPlayingInfoPropertyPlaybackRate] = projection.isPlaying ? 1.0 : 0.0
-            info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = 1.0
+            return projection.isPlaying ? .playing : .paused
+        }
+        return wantsPlayback ? .playing : .paused
+    }
+
+    private func applyNowPlayingPlaybackFields(
+        to info: inout SystemNowPlayingInfo
+    ) {
+        if let projection = remoteProjection {
+            info.duration = projection.duration > 0 ? projection.duration : nil
+            info.elapsed = projection.position
+            info.rate = projection.isPlaying ? 1 : 0
             return
         }
 
-        if duration > 0 {
-            info[MPMediaItemPropertyPlaybackDuration] = duration
-        } else {
-            info.removeValue(forKey: MPMediaItemPropertyPlaybackDuration)
-        }
-        info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
-        let isPlaying = wantsPlayback
-        MPNowPlayingInfoCenter.default().playbackState = isPlaying ? .playing : .paused
-        info[MPNowPlayingInfoPropertyPlaybackRate] = player?.timeControlStatus == .playing ? 1.0 : 0.0
-        info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = 1.0
+        info.duration = duration > 0 ? duration : nil
+        info.elapsed = currentTime
+        info.rate = player?.timeControlStatus == .playing ? 1 : 0
     }
 
     private func emitPlaybackState(
