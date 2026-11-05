@@ -25,6 +25,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     private let databaseManager: DatabaseManager
     private let queueEngine: NativeQueueEngine
     private let sourceResolver: NativeSourceResolver
+    private let storage: StorageLayout
     private let downloadManager: NativeDownloadManager
     private let scrobbleBuffer: NativeScrobbleBuffer
     private let scrobbleSubmitter: NativeScrobbleSubmitter
@@ -118,9 +119,10 @@ public final class AudioService: NSObject, @unchecked Sendable {
 
     init(
         databaseManager: DatabaseManager,
+        storage: StorageLayout = .current,
         queueEngine: NativeQueueEngine = NativeQueueEngine(),
-        sourceResolver: NativeSourceResolver = NativeSourceResolver(),
-        downloadManager: NativeDownloadManager = NativeDownloadManager(),
+        sourceResolver: NativeSourceResolver? = nil,
+        downloadManager: NativeDownloadManager? = nil,
         scrobbleBuffer: NativeScrobbleBuffer = NativeScrobbleBuffer(),
         scrobbleSubmitter: NativeScrobbleSubmitter = NativeScrobbleSubmitter(),
         recoveryController: PlaybackRecoveryController = PlaybackRecoveryController(),
@@ -133,9 +135,10 @@ public final class AudioService: NSObject, @unchecked Sendable {
         self.audioSession = audioSession
         self.volumeControl = volumeControl
         self.databaseManager = databaseManager
+        self.storage = storage
         self.queueEngine = queueEngine
-        self.sourceResolver = sourceResolver
-        self.downloadManager = downloadManager
+        self.sourceResolver = sourceResolver ?? NativeSourceResolver(storage: storage)
+        self.downloadManager = downloadManager ?? NativeDownloadManager(storage: storage)
         self.scrobbleBuffer = scrobbleBuffer
         self.scrobbleSubmitter = scrobbleSubmitter
         self.recoveryController = recoveryController
@@ -147,7 +150,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
         )
         super.init()
         queueEngine.delegate = self
-        downloadManager.delegate = self
+        self.downloadManager.delegate = self
         recoveryController.delegate = self
     }
 
@@ -1288,7 +1291,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
         data: Data,
         contentType: String
     ) throws -> CachedAudioFile {
-        let directory = try AudioCacheUtils.cacheDirectoryURL(createIfNeeded: true)
+        let directory = try AudioCacheUtils.cacheDirectoryURL(createIfNeeded: true, layout: storage)
         let cacheId = AudioCacheUtils.cacheId(for: songId)
         let ext = AudioCacheUtils.fileExtension(for: contentType)
         let fileName = "\(cacheId).\(ext)"
@@ -1311,19 +1314,11 @@ public final class AudioService: NSObject, @unchecked Sendable {
         )
     }
 
+    /// The directories downloaded audio is resolved, deleted and cleared in.
+    /// Only directories this app created: on a Mac never the Electron app's
+    /// `Application Support/Aonsoku/AudioCache` and never `~/Documents`.
     private func audioCacheDirectories() throws -> [URL] {
-        let current = try AudioCacheUtils.cacheDirectoryURL(createIfNeeded: false)
-        var directories = [current]
-        if let applicationSupport = FileManager.default.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        ).first {
-            let legacy = applicationSupport
-                .appendingPathComponent("Aonsoku", isDirectory: true)
-                .appendingPathComponent("AudioCache", isDirectory: true)
-            if legacy != current { directories.append(legacy) }
-        }
-        return directories
+        storage.audioManagedDirectories
     }
 
     public func resolveAudioFile(songId: String) throws -> CachedAudioFile? {
@@ -2694,7 +2689,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
         let imageCache: ImageCacheManager?
         let publication: ImageCachePublicationToken?
         if let coverArtId, !coverArtId.isEmpty {
-            let cache = ImageCacheManager(db: databaseManager.dbPool)
+            let cache = ImageCacheManager(db: databaseManager.dbPool, storage: storage)
             imageCache = cache
             publication = cache.publicationToken(for: coverArtId)
         } else {

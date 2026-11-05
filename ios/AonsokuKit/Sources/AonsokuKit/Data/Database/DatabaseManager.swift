@@ -6,21 +6,16 @@ final class DatabaseManager {
 
     let dbPool: DatabasePool
 
-    private init() {
-        let appSupport = FileManager.default.urls(
-            for: .applicationSupportDirectory, in: .userDomainMask
-        ).first!
-        let dbDirectory = appSupport
-            .appendingPathComponent("Aonsoku", isDirectory: true)
-            .appendingPathComponent("Database", isDirectory: true)
+    private convenience init() {
+        try! self.init(layout: .current)
+    }
 
-        try! FileManager.default.createDirectory(
-            at: dbDirectory, withIntermediateDirectories: true
+    /// Opens (creating it if needed) the library database of `layout`.
+    init(layout: StorageLayout) throws {
+        try FileManager.default.createDirectory(
+            at: layout.databaseDirectory, withIntermediateDirectories: true
         )
-
-        let dbPath = dbDirectory.appendingPathComponent("library.sqlite").path
-
-        dbPool = try! Self.makePool(path: dbPath)
+        dbPool = try Self.makePool(path: layout.databaseFileURL.path)
     }
 
     init(path: String) throws {

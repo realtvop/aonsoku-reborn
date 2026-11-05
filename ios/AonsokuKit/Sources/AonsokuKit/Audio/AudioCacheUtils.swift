@@ -1,7 +1,6 @@
 import Foundation
 
 enum AudioCacheUtils {
-    static let appSupportSubdirectory = "Aonsoku"
     static let cacheDirectoryName = "AudioCache"
 
     static func cacheId(for songId: String) -> String {
@@ -12,16 +11,14 @@ enum AudioCacheUtils {
             .replacingOccurrences(of: "=", with: "")
     }
 
-    static func cacheDirectoryURL(createIfNeeded: Bool) throws -> URL {
-        guard let documents = FileManager.default.urls(
-            for: .documentDirectory,
-            in: .userDomainMask
-        ).first else {
-            throw AudioCacheError.directoryNotFound
-        }
-
-        let directory = documents
-            .appendingPathComponent(cacheDirectoryName, isDirectory: true)
+    /// The directory downloads are written to: `Documents/AudioCache` on iOS,
+    /// the app's own `Application Support` directory on macOS (see
+    /// `StorageLayout`).
+    static func cacheDirectoryURL(
+        createIfNeeded: Bool,
+        layout: StorageLayout = .current
+    ) throws -> URL {
+        let directory = layout.audioCacheDirectory
 
         if createIfNeeded {
             try FileManager.default.createDirectory(

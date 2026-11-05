@@ -88,9 +88,15 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
     }
 
     override convenience init() {
+        self.init(storage: .current)
+    }
+
+    /// Downloads into the audio directory of `storage` over the background
+    /// session.
+    convenience init(storage: StorageLayout) {
         self.init(sessionFactory: { delegate in
             Self.makeBackgroundSession(delegate: delegate)
-        })
+        }, storage: storage)
     }
 
     init(
@@ -102,9 +108,8 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
             PreferencesService.shared.estimateStreamContentLength
         },
         preferences: PreferencesService = .shared,
-        cacheDirectoryProvider: @escaping (Bool) throws -> URL = {
-            try AudioCacheUtils.cacheDirectoryURL(createIfNeeded: $0)
-        },
+        storage: StorageLayout = .current,
+        cacheDirectoryProvider: ((Bool) throws -> URL)? = nil,
         fileManager: FileManager = .default,
         now: @escaping () -> Date = Date.init,
         routesThroughTailscale: @escaping (URL) -> Bool = { TailscaleRouting.shared.requiresTailscale($0) },
@@ -120,7 +125,9 @@ class NativeDownloadManager: NSObject, URLSessionDownloadDelegate {
         self.routesThroughTailscale = routesThroughTailscale
         self.credentialsProvider = credentialsProvider
         self.estimateContentLengthProvider = estimateContentLengthProvider
-        self.cacheDirectoryProvider = cacheDirectoryProvider
+        self.cacheDirectoryProvider = cacheDirectoryProvider ?? {
+            try AudioCacheUtils.cacheDirectoryURL(createIfNeeded: $0, layout: storage)
+        }
         self.fileManager = fileManager
         self.now = now
         self.preferences = preferences

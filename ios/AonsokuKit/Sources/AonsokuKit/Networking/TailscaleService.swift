@@ -266,9 +266,7 @@ public actor TailscaleService {
     }
 
     private static func stateDirectory() throws -> URL {
-        let directory = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
-                                                    appropriateFor: nil, create: true)
-            .appendingPathComponent("Aonsoku/Tailscale", isDirectory: true)
+        let directory = StorageLayout.current.tailscaleDirectory
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
                                                 attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
         var url = directory

@@ -1,7 +1,6 @@
 import Foundation
 
 enum ImageCacheUtils {
-    static let appSupportSubdirectory = "Aonsoku"
     static let cacheDirectoryName = "ImageCache"
     static let cachedImageExtensions = ["jpg", "png", "webp", "gif"]
 
@@ -13,17 +12,14 @@ enum ImageCacheUtils {
             .replacingOccurrences(of: "=", with: "")
     }
 
-    static func cacheDirectoryURL(createIfNeeded: Bool) throws -> URL {
-        guard let applicationSupport = FileManager.default.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        ).first else {
-            throw ImageCacheError.directoryNotFound
-        }
-
-        let directory = applicationSupport
-            .appendingPathComponent(appSupportSubdirectory, isDirectory: true)
-            .appendingPathComponent(cacheDirectoryName, isDirectory: true)
+    /// The directory covers and avatars are cached in: `Application
+    /// Support/Aonsoku/ImageCache` on iOS, the user's `Caches` on macOS (see
+    /// `StorageLayout`).
+    static func cacheDirectoryURL(
+        createIfNeeded: Bool,
+        layout: StorageLayout = .current
+    ) throws -> URL {
+        let directory = layout.imageCacheDirectory
 
         if createIfNeeded {
             try FileManager.default.createDirectory(

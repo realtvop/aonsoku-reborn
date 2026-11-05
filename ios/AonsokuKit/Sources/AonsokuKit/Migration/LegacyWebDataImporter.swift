@@ -47,28 +47,42 @@ public final class LegacyWebDataImporter {
 
     private let reader: @MainActor () async throws -> String
     private let now: () -> Date
+    private let storage: StorageLayout
+    /// Whether the former Capacitor app can have left data on this platform.
+    /// It only ever shipped on iOS: on a Mac there is nothing to import and
+    /// no hidden WebView is created looking for it.
+    private let isSupported: Bool
 
     public init(library: LibraryService, preferences: PreferencesService) {
         self.library = library
         self.preferences = preferences
         reader = { try await Self.readWebData() }
         now = Date.init
+        storage = .current
+        isSupported = PlatformStorage.supportsLegacyWebImport
     }
 
     init(
         library: LibraryService,
         preferences: PreferencesService,
         reader: @escaping @MainActor () async throws -> String,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        storage: StorageLayout = .current,
+        isSupported: Bool = true
     ) {
         self.library = library
         self.preferences = preferences
         self.reader = reader
         self.now = now
+        self.storage = storage
+        self.isSupported = isSupported
     }
 
-    /// True until an import succeeds.
-    public var isNeeded: Bool { preferences.getString(Self.doneKey) == nil }
+    /// True until an import succeeds; always false where the Capacitor app
+    /// never existed (macOS).
+    public var isNeeded: Bool {
+        isSupported && preferences.getString(Self.doneKey) == nil
+    }
 
     public func run() async -> LegacyImportReport {
         guard isNeeded else { return LegacyImportReport() }
@@ -87,9 +101,9 @@ public final class LegacyWebDataImporter {
             }
             let mapped = try Self.map(
                 json: json,
-                nativeFileExists: { [library] type, id in
+                nativeFileExists: { [library, storage] type, id in
                     switch type {
-                    case .audio: Self.nativeAudioExists(songId: id)
+                    case .audio: Self.nativeAudioExists(songId: id, storage: storage)
                     case .cover: library.coverSize(id: id) != nil
                     case .album, .playlist: true
                     }
@@ -292,23 +306,12 @@ public final class LegacyWebDataImporter {
         return String(data: data, encoding: .utf8)
     }
 
-    private static func nativeAudioExists(songId: String) -> Bool {
+    private static func nativeAudioExists(
+        songId: String,
+        storage: StorageLayout
+    ) -> Bool {
         let cacheId = AudioCacheUtils.cacheId(for: songId)
-        var directories: [URL] = []
-        if let current = try? AudioCacheUtils.cacheDirectoryURL(createIfNeeded: false) {
-            directories.append(current)
-        }
-        if let support = FileManager.default.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        ).first {
-            directories.append(
-                support
-                    .appendingPathComponent("Aonsoku", isDirectory: true)
-                    .appendingPathComponent("AudioCache", isDirectory: true)
-            )
-        }
-        for directory in Set(directories) {
+        for directory in Set(storage.audioManagedDirectories) {
             let metadataURL = directory.appendingPathComponent("\(cacheId).json")
             guard let data = try? Data(contentsOf: metadataURL),
                 let metadata = try? JSONDecoder().decode(

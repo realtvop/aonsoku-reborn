@@ -14,6 +14,7 @@ class NativeSourceResolver {
 
     init(
         cacheDirectories: [URL]? = nil,
+        storage: StorageLayout = .current,
         fileManager: FileManager = .default,
         credentialsProvider: @escaping () -> ServerCredentials? = {
             KeychainManager.retrieve()
@@ -30,30 +31,9 @@ class NativeSourceResolver {
         self.estimateContentLengthProvider = estimateContentLengthProvider
         self.now = now
         self.credentialsTTL = credentialsTTL
-        if let cacheDirectories {
-            self.cacheDirectories = cacheDirectories
-            return
-        }
-        var dirs: [URL] = []
-
-        let appSupport = fileManager.urls(
-            for: .applicationSupportDirectory, in: .userDomainMask
-        ).first!
-        dirs.append(
-            appSupport
-                .appendingPathComponent("Aonsoku", isDirectory: true)
-                .appendingPathComponent("AudioCache", isDirectory: true)
-        )
-
-        if let documents = fileManager.urls(
-            for: .documentDirectory, in: .userDomainMask
-        ).first {
-            dirs.append(
-                documents.appendingPathComponent("AudioCache", isDirectory: true)
-            )
-        }
-
-        self.cacheDirectories = dirs
+        // The default lookup list belongs to the platform layout: on a Mac it
+        // is the app's own directory only, never the Electron app's.
+        self.cacheDirectories = cacheDirectories ?? storage.audioLookupDirectories
     }
 
     func invalidateCredentialsCache() {

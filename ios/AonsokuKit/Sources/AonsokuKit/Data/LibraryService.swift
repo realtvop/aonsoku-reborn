@@ -16,13 +16,14 @@ public final class LibraryService: @unchecked Sendable {
 
     init(
         dbManager: DatabaseManager = .shared,
+        storage: StorageLayout = .current,
         httpClient: any LibrarySyncHTTPClient = SubsonicHTTPClient(),
         credentialsProvider: @escaping @Sendable () -> ServerCredentials? = {
             KeychainManager.retrieve()
         }
     ) {
         self.dbManager = dbManager
-        let imageCache = ImageCacheManager(db: dbManager.dbPool)
+        let imageCache = ImageCacheManager(db: dbManager.dbPool, storage: storage)
         self.imageCache = imageCache
         syncEngine = SyncEngine(
             db: dbManager.dbPool,

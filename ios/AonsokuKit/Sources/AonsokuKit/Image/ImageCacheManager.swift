@@ -15,31 +15,41 @@ final class ImageCacheManager: @unchecked Sendable {
     private let db: DatabasePool
     private let client: HTTPClient
     private let credentialsProvider: @Sendable () -> ServerCredentials?
+    private let storage: StorageLayout
 
-    convenience init(db: DatabasePool) {
+    convenience init(db: DatabasePool, storage: StorageLayout = .current) {
         self.init(
             db: db,
             client: NetworkService.shared.client(for: .artwork),
-            credentialsProvider: { KeychainManager.retrieve() }
+            credentialsProvider: { KeychainManager.retrieve() },
+            storage: storage
         )
     }
 
     convenience init(
         db: DatabasePool,
         session: URLSession,
-        credentialsProvider: @escaping @Sendable () -> ServerCredentials?
+        credentialsProvider: @escaping @Sendable () -> ServerCredentials?,
+        storage: StorageLayout = .current
     ) {
-        self.init(db: db, client: HTTPClient(session: session), credentialsProvider: credentialsProvider)
+        self.init(
+            db: db,
+            client: HTTPClient(session: session),
+            credentialsProvider: credentialsProvider,
+            storage: storage
+        )
     }
 
     init(
         db: DatabasePool,
         client: HTTPClient,
-        credentialsProvider: @escaping @Sendable () -> ServerCredentials?
+        credentialsProvider: @escaping @Sendable () -> ServerCredentials?,
+        storage: StorageLayout = .current
     ) {
         self.db = db
         self.client = client
         self.credentialsProvider = credentialsProvider
+        self.storage = storage
     }
 
     // MARK: - Public API
@@ -50,7 +60,7 @@ final class ImageCacheManager: @unchecked Sendable {
             throw ImageCacheError.noCredentials
         }
 
-        let directory = try ImageCacheUtils.cacheDirectoryURL(createIfNeeded: true)
+        let directory = try ImageCacheUtils.cacheDirectoryURL(createIfNeeded: true, layout: storage)
         let url = try buildAvatarURL(credentials: credentials, username: username, size: size)
         let (data, response) = try await client.data(from: url)
 
@@ -81,7 +91,7 @@ final class ImageCacheManager: @unchecked Sendable {
             throw ImageCacheError.noCredentials
         }
 
-        let directory = try ImageCacheUtils.cacheDirectoryURL(createIfNeeded: true)
+        let directory = try ImageCacheUtils.cacheDirectoryURL(createIfNeeded: true, layout: storage)
 
         let url = try buildCoverArtURL(credentials: credentials, coverArtId: coverArtId, size: size)
         let (data, response) = try await client.data(from: url)
@@ -114,7 +124,7 @@ final class ImageCacheManager: @unchecked Sendable {
         coverSize: String,
         expectedPublication: ImageCachePublicationToken? = nil
     ) throws -> URL {
-        let directory = try ImageCacheUtils.cacheDirectoryURL(createIfNeeded: true)
+        let directory = try ImageCacheUtils.cacheDirectoryURL(createIfNeeded: true, layout: storage)
         let publication = try publishCoverImage(
             coverArtId: coverArtId,
             data: data,
@@ -190,7 +200,7 @@ final class ImageCacheManager: @unchecked Sendable {
     }
 
     func resolveCoverImage(coverArtId: String) -> URL? {
-        guard let directory = try? ImageCacheUtils.cacheDirectoryURL(createIfNeeded: false) else {
+        guard let directory = try? ImageCacheUtils.cacheDirectoryURL(createIfNeeded: false, layout: storage) else {
             return nil
         }
 
@@ -224,7 +234,7 @@ final class ImageCacheManager: @unchecked Sendable {
         Self.publication.itemGenerations[coverArtId, default: 0] &+= 1
 
         var deleted = false
-        if let directory = try? ImageCacheUtils.cacheDirectoryURL(createIfNeeded: false),
+        if let directory = try? ImageCacheUtils.cacheDirectoryURL(createIfNeeded: false, layout: storage),
            FileManager.default.fileExists(atPath: directory.path) {
             let cacheId = ImageCacheUtils.cacheId(for: coverArtId)
             deleted = removeCoverImageFiles(cacheId: cacheId, in: directory)
@@ -244,7 +254,7 @@ final class ImageCacheManager: @unchecked Sendable {
         Self.publication.itemGenerations.removeAll(keepingCapacity: true)
 
         var deletedCount = 0
-        if let directory = try? ImageCacheUtils.cacheDirectoryURL(createIfNeeded: false),
+        if let directory = try? ImageCacheUtils.cacheDirectoryURL(createIfNeeded: false, layout: storage),
            FileManager.default.fileExists(atPath: directory.path) {
             let urls = try FileManager.default.contentsOfDirectory(
                 at: directory,
@@ -267,7 +277,7 @@ final class ImageCacheManager: @unchecked Sendable {
     }
 
     func getCoverImageSize(coverArtId: String) -> (sizeBytes: Int, coverSize: String?)? {
-        guard let directory = try? ImageCacheUtils.cacheDirectoryURL(createIfNeeded: false),
+        guard let directory = try? ImageCacheUtils.cacheDirectoryURL(createIfNeeded: false, layout: storage),
               let fileURL = try? findCoverImageURL(
                   cacheId: ImageCacheUtils.cacheId(for: coverArtId),
                   in: directory
