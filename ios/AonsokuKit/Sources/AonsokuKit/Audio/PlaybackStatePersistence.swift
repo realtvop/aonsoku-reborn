@@ -44,6 +44,21 @@ class PlaybackStatePersistence {
         }
     }
 
+    /// Writes the state one last time, before returning, and then writes
+    /// nothing more until `setStateProvider` is called again. The caller is
+    /// about to take the player apart, and a save that starts in the middle
+    /// of that reads the position of a player with no item (zero) and replaces
+    /// the one written here. Late edits, timers and flushes find no provider.
+    /// Never call this from the persistence queue.
+    func finish() {
+        debounceTimer?.cancel()
+        debounceTimer = nil
+        persistQueue.sync {
+            performFullSave()
+            stateProvider = nil
+        }
+    }
+
     func startProgressTracking() {
         stopProgressTracking()
 

@@ -616,6 +616,10 @@ private final class RecoveryTestPlayer: AVPlayer {
     var seekItemStatuses: [AVPlayerItem.Status] = []
     var holdNewItems = false
     var newItemStatus: AVPlayerItem.Status = .readyToPlay
+    /// A real player reports the time of the item it holds, which is zero
+    /// until something seeks. Off by default: most tests read the saved
+    /// position back from the player.
+    var resetsPositionOnItemReplacement = false
     private(set) var heldItem: AVPlayerItem?
     private var testItem: AVPlayerItem?
     private var seekCompletion: (@Sendable (Bool) -> Void)?
@@ -624,6 +628,7 @@ private final class RecoveryTestPlayer: AVPlayer {
 
     override func replaceCurrentItem(with item: AVPlayerItem?) {
         testItem = item
+        if resetsPositionOnItemReplacement, item != nil { position = 0 }
         if holdNewItems, let item {
             heldItem = item
         } else {
@@ -906,5 +911,127 @@ final class ConnectionChangeRecoveryTests: XCTestCase {
         XCTAssertEqual(scheduler.livePendingCount, 0)
         XCTAssertEqual(delegate.exhausted, [1])
         XCTAssertEqual(delegate.begins, 1)
+    }
+}
+
+// MARK: - The position while a reload is under way
+
+/// A reload replaces the player's item, and a player reports the time of the
+/// item it holds: zero, until the saved position has been sought. The song has
+/// not moved, so what is saved or shown meanwhile must still be where recovery
+/// is going to seek to. A Mac starts recovering the moment it wakes, so it can
+/// be put to sleep again or quit while the replacement is still loading.
+@MainActor
+final class ReloadWindowPositionTests: XCTestCase {
+    private let stalledAt = 12.0
+
+    func testSleepingWhileAReloadWaitsSavesWhereTheSongWas() async throws {
+        let fixture = try await makeReloadingFixture()
+
+        fixture.audio.applicationWillSleep()
+
+        let saved = try XCTUnwrap(fixture.savedState)
+        XCTAssertEqual(saved.currentTime, stalledAt)
+        XCTAssertEqual(saved.contextSongs.map(\.id), ["tone"])
+    }
+
+    func testQuittingWhileAReloadWaitsSavesWhereTheSongWas() async throws {
+        let fixture = try await makeReloadingFixture()
+
+        fixture.audio.applicationWillTerminate()
+        // The service saves once more as it shuts down, on its own queue.
+        try await Task.sleep(for: .milliseconds(300))
+
+        let saved = try XCTUnwrap(fixture.savedState)
+        XCTAssertEqual(saved.currentTime, stalledAt)
+    }
+
+    func testThePositionShownWhileAReloadWaitsIsWhereTheSongWas() async throws {
+        let fixture = try await makeReloadingFixture()
+
+        // What a real player reports for the item it was just given.
+        XCTAssertEqual(fixture.player.currentTime().seconds, 0)
+        XCTAssertEqual(fixture.audio.playbackSnapshot().currentTime, stalledAt)
+    }
+
+    func testThePlayerIsTrustedAgainOnceTheSeekHasFinished() async throws {
+        let fixture = try await makeReloadingFixture()
+        fixture.player.prepareHeldItem()
+        let sought = await waitForPlayerStoreTest {
+            fixture.player.seekPositions == [self.stalledAt]
+        }
+        XCTAssertTrue(sought)
+        // Ready, but not yet there.
+        XCTAssertEqual(fixture.audio.playbackSnapshot().currentTime, stalledAt)
+
+        fixture.player.position = 12.5
+        fixture.player.finishSeek(success: true)
+
+        XCTAssertEqual(fixture.audio.playbackSnapshot().currentTime, 12.5)
+    }
+
+    func testAUserSeekDuringAReloadMovesThePositionAtOnce() async throws {
+        let fixture = try await makeReloadingFixture()
+
+        fixture.audio.seek(to: 40)
+        fixture.player.position = 40
+        fixture.player.finishSeek(success: true)
+
+        XCTAssertEqual(fixture.audio.playbackSnapshot().currentTime, 40)
+    }
+
+    // MARK: Helpers
+
+    private struct Reloading {
+        let audio: AudioService
+        let player: RecoveryTestPlayer
+        let database: TemporaryDatabase
+
+        /// What a relaunch would restore.
+        var savedState: PlaybackPersistState? {
+            PlaybackStateRepository(db: database.manager.dbPool).load()
+        }
+    }
+
+    /// A song stalled at 12 s whose recovery has handed the player a new item
+    /// that is still loading, with a real player's idea of the time.
+    private func makeReloadingFixture() async throws -> Reloading {
+        let database = try TemporaryDatabase()
+        let scheduler = ManualRecoveryScheduler()
+        let recovery = PlaybackRecoveryController(recoveryScheduler: scheduler.schedule)
+        let player = RecoveryTestPlayer()
+        player.resetsPositionOnItemReplacement = true
+        let audio = AudioService(
+            databaseManager: database.manager,
+            scrobbleBuffer: makeIsolatedScrobbleBuffer(),
+            scrobbleSubmitter: makeIsolatedScrobbleSubmitter(),
+            recoveryController: recovery,
+            playerItemFactory: { RecoveryTestItem(url: $0) },
+            playerFactory: { item in
+                player.replaceCurrentItem(with: item)
+                return player
+            }
+        )
+        addTeardownBlock { audio.shutdown() }
+        // Starting installs the persistence the lifecycle calls flush.
+        audio.start()
+        audio.setContextQueue(songs: [makeSong("tone")], currentIndex: 0, autoplay: false)
+        let loaded = await waitForPlayerStoreTest {
+            audio.playbackSnapshot().state == .paused
+        }
+        XCTAssertTrue(loaded)
+
+        player.position = stalledAt
+        player.holdNewItems = true
+        recovery.triggerRecovery(
+            currentTime: player.currentTime(),
+            generation: 1,
+            sourceKind: .stream,
+            requiresReload: true
+        )
+        scheduler.performNext()
+        let replaced = await waitForPlayerStoreTest { player.heldItem != nil }
+        XCTAssertTrue(replaced, "The reload never replaced the item")
+        return Reloading(audio: audio, player: player, database: database)
     }
 }

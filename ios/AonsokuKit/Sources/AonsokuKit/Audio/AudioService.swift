@@ -197,7 +197,17 @@ public final class AudioService: NSObject, @unchecked Sendable {
 
     private func teardown(deactivateSession: Bool) {
         started = false
-        persistence.flushNow()
+        // An asynchronous save may start while the player is taken apart
+        // below, after its item is removed and before the player is gone, and
+        // would then read position zero over the one just saved. An explicit
+        // shutdown saves now, before returning, and nothing saves after it.
+        // A deinit cannot wait on the persistence queue, and has nothing left
+        // to read the state from.
+        if deactivateSession {
+            persistence.finish()
+        } else {
+            persistence.flushNow()
+        }
         persistence.stopProgressTracking()
         recoveryController.stopProgressMonitoring()
         unregisterRemoteCommands()
@@ -2934,6 +2944,16 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     private var currentTime: Double {
+        // A reload replaces the player's item, and a player reports the time
+        // of the item it holds: zero until the saved position is sought. The
+        // song has not moved, so keep reporting (and saving) where recovery
+        // is about to seek to. A Mac recovers the moment it wakes, which makes
+        // sleeping or quitting in this window an ordinary thing to do.
+        if isRecoveryReload,
+           let resume = recoveryController.resumePosition?.seconds,
+           resume.isFinite, resume >= 0 {
+            return resume
+        }
         guard let player else { return savedRestoreTime ?? 0 }
         let seconds = player.currentTime().seconds
         return seconds.isFinite && seconds >= 0 ? seconds : 0
