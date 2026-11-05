@@ -44,6 +44,7 @@ struct StorageSettingsView: View {
                     }
                     smartDownloads(cache.smartRules)
                     limits(cache)
+                    DesktopImportSection()
                     Section {
                         NavigationLink(value: SettingsPage.cacheManager) {
                             Text(t("settings.storage.cacheManager.group"))

@@ -314,6 +314,12 @@ public final class LibraryService: @unchecked Sendable {
         try CacheMetaRepository(db: dbManager.dbPool).delete(keys: keys)
     }
 
+    /// For components that write many index rows on a background queue, such
+    /// as the desktop downloads import.
+    func cacheMetaRepository() -> CacheMetaRepository {
+        CacheMetaRepository(db: dbManager.dbPool)
+    }
+
     public func availability() -> LibraryAvailability {
         let timestamp = try? SyncStateRepository(
             db: dbManager.dbPool

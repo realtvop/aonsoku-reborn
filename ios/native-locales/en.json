@@ -167,6 +167,45 @@
         "level": "Level",
         "source": "Source",
         "message": "Message"
+      },
+      "desktopImport": {
+        "title": "Import downloads from Aonsoku Desktop…",
+        "footer": "Copies the songs you downloaded in Aonsoku Desktop so they also play offline here. Aonsoku Desktop's own files are only read and are never changed or removed.",
+        "scanning": "Looking for downloads…",
+        "preparing": "Preparing…",
+        "found_one": "{{count}} downloaded song · {{size}}",
+        "found_other": "{{count}} downloaded songs · {{size}}",
+        "upToDate": "All of them are already on this Mac.",
+        "newCount_one": "{{count}} is not on this Mac yet.",
+        "newCount_other": "{{count}} are not on this Mac yet.",
+        "skipped_one": "{{count}} entry can't be imported.",
+        "skipped_other": "{{count}} entries can't be imported.",
+        "import": "Import",
+        "checkAgain": "Check Again",
+        "tryAgain": "Try Again",
+        "choose": "Choose Folder…",
+        "chooseMessage": "Choose Aonsoku Desktop's data folder. It is usually named Aonsoku, in Library ▸ Application Support.",
+        "choosePrompt": "Choose",
+        "unreadable": "Aonsoku can't open Aonsoku Desktop's folder. Choose it to import its downloads.",
+        "empty": "No downloaded songs were found in this folder.",
+        "progress": "{{completed}} of {{total}} songs · {{size}}",
+        "result": {
+          "imported_one": "Imported {{count}} song.",
+          "imported_other": "Imported {{count}} songs.",
+          "alreadyHere_one": "{{count}} song was already on this Mac.",
+          "alreadyHere_other": "{{count}} songs were already on this Mac.",
+          "failed_one": "{{count}} song couldn't be imported.",
+          "failed_other": "{{count}} songs couldn't be imported.",
+          "diskFull": "The disk is full.",
+          "cancelled": "Import cancelled.",
+          "nothing": "There was nothing to import."
+        },
+        "error": {
+          "unavailable": "Importing downloads isn't available on this device.",
+          "sameFolder": "That folder holds this app's own downloads. Choose Aonsoku Desktop's folder instead.",
+          "space": "Not enough free space: {{needed}} needed, {{available}} available.",
+          "storage": "Aonsoku can't use its own storage right now."
+        }
       }
     }
   }

@@ -1286,6 +1286,9 @@ public final class AudioService: NSObject, @unchecked Sendable {
         else { downloadManager.cancelAll() }
     }
 
+    /// Where this service keeps its files.
+    var storageLayout: StorageLayout { storage }
+
     public func storeAudioFile(
         songId: String,
         data: Data,

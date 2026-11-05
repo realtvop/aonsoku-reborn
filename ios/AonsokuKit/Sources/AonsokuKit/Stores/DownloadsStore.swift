@@ -15,6 +15,9 @@ public final class DownloadsStore {
     public private(set) var activeDownloads = ActiveDownloadsSummary()
     /// Increments when the index changes, for screens listing downloads.
     public private(set) var revision = 0
+    /// Settings → Storage → "Import downloads from Aonsoku Desktop…".
+    public internal(set) var desktopImport: DesktopImportState =
+        PlatformStorage.supportsDesktopDownloadsImport ? .idle : .unavailable
 
     @PerceptionIgnored public let audio: AudioService
     @PerceptionIgnored public let library: LibraryService
@@ -33,8 +36,20 @@ public final class DownloadsStore {
     @PerceptionIgnored private var didToastBatchFailure = false
     @PerceptionIgnored private var started = false
     @PerceptionIgnored private var lifecycleGeneration: UInt64 = 0
-    @PerceptionIgnored private let now: @Sendable () -> Date
+    @PerceptionIgnored let now: @Sendable () -> Date
     @PerceptionIgnored private let commands: DownloadCommands
+    // The desktop import (`DownloadsStore+DesktopImport.swift`) keeps its
+    // working state here, since extensions cannot add stored properties.
+    /// Where the desktop app's downloads are looked for without asking.
+    @PerceptionIgnored var desktopLocator: @Sendable () -> DesktopDataLocation? = {
+        DesktopDataLocator.defaultLocation()
+    }
+    @PerceptionIgnored var desktopLocation: DesktopDataLocation?
+    @PerceptionIgnored var desktopGeneration: UInt64 = 0
+    @PerceptionIgnored var desktopCancellation: DesktopImportCancellation?
+    /// Replace the import's file copy and free-space check in tests.
+    @PerceptionIgnored var desktopTransfer: DesktopFileTransfer?
+    @PerceptionIgnored var desktopAvailableCapacity: (@Sendable (URL) -> Int64?)?
 
     public init(
         audio: AudioService,
@@ -92,6 +107,7 @@ public final class DownloadsStore {
 
     public func stop() {
         lifecycleGeneration &+= 1
+        resetDesktopImport()
         cancelAll()
         if let audioObservation { audio.unsubscribe(audioObservation) }
         audioObservation = nil
@@ -103,6 +119,13 @@ public final class DownloadsStore {
     }
 
     func reloadAfterLibrarySync() {
+        reloadIndex()
+    }
+
+    /// Re-reads the index after the desktop import wrote to it. A stopped
+    /// store holds no account's downloads, so it stays empty.
+    func reloadAfterDesktopImport() {
+        guard started else { return }
         reloadIndex()
     }
 
@@ -522,7 +545,7 @@ public final class DownloadsStore {
 
     // MARK: Index
 
-    private func reloadIndex() {
+    func reloadIndex() {
         let values = (try? library.cacheMetadata()) ?? []
         rows = Dictionary(uniqueKeysWithValues: values.map { ($0.key, $0) })
         collectionSongIds.removeAll()
