@@ -412,6 +412,7 @@ enum DevicePlatform {
         switch platform.lowercased() {
         case "electron", "desktop": "Desktop"
         case "capacitor-ios", "ios": "iOS"
+        case "macos": "macOS"
         case "capacitor-android", "android": "Android"
         case "web": "Web"
         default: platform

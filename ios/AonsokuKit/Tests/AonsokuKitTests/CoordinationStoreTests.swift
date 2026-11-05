@@ -48,6 +48,25 @@ final class CoordinationStoreTests: XCTestCase {
         XCTAssertEqual(Set(fixture.store.groups.hidden.map(\.id)), Set([stale.id, hidden.id]))
     }
 
+    func testThisDeviceBeforeTheServerListsItHasThePlatformOfThisBuild() async throws {
+        let fixture = try CoordinationStoreFixture()
+        fixture.store.handle(.stateChanged(CoordinationState(
+            connectionState: .connected,
+            deviceId: "local",
+            devices: []
+        )))
+
+        await fixture.waitUntil { fixture.store.groups.thisDevice != nil }
+
+        let placeholder = try XCTUnwrap(fixture.store.groups.thisDevice)
+        XCTAssertEqual(placeholder.id, "local")
+        XCTAssertTrue(placeholder.isThisDevice)
+        XCTAssertEqual(
+            placeholder.device.platform,
+            PlatformDevice.coordinationPlatform
+        )
+    }
+
     func testRemoteProjectionBuildsQueueClockAndStopsWhenOffline() async throws {
         let fixture = try CoordinationStoreFixture()
         try SongRepository(db: fixture.database.manager.dbPool).bulkUpsert(

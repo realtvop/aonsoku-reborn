@@ -23,15 +23,18 @@ final class CoordinationServiceTests: XCTestCase {
 
     private func makeService(
         credentials: ServerCredentials? = nil,
+        platform: String? = nil,
         ackTimeout: TimeInterval = 0.2
     ) -> CoordinationService {
         let apiClient = apiClient!
+        let platform = platform ?? PlatformDevice.coordinationPlatform
         return CoordinationService(
             tokenStore: tokenStore,
             realtime: transport,
             makeAPIClient: { _, _, _ in apiClient },
             credentials: { credentials },
             clientVersion: "2.0",
+            platform: platform,
             ackTimeout: ackTimeout
         )
     }
@@ -135,7 +138,10 @@ final class CoordinationServiceTests: XCTestCase {
         try await service.connect(config: config, deviceName: "My Phone")
 
         XCTAssertEqual(apiClient.lastDeviceReg?.deviceName, "My Phone")
-        XCTAssertEqual(apiClient.lastDeviceReg?.platform, "capacitor-ios")
+        XCTAssertEqual(
+            apiClient.lastDeviceReg?.platform,
+            PlatformDevice.coordinationPlatform
+        )
         XCTAssertEqual(apiClient.lastDeviceReg?.clientVersion, "2.0")
         XCTAssertEqual(apiClient.lastDeviceReg?.capabilities, CoordinationCapabilities.all)
         XCTAssertEqual(apiClient.lastProof?.identityUrl, "https://music.test")
@@ -144,6 +150,70 @@ final class CoordinationServiceTests: XCTestCase {
         XCTAssertEqual(service.state.accountId, "acc-1")
         XCTAssertEqual(tokenStore.tokens?.deviceId, "dev-1")
         XCTAssertEqual(transport.lastTicket, "ticket-2")
+    }
+
+    private var musicCredentials: ServerCredentials {
+        ServerCredentials(
+            serverUrl: "https://music.test",
+            username: "u",
+            password: "p",
+            authType: "password",
+            protocolVersion: "1.16.1",
+            serverType: "navidrome",
+            fallbackUrl: nil
+        )
+    }
+
+    func testTheMacRegistersAsAPlatformOfItsOwn() async throws {
+        apiClient.mockTokens = registeredTokens()
+        apiClient.mockTicket = "ticket-2"
+        let service = makeService(
+            credentials: musicCredentials,
+            platform: PlatformDevice.macOSCoordinationPlatform
+        )
+
+        try await service.connect(config: config, deviceName: "Ada's Mac")
+
+        // Not `electron`: the desktop app may be running on the same Mac, and
+        // each is a device in the list.
+        XCTAssertEqual(apiClient.lastDeviceReg?.platform, "macos")
+        XCTAssertEqual(apiClient.lastDeviceReg?.deviceName, "Ada's Mac")
+        XCTAssertEqual(apiClient.lastDeviceReg?.capabilities, CoordinationCapabilities.all)
+    }
+
+    func testTheIPhoneKeepsRegisteringAsItAlwaysHas() async throws {
+        apiClient.mockTokens = registeredTokens()
+        apiClient.mockTicket = "ticket-2"
+        let service = makeService(
+            credentials: musicCredentials,
+            platform: PlatformDevice.iOSCoordinationPlatform
+        )
+
+        try await service.connect(config: config, deviceName: "Ada's iPhone")
+
+        XCTAssertEqual(apiClient.lastDeviceReg?.platform, "capacitor-ios")
+    }
+
+    func testTheServiceRegistersTheBuildsPlatformUnlessToldOtherwise() async throws {
+        apiClient.mockTokens = registeredTokens()
+        apiClient.mockTicket = "ticket-2"
+        let apiClient = apiClient!
+        let credentials = musicCredentials
+        let service = CoordinationService(
+            tokenStore: tokenStore,
+            realtime: transport,
+            makeAPIClient: { _, _, _ in apiClient },
+            credentials: { credentials },
+            clientVersion: "2.0"
+        )
+
+        try await service.connect(config: config, deviceName: "This device")
+
+        #if os(macOS)
+        XCTAssertEqual(apiClient.lastDeviceReg?.platform, "macos")
+        #else
+        XCTAssertEqual(apiClient.lastDeviceReg?.platform, "capacitor-ios")
+        #endif
     }
 
     func testResetRegistrationRejectsAnInFlightRegistration() async {

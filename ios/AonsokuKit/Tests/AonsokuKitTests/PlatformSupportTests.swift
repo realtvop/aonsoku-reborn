@@ -50,6 +50,48 @@ final class ObservationTokenTests: XCTestCase {
     }
 }
 
+final class PlatformDeviceTests: XCTestCase {
+    func testIOSKeepsTheNameItsExistingRegistrationsCarry() {
+        XCTAssertEqual(PlatformDevice.iOSCoordinationPlatform, "capacitor-ios")
+    }
+
+    func testTheMacIsNotTheElectronDesktopApp() {
+        XCTAssertEqual(PlatformDevice.macOSCoordinationPlatform, "macos")
+        XCTAssertNotEqual(PlatformDevice.macOSCoordinationPlatform, "electron")
+        XCTAssertNotEqual(
+            PlatformDevice.macOSCoordinationPlatform,
+            PlatformDevice.iOSCoordinationPlatform
+        )
+    }
+
+    func testThisBuildRegistersAsItsOwnOperatingSystem() {
+        #if os(macOS)
+        XCTAssertEqual(PlatformDevice.coordinationPlatform, "macos")
+        #else
+        XCTAssertEqual(PlatformDevice.coordinationPlatform, "capacitor-ios")
+        #endif
+    }
+
+    /// The web's device list decides the icon by substring, phones before
+    /// laptops (`src/app/components/remote-control/*`), and the Worker rejects
+    /// a platform longer than 128 characters. A name that fails either would
+    /// still register, and be shown with the wrong icon or not at all.
+    func testPlatformNamesSuitTheWebDeviceListAndTheServers() {
+        let macOS = PlatformDevice.macOSCoordinationPlatform
+        XCTAssertTrue(macOS.contains("mac"))
+        for phoneToken in ["ios", "android", "phone", "mobile"] {
+            XCTAssertFalse(macOS.contains(phoneToken), "\(macOS) matches \(phoneToken)")
+        }
+        XCTAssertTrue(PlatformDevice.iOSCoordinationPlatform.contains("ios"))
+
+        for name in [macOS, PlatformDevice.iOSCoordinationPlatform] {
+            XCTAssertFalse(name.isEmpty)
+            XCTAssertLessThanOrEqual(name.count, 128)
+            XCTAssertEqual(name, name.lowercased())
+        }
+    }
+}
+
 final class ApplicationLifecycleTests: XCTestCase {
     func testPlatformNotificationsBecomeLifecycleEvents() {
         let center = NotificationCenter()

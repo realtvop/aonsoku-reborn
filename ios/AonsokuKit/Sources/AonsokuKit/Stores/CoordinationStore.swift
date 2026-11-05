@@ -285,7 +285,7 @@ public final class CoordinationStore: RemotePlaybackSource {
             devices.insert(CoordinationDevice(
                 id: deviceId,
                 name: "This device",
-                platform: "ios"
+                platform: PlatformDevice.coordinationPlatform
             ), at: 0)
         }
 

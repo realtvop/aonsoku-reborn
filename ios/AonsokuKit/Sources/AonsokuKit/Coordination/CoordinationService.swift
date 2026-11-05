@@ -25,6 +25,7 @@ public final class CoordinationService: @unchecked Sendable {
     ) -> CoordinationAPIClient
     private let getCredentials: @Sendable () -> ServerCredentials?
     private let clientVersion: String
+    private let platform: String
     private let ackTimeout: TimeInterval
 
     private var client: CoordinationAPIClient?
@@ -59,6 +60,7 @@ public final class CoordinationService: @unchecked Sendable {
         ) -> CoordinationAPIClient = { CoordinationHTTPClient(baseURL: $0, tokenStore: $1, recoveryProof: $2) },
         credentials: @escaping @Sendable () -> ServerCredentials? = { AuthenticationService.shared.getCredentials() },
         clientVersion: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0",
+        platform: String = PlatformDevice.coordinationPlatform,
         ackTimeout: TimeInterval = 10
     ) {
         self.tokenStore = tokenStore
@@ -66,6 +68,7 @@ public final class CoordinationService: @unchecked Sendable {
         self.makeAPIClient = makeAPIClient
         self.getCredentials = credentials
         self.clientVersion = clientVersion
+        self.platform = platform
         self.ackTimeout = ackTimeout
 
         setupRealtimeCallbacks()
@@ -231,7 +234,7 @@ public final class CoordinationService: @unchecked Sendable {
         do {
             let device = CoordinationDeviceRegistration(
                 deviceName: deviceName,
-                platform: "capacitor-ios",
+                platform: platform,
                 clientVersion: clientVersion,
                 capabilities: CoordinationCapabilities.all
             )
