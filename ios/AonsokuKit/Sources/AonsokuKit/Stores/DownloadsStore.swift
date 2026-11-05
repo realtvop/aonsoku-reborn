@@ -331,6 +331,9 @@ public final class DownloadsStore {
 
     /// Deletes all cover art.
     public func clearAssets() async {
+        await withCheckedContinuation { continuation in
+            ArtworkPreferences.clearVideos { _, _ in continuation.resume() }
+        }
         _ = try? library.clearCovers()
         onAssetsCleared?()
         let keys = rows.values

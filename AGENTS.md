@@ -624,6 +624,10 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   with lower-level helpers in `src/utils/desktop.ts` and
   `src/utils/platform.ts`.
 
+### iOS lock-screen artwork
+
+AonsokuKit Audio/LockScreenArtwork*.swift owns iOS 26 immersive static/animated artwork, DAV2 FP16/P8/P6 model downloads, resource policy and the leased video cache. Earlier systems retain normal artwork. ArtworkPreferences exposes SwiftUI model/video management; original-quality image publications must not be overwritten by thumbnails. AudioService remains the only system media owner. Run `node scripts/ios/test-lock-screen-artwork.mjs`, `node scripts/ios/test-dynamic-cover-interface.mjs`, `node scripts/check-ios-strings.mjs` and `bash scripts/test-ios-native.sh`. Model downloads are opt-in through `AONSOKU_TEST_MODEL_DOWNLOAD=1`.
+
 ### State Management
 
 Two complementary systems:

@@ -23,6 +23,7 @@ let package = Package(
                 .product(name: "Perception", package: "swift-perception"),
             ],
             path: "Sources/AonsokuKit",
+            resources: [.copy("Audio/Resources/DepthAnythingV2-LICENSE.txt")],
             linkerSettings: [.linkedFramework("Security"), .linkedFramework("SystemConfiguration"), .linkedLibrary("resolv")]
         ),
         .binaryTarget(name: "CTailscale", path: "Vendor/CTailscale.xcframework"),
