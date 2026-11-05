@@ -22,6 +22,17 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     private let audioSession = AVAudioSession.sharedInstance()
+    private let carPlayLibrary: CarPlayLibraryProvider
+    private let carPlaySelectionLock = NSLock()
+    private var carPlayGeneration = 0
+    private var carPlaySelectionGeneration: Int {
+        get { carPlaySelectionLock.lock(); defer { carPlaySelectionLock.unlock() }; return carPlayGeneration }
+        set { carPlaySelectionLock.lock(); defer { carPlaySelectionLock.unlock() }; carPlayGeneration = newValue }
+    }
+    private var carPlaySelectionTask: Task<Void, Never>?
+    private var carPlaySelectionTimeout: DispatchWorkItem?
+    private var carPlaySelectionCompletion: ((Result<Void, Error>) -> Void)?
+    private var queueRevision = 0
     private let databaseManager: DatabaseManager
     private let queueEngine: NativeQueueEngine
     private let sourceResolver: NativeSourceResolver
@@ -130,8 +141,11 @@ public final class AudioService: NSObject, @unchecked Sendable {
         recoveryController: PlaybackRecoveryController = PlaybackRecoveryController(),
         playerItemFactory: @escaping PlayerItemFactory = { AVPlayerItem(url: $0) },
         playerFactory: @escaping PlayerFactory = { AVQueuePlayer(items: [$0]) },
-        artworkClient: HTTPClient = NetworkService.shared.client()
+        artworkClient: HTTPClient = NetworkService.shared.client(),
+        carPlayLibrary: CarPlayLibraryProvider? = nil
     ) {
+        self.carPlayLibrary = carPlayLibrary ?? CarPlayLibraryProvider(db: databaseManager.dbPool,
+            credentials: { KeychainManager.retrieve() }, cacheDirectories: sourceResolver.cacheDirectories)
         self.databaseManager = databaseManager
         self.queueEngine = queueEngine
         self.sourceResolver = sourceResolver
@@ -188,6 +202,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
 
     public func shutdown() {
         dispatchMain { [weak self] in
+            self?.cancelCarPlayRequests()
             self?.teardown(deactivateSession: true)
         }
     }
@@ -474,6 +489,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     public func stop() {
+        cancelCarPlaySelection()
         dispatchMain { [weak self] in
             guard let self else { return }
             self.pausedResumePosition = nil
@@ -587,6 +603,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
         startTime: Double? = nil,
         repeatMode: AudioRepeatMode? = nil
     ) {
+        cancelCarPlaySelection()
         stateQueue.async { [weak self] in
             guard let self, !songs.isEmpty else { return }
             self.isQueueActive = true
@@ -687,10 +704,12 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     public func skipToNext() {
+        cancelCarPlaySelection()
         stateQueue.async { [weak self] in self?.queueEngine.skipToNext() }
     }
 
     public func skipToPrevious() {
+        cancelCarPlaySelection()
         let currentTime = player?.currentTime().seconds ?? 0
         stateQueue.async { [weak self] in
             self?.queueEngine.skipToPrevious(currentTime: currentTime)
@@ -706,6 +725,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     public func updateRemotePlaybackState(_ projection: AudioRemotePlaybackProjection) {
+        cancelCarPlaySelection()
         dispatchMain { [weak self] in
             self?.remoteProjection = projection
             self?.updateNowPlayingInfo()
@@ -720,6 +740,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     }
 
     public func clear() {
+        cancelCarPlaySelection()
         invalidateRemoteCommands()
         stateQueue.sync {
             queueEngine.clearAll()
@@ -2940,6 +2961,7 @@ public final class AudioService: NSObject, @unchecked Sendable {
     /// `.aonsokuAudioStateDidChange` observers that its contents or modes
     /// changed. The queue engine delegate uses it for every content change.
     private func publishQueueChange(reason: String) {
+        queueRevision += 1
         persistence.markStateDirty()
         emit(.queueContentsChanged(reason: reason))
         publishStateUpdate()
@@ -3401,6 +3423,8 @@ extension AudioService: NativeQueueEngineDelegate {
         autoplay: Bool,
         startTime: Double?
     ) {
+        queueRevision += 1
+        CarPlayLibraryProvider.recordPlayed(songId: song.id, database: databaseManager.dbPool)
         loadQueueSong(song, autoplay: autoplay, startTime: startTime)
     }
 
@@ -3694,6 +3718,7 @@ extension AudioService: NativeDownloadManagerDelegate {
         contentType: String,
         sizeBytes: Int64
     ) {
+        CarPlayLibraryProvider.recordCached(songId: songId, size: Int(sizeBytes), database: databaseManager.dbPool)
         let file = CachedAudioFile(
             songId: songId,
             uri: fileUrl.absoluteString,
@@ -3771,4 +3796,160 @@ public extension Notification.Name {
     static let aonsokuAudioStateDidChange = Notification.Name(
         "AonsokuAudioServiceStateDidChange"
     )
+}
+
+// MARK: - CarPlay transport-independent API
+
+extension AudioService {
+    private func cancelCarPlaySelection() {
+        if Thread.isMainThread { cancelCarPlayRequests() }
+        else { DispatchQueue.main.async { self.cancelCarPlayRequests() } }
+    }
+
+    public func carPlaySnapshot(
+        queueOffset: Int = 0, queueLimit: Int = 100,
+        _ completion: @escaping (CarPlayPlaybackSnapshot) -> Void
+    ) {
+        precondition(Thread.isMainThread)
+        let isPlaying = player?.timeControlStatus == .playing
+        let isRemote = remoteProjection != nil
+        let currentTime = player == nil ? (savedRestoreTime ?? 0) : CMTimeGetSeconds(player?.currentTime() ?? .zero)
+        stateQueue.async {
+            let engine = self.queueEngine
+            let revision = self.queueRevision
+            var entries: [CarPlayQueueEntry] = []
+            let offset = max(0, queueOffset)
+            let limit = max(1, queueLimit)
+            let currentCount = !engine.isInUserQueue && engine.currentSong != nil ? 1 : 0
+            if offset == 0, !engine.isInUserQueue, let song = engine.currentSong {
+                entries.append(CarPlayQueueEntry(id: song.id, title: song.title, artist: song.artist,
+                    isCurrent: true, index: engine.currentIndex, isUserQueue: false, revision: revision))
+            }
+            entries += engine.userQueue.enumerated().dropFirst(max(0, offset - currentCount))
+                .prefix(max(0, limit - entries.count)).map { index, song in
+                CarPlayQueueEntry(id: song.id, title: song.title, artist: song.artist,
+                    isCurrent: engine.isInUserQueue && index == 0, index: index, isUserQueue: true, revision: revision)
+            }
+            let start = min(engine.currentIndex + 1, engine.contextSongs.count)
+            let contextOffset = start + max(0, offset - currentCount - engine.userQueue.count)
+            entries += engine.contextSongs.enumerated().dropFirst(contextOffset).prefix(max(0, limit - entries.count)).map { index, song in
+                CarPlayQueueEntry(id: song.id, title: song.title, artist: song.artist,
+                    isCurrent: false, index: index, isUserQueue: false, revision: revision)
+            }
+            let snapshot = CarPlayPlaybackSnapshot(title: engine.currentSong?.title,
+                isPlaying: isPlaying, currentTime: currentTime, isRemote: isRemote, shuffle: engine.isShuffleActive,
+                repeatMode: engine.loopState.rawValue, queueOffset: offset,
+                queueTotal: currentCount + engine.userQueue.count + engine.contextSongs.count - start, queue: entries)
+            DispatchQueue.main.async { completion(snapshot) }
+        }
+    }
+
+    public func performCarPlay(_ command: CarPlayPlaybackCommand,
+                               completion: @escaping (Result<Void, Error>) -> Void) {
+        precondition(Thread.isMainThread)
+        guard remoteProjection == nil else { completion(.failure(CarPlayError.remotePlayback)); return }
+        cancelCarPlaySelection()
+        stateQueue.async {
+            guard self.remoteProjection == nil else {
+                DispatchQueue.main.async { completion(.failure(CarPlayError.remotePlayback)) }; return
+            }
+            switch command {
+            case .play: self.play()
+            case .pause: self.pause()
+            case .next: self.skipToNext()
+            case .previous: self.skipToPrevious()
+            case .shuffle(let enabled): self.setShuffle(enabled)
+            case .repeatMode(let mode): self.setRepeatMode(AudioRepeatMode(rawValue: mode) ?? .off)
+            case .queueEntry(let entry):
+                let songs = entry.isUserQueue ? self.queueEngine.userQueue : self.queueEngine.contextSongs
+                guard entry.revision == self.queueRevision, songs.indices.contains(entry.index),
+                      songs[entry.index].id == entry.id else {
+                    DispatchQueue.main.async { completion(.failure(CarPlayError.staleSelection)) }; return
+                }
+                if entry.isUserQueue { self.queueEngine.playUserQueueAtIndex(entry.index) }
+                else { self.queueEngine.playAtIndex(entry.index, startTime: nil) }
+                self.persistence.markStateDirty()
+                self.publishQueueChange(reason: "queue-edit")
+            }
+            DispatchQueue.main.async { completion(.success(())) }
+        }
+    }
+
+    public func playCarPlayLibrary(_ route: CarPlayLibraryRoute, pageOffset: Int, pageLimit: Int = 40,
+                                    index: Int, expectedId: String, sourceName: String,
+                                    completion: @escaping (Result<Void, Error>) -> Void) {
+        precondition(Thread.isMainThread)
+        guard remoteProjection == nil else { completion(.failure(CarPlayError.remotePlayback)); return }
+        cancelCarPlayRequests()
+        let generation = carPlaySelectionGeneration
+        carPlaySelectionCompletion = completion
+        let startedAt = Date()
+        NativeLogger.shared.info("CarPlay selection started generation=\(generation)", source: "CarPlay")
+        let timeout = DispatchWorkItem { [weak self] in
+            guard let self, self.carPlaySelectionGeneration == generation,
+                self.carPlaySelectionCompletion != nil else { return }
+            self.carPlaySelectionTask?.cancel()
+            self.carPlaySelectionGeneration += 1
+            self.finishCarPlaySelection(.failure(CarPlayError.selectionTimedOut))
+            NativeLogger.shared.warn("CarPlay selection timed out generation=\(generation)", source: "CarPlay")
+        }
+        carPlaySelectionTimeout = timeout
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15, execute: timeout)
+        carPlaySelectionTask = Task { @MainActor in
+            do {
+                let songs = try await self.carPlayLibrary.selection(route, pageOffset: pageOffset, pageLimit: pageLimit,
+                    index: index, expectedId: expectedId)
+                try Task.checkCancellation()
+                guard self.carPlaySelectionGeneration == generation, self.remoteProjection == nil else {
+                    throw CancellationError()
+                }
+                let queueIndex: Int
+                let sourceId: AudioQueueSource?
+                switch route {
+                case .album(let id): queueIndex = index; sourceId = AudioQueueSource(type: "album", id: id)
+                case .playlist(let id): queueIndex = index; sourceId = AudioQueueSource(type: "playlist", id: id)
+                default: queueIndex = index - pageOffset; sourceId = nil
+                }
+                self.stateQueue.async {
+                    guard self.carPlaySelectionGeneration == generation, self.remoteProjection == nil else { return }
+                    self.isQueueActive = true
+                    self.queueEngine.setContextQueue(songs: songs, currentIndex: queueIndex, autoplay: true, startTime: nil,
+                        sourceId: sourceId.map { QueueSourceId(type: $0.type, id: $0.id) }, sourceName: sourceName)
+                    self.persistence.markStateDirty()
+                    DispatchQueue.main.async {
+                        guard self.carPlaySelectionGeneration == generation else { return }
+                        self.finishCarPlaySelection(.success(()))
+                        NativeLogger.shared.info(
+                            "CarPlay selection accepted generation=\(generation) elapsed=\(Date().timeIntervalSince(startedAt))",
+                            source: "CarPlay")
+                    }
+                }
+            } catch {
+                // A superseded task must never complete a newer selection.
+                guard self.carPlaySelectionGeneration == generation else { return }
+                self.finishCarPlaySelection(.failure(error))
+                NativeLogger.shared.warn(
+                    "CarPlay selection failed generation=\(generation) elapsed=\(Date().timeIntervalSince(startedAt))",
+                    source: "CarPlay")
+            }
+        }
+    }
+
+    private func finishCarPlaySelection(_ result: Result<Void, Error>) {
+        precondition(Thread.isMainThread)
+        carPlaySelectionTimeout?.cancel()
+        carPlaySelectionTimeout = nil
+        carPlaySelectionTask = nil
+        let completion = carPlaySelectionCompletion
+        carPlaySelectionCompletion = nil
+        completion?(result)
+    }
+
+    public func cancelCarPlayRequests() {
+        precondition(Thread.isMainThread)
+        carPlaySelectionGeneration += 1
+        carPlaySelectionTask?.cancel()
+        // Release the CarPlay row immediately, even if a DB read has not returned.
+        finishCarPlaySelection(.failure(CancellationError()))
+    }
 }
