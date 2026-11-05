@@ -83,8 +83,14 @@ cd android && ./gradlew assembleRelease
 IOS_TEST_RESULT_BUNDLE=/tmp/AonsokuNativeTests.xcresult ./scripts/test-ios-native.sh
 
 # Native AonsokuKit on the macOS 15 host: no Simulator, no CTailscale, the same
-# tests as above. The library the macOS app target links.
+# tests as above. The library the macOS app target links. A test process gets a
+# throwaway data layout, so this never reads or writes ~/Library/Application
+# Support/Aonsoku (the Electron app's folder) or ~/Documents.
 cd ios/AonsokuKit && swift test
+# The Mac system integration only (storage layout, Electron downloads import,
+# Now Playing/media keys, sleep/wake/network, position through reload and quit):
+cd ios/AonsokuKit && swift test --filter \
+  'StorageLayoutTests|DesktopDownloadsImporterTests|DesktopImportStoreTests|SystemMediaTests|SystemPowerTests|AudioServiceSleepTests|AudioServiceTerminationTests|ReloadWindowPositionTests'
 
 # iOS SwiftUI app
 bash scripts/build-ios-tailscale.sh # Once before Xcode/SPM; Go 1.27.1, cached device + Simulator runtime
@@ -466,15 +472,20 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   Resigning goes to `AppLifecycleService.didResignActive`, never to
   `didEnterBackground`: a Mac app keeps playing and drawing behind other apps,
   and the background transition would stop the coordination heartbeat and the
-  published playback state. Termination flushes as before.
-  Gaps against the iOS player and a finished Mac app: macOS Now Playing and
-  the media keys, the coordination platform string, storage locations and
-  sleep/wake are the next phase; there is no large-cover page (the cover is in
-  the bar, the inspector holds lyrics and the queue), long titles in the bar
-  truncate, song lists are not sortable tables, Liquid Glass has only been
-  built (the QA host runs macOS 15), and clicks, hover, drags, real key presses
-  in an active app and VoiceOver have not been tried by hand: the snapshot mode
-  drives the stores and synthesized key events in an inactive app.
+  published playback state. Termination saves the playback state before it
+  returns (`AudioService.applicationWillTerminate()`).
+  The Mac's system integration (storage locations, the Electron desktop app's
+  downloads, Now Playing and the media keys, the coordination platform name,
+  sleep/wake and network changes, the playback position through reloads and
+  quitting) lives in `AonsokuKit` and is described with its seams below.
+  Gaps against the iOS player and a finished Mac app: there is no large-cover
+  page (the cover is in the bar, the inspector holds lyrics and the queue),
+  long titles in the bar truncate, song lists are not sortable tables, Liquid
+  Glass has only been built (the QA host runs macOS 15), and clicks, hover,
+  drags, real key presses in an active app and VoiceOver have not been tried by
+  hand: the snapshot mode drives the stores and synthesized key events in an
+  inactive app. No real sleep/wake, headphone unplugging, media key or Control
+  Center session has been observed on a Mac either.
   DEBUG builds have a snapshot mode for looking at the app without a screen:
   `Aonsoku --snapshot-dir <dir> --snapshot-server <url>` (user/password `qa`
   unless `--snapshot-user`/`--snapshot-password`, `--snapshot-scenes a,b` to
@@ -484,9 +495,11 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   relative `<dir>` lands in the sandbox container's `tmp`; the run keeps its
   credentials in a keychain item of its own
   (`KeychainManager.debugServiceSuffix`), since an ad-hoc signature changes
-  with every build. Run it sandboxed (`CODE_SIGN_IDENTITY=-`): an unsigned
-  build is unsandboxed and shares `~/Library/Application Support/Aonsoku` with
-  the Electron app.
+  with every build. Run it sandboxed (`CODE_SIGN_IDENTITY=-`) and with
+  `AONSOKU_DATA_ROOT` and `AONSOKU_DESKTOP_DATA` pointing at scratch folders: an
+  unsigned build is unsandboxed, keeps its data in
+  `~/Library/Application Support/github.realtvop.aonsoku` and could read the
+  Electron app's folder for the downloads import.
   `App/`, `Compatibility/`, `DesignSystem/`, `Features/` and `Resources/` are
   synchronized groups shared by both targets, so a file added to one compiles
   for both. What must stay iOS-only is excluded from the Mac target by a
@@ -838,10 +851,12 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   `Sources/AonsokuKit/Platform/`; the rest of the package does not scatter `#if`
   or touch UIKit/AppKit directly. `PlatformBoundaryTests` fails when
   `UIApplication`, `NSApplication`, `AVAudioSession`, `MPVolumeView`,
-  `BGTaskScheduler`, `NSBackgroundActivityScheduler`, `os(iOS)`, `os(macOS)`,
+  `MPNowPlayingInfoCenter`, `MPRemoteCommandCenter`, `BGTaskScheduler`,
+  `NSBackgroundActivityScheduler`, `os(iOS)`, `os(macOS)`,
   `canImport(UIKit)`, `canImport(AppKit)`, `canImport(CTailscale)` or an import of
-  UIKit, AppKit, BackgroundTasks or CTailscale appears outside `Platform/` and the
-  UIKit-only `Debug/` folder. Add the next platform difference there, not inline.
+  UIKit, AppKit, MediaPlayer, BackgroundTasks or CTailscale appears outside
+  `Platform/` and the UIKit-only `Debug/` folder. Add the next platform
+  difference there, not inline.
   The seams:
   - `PlaybackAudioSession` (`SystemAudioSession`, `PlatformAudio.makeSession()`):
     iOS wraps `AVAudioSession` (category, activation, interruptions, route
@@ -886,16 +901,157 @@ node scripts/native-audio/ci/collect-runtime-darwin.mjs --root <libmpv.dylib> --
   - `PlatformImage`/`PlatformView` (`UIImage`/`NSImage`, `UIView`/`NSView`)
     with `make(cgImage:)` and `platformCGImage`, used by `ArtworkProvider`;
     `ObservationToken`, the idempotent cancel handle every observation returns.
+  - `StorageLayout` (`PlatformStorage.current`, `Platform/StorageLayout.swift`):
+    where every file lives; see "Mac and Electron on one Mac" below.
+    `PlatformStorage.supportsLegacyWebImport` is false on macOS (Capacitor never
+    shipped there, so no WebView is opened looking for its data) and
+    `supportsDesktopDownloadsImport` is true only there.
+  - `DesktopDataLocator` (`Platform/DesktopDataLocator.swift`): finds the Electron
+    desktop app's `userData` and `AudioCache` as a `DesktopDataLocation`; nil on
+    iOS.
+  - `SystemMediaSession` (`PlatformSystemMedia`, `Platform/SystemMedia.swift`):
+    `AudioService` describes the song with `SystemNowPlayingInfo`, reports a
+    `SystemPlaybackState` and receives `SystemMediaCommand`s. `MPNowPlayingInfoCenter`
+    and `MPRemoteCommandCenter` appear only in `MediaPlayerSystemMedia` (iOS
+    and macOS). A Mac test process gets `DetachedSystemMedia`, so no test can take
+    the user's real Now Playing slot or media keys.
+  - `PlatformDevice.coordinationPlatform` (`Platform/DeviceIdentity.swift`): the
+    platform name this build registers with, `capacitor-ios` on iOS and `macos`
+    on the Mac.
+  - `SystemPowerEventSource` (`PlatformPower`, `Platform/SystemPower.swift`):
+    `NSWorkspace` will-sleep/did-wake on the Mac; `NoPowerEvents` on iOS and in
+    a Mac test process, which must not react to the machine it runs on sleeping.
+    `PlatformPower.reconnectsOnNetworkPathChange` is true only on macOS.
   - `DebugViewController` and the `AVAudioSession` half of `DebugDataProvider`
     exist only where UIKit does; the rest of `DebugDataProvider` and
     `NativeLogger`'s entries are public for the Mac debug window.
 
   Each seam has a fake in the tests, so both platforms run the same expectations
   (`AudioServicePlatformTests`, `AudioRouteTests`, `OutputVolumeTests`,
-  `SyncSchedulerTests`, `TailscaleRuntimeTests`, `PlatformSupportTests`); the
+  `SyncSchedulerTests`, `TailscaleRuntimeTests`, `PlatformSupportTests`,
+  `StorageLayoutTests`, `SystemMediaTests`, `SystemPowerTests`); the
   CoreAudio and `NSBackgroundActivityScheduler` adapters are covered by
-  `#if os(macOS)` tests. Not covered anywhere: real headphone unplugging, the
-  system's own refresh scheduling, and macOS Now Playing.
+  `#if os(macOS)` tests. Not covered anywhere: real headphone unplugging, real
+  sleep and wake, the system's own refresh scheduling, and what the system
+  does with the Now Playing data and media keys it is handed (the tests see
+  only what `AudioService` gives the seam).
+- **Mac and Electron on one Mac.** The native Mac app and the Electron desktop
+  app can be installed and running side by side against the same server, so the
+  Mac app is kept apart from the Electron app's data on purpose.
+  - *Storage.* `StorageLayout` is the only source of paths: every component
+    takes a layout (default `StorageLayout.current`) and tests inject one. iOS
+    keeps the paths every existing install uses, pinned by `StorageLayoutTests`:
+    `Application Support/Aonsoku/{Database,ImageCache,AudioCache,Tailscale}` and
+    downloads in `Documents/AudioCache` (playback looks in the legacy
+    `Application Support/Aonsoku/AudioCache` first, file management in
+    `Documents/AudioCache` first). The Mac keeps the database, the downloads
+    (`AudioCache`) and the Tailscale directory below
+    `Application Support/github.realtvop.aonsoku` and the purgeable cover/avatar
+    cache in `Caches/github.realtvop.aonsoku/ImageCache`, with the same
+    sub-paths inside the sandbox container or outside it (an unsigned build). It
+    never lists, writes or clears `Application Support/Aonsoku`, which is the
+    Electron app's `userData`, or `~/Documents`: `AudioService` resolves,
+    deletes and clears audio only in the layout's `audioManagedDirectories`, and
+    `NativeSourceResolver` searches only `audioLookupDirectories`. A process that
+    hosts XCTest gets a throwaway layout (`aonsoku-kit-data-<pid>` in the
+    temporary directory, removed at exit) in every configuration, so `swift test`
+    cannot reach the real folders; DEBUG builds also honor `AONSOKU_DATA_ROOT`
+    (everything below one directory) and `AONSOKU_DESKTOP_DATA` (where the
+    import looks). Release builds read neither. The Mac never opens a WebView
+    for Capacitor-era data (`supportsLegacyWebImport` is false there).
+  - *Not shared with the Electron app, deliberately.* Coordination tokens and
+    `deviceId` (the Mac registers its own device), the library JSON and database
+    (the Mac syncs its own from the server), `CoverCache` (covers are downloaded
+    again), the `NativeAudio` queue and playback state, and window state.
+    Electron's credentials and preferences are out of scope: its `safeStorage`
+    values are unreadable to another app, and signing in again is cheap. Only
+    the downloaded audio is worth carrying over.
+  - *Downloads import* (Settings → Storage → "Import downloads from Aonsoku
+    Desktop…", macOS only). `DesktopImportSection` shows `DownloadsStore`'s
+    `DesktopImportState` and calls `refreshDesktopDownloads()` (the default
+    place), `chooseDesktopDownloads(at:)`, `rescanDesktopDownloads()` (the folder
+    used last, or the default place when there is none), `importDesktopDownloads()`
+    and `cancelDesktopImport()`; results carry a generation, so a scan or import
+    superseded by sign-out publishes nothing. `DesktopDownloadsImporter`
+    (`Migration/`) copies Electron's `AudioCache`, which holds
+    `<base64url(songId)>.<ext>` and `<base64url(songId)>.json`
+    (`electron/main/native/audio/cache.ts`), into this app's cache. The Electron
+    folder is strictly read-only: nothing is created, changed, moved or deleted
+    below it (a `chmod -R a-w` fixture stays byte-identical). An entry counts only
+    when its metadata decodes, `songId` encodes to the cache id in the file name,
+    and the audio file is a plain `<cacheId>.<ext>` sibling that is a non-empty
+    regular file (links, temporary files and interrupted downloads do not
+    count); the rest is reported as skipped. A copy is an APFS clone where
+    possible and chunked otherwise, into a temporary file in this app's cache,
+    checked against the source size and renamed into place, followed by the same
+    metadata JSON and a `cacheMeta` row of type `audio` and source `explicit`
+    (never evicted automatically). The import checks free space first (plus a
+    64 MiB reserve), is idempotent and resumable (a song already here is only
+    registered, and a streamed or smart copy is promoted to a download),
+    isolates a failing song from the others, stops cleanly on a full disk or a
+    cancel, refuses this app's own cache as a source, removes the temporaries of
+    an interrupted run, and uses no network. `DesktopDataLocator` finds the
+    folder through the real home directory (`getpwuid`, because
+    `NSHomeDirectory()` is the container when sandboxed). A sandboxed app cannot
+    read it, so the row asks the user to choose it (`FolderPicker`;
+    `com.apple.security.files.user-selected.read-only` is the only entitlement
+    added). Access to a chosen folder lasts for the session; no bookmark is
+    stored. The strings (`native.mac.desktopImport.*` in `ios/native-locales`)
+    are English placeholders in the other locales. Tests use a fixture that
+    mimics Electron's `userData`, built from `cache.ts` in a temporary directory
+    (`ElectronUserDataFixture`); there are no real Electron-written audio files
+    on the development Mac, so playing an imported one has not been tried.
+  - *Now Playing and media keys.* Only `SystemMediaSession` touches the system's
+    media surface. A load creates the Now Playing entry; position and rate
+    refreshes only update an existing one, and late artwork republishes the
+    current elapsed time. `playbackState` is set explicitly, and `.stopped` with
+    no entry is reported when nothing is loaded, so the app stops being the
+    target of the media keys. A restored, paused queue publishes nothing until
+    the first load or play, so launching does not take the keys from another
+    player. The system is given text, numbers and decoded artwork, never a URL or
+    credentials. While remote playback is projected, the commands (play, pause,
+    toggle, next, previous, change position, like) go to the controlled device.
+  - *Coordination.* iOS keeps registering as `capacitor-ios`; the Mac registers as
+    `macos`, a device apart from the Electron app's `electron`. None of the Rust
+    server (which stores the string), the Worker (any non-empty string of up to
+    128 characters) and the web (laptop icon for `mac`, checking `ios` first)
+    needed a change.
+  - *Sleep, wake and the network (Mac only).* A Mac app is never in the
+    background, so nothing else would notice the connections a sleep or a change
+    of network interface killed. `AppModel` observes `SystemPowerEvent`s and,
+    where `PlatformPower.reconnectsOnNetworkPathChange` is true, the path changes
+    `NetworkMonitor` reports (an interface change while online; the first path
+    and an offline-to-online step are not changes). Will-sleep goes to
+    `AppLifecycleService.systemWillSleep()`, which has
+    `AudioService.applicationWillSleep()` write the playback state before it
+    returns and send pending scrobbles. Wake and path changes go to
+    `connectionMayHaveChanged()`: a stalled stream's recovery retries now instead
+    of after its backoff (an attempt under way is made again, neither using up an
+    attempt); the coordination socket is replaced at once when it is missing or
+    still connecting, and one that only looks alive must answer a ping within
+    `connectionValidationTimeout` (5 s) or is dropped for a fresh ticket;
+    pending scrobbles are retried; and `LibrarySyncStore` reruns a sync that
+    failed or was interrupted, ignoring the five-minute throttle (offline,
+    metered and signed-out states still hold it back). A healthy stream, a local
+    file and playback that already gave up are left alone: only the user's play
+    restarts a stopped song, however late the network returns. Both calls are
+    ignored outside the active and foreground phases. Tests inject the events and
+    check the socket against a real WebSocket server on the loopback interface
+    (`LocalWebSocketServer`); nothing sleeps the machine.
+  - *Position through reloads and quitting.* A reload replaces the player's item,
+    and a player reports the time of the item it holds (zero until the saved
+    position has been sought), so `AudioService.currentTime` keeps reporting where
+    recovery will seek to while a recovery reload waits; a user seek still moves
+    it at once, and the player is trusted again after the seek. `shutdown()`
+    (called by `applicationWillTerminate()` after its flush) saves once through
+    `PlaybackStatePersistence.finish()` before the player is taken apart, and
+    writes nothing more until `start()` installs a state provider again: an
+    asynchronous save that ran while the player held no item would replace the
+    position with zero. A deinit only flushes asynchronously, since it cannot wait
+    on the persistence queue. `AudioServiceTerminationTests`,
+    `ReloadWindowPositionTests` (in `StreamRecoveryTests`) and
+    `AudioServiceSleepTests` pin this; one of them uses a probe player that acts
+    the moment its items are removed.
 - Platform/runtime detection is centralized in `src/utils/capabilities.ts`,
   with lower-level helpers in `src/utils/desktop.ts` and
   `src/utils/platform.ts`.
@@ -1126,6 +1282,12 @@ local playback begins; fullscreen owns its own drawer while open.
 - Native iOS uses `AonsokuKit.CoordinationService` and `CoordinationStore`
   directly. The service owns HTTP, WebSocket reconnects, snapshots, remote
   commands, and handoff transactions against `AudioService`.
+- The native Mac app runs the same `AonsokuKit` service. It registers as
+  platform `macos` (iOS keeps `capacitor-ios`, so existing registrations stay
+  valid), a device apart from the Electron desktop app's `electron` on the same
+  Mac; tokens and `deviceId` are not shared with Electron. After sleep or a
+  network change it checks its socket and replaces a dead one (see "Mac and
+  Electron on one Mac").
 - Electron native playback coordination is executed by
   `electron/main/native/coordination/playback.ts`: it publishes native queue
   snapshots, executes and acknowledges remote commands, prepares full queues

@@ -164,11 +164,17 @@ carries no `#if` for platform frameworks. `PlatformBoundaryTests` enforces that.
 | `BackgroundRefreshScheduling` | `BGTaskRefreshScheduler` (`BGAppRefreshTask`). | `ActivityRefreshScheduler` (`NSBackgroundActivityScheduler`). |
 | `TailscaleRuntime` | `LibTailscaleRuntime` over the `CTailscale` XCFramework, usable on iOS 18.1+. | `CTailscale` is not linked. `UnavailableTailscaleRuntime` throws `TailscaleUnavailableError`; `TailscaleRouting` never routes, `TailscaleService.status()` reports disconnected. |
 | `PlatformImage`, `PlatformView` | `UIImage`, `UIView` | `NSImage`, `NSView` |
+| `StorageLayout` (`PlatformStorage.current`) | `Application Support/Aonsoku/{Database,ImageCache,AudioCache,Tailscale}` and downloads in `Documents/AudioCache`, exactly as every existing install has them. | `Application Support/github.realtvop.aonsoku/{Database,AudioCache,Tailscale}` and `Caches/github.realtvop.aonsoku/ImageCache`, in the sandbox container or outside it. Never `Application Support/Aonsoku` (the Electron app) or `~/Documents`. A test process gets a throwaway layout. |
+| `DesktopDataLocator` | Finds nothing; the import is never offered. | Finds the Electron desktop app's `userData` and `AudioCache` through the real home directory, or the folder the user chose. |
+| `SystemMediaSession` (`PlatformSystemMedia`) | `MediaPlayerSystemMedia` over `MPNowPlayingInfoCenter` and `MPRemoteCommandCenter` (Lock Screen, Control Center, headphones, CarPlay). | The same adapter drives the Now Playing widget and the media keys; a test process gets `DetachedSystemMedia` and never touches the user's real slot. |
+| `PlatformDevice` | Registers with the coordination server as `capacitor-ios`. | Registers as `macos`, a device apart from the Electron app's `electron`. |
+| `SystemPowerEventSource` (`PlatformPower`) | Never fires: iOS suspends the app and reports it through the lifecycle. A path change is left to the transports. | `NSWorkspace` will-sleep and did-wake; a network path change also checks the connections. A test process never hears the real machine sleep. |
 | `DebugViewController` | Available. | Compiled out; the Mac app's Native Player Debug window reads the public `DebugDataProvider` and `NativeLogger` instead. |
 
 `@available(iOS 18.1, *)` matches every macOS version, so it does not mean
 Tailscale can run: check `TailscaleSupport.isAvailable`. Real headphone
-unplugging, the system's own refresh scheduling and macOS Now Playing are not
+unplugging, real sleep and wake, the system's own refresh scheduling and what
+the system does with the Now Playing data and media keys it is handed are not
 covered by tests.
 
 ## macOS app target
@@ -203,12 +209,39 @@ runtime, and it is sandboxed (`com.apple.security.app-sandbox` and
   playback state (`AppLifecycleService.didResignActive`) without the iOS
   background transition.
 
-Not there yet: macOS Now Playing and the media keys, the coordination platform
-string, storage locations and sleep/wake handling (the next phase); a
-large-cover page like the iOS player's (the cover shows in the bar, and the
-inspector holds lyrics and the queue); sortable song tables; and checks with a
-real pointer, keyboard and VoiceOver, since the app has so far been looked at
-through its DEBUG snapshot mode (`--snapshot-dir`, see `AGENTS.md`).
+Not there yet: a large-cover page like the iOS player's (the cover shows in the
+bar, and the inspector holds lyrics and the queue); sortable song tables; and
+checks with a real pointer, keyboard and VoiceOver, since the app has so far
+been looked at through its DEBUG snapshot mode (`--snapshot-dir`, see
+`AGENTS.md`). Real sleep and wake, a real media key and Control Center session
+have not been observed either.
+
+### Next to the Electron desktop app
+
+The Electron desktop app can be installed and running on the same Mac against
+the same server, so the Mac app keeps its own data and only reads the one thing
+worth carrying over:
+
+- **Own data.** Database, downloads, image cache and Tailscale state live below
+  `Application Support/github.realtvop.aonsoku` and `Caches/github.realtvop.aonsoku`
+  (see `StorageLayout` above). The Mac app never lists, writes or clears
+  `Application Support/Aonsoku`, the Electron app's `userData`, or `~/Documents`.
+  Coordination tokens and the device id, the library, the cover cache, the
+  native audio queue and window state are deliberately not shared: the Mac
+  registers as its own device, syncs its own library and downloads covers again.
+- **Downloads import.** Settings → Storage → "Import downloads from Aonsoku
+  Desktop…" copies the songs in Electron's `AudioCache` into the Mac app's
+  cache and registers them as explicit downloads, which are never evicted
+  automatically. The Electron folder is only read. A sandboxed app cannot read
+  another app's `Application Support` folder, so the row asks the user to choose
+  it (`com.apple.security.files.user-selected.read-only`; access lasts for the
+  session). The import is idempotent and resumable, checks free space first,
+  skips what does not match its own cache id and uses no network.
+- **Debug runs.** DEBUG builds read `AONSOKU_DATA_ROOT` (everything below one
+  directory) and `AONSOKU_DESKTOP_DATA` (where the import looks), so snapshot
+  and manual runs never touch the real folders. `AGENTS.md` ("Mac and Electron
+  on one Mac") has the details, including sleep/wake, the media keys and the
+  playback position rules.
 
 | Folder | Target membership |
 | --- | --- |
