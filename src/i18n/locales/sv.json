@@ -134,7 +134,9 @@
     "queueHistory": "Historik",
     "queueRepeating": "Upprepar",
     "switchButton": "Byt till storspelare",
-    "selectLyrics": "Textinställningar"
+    "selectLyrics": "Textinställningar",
+    "dynamicArtwork": "Dynamiskt albumomslag",
+    "dynamicArtworkInfo": "Använd uppslukande omslagsvideor i helskärmsspelaren. Oberoende av konstverk på låsskärmen."
   },
   "generic": {
     "beta": "Beta",

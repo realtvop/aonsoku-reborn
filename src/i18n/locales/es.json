@@ -135,7 +135,9 @@
     "queueHistory": "Historial",
     "queueRepeating": "Repitiendo",
     "switchButton": "Cambiar a Reproductor Grande",
-    "selectLyrics": "Configuración de letra"
+    "selectLyrics": "Configuración de letra",
+    "dynamicArtwork": "Carátula dinámica del álbum",
+    "dynamicArtworkInfo": "Utilice vídeos de portada inmersivos en el reproductor de pantalla completa. Independiente de la obra de arte de la pantalla de bloqueo."
   },
   "generic": {
     "beta": "Beta",

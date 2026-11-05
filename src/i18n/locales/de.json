@@ -134,7 +134,9 @@
     "queueHistory": "Verlauf",
     "queueRepeating": "Wiederholen",
     "switchButton": "Zum großen Player wechseln",
-    "selectLyrics": "Songtext-Einstellungen"
+    "selectLyrics": "Songtext-Einstellungen",
+    "dynamicArtwork": "Dynamisches Albumcover",
+    "dynamicArtworkInfo": "Nutzen Sie immersive Covervideos im Vollbild-Player. Unabhängig von der Grafik auf dem Sperrbildschirm."
   },
   "generic": {
     "beta": "Beta",

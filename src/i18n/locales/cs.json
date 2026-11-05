@@ -136,7 +136,9 @@
     "queueHistory": "Historie",
     "queueRepeating": "Opakování",
     "switchButton": "Přepnout na velký přehrávač",
-    "selectLyrics": "Nastavení textu"
+    "selectLyrics": "Nastavení textu",
+    "dynamicArtwork": "Dynamická grafika alba",
+    "dynamicArtworkInfo": "V přehrávači na celou obrazovku používejte poutavá videa s přebaly. Nezávislé na kresbě uzamčené obrazovky."
   },
   "generic": {
     "beta": "Beta",

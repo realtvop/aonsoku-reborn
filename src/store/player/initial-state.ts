@@ -57,6 +57,12 @@ export function createInitialSettings(set: SetFn): IPlayerContext["settings"] {
       wheelStep: 5,
     },
     fullscreen: {
+      dynamicArtworkEnabled: false,
+      setDynamicArtworkEnabled: (value: boolean) => {
+        set((state) => {
+          state.settings.fullscreen.dynamicArtworkEnabled = value;
+        });
+      },
       autoFullscreenEnabled: false,
       setAutoFullscreenEnabled: (value: boolean) => {
         set((state) => {

@@ -12,11 +12,15 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/app/components/ui/drawer";
+import { useRemotePlaybackProjection } from "@/app/components/remote-control/use-remote-playback-projection";
 import { useAppWindow } from "@/app/hooks/use-app-window";
 import { useBackdropStyle } from "@/app/hooks/use-backdrop-bg";
+import { useIsPortraitViewport } from "@/app/hooks/use-mobile";
+import { isDynamicCoverAvailable } from "@/native/artwork";
 import { closeFullscreenPlayerWithHistory } from "@/routes/fullscreenRouter";
 import {
   useFullscreenPlayerSettings,
+  useFullscreenPlayerState,
   usePlayerStore,
 } from "@/store/player.store";
 import { useTheme } from "@/store/theme.store";
@@ -24,6 +28,7 @@ import { enterFullscreen, exitFullscreen } from "@/utils/browser";
 import { isDesktop } from "@/utils/desktop";
 import { blendColors, hslToHex } from "@/utils/getAverageColor";
 import { setDesktopTitleBarColors, updatePwaThemeColor } from "@/utils/theme";
+import { FullscreenAmbientAtmosphere } from "./ambient-atmosphere";
 import { FullscreenDragHandler } from "./drag-handler";
 import { FullscreenContent } from "./fullscreen-content";
 import { useFullscreenMouseDrawerDrag } from "./use-mouse-drawer-drag";
@@ -43,7 +48,23 @@ export default function FullscreenMode({
   onOpenChange,
 }: FullscreenModeProps) {
   const { enterFullscreenWindow, exitFullscreenWindow } = useAppWindow();
-  const { autoFullscreenEnabled } = useFullscreenPlayerSettings();
+  const { autoFullscreenEnabled, dynamicArtworkEnabled } =
+    useFullscreenPlayerSettings();
+  const { desktopFullscreenPanelView: rightPanelView } =
+    useFullscreenPlayerState();
+  const isPortraitViewport = useIsPortraitViewport();
+
+  const currentSong = usePlayerStore(
+    (state) => state.songlist.currentSong,
+    (a, b) => a?.id === b?.id,
+  );
+  const remoteProjection = useRemotePlaybackProjection();
+  const displaySong = remoteProjection.song ?? currentSong;
+  const displayCoverArt = displaySong?.coverArt;
+  const displayAlbumId = displaySong?.albumId;
+  const immersive =
+    !!dynamicArtworkEnabled && isDynamicCoverAvailable() && !!displayCoverArt;
+
   const backdropStyle = useBackdropStyle();
   const drawerContentRef = useRef<HTMLDivElement>(null);
   const [devicePanelOpen, setDevicePanelOpen] = useState(false);
@@ -283,6 +304,15 @@ export default function FullscreenMode({
         style={backdropStyle}
       >
         <FullscreenDragHandler />
+        {immersive && (
+          <FullscreenAmbientAtmosphere
+            coverArtId={displayCoverArt}
+            albumId={displayAlbumId}
+            active={open ?? false}
+            hasRightPanel={!!rightPanelView}
+            isPortrait={isPortraitViewport}
+          />
+        )}
         <div
           className="absolute inset-0 z-10 flex flex-col fullscreen-safe-area"
           {...mouseDrawerDragHandlers}

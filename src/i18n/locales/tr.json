@@ -134,7 +134,9 @@
     "queueHistory": "Geçmiş",
     "queueRepeating": "Tekrarlanıyor",
     "switchButton": "Büyük Oynatıcıya geç",
-    "selectLyrics": "Şarkı sözü ayarları"
+    "selectLyrics": "Şarkı sözü ayarları",
+    "dynamicArtwork": "Dinamik albüm kapağı",
+    "dynamicArtworkInfo": "Tam ekran oynatıcıda sürükleyici kapak videolarını kullanın. Kilit ekranı çizimlerinden bağımsız."
   },
   "generic": {
     "beta": "Beta",
