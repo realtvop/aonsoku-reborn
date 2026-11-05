@@ -924,6 +924,10 @@ location from inside a cached subtree unless the freeze above is extended.
   back button handling, metadata sync, coordination, network monitoring, and
   smart downloads.
 
+### Native iOS AMLL lyrics
+
+SyncedLyricsView.swift and the pure Swift LyricsMotion.swift implement native AMLL-style line springs, following and browsing. LyricsText.swift measures and draws unlimited wrapping UILabel text at an explicit width; transforms must not feed back into line geometry. Keep original text semibold to preserve wrapping. Run `bash scripts/test-ios-lyrics-motion.sh` and, with an iPhone Simulator, `bash scripts/test-ios-lyrics-layout.sh`.
+
 ### Styling
 
 Tailwind CSS uses CSS custom properties for layout dimensions
