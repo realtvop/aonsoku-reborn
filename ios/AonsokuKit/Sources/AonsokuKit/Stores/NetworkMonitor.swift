@@ -21,6 +21,32 @@ public struct FixedConnectivity: Connectivity {
     }
 }
 
+/// What a network path looked like, reduced to what decides whether the
+/// connections opened before it may still work.
+struct NetworkPathState: Equatable, Sendable {
+    var isOnline: Bool
+    var isExpensive: Bool
+    var isConstrained: Bool
+    /// The kinds of interface the path may use.
+    var interfaces: Set<NWInterface.InterfaceType>
+}
+
+/// Decides which path updates are a reason to check the connections made
+/// before them: connectivity coming back, or the interfaces in use changing
+/// while online. Going offline is not one, as nothing could reconnect, and
+/// neither is a change of the metered flags. The first update after starting
+/// is only recorded, since it describes the path rather than a change of it.
+struct NetworkPathChangeDetector: Sendable {
+    private var previous: NetworkPathState?
+
+    /// - Returns: whether `state` is such a change from the one before.
+    mutating func ingest(_ state: NetworkPathState) -> Bool {
+        defer { previous = state }
+        guard let previous, state.isOnline else { return false }
+        return !previous.isOnline || previous.interfaces != state.interfaces
+    }
+}
+
 /// Tracks the current network path with `NWPathMonitor` and publishes it to
 /// SwiftUI. `connectivity` mirrors the same values behind a lock.
 @MainActor
@@ -34,6 +60,10 @@ public final class NetworkMonitor {
     public private(set) var isConstrained = false
 
     public var isMetered: Bool { isExpensive || isConstrained }
+
+    /// Called when a path update may have broken the connections opened
+    /// before it (see `NetworkPathChangeDetector`).
+    @PerceptionIgnored var onPathChange: (@MainActor () -> Void)?
 
     public nonisolated let connectivity: any Connectivity
     @PerceptionIgnored private nonisolated let sharedConnectivity: LockedConnectivity
@@ -72,22 +102,34 @@ public final class NetworkMonitor {
         self.generation = generation
         self.monitor = monitor
         let sharedConnectivity = sharedConnectivity
+        let detector = LockedPathChangeDetector()
         monitor.pathUpdateHandler = { [weak self] path in
-            let online = path.status == .satisfied
-            let expensive = path.isExpensive
-            let constrained = path.isConstrained
+            let state = NetworkPathState(
+                isOnline: path.status == .satisfied,
+                isExpensive: path.isExpensive,
+                isConstrained: path.isConstrained,
+                interfaces: Set(path.availableInterfaces.map(\.type))
+            )
+            let changed = detector.ingest(state)
             sharedConnectivity.update(
-                isOnline: online,
-                isMetered: expensive || constrained
+                isOnline: state.isOnline,
+                isMetered: state.isExpensive || state.isConstrained
             )
             Task { @MainActor [weak self] in
                 guard let self, self.generation == generation else { return }
-                self.isOnline = online
-                self.isExpensive = expensive
-                self.isConstrained = constrained
+                self.publish(state, mayHaveBrokenConnections: changed)
             }
         }
         monitor.start(queue: queue)
+    }
+
+    /// Publishes a path update, then tells `onPathChange` when it may have
+    /// broken connections.
+    func publish(_ state: NetworkPathState, mayHaveBrokenConnections: Bool) {
+        isOnline = state.isOnline
+        isExpensive = state.isExpensive
+        isConstrained = state.isConstrained
+        if mayHaveBrokenConnections { onPathChange?() }
     }
 
     public func stop() {
@@ -95,6 +137,17 @@ public final class NetworkMonitor {
         monitor?.pathUpdateHandler = nil
         monitor?.cancel()
         monitor = nil
+    }
+}
+
+final class LockedPathChangeDetector: @unchecked Sendable {
+    private let lock = NSLock()
+    private var detector = NetworkPathChangeDetector()
+
+    func ingest(_ state: NetworkPathState) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return detector.ingest(state)
     }
 }
 

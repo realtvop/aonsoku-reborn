@@ -41,6 +41,9 @@ public final class AppModel {
     @PerceptionIgnored public let downloads: DownloadsStore
     @PerceptionIgnored public let coordination: CoordinationStore
 
+    @PerceptionIgnored private let powerEvents: any SystemPowerEventSource
+    @PerceptionIgnored private let reconnectsOnNetworkPathChange: Bool
+    @PerceptionIgnored private var powerObservation: ObservationToken?
     @PerceptionIgnored private var activation: Task<Void, Never>?
     @PerceptionIgnored private var smartDownloadsReady = false
     @PerceptionIgnored private var smartDownloadsTask: Task<Void, Never>?
@@ -65,15 +68,24 @@ public final class AppModel {
         )
     }
 
+    /// - Parameters:
+    ///   - powerEvents: where the machine's sleep and wake come from; a Mac
+    ///     test host gets none, and iOS suspends the app instead.
+    ///   - reconnectsOnNetworkPathChange: whether a network path change checks
+    ///     the open connections (see `PlatformPower`).
     init(
         services: AppServices,
         bundle: Bundle,
         network: NetworkMonitor,
         api: any SubsonicAPI,
-        sessionAuthenticationClient: SessionAuthenticationClient?
+        sessionAuthenticationClient: SessionAuthenticationClient?,
+        powerEvents: any SystemPowerEventSource = PlatformPower.makeSource(),
+        reconnectsOnNetworkPathChange: Bool = PlatformPower.reconnectsOnNetworkPathChange
     ) {
         self.services = services
         self.network = network
+        self.powerEvents = powerEvents
+        self.reconnectsOnNetworkPathChange = reconnectsOnNetworkPathChange
         toasts = ToastCenter()
         localizer = Localizer(bundle: bundle)
         settings = SettingsStore(preferences: services.preferences)
@@ -165,6 +177,7 @@ public final class AppModel {
         history.maxSize = current.history.maxSize
         applyReplayGain(current.replayGain)
         network.start()
+        observeConnectionChanges()
         session.restore()
         isStarted = true
         guard let account = session.account else {
@@ -293,6 +306,41 @@ public final class AppModel {
         sync.stop()
         coordination.stop()
         resetAccountStores()
+    }
+
+    /// Listens for the machine sleeping and waking and, where the platform
+    /// wants it, for network path changes. Calling it again has no effect;
+    /// the observation ends with the model.
+    private func observeConnectionChanges() {
+        guard powerObservation == nil else { return }
+        powerObservation = powerEvents.observe { [weak self] event in
+            Task { @MainActor [weak self] in
+                self?.handle(event)
+            }
+        }
+        if reconnectsOnNetworkPathChange {
+            network.onPathChange = { [weak self] in
+                self?.connectionMayHaveChanged()
+            }
+        }
+    }
+
+    private func handle(_ event: SystemPowerEvent) {
+        switch event {
+        case .willSleep:
+            services.lifecycle.systemWillSleep()
+        case .didWake:
+            connectionMayHaveChanged()
+        }
+    }
+
+    /// The machine woke or the network moved to another interface, so the
+    /// stream being played, the coordination socket and an interrupted sync
+    /// may be dead without anything having failed yet.
+    func connectionMayHaveChanged() {
+        services.lifecycle.connectionMayHaveChanged()
+        guard isActive else { return }
+        sync.resumeAfterConnectionChange()
     }
 
     /// The scene became active.

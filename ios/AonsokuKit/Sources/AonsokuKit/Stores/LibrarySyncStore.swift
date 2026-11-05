@@ -50,6 +50,9 @@ public final class LibrarySyncStore {
     @PerceptionIgnored private var started = false
     @PerceptionIgnored private var revisionPending = false
     @PerceptionIgnored private var lastForegroundSyncAt: Date?
+    /// A sync was running when the connection changed (see
+    /// `resumeAfterConnectionChange()`): if it fails, it is run once more.
+    @PerceptionIgnored private var retriesAfterFailure = false
     @PerceptionIgnored private var syncCompleted: (@MainActor () -> Void)?
     @PerceptionIgnored private let operations: LibrarySyncOperations
     @PerceptionIgnored private let now: @Sendable () -> Date
@@ -98,7 +101,13 @@ public final class LibrarySyncStore {
             Date(timeIntervalSince1970: TimeInterval($0) / 1_000)
         }
         guard connectivity.isOnline, !connectivity.isMetered else { return }
-        if availability.available {
+        runAutomaticSync(available: availability.available)
+    }
+
+    /// An incremental sync once the library has been synced, a full one
+    /// before.
+    private func runAutomaticSync(available: Bool) {
+        if available {
             operations.syncIncremental(options())
         } else {
             operations.syncAll(options())
@@ -113,6 +122,7 @@ public final class LibrarySyncStore {
         subscription = nil
         started = false
         revisionPending = false
+        retriesAfterFailure = false
         operations.cancel()
         phase = .idle
         operation = nil
@@ -145,6 +155,37 @@ public final class LibrarySyncStore {
         operations.syncIncremental(options())
     }
 
+    /// The machine woke or the network moved to another interface (a Mac
+    /// keeps running through both), so a sync cut off by it, or one that
+    /// failed before it, may succeed now. A sync still running is left alone,
+    /// but run again once if it then fails; one that failed is run again at
+    /// once; otherwise this is a return to the foreground (an incremental
+    /// sync, at most every five minutes). Nothing runs offline, on a metered
+    /// network or before `start()`, like every automatic sync, and calling
+    /// this repeatedly starts at most one sync.
+    func resumeAfterConnectionChange() {
+        guard started, connectivity.isOnline, !connectivity.isMetered else { return }
+        if isSyncing {
+            retriesAfterFailure = true
+        } else if case .failed = phase {
+            runAgainAfterConnectionChange()
+        } else {
+            handleForeground()
+        }
+    }
+
+    /// Runs the sync that failed again and shows it as started right away,
+    /// not when the engine's first event arrives: a second change before then
+    /// has to find a sync under way instead of the failure it replaces, or it
+    /// would start another. The engine reports "connecting" first for the
+    /// same reason, and ends every sync with done, cancelled or an error.
+    private func runAgainAfterConnectionChange() {
+        lastForegroundSyncAt = now()
+        runAutomaticSync(available: operations.availability().available)
+        phase = .waitingForConnection
+        operation = "connecting"
+    }
+
     func handle(_ event: LibraryEvent) {
         switch event {
         case let .syncStateChanged(state):
@@ -154,13 +195,16 @@ public final class LibrarySyncStore {
                 phase = .waitingForConnection
             case "done":
                 phase = .done
+                retriesAfterFailure = false
                 lastSyncedAt = now()
                 lastForegroundSyncAt = lastSyncedAt
                 syncCompleted?()
             case "cancelled":
                 phase = .cancelled
+                retriesAfterFailure = false
             case "error":
                 phase = .failed(state.message ?? "Library sync failed")
+                retrySyncCutOffByConnectionChange()
             case "coverArt":
                 phase = .coverArt(
                     processed: state.processedItems,
@@ -185,6 +229,15 @@ public final class LibrarySyncStore {
                 revision += 1
             }
         }
+    }
+
+    /// Runs the sync once more when the one that just failed was running as
+    /// the connection changed, if the connection allows automatic syncs.
+    private func retrySyncCutOffByConnectionChange() {
+        guard retriesAfterFailure else { return }
+        retriesAfterFailure = false
+        guard started, connectivity.isOnline, !connectivity.isMetered else { return }
+        runAgainAfterConnectionChange()
     }
 
     private func options() -> LibrarySyncOptions {

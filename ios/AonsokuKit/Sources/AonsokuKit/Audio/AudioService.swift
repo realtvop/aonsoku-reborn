@@ -225,6 +225,33 @@ public final class AudioService: NSObject, @unchecked Sendable {
         scrobbleSubmitter.submitPending(buffer: scrobbleBuffer)
     }
 
+    /// The machine is about to sleep and may never wake (a flat battery), so
+    /// the playback state is written to disk before this returns and pending
+    /// scrobbles are sent while the connection still works. Playback itself
+    /// is not touched: the system stops the output, and `connectionMayHaveChanged()`
+    /// deals with what sleep broke when the machine wakes.
+    public func applicationWillSleep() {
+        persistence.flushNow(wait: true)
+        scrobbleSubmitter.submitPending(buffer: scrobbleBuffer)
+    }
+
+    /// The machine woke or the network moved to another interface, so the
+    /// connections opened before may be dead without anything having failed
+    /// yet. Stream recovery that is waiting for its backoff, or has an
+    /// attempt under way, tries again at once, and scrobbles that could not
+    /// be sent are retried. A stream that is playing normally, local files
+    /// and playback that already failed are left alone: only the user's play
+    /// starts the latter again.
+    public func connectionMayHaveChanged() {
+        dispatchMain { [weak self] in
+            guard let self else { return }
+            self.recoveryController.connectionMayHaveChanged(
+                generation: self.playbackGeneration
+            )
+            self.scrobbleSubmitter.submitPending(buffer: self.scrobbleBuffer)
+        }
+    }
+
     public func applicationWillEnterForeground() {
         isInForeground = true
         recoveryController.setBackground(false)

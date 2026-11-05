@@ -24,13 +24,14 @@ final class CoordinationServiceTests: XCTestCase {
     private func makeService(
         credentials: ServerCredentials? = nil,
         platform: String? = nil,
-        ackTimeout: TimeInterval = 0.2
+        ackTimeout: TimeInterval = 0.2,
+        realtime: CoordinationRealtimeTransport? = nil
     ) -> CoordinationService {
         let apiClient = apiClient!
         let platform = platform ?? PlatformDevice.coordinationPlatform
         return CoordinationService(
             tokenStore: tokenStore,
-            realtime: transport,
+            realtime: realtime ?? transport,
             makeAPIClient: { _, _, _ in apiClient },
             credentials: { credentials },
             clientVersion: "2.0",
@@ -423,6 +424,86 @@ final class CoordinationServiceTests: XCTestCase {
 
         await service.reconnect()
         XCTAssertEqual(transport.connectCallCount, 2)
+        XCTAssertEqual(service.state.connectionState, .connected)
+    }
+
+    // MARK: Sleep, wake and network changes
+
+    func testAConnectionChangeReachesTheTransportOnlyWhileAConnectionIsWanted() async {
+        // Coordination has not started.
+        service.connectionMayHaveChanged()
+        XCTAssertEqual(transport.connectionMayHaveChangedCount, 0)
+
+        tokenStore.config = config
+        tokenStore.tokens = registeredTokens()
+        service.start()
+        await waitUntil { self.transport.connectCallCount == 1 }
+        service.connectionMayHaveChanged()
+        XCTAssertEqual(transport.connectionMayHaveChangedCount, 1)
+
+        // Closed on purpose, so it stays closed.
+        service.disconnect()
+        service.connectionMayHaveChanged()
+        XCTAssertEqual(transport.connectionMayHaveChangedCount, 1)
+
+        await service.reconnect()
+        service.connectionMayHaveChanged()
+        XCTAssertEqual(transport.connectionMayHaveChangedCount, 2)
+    }
+
+    func testAConnectionChangeIsIgnoredWithoutARegistration() async {
+        tokenStore.config = config
+        service.start()
+        try? await Task.sleep(for: .milliseconds(50))
+
+        service.connectionMayHaveChanged()
+
+        XCTAssertNil(service.state.deviceId)
+        XCTAssertEqual(transport.connectionMayHaveChangedCount, 0)
+    }
+
+    func testAConnectionChangeIsIgnoredOnceTheRegistrationIsGone() async {
+        tokenStore.config = config
+        tokenStore.tokens = registeredTokens()
+        service.start()
+        await waitUntil { self.transport.connectCallCount == 1 }
+        service.resetRegistration()
+
+        service.connectionMayHaveChanged()
+
+        XCTAssertEqual(transport.connectionMayHaveChangedCount, 0)
+    }
+
+    func testAConnectionThatWentQuietIsReplacedByOneWithAFreshTicket() async throws {
+        let server = try LocalWebSocketServer()
+        try server.start()
+        defer { server.stop() }
+        let realtime = CoordinationRealtime()
+        realtime.connectionValidationTimeout = 0.3
+        let service = makeService(realtime: realtime)
+        defer { service.disconnect() }
+        tokenStore.config = CoordinationConfig(
+            serverUrl: "http://127.0.0.1:\(server.port)",
+            identityUrl: "https://music.test"
+        )
+        tokenStore.tokens = registeredTokens()
+        apiClient.mockTicket = "ticket-1"
+        service.start()
+        await waitUntil(timeout: 5) { server.helloTickets == ["ticket-1"] }
+        XCTAssertEqual(server.helloTickets, ["ticket-1"])
+        await waitUntil { service.state.connectionState == .connected }
+
+        // The machine slept: the socket stayed open, but nothing answers, and
+        // the ticket it was opened with has expired by now.
+        server.answersPings = false
+        apiClient.mockTicket = "ticket-2"
+        service.connectionMayHaveChanged()
+
+        await waitUntil(timeout: 5) { server.helloTickets.count == 2 }
+        XCTAssertEqual(server.helloTickets, ["ticket-1", "ticket-2"])
+        await waitUntil { server.closedConnectionCount == 1 }
+        XCTAssertEqual(server.closedConnectionCount, 1)
+        await waitUntil { service.state.connectionState == .connected }
         XCTAssertEqual(service.state.connectionState, .connected)
     }
 
@@ -928,6 +1009,12 @@ private final class FakeRealtimeTransport: CoordinationRealtimeTransport, @unche
     func didEnterBackground() {}
     func willEnterForeground() {}
     func willTerminate() {}
+
+    var connectionMayHaveChangedCount = 0
+    func connectionMayHaveChanged() {
+        XCTAssertTrue(Thread.isMainThread)
+        connectionMayHaveChangedCount += 1
+    }
 
     func sendCommandFromNative(
         targetDeviceId: String,

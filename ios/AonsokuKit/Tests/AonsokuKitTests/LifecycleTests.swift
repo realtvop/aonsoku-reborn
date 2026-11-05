@@ -96,6 +96,70 @@ final class LifecycleTests: XCTestCase {
         ])
     }
 
+    func testSleepAndConnectionChangesReachOnlyARunningApp() {
+        var calls: [String] = []
+        let lifecycle = AppLifecycleService(
+            audio: AudioLifecycleActions(
+                start: { calls.append("audio:start") },
+                didEnterBackground: { calls.append("audio:background") },
+                willEnterForeground: { calls.append("audio:foreground") },
+                willTerminate: { calls.append("audio:terminate") },
+                handleBackgroundSession: { _, _ in false },
+                willSleep: { calls.append("audio:sleep") },
+                connectionMayHaveChanged: { calls.append("audio:connection") }
+            ),
+            coordination: CoordinationLifecycleActions(
+                didEnterBackground: { calls.append("coordination:background") },
+                willEnterForeground: { calls.append("coordination:foreground") },
+                willTerminate: { calls.append("coordination:terminate") },
+                connectionMayHaveChanged: { calls.append("coordination:connection") }
+            )
+        )
+
+        // Nothing is running before launch finishes.
+        lifecycle.systemWillSleep()
+        lifecycle.connectionMayHaveChanged()
+        XCTAssertTrue(calls.isEmpty)
+
+        lifecycle.didFinishLaunching()
+        lifecycle.systemWillSleep()
+        lifecycle.connectionMayHaveChanged()
+        lifecycle.connectionMayHaveChanged()
+        // Sleeping and waking are not lifecycle transitions: a Mac stays in
+        // the foreground through them.
+        XCTAssertEqual(lifecycle.phase, .active)
+
+        // In the background the transitions already do this work when the app
+        // returns.
+        lifecycle.didEnterBackground()
+        lifecycle.systemWillSleep()
+        lifecycle.connectionMayHaveChanged()
+        lifecycle.willEnterForeground()
+        XCTAssertEqual(lifecycle.phase, .foreground)
+        lifecycle.connectionMayHaveChanged()
+        lifecycle.didBecomeActive()
+        lifecycle.willTerminate()
+        lifecycle.systemWillSleep()
+        lifecycle.connectionMayHaveChanged()
+
+        XCTAssertEqual(calls, [
+            "audio:start",
+            "audio:sleep",
+            "audio:connection",
+            "coordination:connection",
+            "audio:connection",
+            "coordination:connection",
+            "audio:background",
+            "coordination:background",
+            "audio:foreground",
+            "coordination:foreground",
+            "audio:connection",
+            "coordination:connection",
+            "coordination:terminate",
+            "audio:terminate",
+        ])
+    }
+
     func testBackgroundSessionRoutingReturnsOwnershipAndCompletion() {
         var routedIdentifier: String?
         var completed = false

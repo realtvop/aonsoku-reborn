@@ -37,6 +37,8 @@ struct AudioLifecycleActions {
     let willTerminate: () -> Void
     let handleBackgroundSession: (String, @escaping () -> Void) -> Bool
     let didResignActive: () -> Void
+    let willSleep: () -> Void
+    let connectionMayHaveChanged: () -> Void
 
     init(
         start: @escaping () -> Void,
@@ -47,7 +49,9 @@ struct AudioLifecycleActions {
             String,
             @escaping () -> Void
         ) -> Bool,
-        didResignActive: @escaping () -> Void = {}
+        didResignActive: @escaping () -> Void = {},
+        willSleep: @escaping () -> Void = {},
+        connectionMayHaveChanged: @escaping () -> Void = {}
     ) {
         self.start = start
         self.didEnterBackground = didEnterBackground
@@ -55,11 +59,15 @@ struct AudioLifecycleActions {
         self.willTerminate = willTerminate
         self.handleBackgroundSession = handleBackgroundSession
         self.didResignActive = didResignActive
+        self.willSleep = willSleep
+        self.connectionMayHaveChanged = connectionMayHaveChanged
     }
 
     init(audio: AudioService) {
         start = { audio.start() }
         didResignActive = { audio.applicationDidResignActive() }
+        willSleep = { audio.applicationWillSleep() }
+        connectionMayHaveChanged = { audio.connectionMayHaveChanged() }
         didEnterBackground = { audio.applicationDidEnterBackground() }
         willEnterForeground = { audio.applicationWillEnterForeground() }
         willTerminate = { audio.applicationWillTerminate() }
@@ -76,6 +84,19 @@ struct CoordinationLifecycleActions {
     let didEnterBackground: () -> Void
     let willEnterForeground: () -> Void
     let willTerminate: () -> Void
+    let connectionMayHaveChanged: () -> Void
+
+    init(
+        didEnterBackground: @escaping () -> Void,
+        willEnterForeground: @escaping () -> Void,
+        willTerminate: @escaping () -> Void,
+        connectionMayHaveChanged: @escaping () -> Void = {}
+    ) {
+        self.didEnterBackground = didEnterBackground
+        self.willEnterForeground = willEnterForeground
+        self.willTerminate = willTerminate
+        self.connectionMayHaveChanged = connectionMayHaveChanged
+    }
 
     static let live = CoordinationLifecycleActions(
         didEnterBackground: {
@@ -86,6 +107,9 @@ struct CoordinationLifecycleActions {
         },
         willTerminate: {
             CoordinationService.shared.willTerminate()
+        },
+        connectionMayHaveChanged: {
+            CoordinationService.shared.connectionMayHaveChanged()
         }
     )
 }
@@ -134,6 +158,29 @@ public final class AppLifecycleService: @unchecked Sendable {
     public func didResignActive() {
         guard phase == .active || phase == .foreground else { return }
         audio.didResignActive()
+    }
+
+    /// The machine is about to sleep (a Mac; iOS suspends the app through
+    /// `didEnterBackground`). A laptop may never wake again, so playback
+    /// state is written and pending scrobbles are sent now. Nothing else
+    /// changes: the app is not leaving the foreground, and what sleep broke
+    /// is dealt with by `connectionMayHaveChanged()` when the machine wakes.
+    /// Ignored outside the active and foreground phases.
+    public func systemWillSleep() {
+        guard phase == .active || phase == .foreground else { return }
+        audio.willSleep()
+    }
+
+    /// The machine woke or the network path changed, so the connections
+    /// opened before may be dead without the system having said so: the
+    /// current stream is recovered at once instead of after its backoff, the
+    /// coordination socket is checked and replaced with a fresh ticket if it
+    /// does not answer. Safe to call repeatedly; ignored outside the active
+    /// and foreground phases, where the lifecycle transitions already do this.
+    public func connectionMayHaveChanged() {
+        guard phase == .active || phase == .foreground else { return }
+        audio.connectionMayHaveChanged()
+        coordination.connectionMayHaveChanged()
     }
 
     public func didBecomeActive() {

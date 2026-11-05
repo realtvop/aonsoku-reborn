@@ -81,12 +81,7 @@ class PlaybackRecoveryController {
         guard self.generation == generation || state == .idle else { return }
 
         if state == .idle {
-            self.generation = generation
-            self.sourceKind = sourceKind
-            savedPosition = currentTime
-            lastProgressTime = currentTime
-            delegate?.recoveryDidBegin(self)
-            delegate?.recoverySetBuffering(self, isBuffering: true)
+            beginRecovery(at: currentTime, generation: generation, sourceKind: sourceKind)
         } else if recoveryTimer != nil || attemptTimeoutTimer != nil {
             return
         }
@@ -103,6 +98,29 @@ class PlaybackRecoveryController {
             escalateToLevel2()
         case .stream:
             escalateStream()
+        }
+    }
+
+    /// The machine woke or the network moved to another interface (a Mac
+    /// keeps playing through both), so what recovery tried before may work
+    /// now. A pending backoff is not waited for and an attempt already under
+    /// way is made again, neither using up an attempt. A healthy stream, local
+    /// files and recovery that has given up are left alone: the first has
+    /// nothing to recover, and the last has already told the user that
+    /// playback stopped, so only the user's play may start it again, however
+    /// much later the connection returns. Calling this repeatedly only
+    /// repeats the current attempt.
+    func connectionMayHaveChanged(generation: Int) {
+        guard generation == self.generation, sourceKind != .nativeFile else { return }
+        switch state {
+        case .idle, .gaveUp:
+            break
+        case .level1(let attempt):
+            cancelAttemptTimeout()
+            scheduleLevel1(attempt: attempt, immediately: true)
+        case .level2(let attempt):
+            cancelAttemptTimeout()
+            scheduleLevel2(attempt: attempt, immediately: true)
         }
     }
 
@@ -197,6 +215,19 @@ class PlaybackRecoveryController {
 
     // MARK: - Private: Escalation
 
+    private func beginRecovery(
+        at time: CMTime,
+        generation: Int,
+        sourceKind: RecoverySourceKind
+    ) {
+        self.generation = generation
+        self.sourceKind = sourceKind
+        savedPosition = time
+        lastProgressTime = time
+        delegate?.recoveryDidBegin(self)
+        delegate?.recoverySetBuffering(self, isBuffering: true)
+    }
+
     private func escalateStream() {
         switch state {
         case .idle, .level1:
@@ -257,12 +288,15 @@ class PlaybackRecoveryController {
 
     // MARK: - Private: Scheduling
 
-    private func scheduleLevel1(attempt: Int) {
+    /// - Parameter immediately: skips the backoff, for an attempt made again
+    ///   because the connection changed rather than because the last one
+    ///   failed.
+    private func scheduleLevel1(attempt: Int, immediately: Bool = false) {
         cancelRecoveryTimer()
         revision += 1
         state = .level1(attempt: attempt)
 
-        let delay = level1BaseDelay * pow(2.0, Double(attempt - 1))
+        let delay = immediately ? 0 : level1BaseDelay * pow(2.0, Double(attempt - 1))
         let gen = generation
         let revision = revision
 
@@ -275,13 +309,13 @@ class PlaybackRecoveryController {
         recoveryTimer = work
     }
 
-    private func scheduleLevel2(attempt: Int) {
+    private func scheduleLevel2(attempt: Int, immediately: Bool = false) {
         cancelRecoveryTimer()
         revision += 1
         state = .level2(attempt: attempt)
 
         let baseDelay = isBackground ? level2BaseDelay * 2.0 : level2BaseDelay
-        let delay = baseDelay * pow(2.0, Double(attempt - 1))
+        let delay = immediately ? 0 : baseDelay * pow(2.0, Double(attempt - 1))
         let gen = generation
         let revision = revision
 

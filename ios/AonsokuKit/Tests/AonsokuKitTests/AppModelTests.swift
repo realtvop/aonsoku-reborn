@@ -484,6 +484,173 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(fixture.model.session.account?.primaryUrl, "https://new.test")
     }
 
+    // MARK: Sleep, wake and network changes
+
+    func testSleepAndWakeReachTheLifecycleOfARunningApp() async throws {
+        let power = ManualPowerEvents()
+        let recorder = LifecycleRecorder()
+        let fixture = try AppModelFixture(
+            owner: alice,
+            powerEvents: power,
+            lifecycle: recorder.makeLifecycle()
+        )
+        fixture.model.start()
+        fixture.services.lifecycle.didFinishLaunching()
+        recorder.clear()
+
+        power.send(.willSleep)
+        let slept = await waitForPlayerStoreTest { recorder.calls == ["sleep"] }
+        XCTAssertTrue(slept)
+
+        power.send(.didWake)
+        let woke = await waitForPlayerStoreTest { recorder.calls == ["sleep", "connection"] }
+        XCTAssertTrue(woke)
+        fixture.model.signOut()
+    }
+
+    func testWakeAndPathChangesResumeTheLibrarySync() async throws {
+        let power = ManualPowerEvents()
+        let recorder = LifecycleRecorder()
+        let fixture = try AppModelFixture(
+            owner: alice,
+            powerEvents: power,
+            reconnectsOnNetworkPathChange: true,
+            lifecycle: recorder.makeLifecycle()
+        )
+        fixture.model.start()
+        fixture.services.lifecycle.didFinishLaunching()
+        recorder.clear()
+        XCTAssertTrue(fixture.model.isActive)
+        XCTAssertEqual(fixture.model.sync.phase, .idle, "offline: no startup sync")
+
+        // Woken without a connection: nothing can be resumed yet.
+        power.send(.didWake)
+        let wokeOffline = await waitForPlayerStoreTest { recorder.calls == ["connection"] }
+        XCTAssertTrue(wokeOffline)
+        XCTAssertEqual(fixture.model.sync.phase, .idle)
+
+        // Woken with one: the sync the startup could not run is started now.
+        // (The library has no credentials, so it ends in a failure at once.)
+        fixture.setOnline(true)
+        power.send(.didWake)
+        func syncFailed() -> Bool {
+            if case .failed = fixture.model.sync.phase { return true }
+            return false
+        }
+        let failed = await waitForPlayerStoreTest { syncFailed() }
+        XCTAssertTrue(failed, "\(fixture.model.sync.phase)")
+
+        // A change of network path then runs it again without waiting.
+        fixture.network.publish(
+            NetworkPathState(
+                isOnline: true,
+                isExpensive: false,
+                isConstrained: false,
+                interfaces: [.wifi]
+            ),
+            mayHaveBrokenConnections: true
+        )
+        XCTAssertEqual(fixture.model.sync.phase, .waitingForConnection)
+        fixture.model.signOut()
+    }
+
+    func testWakeWhileSignedOutOnlyReachesTheLifecycle() async throws {
+        let power = ManualPowerEvents()
+        let recorder = LifecycleRecorder()
+        let fixture = try AppModelFixture(
+            account: nil,
+            owner: nil,
+            powerEvents: power,
+            lifecycle: recorder.makeLifecycle()
+        )
+        fixture.setOnline(true)
+        fixture.model.start()
+        fixture.services.lifecycle.didFinishLaunching()
+        recorder.clear()
+        XCTAssertFalse(fixture.model.isActive)
+
+        power.send(.didWake)
+        let woke = await waitForPlayerStoreTest { recorder.calls == ["connection"] }
+        XCTAssertTrue(woke)
+        XCTAssertEqual(fixture.model.sync.phase, .idle)
+    }
+
+    func testNetworkPathChangesCheckConnectionsOnlyWhereThePlatformWantsIt() throws {
+        let path = NetworkPathState(
+            isOnline: true,
+            isExpensive: false,
+            isConstrained: false,
+            interfaces: [.wifi]
+        )
+
+        let wanted = LifecycleRecorder()
+        let reconnecting = try AppModelFixture(
+            owner: alice,
+            reconnectsOnNetworkPathChange: true,
+            lifecycle: wanted.makeLifecycle()
+        )
+        reconnecting.model.start()
+        reconnecting.services.lifecycle.didFinishLaunching()
+        wanted.clear()
+        reconnecting.network.publish(path, mayHaveBrokenConnections: false)
+        XCTAssertEqual(wanted.calls, [])
+        reconnecting.network.publish(path, mayHaveBrokenConnections: true)
+        XCTAssertEqual(wanted.calls, ["connection"])
+        reconnecting.model.signOut()
+
+        // iOS suspends the app and checks on its return to the foreground.
+        let unwanted = LifecycleRecorder()
+        let suspended = try AppModelFixture(
+            owner: alice,
+            reconnectsOnNetworkPathChange: false,
+            lifecycle: unwanted.makeLifecycle()
+        )
+        suspended.model.start()
+        suspended.services.lifecycle.didFinishLaunching()
+        unwanted.clear()
+        XCTAssertNil(suspended.network.onPathChange)
+        suspended.network.publish(path, mayHaveBrokenConnections: true)
+        XCTAssertEqual(unwanted.calls, [])
+        suspended.model.signOut()
+    }
+
+    func testPowerObservationStartsOnceAndEndsWithTheModel() async throws {
+        let power = ManualPowerEvents()
+        let recorder = LifecycleRecorder()
+        let fixture = try AppModelFixture(
+            owner: alice,
+            powerEvents: power,
+            lifecycle: recorder.makeLifecycle()
+        )
+        XCTAssertEqual(power.observerCount, 0, "nothing is observed before the model starts")
+
+        fixture.model.start()
+        fixture.model.start()
+        XCTAssertEqual(power.observeCalls, 1)
+        XCTAssertEqual(power.observerCount, 1)
+
+        fixture.services.lifecycle.didFinishLaunching()
+        recorder.clear()
+        power.send(.didWake)
+        let woke = await waitForPlayerStoreTest { recorder.calls == ["connection"] }
+        XCTAssertTrue(woke)
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(recorder.calls, ["connection"], "one wake is one report")
+
+        // Signing out keeps the model, and so the observation, alive.
+        fixture.model.signOut()
+        XCTAssertEqual(power.observerCount, 1)
+
+        weak var released: AppModel? = fixture.model
+        _ = fixture.relaunch()
+        XCTAssertNil(released)
+        XCTAssertEqual(power.observerCount, 0)
+        recorder.clear()
+        power.send(.didWake)
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(recorder.calls, [])
+    }
+
     // MARK: Helpers
 
     /// A downloaded file in the audio cache, removed when the test ends.
@@ -541,22 +708,35 @@ private final class AppModelFixture {
     private(set) var model: AppModel
     let preferences: PreferencesService
     let services: AppServices
+    /// Offline, with connectivity that `setOnline` can change.
+    let network = NetworkMonitor(isOnline: false, isMetered: false)
     let clearedCredentials = LockedTestBox(0)
     /// Server addresses that answer the credentials check of a changed address.
     let reachableServers = LockedTestBox<Set<String>>([])
     private let api: FakeSubsonicAPI
     private let client: SessionAuthenticationClient
     private let database: TemporaryDatabase
+    private let powerEvents: any SystemPowerEventSource
+    private let reconnectsOnNetworkPathChange: Bool
 
     /// `account` is the signed-in account at launch, `owner` the recorded
     /// library owner and `libraryData` whether a synced library exists.
+    /// `powerEvents` and `reconnectsOnNetworkPathChange` replace the
+    /// platform's, and `lifecycle` the service that receives what the model
+    /// forwards.
     init(
         loginSucceeds: Bool = true,
         account: ServerAccount? = AppModelFixture.aliceAccount,
         owner: LibraryAccountIdentity? = nil,
         libraryData: Bool = false,
-        pendingMarker: PendingAccountSwitchRecord? = nil
+        pendingMarker: PendingAccountSwitchRecord? = nil,
+        powerEvents: (any SystemPowerEventSource)? = nil,
+        reconnectsOnNetworkPathChange: Bool? = nil,
+        lifecycle: AppLifecycleService? = nil
     ) throws {
+        self.powerEvents = powerEvents ?? PlatformPower.makeSource()
+        self.reconnectsOnNetworkPathChange = reconnectsOnNetworkPathChange
+            ?? PlatformPower.reconnectsOnNetworkPathChange
         database = try TemporaryDatabase()
         preferences = PreferencesService(db: database.manager.dbPool)
         let credentials = LockedTestBox<ServerCredentials?>(nil)
@@ -597,9 +777,15 @@ private final class AppModelFixture {
                 scrobbleBuffer: makeIsolatedScrobbleBuffer(),
                 scrobbleSubmitter: makeIsolatedScrobbleSubmitter()
             ),
-            library: LibraryService(dbManager: database.manager),
+            // No credentials, so a sync that a test starts ends at once
+            // without reaching any server.
+            library: LibraryService(
+                dbManager: database.manager,
+                credentialsProvider: { nil }
+            ),
             preferences: preferences,
-            coordination: coordination
+            coordination: coordination,
+            lifecycleFactory: { lifecycle ?? AppLifecycleService(audio: $0) }
         )
         api = FakeSubsonicAPI()
         api.starredHandler = { SearchResults() }
@@ -638,13 +824,34 @@ private final class AppModelFixture {
             },
             probeCompatibility: { _, _, _ in .compatible }
         )
-        model = Self.makeModel(services: services, api: api, client: client)
+        model = Self.makeModel(
+            services: services,
+            network: network,
+            api: api,
+            client: client,
+            powerEvents: self.powerEvents,
+            reconnectsOnNetworkPathChange: self.reconnectsOnNetworkPathChange
+        )
     }
 
     /// A new app model over the same stored state, as after a relaunch.
     func relaunch() -> AppModel {
-        model = Self.makeModel(services: services, api: api, client: client)
+        model = Self.makeModel(
+            services: services,
+            network: network,
+            api: api,
+            client: client,
+            powerEvents: powerEvents,
+            reconnectsOnNetworkPathChange: reconnectsOnNetworkPathChange
+        )
         return model
+    }
+
+    /// Changes what the sync store sees of the connection, which the offline
+    /// monitor never updates by itself.
+    func setOnline(_ isOnline: Bool, isMetered: Bool = false) {
+        (network.connectivity as? LockedConnectivity)?
+            .update(isOnline: isOnline, isMetered: isMetered)
     }
 
     func signInAsBob() async throws {
@@ -675,15 +882,82 @@ private final class AppModelFixture {
 
     private static func makeModel(
         services: AppServices,
+        network: NetworkMonitor,
         api: FakeSubsonicAPI,
-        client: SessionAuthenticationClient
+        client: SessionAuthenticationClient,
+        powerEvents: any SystemPowerEventSource,
+        reconnectsOnNetworkPathChange: Bool
     ) -> AppModel {
         AppModel(
             services: services,
             bundle: .main,
-            network: NetworkMonitor(isOnline: false, isMetered: false),
+            network: network,
             api: api,
-            sessionAuthenticationClient: client
+            sessionAuthenticationClient: client,
+            powerEvents: powerEvents,
+            reconnectsOnNetworkPathChange: reconnectsOnNetworkPathChange
+        )
+    }
+}
+
+/// Reports the events a test sends, to everyone observing.
+private final class ManualPowerEvents: SystemPowerEventSource, @unchecked Sendable {
+    private let lock = NSLock()
+    private var handlers: [UUID: @Sendable (SystemPowerEvent) -> Void] = [:]
+    private var observations = 0
+
+    /// Observations that have not ended.
+    var observerCount: Int { lock.withLock { handlers.count } }
+    /// Observations ever begun.
+    var observeCalls: Int { lock.withLock { observations } }
+
+    func observe(
+        _ handler: @escaping @Sendable (SystemPowerEvent) -> Void
+    ) -> ObservationToken {
+        let id = UUID()
+        lock.withLock {
+            handlers[id] = handler
+            observations += 1
+        }
+        return ObservationToken { [weak self] in
+            self?.lock.withLock { self?.handlers[id] = nil }
+        }
+    }
+
+    func send(_ event: SystemPowerEvent) {
+        let current = lock.withLock { Array(handlers.values) }
+        for handler in current { handler(event) }
+    }
+}
+
+/// An app lifecycle that records what reaches the audio side, in order.
+private final class LifecycleRecorder: @unchecked Sendable {
+    private let log = LockedTestBox<[String]>([])
+
+    var calls: [String] { log.read { $0 } }
+
+    func clear() { log.update { $0.removeAll() } }
+
+    func makeLifecycle() -> AppLifecycleService {
+        let log = log
+        let record: @Sendable (String) -> Void = { name in
+            log.update { $0.append(name) }
+        }
+        return AppLifecycleService(
+            audio: AudioLifecycleActions(
+                start: { record("start") },
+                didEnterBackground: { record("background") },
+                willEnterForeground: { record("foreground") },
+                willTerminate: { record("terminate") },
+                handleBackgroundSession: { _, _ in false },
+                willSleep: { record("sleep") },
+                connectionMayHaveChanged: { record("connection") }
+            ),
+            coordination: CoordinationLifecycleActions(
+                didEnterBackground: {},
+                willEnterForeground: {},
+                willTerminate: {}
+            )
         )
     }
 }

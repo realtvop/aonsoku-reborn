@@ -36,6 +36,10 @@ protocol CoordinationRealtimeTransport: AnyObject {
     func didEnterBackground()
     func willEnterForeground()
     func willTerminate()
+    /// The machine woke or the network moved to another interface, so the
+    /// connection may be dead without the system having said so. Replaces it
+    /// with a new one (and a fresh ticket) when it does not answer.
+    func connectionMayHaveChanged()
     func sendCommandFromNative(
         targetDeviceId: String,
         expectedGeneration: Int?,
@@ -95,6 +99,10 @@ struct CoordinationReconnectPolicy: Equatable {
 /// Owned by CoordinationService; iOS lifecycle is managed by AppLifecycleService.
 final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSessionDelegate, CoordinationRealtimeTransport {
     internal var reconnectPolicy = CoordinationReconnectPolicy()
+    /// How long a connection that may have died (see
+    /// `connectionMayHaveChanged()`) has to answer a ping before it is
+    /// replaced.
+    internal var connectionValidationTimeout: TimeInterval = 5
     internal var sessionFactory: (
         URLSessionConfiguration,
         URLSessionDelegate
@@ -342,6 +350,11 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
     private var heartbeatTimer: Timer?
     private var snapshotHeartbeatTimer: Timer?
     private var reconnectWorkItem: DispatchWorkItem?
+    /// The deadline of the ping that checks the connection after a wake or a
+    /// network change. Only the latest check acts, so repeating the request
+    /// neither reconnects twice nor lets an older answer decide.
+    private var connectionCheckDeadline: DispatchWorkItem?
+    private var connectionCheckId: UInt64 = 0
     /// §9.1 dedup cache for incoming envelopes.
     private var dedupCache = CoordinationDedup(max: 200)
     /// §9.2 sequence tracker — highest server seq processed.
@@ -608,6 +621,15 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
         }
     }
 
+    /// Called when the machine woke or the network moved to another
+    /// interface. A Mac app is never in the background, so nothing else
+    /// would notice a connection that died meanwhile.
+    func connectionMayHaveChanged() {
+        DispatchQueue.main.async {
+            self.handleConnectionMayHaveChanged()
+        }
+    }
+
     // MARK: - Public command dispatch (called by AudioService)
 
     /// Send a command from the active audio service.
@@ -830,8 +852,74 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
         disconnectInternal()
     }
 
-    private func handleTransportClosed(_ task: URLSessionWebSocketTask) {
+    /// A connection that is missing, or still being made with a ticket that
+    /// has probably expired, is replaced at once, without waiting for the
+    /// backoff. One that looks alive must answer a ping within
+    /// `connectionValidationTimeout`; if it does not, or the ping fails, it
+    /// is dropped and replaced the same way. Does nothing after an explicit
+    /// disconnect, and the app's foreground state is left as it is.
+    private func handleConnectionMayHaveChanged() {
+        guard reconnectPolicy.permitsReconnect(
+            manualDisconnect: manualDisconnect,
+            isAppInBackground: isAppInBackground
+        ) else { return }
+        cancelConnectionCheck()
+        guard let task = webSocketTask, task.state == .running, !isConnecting else {
+            replaceConnection()
+            return
+        }
+        let checkId = connectionCheckId
+        let deadline = DispatchWorkItem { [weak self, weak task] in
+            guard let self, let task,
+                  self.connectionCheckId == checkId,
+                  task === self.webSocketTask else { return }
+            self.connectionCheckDeadline = nil
+            self.replaceConnection()
+        }
+        connectionCheckDeadline = deadline
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + connectionValidationTimeout,
+            execute: deadline
+        )
+        task.sendPing { [weak self, weak task] error in
+            DispatchQueue.main.async {
+                guard let self, let task,
+                      self.connectionCheckId == checkId,
+                      task === self.webSocketTask else { return }
+                self.cancelConnectionCheck()
+                if error == nil {
+                    self.reconnectAttempts = 0
+                } else {
+                    self.replaceConnection()
+                }
+            }
+        }
+    }
+
+    /// Drops the current connection, if any, and asks for a new one now with
+    /// the backoff starting over.
+    private func replaceConnection() {
+        reconnectAttempts = 0
+        if let task = webSocketTask {
+            handleTransportClosed(task, reconnectImmediately: true)
+        } else {
+            scheduleReconnectInternal(immediately: true)
+        }
+    }
+
+    /// Invalidates the connection check in progress, if any.
+    private func cancelConnectionCheck() {
+        connectionCheckId &+= 1
+        connectionCheckDeadline?.cancel()
+        connectionCheckDeadline = nil
+    }
+
+    private func handleTransportClosed(
+        _ task: URLSessionWebSocketTask,
+        reconnectImmediately: Bool = false
+    ) {
         guard task === webSocketTask else { return }
+        cancelConnectionCheck()
         isConnecting = false
         heartbeatTimer?.invalidate()
         heartbeatTimer = nil
@@ -840,10 +928,13 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
         session?.invalidateAndCancel()
         session = nil
         notifyState("disconnected")
-        if !manualDisconnect && !isAppInBackground { scheduleReconnect() }
+        if !manualDisconnect && !isAppInBackground {
+            scheduleReconnectInternal(immediately: reconnectImmediately)
+        }
     }
 
     private func disconnectInternal() {
+        cancelConnectionCheck()
         connectionPreparation?.cancel()
         connectionPreparation = nil
         if handoffPreparing {
@@ -1232,7 +1323,10 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
         return true
     }
 
-    private func scheduleReconnectInternal() {
+    /// - Parameter immediately: asks for the new connection without the
+    ///   backoff delay, for a connection known to be gone rather than one
+    ///   that just failed to open.
+    private func scheduleReconnectInternal(immediately: Bool = false) {
         guard reconnectPolicy.permitsReconnect(
             manualDisconnect: manualDisconnect,
             isAppInBackground: isAppInBackground
@@ -1243,7 +1337,7 @@ final class CoordinationRealtime: NSObject, URLSessionWebSocketDelegate, URLSess
         // Tickets expire in 30s so the native layer only emits the request;
         // the WebView performs the reconnect after refreshing the ticket.
         let attempt = next.attempt
-        let delay = next.delay
+        let delay = immediately ? 0 : next.delay
         let workItem = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
             self.notifyReconnectNeeded(attempt: attempt)

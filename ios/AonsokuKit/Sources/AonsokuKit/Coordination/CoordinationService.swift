@@ -190,6 +190,21 @@ public final class CoordinationService: @unchecked Sendable {
         transport.willTerminate()
     }
 
+    /// The machine woke or the network moved to another interface, so the
+    /// realtime connection may be dead without anything having failed yet.
+    /// It is checked and, when it does not answer, replaced by one made with
+    /// a fresh ticket. Ignored unless coordination has started, this device
+    /// is registered and the connection was not closed on purpose.
+    public func connectionMayHaveChanged() {
+        let isConnectionWanted = lock.withLock {
+            started && !manualDisconnect && currentState.deviceId != nil
+        }
+        guard isConnectionWanted else { return }
+        onMain { [weak self] in
+            self?.transport.connectionMayHaveChanged()
+        }
+    }
+
     // MARK: - Registration and connection
 
     /// Persists the coordination server and identity URLs.
