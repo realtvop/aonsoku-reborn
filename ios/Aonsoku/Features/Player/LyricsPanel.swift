@@ -2,9 +2,9 @@ import AonsokuKit
 import Perception
 import SwiftUI
 
-/// The playing song's lyrics. Synced lyrics follow the song with the
-/// current line lit and kept in view, as in Apple Music; a tap on a line
-/// plays from it, and scrolling by hand pauses the following for a moment.
+/// The playing song's lyrics. Synced lyrics (`SyncedLyrics`) follow the song
+/// with the web player's Apple Music Like Lyrics motion; a tap on a line plays
+/// from it, and scrolling by hand pauses the following for a moment.
 struct LyricsPanel: View {
     var isActive = true
     var onControlsHiddenChange: (Bool) -> Void = { _ in }
@@ -86,140 +86,6 @@ struct LyricsPanel: View {
     }
 }
 
-// MARK: - Synced
-
-private struct SyncedLyrics: View {
-    let lyrics: SongLyrics
-    let showsTranslation: Bool
-    let isActive: Bool
-    let onControlsHiddenChange: (Bool) -> Void
-
-    @Environment(PlayerStore.self) private var player
-    @Environment(LyricsStore.self) private var store
-
-    @State private var activeIndex: Int?
-    @State private var seekFeedback = 0
-    /// When the user last scrolled by hand.
-    @State private var manualScrollAt = Date.distantPast
-
-    var body: some View {
-        WithPerceptionTracking {
-            ScrollViewReader { proxy in
-                WithPerceptionTracking {
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 28) {
-                            ForEach(lyrics.lines) { line in
-                                WithPerceptionTracking {
-                                    Button {
-                                        play(from: line)
-                                    } label: {
-                                        LyricLineView(
-                                            line: line,
-                                            isActive: line.id == activeIndex,
-                                            showsTranslation: showsTranslation
-                                        )
-                                        .multilineTextAlignment(.leading)
-                                        .frame(minHeight: 44, alignment: .leading)
-                                        .contentShape(.rect)
-                                    }
-                                    .buttonStyle(.touchFeedback)
-                                    .id(line.id)
-                                }
-                            }
-                            LyricsCredit(lyrics: lyrics)
-                        }
-                        .padding(.horizontal, 28)
-                        .padding(.top, 40)
-                        .padding(.bottom, 320)
-                    }
-                    .scrollIndicators(.hidden)
-                    .modifier(LyricsControlsScrollObserver(
-                        isActive: isActive, onControlsHiddenChange: onControlsHiddenChange
-                    ))
-                    .appOnScrollPhaseChange { _, phase in
-                        if phase == .interacting {
-                            manualScrollAt = .now
-                        }
-                    }
-                    .appOnChange(of: activeIndex) { _, index in
-                        guard let index, Date.now.timeIntervalSince(manualScrollAt) > 3 else { return }
-                        withAnimation(.spring(duration: 0.7, bounce: 0.12)) {
-                            proxy.scrollTo(index, anchor: UnitPoint(x: 0.5, y: 0.2))
-                        }
-                    }
-                    .onAppear {
-                        activeIndex = store.lineIndex(at: player.clock.position())
-                        if let activeIndex {
-                            proxy.scrollTo(activeIndex, anchor: UnitPoint(x: 0.5, y: 0.2))
-                        }
-                    }
-                }
-            }
-            .mask(EdgeFade())
-            .haptic(.selection, trigger: seekFeedback)
-            .task(id: LyricsFollowingTask(lyrics: lyrics, isActive: isActive)) {
-                guard isActive else { return }
-                // Checks the line ten times a second but only redraws when it
-                // changes.
-                while !Task.isCancelled {
-                    let index = store.lineIndex(at: player.clock.position())
-                    if index != activeIndex {
-                        activeIndex = index
-                    }
-                    try? await Task.sleep(for: .milliseconds(100))
-                }
-            }
-        }
-    }
-
-    /// Plays from the line, which the offset moves on the song's timeline.
-    private func play(from line: LyricLine) {
-        manualScrollAt = .distantPast
-        seekFeedback += 1
-        player.seek(to: max(line.start - store.selection.offset, 0))
-        if !player.isPlaying {
-            player.resume()
-        }
-    }
-}
-
-private struct LyricsFollowingTask: Equatable {
-    let lyrics: SongLyrics
-    let isActive: Bool
-}
-
-private struct LyricLineView: View {
-    let line: LyricLine
-    let isActive: Bool
-    let showsTranslation: Bool
-
-    @ScaledMetric(relativeTo: .title) private var size: CGFloat = 30
-
-    var body: some View {
-        WithPerceptionTracking {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(line.text.isEmpty ? "♪" : line.text)
-                    .font(.system(size: size, weight: .bold))
-                if let romanization = line.romanization, !romanization.isEmpty {
-                    Text(romanization)
-                        .font(.title3.weight(.semibold))
-                }
-                if showsTranslation, let translation = line.translation, !translation.isEmpty {
-                    Text(translation)
-                        .font(.title3.weight(.semibold))
-                        .opacity(0.8)
-                }
-            }
-            .foregroundStyle(.white.opacity(isActive ? 1 : 0.3))
-            .scaleEffect(isActive ? 1 : 0.97, anchor: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(.rect)
-            .animation(.smooth(duration: 0.45), value: isActive)
-            .accessibilityAddTraits(isActive ? .isSelected : [])
-        }
-    }
-}
-
 // MARK: - Plain
 
 private struct PlainLyrics: View {
@@ -264,7 +130,7 @@ private struct PlainLyrics: View {
 
 /// React only to browsing gestures, never playback following or viewport
 /// changes caused by the footer itself. Accumulation filters finger jitter.
-private struct LyricsControlsScrollObserver: ViewModifier {
+struct LyricsControlsScrollObserver: ViewModifier {
     let isActive: Bool
     let onControlsHiddenChange: (Bool) -> Void
 
@@ -323,7 +189,7 @@ private struct LyricsScrollMetrics: Equatable {
 }
 
 /// Who wrote the lyrics, when known, and where they came from.
-private struct LyricsCredit: View {
+struct LyricsCredit: View {
     let lyrics: SongLyrics
 
     @Environment(Localizer.self) private var t

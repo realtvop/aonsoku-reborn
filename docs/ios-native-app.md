@@ -178,6 +178,12 @@ connectivity, metered-network and cover-art options. `SyncScheduler` only owns
 the system background refresh path when `AppModel` initializes the library
 with automatic foreground sync disabled.
 
+### Native AMLL lyrics
+
+Synced lyrics use per-line position and scale springs, distance blur, a 35% viewport alignment and timed browsing suspension. Romanization appears above the original and translation below it. Each layer uses an unlimited wrapping UILabel measured at the same explicit width used for rendering. The original retains semibold weight while scale and opacity emphasize the active line. Hidden lyrics stop following playback; Reduce Motion disables blur and scaling. Tap/clock jumps use quick springs. This approximates Web AMLL; seek preview, weight animation and some timing details differ.
+
+Validate with `bash scripts/test-ios-lyrics-motion.sh` and `bash scripts/test-ios-lyrics-layout.sh`.
+
 ## Navigation and screens
 
 - **Tabs**: Home, Library, Search (`Tab(role: .search)`), each with an
