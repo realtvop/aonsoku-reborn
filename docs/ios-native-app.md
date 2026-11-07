@@ -298,6 +298,10 @@ with automatic foreground sync disabled.
   Cross-Device, Privacy, About, and Sign Out. Shaking the device opens the
   native player debug screen, as before.
 
+### iOS lock-screen artwork
+
+iOS 26 system animated artwork uses generated silent static/camera/depth clips in system-requested geometry. Original artwork is upgraded independently of thumbnails. DAV2 Small FP16/P8/P6 models are downloaded on demand with pinned SHA256 verification; memory and thermal policy gate generation. Settings expose immersive/dynamic switches, model quality, motion controls and cache management. Active leases protect files from eviction. Older systems keep ordinary static system artwork. No second audio service is created.
+
 ## Settings parity
 
 | Web setting | Native behavior |

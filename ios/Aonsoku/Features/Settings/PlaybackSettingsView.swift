@@ -12,6 +12,11 @@ struct PlaybackSettingsView: View {
         WithPerceptionTracking {
             let replayGain = settings.settings.replayGain
             ThemedForm {
+                Section {
+                    NavigationLink { ArtworkSettingsView() } label: {
+                        Text(t("settings.audio.lockScreenArtwork.group"))
+                    }
+                }
                 WithPerceptionTracking {
                     Section {
                         SettingsToggle(

@@ -5,7 +5,7 @@ public final class DebugViewController: UIViewController {
     private let dataProvider: DebugDataProvider
     private var refreshTimer: Timer?
     private let tableView = UITableView(frame: .zero, style: .grouped)
-    private let segmentedControl = UISegmentedControl(items: ["Playback", "Info", "Logs"])
+    private let segmentedControl = UISegmentedControl(items: ["Playback", "Info", "Artwork", "Logs"])
     private let searchBar = UISearchBar()
     private let filterStack = UIStackView()
     private var filterScrollView: UIScrollView!
@@ -13,7 +13,8 @@ public final class DebugViewController: UIViewController {
     private var tableTopToSegment: NSLayoutConstraint!
     private var tableTopToFilter: NSLayoutConstraint!
 
-    private enum Tab: Int { case playback, info, logs }
+    private enum Tab: Int { case playback, info, artwork, logs }
+    private var artworkRows: [(String, [(String, String)])] = []
     private var currentTab: Tab = .playback
 
     private var audioSnapshot: AudioDebugSnapshot?
@@ -61,6 +62,13 @@ public final class DebugViewController: UIViewController {
         super.viewWillDisappear(animated)
         refreshTimer?.invalidate()
         refreshTimer = nil
+    }
+    public override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        if isViewLoaded && refreshTimer == nil {
+            refreshData()
+            startAutoRefresh()
+        }
     }
     private func setupSegmentedControl() {
         segmentedControl.selectedSegmentIndex = 0
@@ -146,6 +154,7 @@ public final class DebugViewController: UIViewController {
         connectionSnapshot = dataProvider.connectionSnapshot()
         sessionSnapshot = dataProvider.audioSessionSnapshot()
         memoryMB = dataProvider.memoryUsageMB()
+        refreshArtwork()
         logEntries = NativeLogger.shared.getEntries().reversed()
         updateSources()
         applyLogFilter()
@@ -154,6 +163,35 @@ public final class DebugViewController: UIViewController {
 
     @objc private func closeTapped() { dismiss(animated: true) }
     @objc private func refreshTapped() { refreshData() }
+
+    private func refreshArtwork() {
+        let options = LockScreenArtworkSettings.shared.value
+        let policy = LockScreenArtworkMotionPolicy.shared
+        let manager = LockScreenArtworkModelManager.shared
+        let snapshot = LockScreenArtworkDiagnostics.shared.snapshot()
+        artworkRows = [("CONFIGURATION", [
+            ("Immersive / Dynamic", "\(options.immersiveEnabled) / \(options.dynamicEnabled)"),
+            ("Requested / Effective", "\(options.quality) / \(policy.effectiveTier?.rawValue ?? "paused")"),
+            ("Resource Policy", policy.generationReason),
+            ("Cached Video Playback", policy.allowsPlayback ? "allowed" : "reduceMotion"),
+            ("Resource Protection", options.resourceProtectionEnabled ? "on" : "off (user override)"),
+            ("Motion amplitude / speed", "\(options.motionAmplitude)× / \(options.motionSpeed)×"),
+            ("DAV2 loop", "\(options.motionParameters.duration) s · 24 fps"),
+            ("Depth Renderer", LockScreenArtworkDiagnostics.shared.rendererState()),
+            ("RAM", "\(ProcessInfo.processInfo.physicalMemory / 1048576) MiB")
+        ])]
+        artworkRows.append(("MODELS", LockScreenArtworkTier.allCases.map { tier in
+            (tier.rawValue.uppercased(), manager.modelURL(tier) == nil ? "not ready" : "ready")
+        }))
+        for format in snapshot.variants.keys.sorted() {
+            let fields = snapshot.variants[format] ?? [:]
+            artworkRows.append(("PIPELINE \(format)", fields.keys.sorted().map { ($0, fields[$0]!) }))
+        }
+        for phase in snapshot.phases.keys.sorted() {
+            let fields = snapshot.phases[phase] ?? [:]
+            artworkRows.append((phase.uppercased(), fields.keys.sorted().map { ($0, fields[$0]!) }))
+        }
+    }
 
     @objc private func tabChanged() {
         currentTab = Tab(rawValue: segmentedControl.selectedSegmentIndex) ?? .playback
@@ -179,7 +217,36 @@ public final class DebugViewController: UIViewController {
                 UIBarButtonItem(barButtonSystemItem: .refresh, target: self, action: #selector(refreshTapped)),
             ]
             title = "Debug"
+            if currentTab == .artwork {
+                navigationItem.rightBarButtonItems?.append(UIBarButtonItem(title: "Depth", style: .plain,
+                    target: self, action: #selector(showArtworkDepth)))
+            }
         }
+    }
+
+    @objc private func showArtworkDepth() {
+        let controller = UIViewController()
+        controller.title = "Normalized depth"
+        controller.view.backgroundColor = .systemBackground
+        if let depth = LockScreenArtworkDiagnostics.shared.depthPreview() {
+            let image = UIImageView(image: UIImage(cgImage: depth))
+            image.contentMode = .scaleAspectFit
+            image.translatesAutoresizingMaskIntoConstraints = false
+            controller.view.addSubview(image)
+            NSLayoutConstraint.activate([
+                image.leadingAnchor.constraint(equalTo: controller.view.leadingAnchor, constant: 16),
+                image.trailingAnchor.constraint(equalTo: controller.view.trailingAnchor, constant: -16),
+                image.topAnchor.constraint(equalTo: controller.view.safeAreaLayoutGuide.topAnchor, constant: 16),
+                image.bottomAnchor.constraint(equalTo: controller.view.safeAreaLayoutGuide.bottomAnchor, constant: -16),
+            ])
+        } else {
+            let label = UILabel()
+            label.text = "No completed depth analysis yet. Cached video does not retain a depth map."
+            label.numberOfLines = 0
+            label.frame = CGRect(x: 20, y: 100, width: 320, height: 100)
+            controller.view.addSubview(label)
+        }
+        navigationController?.pushViewController(controller, animated: true)
     }
 
     @objc private func exitSelectMode() {
@@ -333,6 +400,7 @@ extension DebugViewController: UITableViewDataSource, UITableViewDelegate {
         switch currentTab {
         case .playback: return 3
         case .info: return 3
+        case .artwork: return artworkRows.count
         case .logs: return 1
         }
     }
@@ -355,6 +423,7 @@ extension DebugViewController: UITableViewDataSource, UITableViewDelegate {
             }
         case .logs:
             return "LOGS (\(filteredLogEntries.count)/\(logEntries.count))"
+        case .artwork: return artworkRows[section].0
         }
     }
 
@@ -376,6 +445,7 @@ extension DebugViewController: UITableViewDataSource, UITableViewDelegate {
             }
         case .logs:
             return max(filteredLogEntries.count, 1)
+        case .artwork: return artworkRows[section].1.count
         }
     }
     public func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -383,6 +453,15 @@ extension DebugViewController: UITableViewDataSource, UITableViewDelegate {
         case .playback: return playbackTabCell(tableView, section: indexPath.section, row: indexPath.row)
         case .info: return infoTabCell(tableView, section: indexPath.section, row: indexPath.row)
         case .logs: return logCell(tableView, row: indexPath.row)
+        case .artwork:
+            let row = artworkRows[indexPath.section].1[indexPath.row]
+            let cell = kvCell(tableView, key: row.0, value: row.1)
+            if var config = cell.contentConfiguration as? UIListContentConfiguration {
+                config.textProperties.numberOfLines = 0
+                config.secondaryTextProperties.numberOfLines = 0
+                cell.contentConfiguration = config
+            }
+            return cell
         }
     }
 

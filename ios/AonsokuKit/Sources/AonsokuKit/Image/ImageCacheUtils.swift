@@ -96,6 +96,7 @@ enum ImageCacheUtils {
 enum ImageCacheError: Error {
     case directoryNotFound
     case invalidCoverArtId
+    case invalidImage
     case noCredentials
     case invalidURL
     case downloadFailed(Error)

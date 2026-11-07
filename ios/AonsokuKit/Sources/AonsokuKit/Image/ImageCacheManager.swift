@@ -42,6 +42,12 @@ final class ImageCacheManager: @unchecked Sendable {
         self.credentialsProvider = credentialsProvider
     }
 
+    func readCoverImage(coverArtId: String) -> (data: Data, quality: String?)? {
+        guard let url = resolveCoverImage(coverArtId: coverArtId),
+              let data = try? Data(contentsOf: url) else { return nil }
+        return (data, getCoverImageSize(coverArtId: coverArtId)?.coverSize)
+    }
+
     // MARK: - Public API
 
     func downloadAvatar(username: String, size: String) async throws -> URL {
@@ -147,10 +153,8 @@ final class ImageCacheManager: @unchecked Sendable {
         let cacheId = ImageCacheUtils.cacheId(for: coverArtId)
         let key = "cover:\(coverArtId)"
         let repo = CacheMetaRepository(db: db)
-        if let incomingSize = Int(coverSize),
-           let existingSizeString = try repo.getByKey(key)?.coverSize,
-           let existingSize = Int(existingSizeString),
-           existingSize > incomingSize,
+        if let existingSizeString = try repo.getByKey(key)?.coverSize,
+           !CoverImageQuality.shouldReplace(cached: existingSizeString, incoming: coverSize),
            let existingURL = try findCoverImageURL(
                cacheId: cacheId,
                in: directory
@@ -312,7 +316,7 @@ final class ImageCacheManager: @unchecked Sendable {
             protocolVersion: credentials.protocolVersion
         )
         params["username"] = username
-        params["size"] = size
+        if !CoverImageQuality.isOriginal(size) { params["size"] = size }
 
         let baseString = "\(credentials.serverUrl)/rest/getAvatar"
         guard var components = URLComponents(string: baseString) else {
@@ -334,7 +338,7 @@ final class ImageCacheManager: @unchecked Sendable {
             protocolVersion: credentials.protocolVersion
         )
         params["id"] = coverArtId
-        params["size"] = size
+        if !CoverImageQuality.isOriginal(size) { params["size"] = size }
 
         let baseString = "\(credentials.serverUrl)/rest/getCoverArt"
         guard var components = URLComponents(string: baseString) else {
