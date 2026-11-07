@@ -11,6 +11,7 @@ import {
   Root,
 } from "@/app/components/settings/section";
 import { Switch } from "@/app/components/ui/switch";
+import { isDynamicCoverAvailable } from "@/native/artwork";
 import {
   useCoverArtSettings,
   useFullscreenPlayerSettings,
@@ -19,8 +20,12 @@ import { useTheme } from "@/store/theme.store";
 
 export function FullscreenSettings() {
   const { t } = useTranslation();
-  const { autoFullscreenEnabled, setAutoFullscreenEnabled } =
-    useFullscreenPlayerSettings();
+  const {
+    autoFullscreenEnabled,
+    setAutoFullscreenEnabled,
+    dynamicArtworkEnabled,
+    setDynamicArtworkEnabled,
+  } = useFullscreenPlayerSettings();
   const { useAlbumCoverForSongs, setUseAlbumCoverForSongs } =
     useCoverArtSettings();
   const { usePointerCursors, setUsePointerCursors } = useTheme();
@@ -34,6 +39,19 @@ export function FullscreenSettings() {
         </HeaderDescription>
       </Header>
       <Content>
+        {isDynamicCoverAvailable() && (
+          <ContentItem>
+            <ContentItemTitle info={t("fullscreen.dynamicArtworkInfo")}>
+              {t("fullscreen.dynamicArtwork")}
+            </ContentItemTitle>
+            <ContentItemForm>
+              <Switch
+                checked={dynamicArtworkEnabled ?? false}
+                onCheckedChange={setDynamicArtworkEnabled}
+              />
+            </ContentItemForm>
+          </ContentItem>
+        )}
         <ContentItem>
           <ContentItemTitle
             info={t("settings.appearance.general.fullscreen.info")}

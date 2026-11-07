@@ -935,6 +935,10 @@ Tailwind CSS uses CSS custom properties for layout dimensions
 etc.). Theme variables (HSL colors for dark/light) are in `src/themes.css`.
 Dark mode is class-based.
 
+### Web fullscreen artwork
+
+Fullscreen ImmersiveArtwork renders optional leased silent video with mirrored content-region edges, feathering and root-level CSS atmosphere. Hosts may install `window.aonsokuDynamicCover` using src/native/artwork/types.ts. No native producer is included: absent/unsupported providers preserve static artwork and hide the opt-in setting. Demand and acquire are separate; release leases through their granting provider, including when disposed or superseded. Pause hidden/background/Reduced Motion content. Run the dynamic-cover unit tests, fullscreen Cypress components and `pnpm run build`. This does not embed Web UI into the native iOS app.
+
 ### Code Splitting
 
 Normal Web (`pnpm run build`) and Electron renderer builds use

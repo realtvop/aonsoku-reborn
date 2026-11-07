@@ -234,6 +234,16 @@
   background-color: hsl(var(--foreground) / 0.15);
 }
 
+/* Desktop fullscreen side panel queue: transparent background so ambient glow and lyrics share seamless backdrop */
+[data-testid="fullscreen-desktop-side-panel"] .fullscreen-queue-bg {
+  background: transparent;
+}
+
+[data-testid="fullscreen-desktop-side-panel"] .fullscreen-queue-bg::before,
+[data-testid="fullscreen-desktop-side-panel"] .fullscreen-queue-bg::after {
+  display: none;
+}
+
 .fullscreen-drawer-surface {
   transition:
     --queue-backdrop-r 1000ms,

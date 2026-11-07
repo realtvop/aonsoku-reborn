@@ -134,7 +134,9 @@
     "queueHistory": "재생 기록",
     "queueRepeating": "반복 재생 중",
     "switchButton": "큰 플레이어로 전환",
-    "selectLyrics": "가사 설정"
+    "selectLyrics": "가사 설정",
+    "dynamicArtwork": "다이나믹한 앨범 아트워크",
+    "dynamicArtworkInfo": "전체 화면 플레이어에서 몰입형 커버 동영상을 사용하세요. 잠금 화면 아트웍과 독립적입니다."
   },
   "generic": {
     "beta": "베타",

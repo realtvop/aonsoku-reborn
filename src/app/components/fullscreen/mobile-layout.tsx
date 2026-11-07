@@ -268,7 +268,7 @@ export const MobileLayout = memo(function MobileLayout({
               exit={{ opacity: 0, y: -8 }}
               transition={VIEW_TRANSITION}
               data-testid="fullscreen-playing-view"
-              className="flex min-h-0 flex-1 flex-col items-center overflow-hidden overflow-clip px-4"
+              className="flex min-h-0 flex-1 flex-col items-center px-4"
             >
               <MobilePlayingView />
             </motion.div>

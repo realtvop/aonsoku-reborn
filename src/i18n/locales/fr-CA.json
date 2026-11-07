@@ -135,7 +135,9 @@
     "queueHistory": "Historique",
     "queueRepeating": "Répétition en cours",
     "switchButton": "Passer au Big Player",
-    "selectLyrics": "Paramètres des paroles"
+    "selectLyrics": "Paramètres des paroles",
+    "dynamicArtwork": "Illustration d'album dynamique",
+    "dynamicArtworkInfo": "Utilisez des vidéos de couverture immersives dans le lecteur plein écran. Indépendant des illustrations de l'écran de verrouillage."
   },
   "generic": {
     "beta": "Bêta",

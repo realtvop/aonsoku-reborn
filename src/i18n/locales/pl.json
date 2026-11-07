@@ -136,7 +136,9 @@
     "queueHistory": "Historia",
     "queueRepeating": "Powtarzanie",
     "switchButton": "Przełącz na Duży Odtwarzacz",
-    "selectLyrics": "Ustawienia tekstu"
+    "selectLyrics": "Ustawienia tekstu",
+    "dynamicArtwork": "Dynamiczna okładka albumu",
+    "dynamicArtworkInfo": "Korzystaj z wciągających filmów z okładek w odtwarzaczu pełnoekranowym. Niezależne od grafiki na ekranie blokady."
   },
   "generic": {
     "beta": "Beta",

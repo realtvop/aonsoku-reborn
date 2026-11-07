@@ -135,7 +135,9 @@
     "queueHistory": "Histórico",
     "queueRepeating": "Repetindo",
     "switchButton": "Alternar para o Player Grande",
-    "selectLyrics": "Configurações de letra"
+    "selectLyrics": "Configurações de letra",
+    "dynamicArtwork": "Capa dinâmica do álbum",
+    "dynamicArtworkInfo": "Utilize vídeos de capa envolventes no leitor em ecrã inteiro. Independente da arte do ecrã de bloqueio."
   },
   "generic": {
     "beta": "Beta",

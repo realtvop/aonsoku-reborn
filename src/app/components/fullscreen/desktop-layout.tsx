@@ -105,7 +105,7 @@ export const DesktopLayout = memo(function DesktopLayout() {
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col items-center justify-center min-h-0">
-          <div className="flex h-full min-h-0 w-full min-w-0 flex-col items-center justify-center overflow-hidden">
+          <div className="flex h-full min-h-0 w-full min-w-0 flex-col items-center justify-center">
             <ArtworkWithInfo
               preferCompactLayout
               showTouchDragSurface={isTouchPrimary}

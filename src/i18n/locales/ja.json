@@ -312,7 +312,9 @@
     "lyrics": "歌詞",
     "selectLyrics": "歌詞の設定",
     "switchButton": "ビッグプレーヤーに切り替える",
-    "emptyQueue": "キューに曲がありません"
+    "emptyQueue": "キューに曲がありません",
+    "dynamicArtwork": "動くアルバムアートワーク",
+    "dynamicArtworkInfo": "全画面プレーヤーでイマーシブカバー動画を使用します。ロック画面のアートワークとは個別に設定できます。"
   },
   "lyrics": {
     "customSelect": {

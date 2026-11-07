@@ -317,7 +317,9 @@
     "selectLyrics": "Lyrics settings",
     "switchButton": "Switch to Big Player",
     "emptyQueue": "No songs in queue",
-    "close": "Close"
+    "close": "Close",
+    "dynamicArtwork": "Dynamic album artwork",
+    "dynamicArtworkInfo": "Use immersive cover videos in the fullscreen player. Independent of lock-screen artwork."
   },
   "lyrics": {
     "customSelect": {

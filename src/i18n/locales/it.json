@@ -135,7 +135,9 @@
     "queueHistory": "Cronologia",
     "queueRepeating": "Ripetizione",
     "switchButton": "Passa a Riproduttore Grande",
-    "selectLyrics": "Impostazioni testo"
+    "selectLyrics": "Impostazioni testo",
+    "dynamicArtwork": "Copertina dell'album dinamica",
+    "dynamicArtworkInfo": "Utilizza video di copertina coinvolgenti nel player a schermo intero. Indipendente dalla grafica della schermata di blocco."
   },
   "generic": {
     "beta": "Beta",

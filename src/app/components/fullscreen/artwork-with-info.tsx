@@ -120,7 +120,7 @@ export const ArtworkWithInfo = memo(function ArtworkWithInfo({
 
         <div
           className={clsx(
-            "flex min-h-0 w-full items-center justify-center overflow-hidden [container-type:size]",
+            "flex min-h-0 w-full items-center justify-center [container-type:size]",
             preferCompactLayout
               ? "flex-[0_1_min(480px,100cqw)]"
               : "flex-1",

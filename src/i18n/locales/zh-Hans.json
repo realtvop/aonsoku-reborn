@@ -141,7 +141,9 @@
     "queueRepeating": "单曲循环",
     "queueShuffling": "随机播放中",
     "selectLyrics": "歌词设置",
-    "switchButton": "切换到大播放器"
+    "switchButton": "切换到大播放器",
+    "dynamicArtwork": "动态专辑封面",
+    "dynamicArtworkInfo": "在全屏播放器中展示沉浸封面视频，与锁屏封面开关独立。"
   },
   "lyrics": {
     "customSelect": {

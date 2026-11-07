@@ -9,15 +9,37 @@ import {
 } from "@/app/components/ui/popover";
 import { Separator } from "@/app/components/ui/separator";
 import { Slider } from "@/app/components/ui/slider";
+import { Switch } from "@/app/components/ui/switch";
 import { useFullscreenContrast } from "@/app/hooks/use-fullscreen-contrast";
 import { cn } from "@/lib/utils";
-import { useSongColor } from "@/store/player.store";
+import { isDynamicCoverAvailable } from "@/native/artwork";
+import {
+  useFullscreenPlayerSettings,
+  useSongColor,
+} from "@/store/player.store";
 
 export function FullscreenSettings() {
   return (
     <DynamicSettingsPopover>
       <ColorIntensityOption showSeparator={false} />
+      <DynamicArtworkOption />
     </DynamicSettingsPopover>
+  );
+}
+
+function DynamicArtworkOption() {
+  const { t } = useTranslation();
+  const { dynamicArtworkEnabled, setDynamicArtworkEnabled } =
+    useFullscreenPlayerSettings();
+  if (!isDynamicCoverAvailable()) return null;
+  return (
+    <SettingWrapper text={t("fullscreen.dynamicArtwork")}>
+      <Switch
+        aria-label={t("fullscreen.dynamicArtwork")}
+        checked={dynamicArtworkEnabled ?? false}
+        onCheckedChange={setDynamicArtworkEnabled}
+      />
+    </SettingWrapper>
   );
 }
 
@@ -59,7 +81,7 @@ function ColorIntensityOption(props: OptionProps) {
 
   return (
     <SettingWrapper
-      text={t("settings.appearance.colors.queue.intensity")}
+      text={t("settings.appearance.queue.colors.intensity")}
       {...props}
     >
       <Slider

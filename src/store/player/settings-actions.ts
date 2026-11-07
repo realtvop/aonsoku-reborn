@@ -14,6 +14,7 @@ export function createSettingsActions(shared: SharedDeps) {
       set((state) => {
         state.settings.colors.currentSongColorIntensity = 0.65;
         state.settings.fullscreen.autoFullscreenEnabled = false;
+        state.settings.fullscreen.dynamicArtworkEnabled = false;
         state.settings.coverArt.useAlbumCoverForSongs = false;
         state.settings.lyrics.preferSyncedLyrics = false;
         state.settings.hapticFeedback.hapticFeedbackEnabled = true;

@@ -145,6 +145,8 @@ interface IReplayGain {
 }
 
 interface IFullscreen {
+  dynamicArtworkEnabled: boolean;
+  setDynamicArtworkEnabled: (value: boolean) => void;
   autoFullscreenEnabled: boolean;
   setAutoFullscreenEnabled: (value: boolean) => void;
 }
