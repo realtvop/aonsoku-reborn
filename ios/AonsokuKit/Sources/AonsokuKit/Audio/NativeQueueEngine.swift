@@ -387,6 +387,19 @@ class NativeQueueEngine {
 
     // MARK: - Playback Control
 
+    /// Select an occurrence, rather than a song ID (a queue may contain duplicates).
+    func playUserQueueAtIndex(_ index: Int) {
+        guard userQueue.indices.contains(index) else { return }
+        playedUserQueueHistory.append(contentsOf: userQueue.prefix(index))
+        userQueue.removeFirst(index)
+        isInUserQueue = true
+        if let song = currentSong {
+            delegate?.queueEngine(self, loadSong: song, autoplay: true, startTime: nil)
+            delegate?.queueEngine(self, didAdvanceTo: currentIndex, songId: song.id, reason: .skip)
+            delegate?.queueEngine(self, didChangeContents: "queue-edit")
+        }
+    }
+
     func handleEnded() {
         if loopState == .one {
             let userQueueRemaining = isInUserQueue

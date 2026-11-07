@@ -29,6 +29,10 @@ public struct ServerCredentials: Codable, Equatable, Sendable {
     }
 }
 
+public extension Notification.Name {
+    static let aonsokuCredentialsChanged = Notification.Name("AonsokuCredentialsChanged")
+}
+
 public final class KeychainManager {
     private static let service = "github.realtvop.aonsoku.credentials"
     private static let account = "server-credentials"
@@ -95,6 +99,7 @@ public final class KeychainManager {
         } else if status != errSecSuccess {
             throw KeychainError.unableToStore(status)
         }
+        NotificationCenter.default.post(name: .aonsokuCredentialsChanged, object: nil)
     }
 
     public static func storeIfPossible(_ credentials: ServerCredentials) -> Bool {
@@ -121,6 +126,7 @@ public final class KeychainManager {
     }
 
     public static func delete() {
+        defer { NotificationCenter.default.post(name: .aonsokuCredentialsChanged, object: nil) }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

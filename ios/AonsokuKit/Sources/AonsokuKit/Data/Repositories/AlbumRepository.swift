@@ -59,8 +59,8 @@ struct AlbumRepository {
                 query = query.order(sql: "RANDOM()")
             default:
                 query = filter.sortOrder == "desc"
-                    ? query.order(Column("name").desc)
-                    : query.order(Column("name").asc)
+                    ? query.order(Column("name").desc, Column("id").asc)
+                    : query.order(Column("name").asc, Column("id").asc)
             }
 
             let items = try query.limit(limit, offset: offset).fetchAll(db)

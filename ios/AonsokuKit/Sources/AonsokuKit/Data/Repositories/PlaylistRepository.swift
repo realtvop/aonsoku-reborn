@@ -8,7 +8,7 @@ struct PlaylistRepository {
         try db.read { db in
             let total = try PlaylistRecord.fetchCount(db)
             let items = try PlaylistRecord
-                .order(Column("name").asc)
+                .order(Column("name").asc, Column("id").asc)
                 .limit(limit, offset: offset)
                 .fetchAll(db)
             return (items, total)

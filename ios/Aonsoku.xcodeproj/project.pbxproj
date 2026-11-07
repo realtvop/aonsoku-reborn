@@ -25,6 +25,8 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Resources/Info.plist,
+				Resources/CarPlay.entitlements,
+				Resources/App.entitlements,
 			);
 			target = 4E5A00000000000000000501 /* Aonsoku */;
 		};
@@ -295,6 +297,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Aonsoku/Resources/Info.plist;
+				CODE_SIGN_ENTITLEMENTS = "$(AONSOKU_ENTITLEMENTS)";
+				AONSOKU_ENTITLEMENTS = Aonsoku/Resources/CarPlay.entitlements;
 				INFOPLIST_KEY_CFBundleDisplayName = Aonsoku;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -333,6 +337,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Aonsoku/Resources/Info.plist;
+				CODE_SIGN_ENTITLEMENTS = "$(AONSOKU_ENTITLEMENTS)";
+				AONSOKU_ENTITLEMENTS = Aonsoku/Resources/CarPlay.entitlements;
 				INFOPLIST_KEY_CFBundleDisplayName = Aonsoku;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

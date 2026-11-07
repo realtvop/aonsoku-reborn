@@ -23,6 +23,7 @@ final class EventEmitter {
     }
 
     func emitDataChanged(tables: [String], tier: String) {
+        NotificationCenter.default.post(name: .aonsokuNativeLibraryChanged, object: nil)
         notify("dataChanged", [
             "tables": tables,
             "tier": tier,

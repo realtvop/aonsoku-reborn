@@ -796,6 +796,10 @@ Electron follows the same renderer/native ownership boundary as Capacitor:
   metadata traffic shares one raised connection ceiling instead of saturating
   Node's default low-limit global pool and starving IPC handlers.
 
+### Native iOS CarPlay
+
+CarPlaySceneDelegate registers the system CarPlay scene. AonsokuKit/CarPlay owns native GRDB browsing and templates; AudioService remains the single playback owner. Queue rows carry occurrence indices and revisions, selections have a 15-second deadline, and cancellation releases row completion immediately. Remote projection disables transport. Default signing uses CarPlay.entitlements; builds without the capability can set `AONSOKU_ENTITLEMENTS=Aonsoku/Resources/App.entitlements`. Run `bash scripts/test-ios-native.sh` for library, playback and template tests.
+
 ### Cross-Device Coordination
 
 Aonsoku includes a Rust coordination service in `coordination-server/` for
